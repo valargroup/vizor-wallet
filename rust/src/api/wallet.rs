@@ -63,3 +63,9 @@ pub fn wallet_exists(db_path: String) -> bool {
 pub fn validate_mnemonic(mnemonic: String) -> bool {
     keys::mnemonic_to_seed(&mnemonic).is_ok()
 }
+
+/// Get the transparent address for the wallet (separate from the shielded UA).
+pub fn get_transparent_address(db_path: String, network: String) -> Result<String, String> {
+    let network = keys::parse_network(&network)?;
+    keys::get_transparent_address_from_db(&db_path, network)
+}

@@ -8,7 +8,7 @@ use zcash_client_backend::data_api::{
     chain::ChainState,
 };
 use zcash_client_sqlite::{WalletDb, util::SystemClock, wallet::init::init_wallet_db};
-use zcash_keys::keys::UnifiedAddressRequest;
+use zcash_keys::keys::{ReceiverRequirement, UnifiedAddressRequest};
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::{BlockHeight, Network, NetworkUpgrade, Parameters};
 
@@ -74,7 +74,7 @@ pub fn init_db_and_create_account(
 
     let ufvk = usk.to_unified_full_viewing_key();
     let (ua, _di) = ufvk
-        .default_address(UnifiedAddressRequest::AllAvailableKeys)
+        .default_address(shielded_address_request())
         .map_err(|e| format!("Failed to derive address: {e}"))?;
 
     Ok(ua.encode(&network))
@@ -104,8 +104,56 @@ pub fn get_address_from_db(db_path: &str, network: Network) -> Result<String, St
         .ok_or("Account does not have a UFVK")?;
 
     let (ua, _di) = ufvk
-        .default_address(UnifiedAddressRequest::AllAvailableKeys)
+        .default_address(shielded_address_request())
         .map_err(|e| format!("Failed to derive address: {e}"))?;
+
+    Ok(ua.encode(&network))
+}
+
+/// Returns the standard shielded address request (Orchard + Sapling, no transparent).
+/// This matches the behavior of zodl/Zashi wallets.
+fn shielded_address_request() -> UnifiedAddressRequest {
+    UnifiedAddressRequest::custom(
+        ReceiverRequirement::Require, // Orchard
+        ReceiverRequirement::Require, // Sapling
+        ReceiverRequirement::Omit,    // Transparent
+    )
+    .expect("valid receiver requirements")
+}
+
+/// Get the transparent address from an existing wallet database.
+pub fn get_transparent_address_from_db(db_path: &str, network: Network) -> Result<String, String> {
+    let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
+        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+
+    let accounts = db
+        .get_account_ids()
+        .map_err(|e| format!("Failed to list accounts: {e}"))?;
+
+    let account_id = accounts
+        .into_iter()
+        .next()
+        .ok_or("No accounts found in wallet")?;
+
+    let account = db
+        .get_account(account_id)
+        .map_err(|e| format!("Failed to get account: {e}"))?
+        .ok_or("Account not found")?;
+
+    let ufvk = account
+        .ufvk()
+        .ok_or("Account does not have a UFVK")?;
+
+    let transparent_req = UnifiedAddressRequest::custom(
+        ReceiverRequirement::Omit,    // Orchard
+        ReceiverRequirement::Omit,    // Sapling
+        ReceiverRequirement::Require, // Transparent
+    )
+    .map_err(|_| "Failed to create transparent address request")?;
+
+    let (ua, _di) = ufvk
+        .default_address(transparent_req)
+        .map_err(|e| format!("Failed to derive transparent address: {e}"))?;
 
     Ok(ua.encode(&network))
 }
@@ -205,5 +253,27 @@ mod tests {
                 .unwrap();
 
         assert_eq!(addr1, addr2, "Same seed should produce same address");
+    }
+
+    #[test]
+    fn test_shielded_address_has_sapling_and_orchard_only() {
+        // Verify our address uses Sapling+Orchard receivers (no transparent),
+        // matching zodl/Zashi wallet behavior.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("wallet.db");
+        let db_path_str = db_path.to_str().unwrap();
+
+        let phrase = generate_mnemonic();
+        let seed = mnemonic_to_seed(&phrase).unwrap();
+
+        let address =
+            init_db_and_create_account(db_path_str, Network::MainNetwork, &seed, None).unwrap();
+
+        // Decode and verify receiver types
+        let za = zcash_address::ZcashAddress::try_from_encoded(&address).unwrap();
+        let debug = format!("{:?}", za);
+        assert!(debug.contains("Sapling"), "UA should contain Sapling receiver");
+        assert!(debug.contains("Orchard"), "UA should contain Orchard receiver");
+        assert!(!debug.contains("P2pkh"), "UA should NOT contain transparent receiver");
     }
 }
