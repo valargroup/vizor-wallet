@@ -72,11 +72,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     final dbPath = await _getDbPath();
     final cachePath = await _getCachePath();
 
-    log('Sync: connecting to ${network.lightwalletdUrl}');
+    log('Sync: connecting to ${network.lightwalletdHost}:${network.lightwalletdPort}');
 
     final channel = ClientChannel(
       network.lightwalletdHost,
-      port: network.defaultPort,
+      port: network.lightwalletdPort,
       options: const ChannelOptions(
         credentials: ChannelCredentials.secure(),
       ),
