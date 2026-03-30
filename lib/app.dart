@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'main.dart' show log;
 import 'src/features/home/screens/home_screen.dart';
 import 'src/features/onboarding/screens/create_wallet_screen.dart';
 import 'src/features/onboarding/screens/import_wallet_screen.dart';
@@ -10,6 +11,7 @@ import 'src/providers/wallet_provider.dart';
 
 final _routerProvider = Provider<GoRouter>((ref) {
   final walletAsync = ref.watch(walletProvider);
+  log('router: walletAsync=$walletAsync');
 
   return GoRouter(
     initialLocation: '/',
@@ -20,12 +22,21 @@ final _routerProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == '/create' ||
           state.matchedLocation == '/import';
 
+      log('router redirect: location=${state.matchedLocation}, hasWallet=$hasWallet, isOnboarding=$isOnboarding');
+
       if (!hasWallet && !isOnboarding) return '/welcome';
       if (hasWallet && state.matchedLocation == '/welcome') return '/home';
       return null;
     },
     routes: [
-      GoRoute(path: '/', redirect: (_, _) => '/welcome'),
+      GoRoute(
+        path: '/',
+        redirect: (_, _) {
+          final wallet = walletAsync.value;
+          final hasWallet = wallet?.hasWallet ?? false;
+          return hasWallet ? '/home' : '/welcome';
+        },
+      ),
       GoRoute(
         path: '/welcome',
         builder: (_, _) => const WelcomeScreen(),

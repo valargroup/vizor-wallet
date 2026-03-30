@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../main.dart' show log;
 import '../rust/api/wallet.dart' as rust_wallet;
 
 const _mnemonicKey = 'zcash_wallet_mnemonic';
@@ -37,47 +38,63 @@ class WalletNotifier extends AsyncNotifier<WalletState> {
 
   @override
   Future<WalletState> build() async {
+    log('WalletNotifier.build: starting');
     final dbPath = await _getDbPath();
+    log('WalletNotifier.build: dbPath=$dbPath');
     final exists = rust_wallet.walletExists(dbPath: dbPath);
+    log('WalletNotifier.build: walletExists=$exists');
     if (!exists) {
+      log('WalletNotifier.build: no wallet found, returning empty state');
       return const WalletState();
     }
 
     final network = await _storage.read(key: _networkKey) ?? 'main';
+    log('WalletNotifier.build: network=$network');
     try {
       final address = await rust_wallet.getUnifiedAddress(
         dbPath: dbPath,
         network: network,
       );
+      log('WalletNotifier.build: address=${address.substring(0, 20)}...');
       return WalletState(
         hasWallet: true,
         unifiedAddress: address,
         network: network,
       );
-    } catch (_) {
+    } catch (e) {
+      log('WalletNotifier.build: ERROR getting address: $e');
       return const WalletState();
     }
   }
 
   /// Create a new wallet. Returns the mnemonic that must be shown to the user.
   Future<String> createWallet({String network = 'main'}) async {
+    log('createWallet: starting, network=$network');
     final dbPath = await _getDbPath();
-    final result = await rust_wallet.createWallet(
-      network: network,
-      dbPath: dbPath,
-    );
+    log('createWallet: dbPath=$dbPath');
+    await _deleteExistingDb(dbPath);
+    try {
+      final result = await rust_wallet.createWallet(
+        network: network,
+        dbPath: dbPath,
+      );
+      log('createWallet: success, address=${result.unifiedAddress.substring(0, 20)}...');
 
-    // Store mnemonic securely
-    await _storage.write(key: _mnemonicKey, value: result.mnemonic);
-    await _storage.write(key: _networkKey, value: network);
+      await _storage.write(key: _mnemonicKey, value: result.mnemonic);
+      await _storage.write(key: _networkKey, value: network);
+      log('createWallet: mnemonic and network saved to secure storage');
 
-    state = AsyncData(WalletState(
-      hasWallet: true,
-      unifiedAddress: result.unifiedAddress,
-      network: network,
-    ));
+      state = AsyncData(WalletState(
+        hasWallet: true,
+        unifiedAddress: result.unifiedAddress,
+        network: network,
+      ));
 
-    return result.mnemonic;
+      return result.mnemonic;
+    } catch (e, st) {
+      log('createWallet: ERROR: $e\n$st');
+      rethrow;
+    }
   }
 
   /// Import a wallet from an existing mnemonic.
@@ -86,28 +103,53 @@ class WalletNotifier extends AsyncNotifier<WalletState> {
     int? birthdayHeight,
     String network = 'main',
   }) async {
+    log('importWallet: starting, network=$network, birthdayHeight=$birthdayHeight');
+    log('importWallet: mnemonic word count=${mnemonic.trim().split(' ').length}');
     final dbPath = await _getDbPath();
-    final result = await rust_wallet.importWallet(
-      mnemonic: mnemonic,
-      birthdayHeight:
-          birthdayHeight != null ? BigInt.from(birthdayHeight) : null,
-      network: network,
-      dbPath: dbPath,
-    );
+    log('importWallet: dbPath=$dbPath');
+    await _deleteExistingDb(dbPath);
+    try {
+      final result = await rust_wallet.importWallet(
+        mnemonic: mnemonic,
+        birthdayHeight:
+            birthdayHeight != null ? BigInt.from(birthdayHeight) : null,
+        network: network,
+        dbPath: dbPath,
+      );
+      log('importWallet: success, address=${result.unifiedAddress.substring(0, 20)}...');
 
-    await _storage.write(key: _mnemonicKey, value: mnemonic);
-    await _storage.write(key: _networkKey, value: network);
+      await _storage.write(key: _mnemonicKey, value: mnemonic);
+      await _storage.write(key: _networkKey, value: network);
+      log('importWallet: saved to secure storage');
 
-    state = AsyncData(WalletState(
-      hasWallet: true,
-      unifiedAddress: result.unifiedAddress,
-      network: network,
-    ));
+      state = AsyncData(WalletState(
+        hasWallet: true,
+        unifiedAddress: result.unifiedAddress,
+        network: network,
+      ));
+      log('importWallet: state updated');
+    } catch (e, st) {
+      log('importWallet: ERROR: $e\n$st');
+      rethrow;
+    }
   }
 
   Future<String> _getDbPath() async {
     final dir = await getApplicationDocumentsDirectory();
     return '${dir.path}${Platform.pathSeparator}zcash_wallet.db';
+  }
+
+  Future<void> _deleteExistingDb(String dbPath) async {
+    final file = File(dbPath);
+    if (file.existsSync()) {
+      log('_deleteExistingDb: removing existing DB at $dbPath');
+      file.deleteSync();
+    }
+    // Also remove SQLite journal/wal files
+    for (final suffix in ['-journal', '-wal', '-shm']) {
+      final f = File('$dbPath$suffix');
+      if (f.existsSync()) f.deleteSync();
+    }
   }
 }
 

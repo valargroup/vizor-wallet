@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../main.dart' show log;
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import '../../../providers/wallet_provider.dart';
 
@@ -26,12 +27,17 @@ class _ImportWalletScreenState extends ConsumerState<ImportWalletScreen> {
   }
 
   bool get _isValid {
-    final words = _mnemonicController.text.trim().split(RegExp(r'\s+'));
-    return words.length == 24 &&
-        rust_wallet.validateMnemonic(mnemonic: _mnemonicController.text.trim());
+    final text = _mnemonicController.text.trim();
+    final words = text.split(RegExp(r'\s+'));
+    final wordCountOk = words.length == 24;
+    final mnemonicValid =
+        wordCountOk ? rust_wallet.validateMnemonic(mnemonic: text) : false;
+    log('ImportScreen._isValid: wordCount=${words.length}, wordCountOk=$wordCountOk, mnemonicValid=$mnemonicValid');
+    return wordCountOk && mnemonicValid;
   }
 
   Future<void> _import() async {
+    log('ImportScreen._import: button pressed');
     setState(() {
       _isLoading = true;
       _error = null;
@@ -41,14 +47,17 @@ class _ImportWalletScreenState extends ConsumerState<ImportWalletScreen> {
       final birthdayText = _birthdayController.text.trim();
       final birthdayHeight =
           birthdayText.isNotEmpty ? int.tryParse(birthdayText) : null;
+      log('ImportScreen._import: calling importWallet, birthdayHeight=$birthdayHeight');
 
       await ref.read(walletProvider.notifier).importWallet(
             mnemonic: _mnemonicController.text.trim(),
             birthdayHeight: birthdayHeight,
           );
 
+      log('ImportScreen._import: importWallet completed, navigating to /home');
       if (mounted) context.go('/home');
-    } catch (e) {
+    } catch (e, st) {
+      log('ImportScreen._import: ERROR: $e\n$st');
       if (mounted) {
         setState(() {
           _error = e.toString();
