@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,44 +31,14 @@
     p, li { color: var(--text-secondary); margin-bottom: 12px; }
     a { color: var(--link); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    code {
-      background: var(--code-bg);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.9em;
-    }
-    pre {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      overflow-x: auto;
-      margin: 16px 0;
-      font-size: 0.85em;
-      line-height: 1.5;
-    }
+    code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.9em; }
+    pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; font-size: 0.85em; line-height: 1.5; }
     pre code { background: none; padding: 0; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 16px 0;
-    }
-    th, td {
-      border: 1px solid var(--border);
-      padding: 10px 14px;
-      text-align: left;
-      font-size: 0.9em;
-    }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; font-size: 0.9em; }
     th { background: var(--surface); color: var(--text); }
     td { color: var(--text-secondary); }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: 0.75em;
-      font-weight: 600;
-    }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: 600; }
     .rust { background: #b7410e22; color: #e57324; border: 1px solid #e5732444; }
     .dart { background: #0175c222; color: #02a3f4; border: 1px solid #02a3f444; }
     .ffi { background: #6e40c933; color: #a78bfa; border: 1px solid #a78bfa44; }
@@ -77,134 +47,115 @@
     .toc li { margin-bottom: 6px; }
     .toc a { color: var(--text); }
     .subtitle { color: var(--text-secondary); font-size: 1.1em; margin-bottom: 32px; }
-    .diagram {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 24px;
-      margin: 16px 0;
-      font-family: 'SF Mono', monospace;
-      font-size: 0.85em;
-      white-space: pre;
-      overflow-x: auto;
-      line-height: 1.4;
-    }
-    .note {
-      background: #f4b72811;
-      border-left: 3px solid var(--accent);
-      padding: 12px 16px;
-      margin: 16px 0;
-      border-radius: 0 8px 8px 0;
-    }
+    .diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin: 16px 0; font-family: 'SF Mono', monospace; font-size: 0.85em; white-space: pre; overflow-x: auto; line-height: 1.4; }
+    .note { background: #f4b72811; border-left: 3px solid var(--accent); padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
     .note p { color: var(--text); margin: 0; }
   </style>
 </head>
 <body>
 
 <h1>Zcash Wallet — Developer Onboarding</h1>
-<p class="subtitle">Flutter + Rust FFI architecture for the Zcash shielded mobile wallet</p>
+<p class="subtitle">Zcash shielded 모바일 월렛의 Flutter + Rust FFI 아키텍처 문서</p>
 
 <div class="toc">
-  <strong>Table of Contents</strong>
+  <strong>목차</strong>
   <ol>
-    <li><a href="#architecture">Architecture Overview</a>
+    <li><a href="#architecture">아키텍처 개요</a>
       <ol>
-        <li><a href="#arch-layers">Layer Separation: Rust Core / FFI Bridge / Dart UI</a></li>
-        <li><a href="#arch-diagram">Data Flow Diagram</a></li>
-        <li><a href="#arch-why">Why Rust + Flutter (not native SDKs)</a></li>
+        <li><a href="#arch-layers">레이어 분리: Rust Core / FFI Bridge / Dart UI</a></li>
+        <li><a href="#arch-diagram">데이터 흐름 다이어그램</a></li>
+        <li><a href="#arch-why">왜 Rust + Flutter인가 (네이티브 SDK 대신)</a></li>
       </ol>
     </li>
-    <li><a href="#ffi">Flutter Rust Bridge (FRB) Communication</a>
+    <li><a href="#ffi">Flutter Rust Bridge (FRB) 통신</a>
       <ol>
-        <li><a href="#ffi-how">How FRB Works</a></li>
-        <li><a href="#ffi-types">Type Mapping: Rust ↔ Dart</a></li>
-        <li><a href="#ffi-codegen">Codegen Workflow</a></li>
-        <li><a href="#ffi-constraints">Design Constraints</a></li>
+        <li><a href="#ffi-how">FRB 작동 방식</a></li>
+        <li><a href="#ffi-types">타입 매핑: Rust ↔ Dart</a></li>
+        <li><a href="#ffi-codegen">Codegen 워크플로우</a></li>
+        <li><a href="#ffi-constraints">설계 제약</a></li>
       </ol>
     </li>
-    <li><a href="#rust-core">Rust Core Logic</a>
+    <li><a href="#rust-core">Rust 핵심 로직</a>
       <ol>
-        <li><a href="#rust-modules">Module Structure</a></li>
-        <li><a href="#rust-wallet">Wallet API — Key Derivation &amp; Account Management</a></li>
-        <li><a href="#rust-sync">Sync API — Block Scanning &amp; Balance</a></li>
-        <li><a href="#rust-deps">Zcash Crate Dependency Graph</a></li>
-        <li><a href="#rust-security">Security Model: Spending Key Separation</a></li>
+        <li><a href="#rust-modules">모듈 구조</a></li>
+        <li><a href="#rust-wallet">Wallet API — 키 유도 &amp; 계정 관리</a></li>
+        <li><a href="#rust-sync">Sync API — 블록 스캐닝 &amp; 잔액</a></li>
+        <li><a href="#rust-deps">Zcash Crate 의존성 그래프</a></li>
+        <li><a href="#rust-security">보안 모델: Spending Key 분리</a></li>
       </ol>
     </li>
-    <li><a href="#dart-layer">Dart / Flutter Layer</a>
+    <li><a href="#dart-layer">Dart / Flutter 레이어</a>
       <ol>
         <li><a href="#dart-providers">Riverpod Providers</a></li>
-        <li><a href="#dart-sync-loop">Sync Loop Orchestration (Dart-managed)</a></li>
-        <li><a href="#dart-grpc">gRPC Client &amp; Proto Definitions</a></li>
-        <li><a href="#dart-routing">Navigation &amp; Routing</a></li>
-        <li><a href="#dart-ui">UI Screens</a></li>
+        <li><a href="#dart-sync-loop">Sync 루프 오케스트레이션 (Dart 관리)</a></li>
+        <li><a href="#dart-grpc">gRPC 클라이언트 &amp; Proto 정의</a></li>
+        <li><a href="#dart-routing">네비게이션 &amp; 라우팅</a></li>
+        <li><a href="#dart-ui">UI 화면</a></li>
       </ol>
     </li>
-    <li><a href="#sync-deep">Sync Engine Deep Dive</a>
+    <li><a href="#sync-deep">Sync 엔진 상세</a>
       <ol>
-        <li><a href="#sync-flow">Full Sync Flow (Step by Step)</a></li>
+        <li><a href="#sync-flow">전체 Sync 흐름 (단계별)</a></li>
         <li><a href="#sync-blockcache">Block Cache &amp; FsBlockDb</a></li>
-        <li><a href="#sync-scanning">Trial Decryption &amp; Note Discovery</a></li>
-        <li><a href="#sync-progress">Progress Reporting</a></li>
+        <li><a href="#sync-scanning">Trial Decryption &amp; 노트 발견</a></li>
+        <li><a href="#sync-progress">진행률 보고</a></li>
       </ol>
     </li>
-    <li><a href="#api-reference">API Reference</a>
+    <li><a href="#api-reference">API 레퍼런스</a>
       <ol>
-        <li><a href="#api-wallet">Wallet Functions (6)</a></li>
-        <li><a href="#api-sync">Sync Functions (8)</a></li>
-        <li><a href="#api-structs">Data Structures</a></li>
+        <li><a href="#api-wallet">Wallet 함수 (6개)</a></li>
+        <li><a href="#api-sync">Sync 함수 (8개)</a></li>
+        <li><a href="#api-structs">데이터 구조체</a></li>
       </ol>
     </li>
-    <li><a href="#address">Address System</a>
+    <li><a href="#address">주소 체계</a>
       <ol>
         <li><a href="#addr-ua">Unified Address (Sapling + Orchard)</a></li>
-        <li><a href="#addr-transparent">Transparent Address (separate)</a></li>
-        <li><a href="#addr-zodl">Compatibility with zodl/Zashi</a></li>
+        <li><a href="#addr-transparent">Transparent Address (별도)</a></li>
+        <li><a href="#addr-zodl">zodl/Zashi 호환성</a></li>
       </ol>
     </li>
-    <li><a href="#testing">Testing</a>
+    <li><a href="#testing">테스트</a>
       <ol>
-        <li><a href="#test-rust">Rust Unit Tests</a></li>
-        <li><a href="#test-dart">Dart Tests</a></li>
+        <li><a href="#test-rust">Rust 단위 테스트</a></li>
+        <li><a href="#test-dart">Dart 테스트</a></li>
       </ol>
     </li>
-    <li><a href="#dev-commands">Development Commands</a></li>
+    <li><a href="#dev-commands">개발 명령어</a></li>
   </ol>
 </div>
 
 <!-- ============================================================ -->
-<!-- 1. Architecture Overview                                      -->
+<!-- 1. 아키텍처 개요                                               -->
 <!-- ============================================================ -->
 
-<h2 id="architecture">1. Architecture Overview</h2>
+<h2 id="architecture">1. 아키텍처 개요</h2>
 
-<h3 id="arch-layers">1.1 Layer Separation</h3>
-<p>The wallet is split into three distinct layers:</p>
+<h3 id="arch-layers">1.1 레이어 분리</h3>
+<p>월렛은 세 개의 레이어로 분리되어 있다:</p>
 <table>
-  <tr>
-    <th>Layer</th><th>Language</th><th>Responsibility</th><th>Key Files</th>
-  </tr>
+  <tr><th>Layer</th><th>Language</th><th>역할</th><th>주요 파일</th></tr>
   <tr>
     <td><span class="badge rust">Rust Core</span></td>
     <td>Rust</td>
-    <td>All Zcash cryptography: key derivation (ZIP-32), address encoding (ZIP-316), block scanning (trial decryption), wallet DB (SQLite), commitment tree management</td>
+    <td>모든 Zcash 암호학: 키 유도(ZIP-32), 주소 인코딩(ZIP-316), 블록 스캐닝(trial decryption), 월렛 DB(SQLite), commitment tree 관리</td>
     <td><code>rust/src/wallet/</code>, <code>rust/src/api/</code></td>
   </tr>
   <tr>
     <td><span class="badge ffi">FFI Bridge</span></td>
     <td>Generated</td>
-    <td>flutter_rust_bridge v2.11.1 codegen. Translates Rust <code>pub fn</code> in <code>rust/src/api/</code> into Dart async functions. Handles memory, serialization, error propagation.</td>
-    <td><code>lib/src/rust/</code> (auto-generated), <code>flutter_rust_bridge.yaml</code></td>
+    <td>flutter_rust_bridge v2.11.1 codegen. <code>rust/src/api/</code>의 <code>pub fn</code>을 Dart async 함수로 변환. 메모리, 직렬화, 에러 전파를 처리.</td>
+    <td><code>lib/src/rust/</code> (자동 생성), <code>flutter_rust_bridge.yaml</code></td>
   </tr>
   <tr>
     <td><span class="badge dart">Dart UI</span></td>
     <td>Dart / Flutter</td>
-    <td>UI rendering, state management (Riverpod), navigation (GoRouter), secure storage (iOS Keychain / Android Keystore), gRPC client to lightwalletd, sync loop orchestration</td>
+    <td>UI 렌더링, 상태 관리(Riverpod), 네비게이션(GoRouter), 보안 저장소(iOS Keychain / Android Keystore), lightwalletd gRPC 클라이언트, sync 루프 오케스트레이션</td>
     <td><code>lib/src/providers/</code>, <code>lib/src/features/</code>, <code>lib/app.dart</code></td>
   </tr>
 </table>
 
-<h3 id="arch-diagram">1.2 Data Flow Diagram</h3>
+<h3 id="arch-diagram">1.2 데이터 흐름 다이어그램</h3>
 <div class="diagram">
                           lightwalletd (zec.rocks:443)
                                     |
@@ -212,8 +163,8 @@
                                     |
                     +---------------+---------------+
                     |                               |
-             Download blocks                  Get tree states
-             Get subtree roots                Get chain tip
+             블록 다운로드                    tree state 조회
+             subtree roots 조회              chain tip 조회
                     |                               |
                     v                               v
         +---------------------+         +---------------------+
@@ -221,7 +172,7 @@
         |  (SyncNotifier)     |-------->|  (WalletNotifier)   |
         +---------------------+         +---------------------+
                     |                               |
-              FFI calls                       FFI calls
+              FFI 호출                          FFI 호출
                     |                               |
         +-----------+-----------+       +-----------+-----------+
         |  rust/src/api/sync.rs |       | rust/src/api/wallet.rs|
@@ -240,104 +191,103 @@
          (wallet.db + cache/)
 </div>
 
-<h3 id="arch-why">1.3 Why Rust + Flutter</h3>
-<p>The official Zcash ecosystem provides mobile SDKs for Swift (iOS) and Kotlin (Android), both of which wrap the same <code>librustzcash</code> Rust crates via UniFFI / JNI. There is no official Flutter/Dart SDK.</p>
-<p>Our approach calls <code>librustzcash</code> directly via FFI, which gives us:</p>
+<h3 id="arch-why">1.3 왜 Rust + Flutter인가</h3>
+<p>공식 Zcash 생태계에서 Swift(iOS)와 Kotlin(Android) 모바일 SDK를 제공하지만, 둘 다 내부적으로 동일한 <code>librustzcash</code> Rust 크레이트를 UniFFI / JNI로 래핑한 것이다. 공식 Flutter/Dart SDK는 존재하지 않는다.</p>
+<p>우리 접근법은 <code>librustzcash</code>를 FFI로 직접 호출하며, 이를 통해:</p>
 <ul>
-  <li><strong>Single Rust codebase</strong> for both iOS and Android &mdash; no platform-specific crypto code</li>
-  <li><strong>Direct access</strong> to <code>zcash_client_backend</code> and <code>zcash_client_sqlite</code> without an intermediary SDK</li>
-  <li><strong>flutter_rust_bridge</strong> handles cross-compilation, async, and type marshalling automatically</li>
+  <li><strong>단일 Rust 코드베이스</strong>로 iOS와 Android 모두 커버 — 플랫폼별 암호화 코드 불필요</li>
+  <li><code>zcash_client_backend</code>와 <code>zcash_client_sqlite</code>에 중간 SDK 없이 <strong>직접 접근</strong></li>
+  <li><strong>flutter_rust_bridge</strong>가 크로스 컴파일, async, 타입 마샬링을 자동으로 처리</li>
 </ul>
 
 <!-- ============================================================ -->
-<!-- 2. Flutter Rust Bridge (FRB) Communication                    -->
+<!-- 2. FRB 통신                                                    -->
 <!-- ============================================================ -->
 
-<h2 id="ffi">2. Flutter Rust Bridge (FRB) Communication</h2>
+<h2 id="ffi">2. Flutter Rust Bridge (FRB) 통신</h2>
 
-<h3 id="ffi-how">2.1 How FRB Works</h3>
-<p>FRB reads Rust source files in <code>rust/src/api/</code> and generates Dart bindings. At runtime:</p>
+<h3 id="ffi-how">2.1 FRB 작동 방식</h3>
+<p>FRB는 <code>rust/src/api/</code>의 Rust 소스 파일을 읽고 Dart 바인딩을 생성한다. 런타임에:</p>
 <ol>
-  <li>Dart calls a generated async function (e.g. <code>createWallet()</code>)</li>
-  <li>FRB serializes arguments using SSE (Simple Serialization Engine)</li>
-  <li>The call is dispatched to a Rust function on a separate isolate/thread</li>
-  <li>Rust executes the function, serializes the result</li>
-  <li>FRB deserializes the result back into Dart objects</li>
+  <li>Dart가 생성된 async 함수를 호출 (예: <code>createWallet()</code>)</li>
+  <li>FRB가 SSE(Simple Serialization Engine)로 인자를 직렬화</li>
+  <li>별도 isolate/thread의 Rust 함수로 호출이 전달됨</li>
+  <li>Rust가 함수를 실행하고 결과를 직렬화</li>
+  <li>FRB가 결과를 역직렬화하여 Dart 객체로 반환</li>
 </ol>
-<p>Rust functions marked <code>#[flutter_rust_bridge::frb(sync)]</code> run synchronously on the calling thread (no isolate hop). Use this only for trivial, non-blocking operations.</p>
+<p><code>#[flutter_rust_bridge::frb(sync)]</code>로 표시된 Rust 함수는 호출 스레드에서 동기적으로 실행된다(isolate 전환 없음). 간단하고 블로킹하지 않는 연산에만 사용해야 한다.</p>
 
-<h3 id="ffi-types">2.2 Type Mapping</h3>
+<h3 id="ffi-types">2.2 타입 매핑</h3>
 <table>
-  <tr><th>Rust Type</th><th>Dart Type</th><th>Notes</th></tr>
-  <tr><td><code>String</code></td><td><code>String</code></td><td>UTF-8, copied across FFI</td></tr>
-  <tr><td><code>u64</code></td><td><code>BigInt</code></td><td>Dart <code>int</code> is 64-bit on native, but FRB uses <code>BigInt</code> for u64</td></tr>
+  <tr><th>Rust Type</th><th>Dart Type</th><th>비고</th></tr>
+  <tr><td><code>String</code></td><td><code>String</code></td><td>UTF-8, FFI 경계에서 복사됨</td></tr>
+  <tr><td><code>u64</code></td><td><code>BigInt</code></td><td>Dart <code>int</code>는 네이티브에서 64비트이지만 FRB는 u64에 <code>BigInt</code> 사용</td></tr>
   <tr><td><code>u32</code>, <code>u8</code></td><td><code>int</code></td><td></td></tr>
   <tr><td><code>bool</code></td><td><code>bool</code></td><td></td></tr>
-  <tr><td><code>Vec&lt;u8&gt;</code></td><td><code>Uint8List</code></td><td>Efficient byte transfer</td></tr>
+  <tr><td><code>Vec&lt;u8&gt;</code></td><td><code>Uint8List</code></td><td>효율적 바이트 전송</td></tr>
   <tr><td><code>Vec&lt;T&gt;</code></td><td><code>List&lt;T&gt;</code></td><td></td></tr>
-  <tr><td><code>Result&lt;T, String&gt;</code></td><td><code>Future&lt;T&gt;</code></td><td><code>Err</code> becomes a Dart exception</td></tr>
-  <tr><td><code>struct Foo { pub x: String }</code></td><td><code>class Foo { final String x; }</code></td><td>FRB generates the Dart class</td></tr>
+  <tr><td><code>Result&lt;T, String&gt;</code></td><td><code>Future&lt;T&gt;</code></td><td><code>Err</code>는 Dart 예외가 됨</td></tr>
+  <tr><td><code>struct Foo { pub x: String }</code></td><td><code>class Foo { final String x; }</code></td><td>FRB가 Dart 클래스를 생성</td></tr>
 </table>
 
-<h3 id="ffi-codegen">2.3 Codegen Workflow</h3>
-<pre><code># After modifying any file in rust/src/api/*.rs:
-# (adding/removing/changing pub fn signatures or pub structs)
+<h3 id="ffi-codegen">2.3 Codegen 워크플로우</h3>
+<pre><code># rust/src/api/*.rs 파일을 수정한 후 (pub fn 시그니처나 pub struct 변경 시):
 flutter_rust_bridge_codegen generate
 
-# This regenerates:
-#   lib/src/rust/api/*.dart        (Dart bindings)
-#   lib/src/rust/frb_generated.*   (FFI glue)
-#   rust/src/frb_generated.rs      (Rust FFI glue)</code></pre>
+# 재생성되는 파일:
+#   lib/src/rust/api/*.dart        (Dart 바인딩)
+#   lib/src/rust/frb_generated.*   (FFI 글루 코드)
+#   rust/src/frb_generated.rs      (Rust FFI 글루 코드)</code></pre>
 
 <div class="note">
-  <p><strong>Important:</strong> Run codegen from the project root (<code>/zcash-wallet/</code>), not from <code>rust/</code>. The <code>flutter_rust_bridge.yaml</code> config is in the project root.</p>
+  <p><strong>중요:</strong> codegen은 프로젝트 루트(<code>/zcash-wallet/</code>)에서 실행해야 한다. <code>rust/</code>에서 실행하면 안 된다. <code>flutter_rust_bridge.yaml</code> 설정이 프로젝트 루트에 있기 때문이다.</p>
 </div>
 
-<h3 id="ffi-constraints">2.4 Design Constraints</h3>
+<h3 id="ffi-constraints">2.4 설계 제약</h3>
 <ul>
-  <li><strong>Simple types only at the API boundary.</strong> FRB handles primitives, <code>String</code>, <code>Vec</code>, and flat structs well. Complex Zcash types (<code>WalletDb</code>, <code>UnifiedSpendingKey</code>, <code>CompactBlock</code>) must stay inside Rust. The API layer (<code>rust/src/api/</code>) converts between simple types and internal Zcash types.</li>
-  <li><strong>No persistent Rust state across calls.</strong> Each FFI call opens the database, performs the operation, and closes. There is no long-lived <code>WalletDb</code> instance held in Rust. This is simpler and avoids lifecycle issues.</li>
-  <li><strong>Errors are strings.</strong> <code>Result&lt;T, String&gt;</code> is used throughout the API. Zcash crate errors are formatted into human-readable strings at the API boundary.</li>
+  <li><strong>API 경계에는 단순 타입만 사용.</strong> FRB는 프리미티브, <code>String</code>, <code>Vec</code>, 플랫 struct를 잘 처리한다. 복잡한 Zcash 타입(<code>WalletDb</code>, <code>UnifiedSpendingKey</code>, <code>CompactBlock</code>)은 Rust 내부에 머물러야 한다. API 레이어(<code>rust/src/api/</code>)가 단순 타입과 내부 Zcash 타입 간의 변환을 담당한다.</li>
+  <li><strong>호출 간 Rust 상태를 유지하지 않는다.</strong> 각 FFI 호출은 DB를 열고, 연산을 수행하고, 닫는다. Rust에 장기 유지되는 <code>WalletDb</code> 인스턴스가 없다. 더 단순하고 라이프사이클 문제를 피할 수 있다.</li>
+  <li><strong>에러는 문자열이다.</strong> API 전체에서 <code>Result&lt;T, String&gt;</code>을 사용한다. Zcash crate 에러는 API 경계에서 사람이 읽을 수 있는 문자열로 포맷된다.</li>
 </ul>
 
 <!-- ============================================================ -->
-<!-- 3. Rust Core Logic                                            -->
+<!-- 3. Rust 핵심 로직                                              -->
 <!-- ============================================================ -->
 
-<h2 id="rust-core">3. Rust Core Logic</h2>
+<h2 id="rust-core">3. Rust 핵심 로직</h2>
 
-<h3 id="rust-modules">3.1 Module Structure</h3>
+<h3 id="rust-modules">3.1 모듈 구조</h3>
 <pre><code>rust/src/
-  lib.rs                  # Module declarations
-  frb_generated.rs        # Auto-generated FRB glue (do not edit)
+  lib.rs                  # 모듈 선언
+  frb_generated.rs        # FRB 자동 생성 글루 코드 (수정 금지)
   api/
-    mod.rs                # API module declarations
-    wallet.rs             # FRB-exposed wallet functions (6 functions)
-    sync.rs               # FRB-exposed sync functions (8 functions)
-    simple.rs             # FRB demo (greet function, can be removed)
+    mod.rs                # API 모듈 선언
+    wallet.rs             # FRB 노출 wallet 함수 (6개)
+    sync.rs               # FRB 노출 sync 함수 (8개)
+    simple.rs             # FRB 데모 (greet 함수, 제거 가능)
   wallet/
-    mod.rs                # Internal module declarations
-    keys.rs               # Key derivation, mnemonic, address generation
-    sync.rs               # Block scanning, balance queries, chain state</code></pre>
+    mod.rs                # 내부 모듈 선언
+    keys.rs               # 키 유도, 니모닉, 주소 생성
+    sync.rs               # 블록 스캐닝, 잔액 조회, 체인 상태</code></pre>
 
-<p>The <code>api/</code> layer is the FFI boundary &mdash; it contains only thin wrappers that parse parameters and delegate to <code>wallet/</code>. The <code>wallet/</code> layer contains the actual Zcash logic.</p>
+<p><code>api/</code> 레이어가 FFI 경계이며, 파라미터를 파싱하고 <code>wallet/</code>에 위임하는 얇은 래퍼만 포함한다. <code>wallet/</code> 레이어에 실제 Zcash 로직이 들어있다.</p>
 
-<h3 id="rust-wallet">3.2 Wallet API &mdash; Key Derivation &amp; Account Management</h3>
+<h3 id="rust-wallet">3.2 Wallet API — 키 유도 &amp; 계정 관리</h3>
 
-<p>File: <code>rust/src/wallet/keys.rs</code></p>
+<p>파일: <code>rust/src/wallet/keys.rs</code></p>
 
-<p><strong>Mnemonic generation:</strong> Uses <code>bip0039</code> crate to generate 24-word BIP-39 mnemonics with 256-bit entropy. Seed derivation follows the standard: PBKDF2-HMAC-SHA512 with salt <code>"mnemonic" + passphrase</code> (empty passphrase).</p>
+<p><strong>니모닉 생성:</strong> <code>bip0039</code> 크레이트로 256비트 엔트로피의 24단어 BIP-39 니모닉을 생성한다. Seed 유도는 표준을 따른다: PBKDF2-HMAC-SHA512, salt = <code>"mnemonic" + passphrase</code> (빈 passphrase).</p>
 
-<p><strong>Key derivation:</strong> <code>zcash_keys::UnifiedSpendingKey::from_seed()</code> derives three key types from a single seed:</p>
+<p><strong>키 유도:</strong> <code>zcash_keys::UnifiedSpendingKey::from_seed()</code>가 하나의 seed에서 세 종류의 키를 유도한다:</p>
 <ul>
-  <li><strong>Transparent:</strong> BIP-44 path <code>m/44'/133'/0'</code> (mainnet)</li>
-  <li><strong>Sapling:</strong> ZIP-32 HD derivation on the Jubjub curve</li>
-  <li><strong>Orchard:</strong> ZIP-32 HD derivation on the Pallas curve</li>
+  <li><strong>Transparent:</strong> BIP-44 경로 <code>m/44'/133'/0'</code> (mainnet)</li>
+  <li><strong>Sapling:</strong> Jubjub 곡선 위의 ZIP-32 HD 유도</li>
+  <li><strong>Orchard:</strong> Pallas 곡선 위의 ZIP-32 HD 유도</li>
 </ul>
 
-<p><strong>Account creation:</strong> <code>WalletDb::create_account()</code> stores only the Unified Full Viewing Key (UFVK) in the database. The spending key is never persisted in the DB.</p>
+<p><strong>계정 생성:</strong> <code>WalletDb::create_account()</code>은 Unified Full Viewing Key (UFVK)만 데이터베이스에 저장한다. Spending key는 DB에 영속화하지 않는다.</p>
 
-<p><strong>Address encoding:</strong> The Unified Address is generated with <code>Require Orchard + Require Sapling + Omit Transparent</code>, matching zodl/Zashi wallet behavior. This is controlled by the <code>shielded_address_request()</code> helper function.</p>
+<p><strong>주소 인코딩:</strong> Unified Address는 <code>Require Orchard + Require Sapling + Omit Transparent</code>로 생성하며, zodl/Zashi 월렛 동작과 일치한다. <code>shielded_address_request()</code> 헬퍼 함수가 이를 제어한다.</p>
 
 <pre><code>fn shielded_address_request() -> UnifiedAddressRequest {
     UnifiedAddressRequest::custom(
@@ -347,269 +297,269 @@ flutter_rust_bridge_codegen generate
     ).expect("valid receiver requirements")
 }</code></pre>
 
-<h3 id="rust-sync">3.3 Sync API &mdash; Block Scanning &amp; Balance</h3>
+<h3 id="rust-sync">3.3 Sync API — 블록 스캐닝 &amp; 잔액</h3>
 
-<p>File: <code>rust/src/wallet/sync.rs</code></p>
+<p>파일: <code>rust/src/wallet/sync.rs</code></p>
 
-<p>Individual sync steps exposed to Dart. Each function opens the database, performs one operation, and returns. Dart orchestrates the sequence.</p>
+<p>Dart에 노출되는 개별 sync 단계. 각 함수는 DB를 열고, 하나의 연산을 수행하고, 반환한다. Dart가 시퀀스를 오케스트레이션한다.</p>
 
 <table>
-  <tr><th>Function</th><th>What it does</th></tr>
-  <tr><td><code>update_chain_tip()</code></td><td>Sets the latest block height in the wallet DB. Must be called before <code>suggest_scan_ranges()</code>.</td></tr>
-  <tr><td><code>put_sapling_subtree_roots()</code></td><td>Stores Sapling commitment tree subtree roots for efficient tree reconstruction.</td></tr>
-  <tr><td><code>put_orchard_subtree_roots()</code></td><td>Same for Orchard.</td></tr>
-  <tr><td><code>suggest_scan_ranges()</code></td><td>Queries the wallet DB for block ranges that need scanning, ordered by priority.</td></tr>
-  <tr><td><code>write_block_metadata()</code></td><td>Registers compact block files in the <code>FsBlockDb</code> metadata DB. Validates that files exist.</td></tr>
-  <tr><td><code>scan_blocks()</code></td><td>Performs trial decryption on cached compact blocks using <code>scan_cached_blocks()</code> from <code>zcash_client_backend</code>.</td></tr>
-  <tr><td><code>get_sync_progress()</code></td><td>Returns <code>fully_scanned_height</code> and <code>chain_tip_height</code> from the wallet summary.</td></tr>
-  <tr><td><code>get_wallet_balance()</code></td><td>Returns spendable balances for transparent, Sapling, and Orchard pools.</td></tr>
+  <tr><th>Function</th><th>역할</th></tr>
+  <tr><td><code>update_chain_tip()</code></td><td>월렛 DB에 최신 블록 높이를 설정한다. <code>suggest_scan_ranges()</code> 전에 반드시 호출해야 한다.</td></tr>
+  <tr><td><code>put_sapling_subtree_roots()</code></td><td>효율적 트리 재구성을 위한 Sapling commitment tree subtree root를 저장한다.</td></tr>
+  <tr><td><code>put_orchard_subtree_roots()</code></td><td>Orchard에 대해 동일.</td></tr>
+  <tr><td><code>suggest_scan_ranges()</code></td><td>월렛 DB에서 스캔이 필요한 블록 범위를 우선순위 순으로 조회한다.</td></tr>
+  <tr><td><code>write_block_metadata()</code></td><td><code>FsBlockDb</code> 메타데이터 DB에 compact block 파일을 등록한다. 파일 존재 여부를 검증한다.</td></tr>
+  <tr><td><code>scan_blocks()</code></td><td><code>zcash_client_backend</code>의 <code>scan_cached_blocks()</code>를 사용하여 캐시된 compact block에 trial decryption을 수행한다.</td></tr>
+  <tr><td><code>get_sync_progress()</code></td><td>월렛 요약에서 <code>fully_scanned_height</code>와 <code>chain_tip_height</code>를 반환한다.</td></tr>
+  <tr><td><code>get_wallet_balance()</code></td><td>transparent, Sapling, Orchard 풀의 사용 가능 잔액을 반환한다.</td></tr>
 </table>
 
-<h3 id="rust-deps">3.4 Zcash Crate Dependency Graph</h3>
+<h3 id="rust-deps">3.4 Zcash Crate 의존성 그래프</h3>
 <div class="diagram">
-  zcash_client_sqlite (0.19.5)  &lt;-- Our main entry point
+  zcash_client_sqlite (0.19.5)  &lt;-- 우리의 주요 진입점
     |-- zcash_client_backend (0.21.2)
     |     |-- zcash_keys (0.12.0)
     |     |-- zcash_protocol (0.7.2)
     |     |-- zcash_address (0.10.1)
     |     |-- zcash_primitives (0.26.4)
     |     +-- lightwalletd proto (via tonic-prost)
-    |-- sapling-crypto (0.5.x)   &lt;-- Must match zcash_client_sqlite's version
-    +-- orchard (0.11.x)         &lt;-- Must match zcash_client_sqlite's version
+    |-- sapling-crypto (0.5.x)   &lt;-- zcash_client_sqlite의 버전과 반드시 일치해야 함
+    +-- orchard (0.11.x)         &lt;-- zcash_client_sqlite의 버전과 반드시 일치해야 함
 </div>
 
 <div class="note">
-  <p><strong>Version constraint:</strong> <code>orchard</code> and <code>sapling-crypto</code> versions must match what <code>zcash_client_sqlite</code> uses internally. If you use different versions, you get type mismatch errors (e.g. "expected <code>sapling_crypto::Node</code>, found <code>Node</code>") because Rust treats different crate versions as different types.</p>
+  <p><strong>버전 제약:</strong> <code>orchard</code>와 <code>sapling-crypto</code> 버전은 <code>zcash_client_sqlite</code>가 내부적으로 사용하는 것과 반드시 일치해야 한다. 다른 버전을 사용하면 타입 불일치 에러가 발생한다 (예: "expected <code>sapling_crypto::Node</code>, found <code>Node</code>"). Rust는 서로 다른 crate 버전을 다른 타입으로 취급하기 때문이다.</p>
 </div>
 
-<h3 id="rust-security">3.5 Security Model: Spending Key Separation</h3>
-<p>This is an intentional design by <code>librustzcash</code>, not our choice:</p>
+<h3 id="rust-security">3.5 보안 모델: Spending Key 분리</h3>
+<p>이것은 <code>librustzcash</code>의 의도적인 설계이며, 우리의 선택이 아니다:</p>
 <ul>
-  <li><code>WalletDb</code> stores only the <strong>Unified Full Viewing Key (UFVK)</strong> &mdash; sufficient for detecting transactions and computing balances, but cannot spend funds.</li>
-  <li>The <strong>mnemonic / seed</strong> is stored in Dart's <code>flutter_secure_storage</code> (iOS Keychain / Android Keystore), encrypted at rest by the OS.</li>
-  <li>The spending key is derived on-the-fly from the seed only when needed for transaction signing, passed to Rust via FFI, and used with <code>secrecy::SecretVec</code> for memory zeroization after use.</li>
+  <li><code>WalletDb</code>에는 <strong>Unified Full Viewing Key (UFVK)</strong>만 저장된다 — 트랜잭션 감지와 잔액 계산에는 충분하지만, 자금을 사용할 수는 없다.</li>
+  <li><strong>니모닉 / seed</strong>는 Dart의 <code>flutter_secure_storage</code>(iOS Keychain / Android Keystore)에 저장되며, OS에 의해 rest 상태에서 암호화된다.</li>
+  <li>Spending key는 트랜잭션 서명이 필요할 때만 seed에서 즉석에서 유도되고, FFI를 통해 Rust에 전달되며, 사용 후 <code>secrecy::SecretVec</code>으로 메모리 제로화된다.</li>
 </ul>
 
 <!-- ============================================================ -->
-<!-- 4. Dart / Flutter Layer                                       -->
+<!-- 4. Dart / Flutter 레이어                                       -->
 <!-- ============================================================ -->
 
-<h2 id="dart-layer">4. Dart / Flutter Layer</h2>
+<h2 id="dart-layer">4. Dart / Flutter 레이어</h2>
 
 <h3 id="dart-providers">4.1 Riverpod Providers</h3>
 
 <p><strong><code>walletProvider</code></strong> (<code>AsyncNotifierProvider&lt;WalletNotifier, WalletState&gt;</code>)</p>
 <ul>
-  <li>On <code>build()</code>: checks if wallet DB exists, loads address from UFVK</li>
-  <li><code>createWallet()</code>: generates mnemonic, creates account, saves mnemonic to secure storage</li>
-  <li><code>importWallet()</code>: validates mnemonic, deletes existing DB, creates account</li>
+  <li><code>build()</code>에서: 월렛 DB 존재 여부를 확인하고, UFVK에서 주소를 로드</li>
+  <li><code>createWallet()</code>: 니모닉을 생성하고, 계정을 만들고, 니모닉을 secure storage에 저장</li>
+  <li><code>importWallet()</code>: 니모닉을 검증하고, 기존 DB를 삭제하고, 계정을 생성</li>
   <li><code>WalletState</code>: <code>{ hasWallet, unifiedAddress, network }</code></li>
 </ul>
 
 <p><strong><code>syncProvider</code></strong> (<code>AsyncNotifierProvider&lt;SyncNotifier, SyncState&gt;</code>)</p>
 <ul>
-  <li>Manages the entire sync lifecycle via gRPC + Rust FFI</li>
-  <li><code>startSync()</code>: connects to lightwalletd, runs the sync loop</li>
-  <li><code>stopSync()</code>: sets cancellation flag</li>
+  <li>gRPC + Rust FFI를 통한 전체 sync 라이프사이클 관리</li>
+  <li><code>startSync()</code>: lightwalletd에 연결하고 sync 루프를 실행</li>
+  <li><code>stopSync()</code>: 취소 플래그 설정</li>
   <li><code>SyncState</code>: <code>{ isSyncing, percentage, scannedHeight, chainTipHeight, transparentBalance, saplingBalance, orchardBalance, totalBalance, error }</code></li>
 </ul>
 
-<h3 id="dart-sync-loop">4.2 Sync Loop Orchestration</h3>
-<p>The sync loop runs in Dart (not Rust), following the zodl/Zashi Android SDK pattern where Kotlin's <code>CompactBlockProcessor</code> manages the loop. Our equivalent is <code>SyncNotifier._runSync()</code>.</p>
+<h3 id="dart-sync-loop">4.2 Sync 루프 오케스트레이션</h3>
+<p>Sync 루프는 Dart에서 실행된다(Rust가 아님). zodl/Zashi Android SDK에서 Kotlin의 <code>CompactBlockProcessor</code>가 루프를 관리하는 패턴을 따른다. 우리의 동등한 구현은 <code>SyncNotifier._runSync()</code>이다.</p>
 
-<pre><code>// Simplified sync loop (actual code in sync_provider.dart)
-1. Connect gRPC to zec.rocks:443
-2. Get chain tip height
-3. Call Rust: update_chain_tip(height)
-4. Download Sapling + Orchard subtree roots via gRPC stream
-5. Call Rust: put_subtree_roots(sapling_roots, orchard_roots)
-6. Loop:
-   a. Call Rust: suggest_scan_ranges() -> ranges
-   b. If no ranges: done (fully synced)
-   c. Pick highest-priority range, batch = 1000 blocks
-   d. Download compact blocks via gRPC stream
-   e. Write block files to {cache}/blocks/{height}-{hash}-compactblock
-   f. Call Rust: write_block_metadata(metas)
-   g. Get tree state via gRPC: getTreeState(start - 1)
-   h. Call Rust: scan_blocks(from_height, tree_state, limit)
-   i. Call Rust: get_sync_status() + get_balance()
-   j. Update SyncState -> UI refreshes</code></pre>
+<pre><code>// 간소화된 sync 루프 (실제 코드는 sync_provider.dart)
+1. gRPC로 zec.rocks:443에 연결
+2. chain tip 높이 조회
+3. Rust 호출: update_chain_tip(height)
+4. gRPC 스트림으로 Sapling + Orchard subtree roots 다운로드
+5. Rust 호출: put_subtree_roots(sapling_roots, orchard_roots)
+6. 루프:
+   a. Rust 호출: suggest_scan_ranges() -> ranges
+   b. 범위 없으면: 완료 (fully synced)
+   c. 최고 우선순위 범위 선택, batch = 1000 블록
+   d. gRPC 스트림으로 compact block 다운로드
+   e. 블록 파일을 {cache}/blocks/{height}-{hash}-compactblock에 저장
+   f. Rust 호출: write_block_metadata(metas)
+   g. gRPC로 tree state 조회: getTreeState(start - 1)
+   h. Rust 호출: scan_blocks(from_height, tree_state, limit)
+   i. Rust 호출: get_sync_status() + get_balance()
+   j. SyncState 업데이트 -> UI 갱신</code></pre>
 
-<h3 id="dart-grpc">4.3 gRPC Client &amp; Proto Definitions</h3>
-<p>Proto files from the <a href="https://github.com/zcash/lightwalletd">lightwalletd</a> repository are compiled to Dart using <code>protoc</code> + <code>protoc_plugin</code>.</p>
+<h3 id="dart-grpc">4.3 gRPC 클라이언트 &amp; Proto 정의</h3>
+<p><a href="https://github.com/zcash/lightwalletd">lightwalletd</a> 레포의 proto 파일을 <code>protoc</code> + <code>protoc_plugin</code>으로 Dart 코드로 컴파일한다.</p>
 
 <table>
-  <tr><th>Proto File</th><th>Generated Dart</th><th>Key Types</th></tr>
+  <tr><th>Proto File</th><th>Generated Dart</th><th>주요 타입</th></tr>
   <tr><td><code>protos/service.proto</code></td><td><code>lib/src/generated/service.pbgrpc.dart</code></td><td><code>CompactTxStreamerClient</code>, <code>BlockID</code>, <code>BlockRange</code>, <code>TreeState</code>, <code>ChainSpec</code></td></tr>
   <tr><td><code>protos/compact_formats.proto</code></td><td><code>lib/src/generated/compact_formats.pb.dart</code></td><td><code>CompactBlock</code>, <code>CompactTx</code>, <code>CompactSaplingOutput</code>, <code>CompactOrchardAction</code></td></tr>
 </table>
 
-<p>The Dart gRPC client connects to <code>zec.rocks:443</code> (mainnet) with TLS. Key RPC methods used:</p>
+<p>Dart gRPC 클라이언트는 TLS로 <code>zec.rocks:443</code>(mainnet)에 연결한다. 사용하는 주요 RPC 메서드:</p>
 <ul>
-  <li><code>getLatestBlock()</code> &mdash; current chain tip</li>
-  <li><code>getBlockRange()</code> &mdash; streaming download of compact blocks</li>
-  <li><code>getTreeState()</code> &mdash; commitment tree state at a given height</li>
-  <li><code>getSubtreeRoots()</code> &mdash; streaming download of subtree roots</li>
+  <li><code>getLatestBlock()</code> — 현재 chain tip</li>
+  <li><code>getBlockRange()</code> — compact block 스트리밍 다운로드</li>
+  <li><code>getTreeState()</code> — 특정 높이의 commitment tree 상태</li>
+  <li><code>getSubtreeRoots()</code> — subtree root 스트리밍 다운로드</li>
 </ul>
 
-<h3 id="dart-routing">4.4 Navigation &amp; Routing</h3>
-<p>Uses <code>go_router</code> with redirect guards based on wallet state:</p>
+<h3 id="dart-routing">4.4 네비게이션 &amp; 라우팅</h3>
+<p>월렛 상태 기반 redirect guard가 있는 <code>go_router</code>를 사용한다:</p>
 <pre><code>Routes:
-  /          -> redirects to /welcome or /home based on hasWallet
-  /welcome   -> WelcomeScreen (create / import choice)
-  /create    -> CreateWalletScreen (24-word grid)
-  /import    -> ImportWalletScreen (mnemonic input)
-  /home      -> HomeScreen (balance, sync status, address)</code></pre>
+  /          -> hasWallet에 따라 /welcome 또는 /home으로 리다이렉트
+  /welcome   -> WelcomeScreen (생성 / 가져오기 선택)
+  /create    -> CreateWalletScreen (24단어 그리드)
+  /import    -> ImportWalletScreen (니모닉 입력)
+  /home      -> HomeScreen (잔액, sync 상태, 주소)</code></pre>
 
-<h3 id="dart-ui">4.5 UI Screens</h3>
+<h3 id="dart-ui">4.5 UI 화면</h3>
 <table>
-  <tr><th>Screen</th><th>File</th><th>Description</th></tr>
-  <tr><td>Welcome</td><td><code>features/onboarding/screens/welcome_screen.dart</code></td><td>"Create New Wallet" / "Import Wallet" buttons</td></tr>
-  <tr><td>Create Wallet</td><td><code>features/onboarding/screens/create_wallet_screen.dart</code></td><td>24-word mnemonic grid, backup confirmation checkbox</td></tr>
-  <tr><td>Import Wallet</td><td><code>features/onboarding/screens/import_wallet_screen.dart</code></td><td>Mnemonic text input, optional birthday height, real-time validation</td></tr>
-  <tr><td>Home</td><td><code>features/home/screens/home_screen.dart</code></td><td>Balance display, sync progress bar, address card with copy</td></tr>
+  <tr><th>Screen</th><th>File</th><th>설명</th></tr>
+  <tr><td>Welcome</td><td><code>features/onboarding/screens/welcome_screen.dart</code></td><td>"Create New Wallet" / "Import Wallet" 버튼</td></tr>
+  <tr><td>Create Wallet</td><td><code>features/onboarding/screens/create_wallet_screen.dart</code></td><td>24단어 니모닉 그리드, 백업 확인 체크박스</td></tr>
+  <tr><td>Import Wallet</td><td><code>features/onboarding/screens/import_wallet_screen.dart</code></td><td>니모닉 텍스트 입력, 선택적 birthday height, 실시간 유효성 검사</td></tr>
+  <tr><td>Home</td><td><code>features/home/screens/home_screen.dart</code></td><td>잔액 표시, sync 진행률 바, 주소 카드 + 복사</td></tr>
 </table>
 
 <!-- ============================================================ -->
-<!-- 5. Sync Engine Deep Dive                                      -->
+<!-- 5. Sync 엔진 상세                                              -->
 <!-- ============================================================ -->
 
-<h2 id="sync-deep">5. Sync Engine Deep Dive</h2>
+<h2 id="sync-deep">5. Sync 엔진 상세</h2>
 
-<h3 id="sync-flow">5.1 Full Sync Flow</h3>
-<p>Initial sync on mainnet starts from Sapling activation height (419,200) and must scan through to the current tip (~3.29M blocks). This takes hours on mobile.</p>
+<h3 id="sync-flow">5.1 전체 Sync 흐름</h3>
+<p>메인넷 초기 sync는 Sapling 활성화 높이(419,200)부터 시작하여 현재 tip(~329만 블록)까지 스캔해야 한다. 모바일에서 수 시간이 소요된다.</p>
 
-<p>The scan range priority system determines what to scan first:</p>
+<p>스캔 범위 우선순위 시스템이 무엇을 먼저 스캔할지 결정한다:</p>
 <table>
-  <tr><th>Priority</th><th>Value</th><th>Meaning</th></tr>
-  <tr><td>Verify</td><td>6</td><td>Chain reorg detection &mdash; scan immediately</td></tr>
-  <tr><td>ChainTip</td><td>5</td><td>Latest blocks &mdash; shows recent transactions</td></tr>
-  <tr><td>FoundNote</td><td>4</td><td>Complete commitment trees for found notes</td></tr>
-  <tr><td>OpenAdjacent</td><td>3</td><td>Near account birthday</td></tr>
-  <tr><td>Historic</td><td>2</td><td>Advance fully-scanned height</td></tr>
-  <tr><td>Scanned</td><td>1</td><td>Already scanned (skipped)</td></tr>
-  <tr><td>Ignored</td><td>0</td><td>Not relevant (skipped)</td></tr>
+  <tr><th>Priority</th><th>Value</th><th>의미</th></tr>
+  <tr><td>Verify</td><td>6</td><td>체인 reorg 감지 — 즉시 스캔</td></tr>
+  <tr><td>ChainTip</td><td>5</td><td>최신 블록 — 최근 트랜잭션 표시</td></tr>
+  <tr><td>FoundNote</td><td>4</td><td>발견된 노트의 commitment tree 완성</td></tr>
+  <tr><td>OpenAdjacent</td><td>3</td><td>계정 birthday 근처</td></tr>
+  <tr><td>Historic</td><td>2</td><td>fully-scanned height 전진</td></tr>
+  <tr><td>Scanned</td><td>1</td><td>이미 스캔됨 (건너뜀)</td></tr>
+  <tr><td>Ignored</td><td>0</td><td>관련 없음 (건너뜀)</td></tr>
 </table>
 
 <h3 id="sync-blockcache">5.2 Block Cache &amp; FsBlockDb</h3>
-<p><code>FsBlockDb</code> from <code>zcash_client_sqlite</code> is a filesystem-backed block cache:</p>
+<p><code>zcash_client_sqlite</code>의 <code>FsBlockDb</code>는 파일시스템 기반 블록 캐시다:</p>
 <ul>
-  <li><strong>Metadata DB:</strong> <code>{cache_path}/blockmeta.sqlite</code> &mdash; tracks which blocks are cached</li>
-  <li><strong>Block files:</strong> <code>{cache_path}/blocks/{height}-{hash_hex}-compactblock</code></li>
-  <li>Hash in filename is <strong>byte-reversed hex</strong> (matches <code>BlockHash::Display</code>)</li>
-  <li>File content is protobuf-serialized <code>CompactBlock</code></li>
+  <li><strong>메타데이터 DB:</strong> <code>{cache_path}/blockmeta.sqlite</code> — 캐시된 블록을 추적</li>
+  <li><strong>블록 파일:</strong> <code>{cache_path}/blocks/{height}-{hash_hex}-compactblock</code></li>
+  <li>파일명의 해시는 <strong>바이트 역순 hex</strong>이다 (<code>BlockHash::Display</code>와 일치)</li>
+  <li>파일 내용은 protobuf 직렬화된 <code>CompactBlock</code></li>
 </ul>
 
-<p>Dart writes the block files, Rust reads them during scanning. The flow:</p>
-<pre><code>Dart: gRPC download -> CompactBlock.writeToBuffer() -> write file
-Dart: call Rust write_block_metadata() -> validates files exist, writes to SQLite
-Rust: scan_cached_blocks() -> FsBlockDb reads files -> prost::decode -> trial decrypt</code></pre>
+<p>Dart가 블록 파일을 쓰고, Rust가 스캐닝 중에 읽는다. 흐름:</p>
+<pre><code>Dart: gRPC 다운로드 -> CompactBlock.writeToBuffer() -> 파일 쓰기
+Dart: Rust write_block_metadata() 호출 -> 파일 존재 검증, SQLite에 기록
+Rust: scan_cached_blocks() -> FsBlockDb가 파일 읽기 -> prost::decode -> trial decrypt</code></pre>
 
-<h3 id="sync-scanning">5.3 Trial Decryption &amp; Note Discovery</h3>
-<p><code>scan_cached_blocks()</code> from <code>zcash_client_backend</code> performs trial decryption on every shielded output in the cached blocks:</p>
+<h3 id="sync-scanning">5.3 Trial Decryption &amp; 노트 발견</h3>
+<p><code>zcash_client_backend</code>의 <code>scan_cached_blocks()</code>가 캐시된 블록의 모든 shielded 출력에 trial decryption을 수행한다:</p>
 <ul>
-  <li>For each Sapling output: attempts decryption with the wallet's Sapling IVK</li>
-  <li>For each Orchard action: attempts decryption with the wallet's Orchard IVK</li>
-  <li>Successful decryption = note belongs to this wallet &rarr; stored in wallet DB</li>
-  <li>Nullifiers are tracked to detect when notes are spent</li>
+  <li>각 Sapling 출력에 대해: 월렛의 Sapling IVK로 복호화 시도</li>
+  <li>각 Orchard 액션에 대해: 월렛의 Orchard IVK로 복호화 시도</li>
+  <li>복호화 성공 = 이 월렛의 노트 &rarr; 월렛 DB에 저장</li>
+  <li>Nullifier를 추적하여 노트가 사용되었는지 감지</li>
 </ul>
 
-<h3 id="sync-progress">5.4 Progress Reporting</h3>
-<p>After each batch of 1000 blocks, Dart calls <code>get_sync_status()</code> which reads <code>WalletSummary</code> from the DB. This provides <code>fully_scanned_height</code> and <code>chain_tip_height</code>, from which percentage is computed. The <code>SyncState</code> is updated and the UI reflects the new progress.</p>
+<h3 id="sync-progress">5.4 진행률 보고</h3>
+<p>1000 블록 배치마다 Dart가 <code>get_sync_status()</code>를 호출하여 DB에서 <code>WalletSummary</code>를 읽는다. 여기서 <code>fully_scanned_height</code>와 <code>chain_tip_height</code>를 제공하며, 이로부터 퍼센트를 계산한다. <code>SyncState</code>가 업데이트되고 UI에 새 진행률이 반영된다.</p>
 
 <!-- ============================================================ -->
-<!-- 6. API Reference                                              -->
+<!-- 6. API 레퍼런스                                                -->
 <!-- ============================================================ -->
 
-<h2 id="api-reference">6. API Reference</h2>
+<h2 id="api-reference">6. API 레퍼런스</h2>
 
-<h3 id="api-wallet">6.1 Wallet Functions</h3>
+<h3 id="api-wallet">6.1 Wallet 함수</h3>
 <table>
-  <tr><th>Dart Function</th><th>Rust Function</th><th>Sync?</th><th>Description</th></tr>
+  <tr><th>Dart Function</th><th>Rust Function</th><th>Sync?</th><th>설명</th></tr>
   <tr>
     <td><code>createWallet({network, dbPath})</code></td>
     <td><code>create_wallet(network, db_path)</code></td>
     <td>async</td>
-    <td>Generates mnemonic, creates account, returns <code>WalletCreationResult { mnemonic, unifiedAddress }</code></td>
+    <td>니모닉 생성, 계정 생성, <code>WalletCreationResult { mnemonic, unifiedAddress }</code> 반환</td>
   </tr>
   <tr>
     <td><code>importWallet({mnemonic, birthdayHeight?, network, dbPath})</code></td>
     <td><code>import_wallet(mnemonic, birthday_height, network, db_path)</code></td>
     <td>async</td>
-    <td>Imports from mnemonic, returns <code>WalletImportResult { unifiedAddress }</code></td>
+    <td>니모닉에서 가져오기, <code>WalletImportResult { unifiedAddress }</code> 반환</td>
   </tr>
   <tr>
     <td><code>getUnifiedAddress({dbPath, network})</code></td>
     <td><code>get_unified_address(db_path, network)</code></td>
     <td>async</td>
-    <td>Returns the shielded UA (Sapling+Orchard) from DB</td>
+    <td>DB에서 shielded UA (Sapling+Orchard) 반환</td>
   </tr>
   <tr>
     <td><code>getTransparentAddress({dbPath, network})</code></td>
     <td><code>get_transparent_address(db_path, network)</code></td>
     <td>async</td>
-    <td>Returns the transparent-only address from DB</td>
+    <td>DB에서 transparent 전용 주소 반환</td>
   </tr>
   <tr>
     <td><code>walletExists({dbPath})</code></td>
     <td><code>wallet_exists(db_path)</code></td>
     <td><strong>sync</strong></td>
-    <td>Checks if wallet DB file exists</td>
+    <td>월렛 DB 파일 존재 여부 확인</td>
   </tr>
   <tr>
     <td><code>validateMnemonic({mnemonic})</code></td>
     <td><code>validate_mnemonic(mnemonic)</code></td>
     <td><strong>sync</strong></td>
-    <td>Validates BIP-39 checksum and word list</td>
+    <td>BIP-39 체크섬 및 단어 목록 유효성 검사</td>
   </tr>
 </table>
 
-<h3 id="api-sync">6.2 Sync Functions</h3>
+<h3 id="api-sync">6.2 Sync 함수</h3>
 <table>
-  <tr><th>Dart Function</th><th>Rust Function</th><th>Description</th></tr>
+  <tr><th>Dart Function</th><th>Rust Function</th><th>설명</th></tr>
   <tr>
     <td><code>updateChainTip({dbPath, network, height})</code></td>
     <td><code>update_chain_tip(db_path, network, height)</code></td>
-    <td>Sets chain tip. Must call before <code>suggestScanRanges</code>.</td>
+    <td>chain tip 설정. <code>suggestScanRanges</code> 전에 반드시 호출.</td>
   </tr>
   <tr>
     <td><code>putSubtreeRoots({dbPath, network, saplingRoots, orchardRoots})</code></td>
     <td><code>put_subtree_roots(...)</code></td>
-    <td>Stores commitment tree subtree roots. Each root = <code>{ completingBlockHeight, rootHash[32] }</code></td>
+    <td>commitment tree subtree root 저장. 각 root = <code>{ completingBlockHeight, rootHash[32] }</code></td>
   </tr>
   <tr>
     <td><code>suggestScanRanges({dbPath, network})</code></td>
     <td><code>suggest_scan_ranges(db_path, network)</code></td>
-    <td>Returns <code>List&lt;ScanRangeInfo&gt;</code> with <code>{ start, end, priority }</code></td>
+    <td><code>List&lt;ScanRangeInfo&gt;</code> 반환: <code>{ start, end, priority }</code></td>
   </tr>
   <tr>
     <td><code>writeBlockMetadata({cachePath, blocks})</code></td>
     <td><code>write_block_metadata(cache_path, blocks)</code></td>
-    <td>Registers block files. <code>BlockMetaInfo = { height, hash[32], time, saplingOutputsCount, orchardActionsCount }</code></td>
+    <td>블록 파일 등록. <code>BlockMetaInfo = { height, hash[32], time, saplingOutputsCount, orchardActionsCount }</code></td>
   </tr>
   <tr>
     <td><code>scanBlocks({dbPath, cachePath, network, fromHeight, treeState*, limit})</code></td>
     <td><code>scan_blocks(...)</code></td>
-    <td>Trial decryption. TreeState passed as individual fields (network, height, hash, time, saplingTree, orchardTree).</td>
+    <td>Trial decryption. TreeState는 개별 필드로 전달 (network, height, hash, time, saplingTree, orchardTree).</td>
   </tr>
   <tr>
     <td><code>getSyncStatus({dbPath, network})</code></td>
     <td><code>get_sync_status(db_path, network)</code></td>
-    <td>Returns <code>SyncProgress { scannedHeight, chainTipHeight, isSyncing }</code></td>
+    <td><code>SyncProgress { scannedHeight, chainTipHeight, isSyncing }</code> 반환</td>
   </tr>
   <tr>
     <td><code>getBalance({dbPath, network})</code></td>
     <td><code>get_balance(db_path, network)</code></td>
-    <td>Returns <code>WalletBalance { transparent, sapling, orchard, total }</code> in zatoshi</td>
+    <td><code>WalletBalance { transparent, sapling, orchard, total }</code> 반환 (zatoshi 단위)</td>
   </tr>
   <tr>
     <td><code>getBlocksDir({cachePath})</code></td>
     <td><code>get_blocks_dir(cache_path)</code></td>
-    <td><strong>sync</strong>. Returns <code>{cachePath}/blocks</code></td>
+    <td><strong>sync</strong>. <code>{cachePath}/blocks</code> 반환</td>
   </tr>
 </table>
 
-<h3 id="api-structs">6.3 Data Structures</h3>
+<h3 id="api-structs">6.3 데이터 구조체</h3>
 <pre><code>// Wallet
 WalletCreationResult { mnemonic: String, unifiedAddress: String }
 WalletImportResult   { unifiedAddress: String }
@@ -624,75 +574,75 @@ BlockMetaInfo  { height: u64, hash: Vec&lt;u8&gt;, time: u32,
                  saplingOutputsCount: u32, orchardActionsCount: u32 }</code></pre>
 
 <!-- ============================================================ -->
-<!-- 7. Address System                                             -->
+<!-- 7. 주소 체계                                                   -->
 <!-- ============================================================ -->
 
-<h2 id="address">7. Address System</h2>
+<h2 id="address">7. 주소 체계</h2>
 
 <h3 id="addr-ua">7.1 Unified Address (Sapling + Orchard)</h3>
-<p>The primary address shown to users is a ZIP-316 Unified Address containing <strong>Sapling and Orchard receivers only</strong> (transparent is excluded). This matches zodl/Zashi behavior.</p>
+<p>사용자에게 표시되는 기본 주소는 <strong>Sapling과 Orchard receiver만</strong> 포함하는 ZIP-316 Unified Address이다 (transparent 제외). zodl/Zashi 동작과 일치한다.</p>
 <ul>
-  <li>Mainnet prefix: <code>u1...</code></li>
-  <li>Receivers: Orchard (Pallas curve) + Sapling (Jubjub curve)</li>
-  <li>Sending wallets automatically select the highest-privacy receiver they support</li>
+  <li>메인넷 접두사: <code>u1...</code></li>
+  <li>Receivers: Orchard (Pallas 곡선) + Sapling (Jubjub 곡선)</li>
+  <li>보내는 월렛이 자동으로 지원하는 가장 높은 프라이버시 레벨의 receiver를 선택</li>
 </ul>
 
 <h3 id="addr-transparent">7.2 Transparent Address</h3>
-<p>A separate transparent-only address is available via <code>getTransparentAddress()</code>. This is a standard t-address (P2PKH, prefix <code>t1</code> on mainnet) derived from the same seed at BIP-44 path <code>m/44'/133'/0'</code>.</p>
+<p><code>getTransparentAddress()</code>를 통해 별도의 transparent 전용 주소를 조회할 수 있다. 이것은 동일한 seed에서 BIP-44 경로 <code>m/44'/133'/0'</code>로 유도된 표준 t-address (P2PKH, 메인넷 접두사 <code>t1</code>)이다.</p>
 
-<h3 id="addr-zodl">7.3 Compatibility with zodl/Zashi</h3>
+<h3 id="addr-zodl">7.3 zodl/Zashi 호환성</h3>
 <div class="note">
-  <p>Same mnemonic will produce <strong>different addresses</strong> between our wallet and zodl. This is expected &mdash; zodl's Android SDK uses specific git revisions of <code>orchard</code> and <code>sapling-crypto</code> via <code>[patch.crates-io]</code> that differ from the crates.io published versions we use. The key derivation math produces different curve points. Both are valid Zcash addresses from the same seed.</p>
+  <p>같은 니모닉으로 생성해도 우리 월렛과 zodl에서 <strong>다른 주소가 생성</strong>된다. 이것은 예상된 동작이다 — zodl의 Android SDK가 <code>[patch.crates-io]</code>를 통해 crates.io 공개 버전과 다른 특정 git revision의 <code>orchard</code>와 <code>sapling-crypto</code>를 사용하기 때문이다. 키 유도 수학이 다른 곡선 포인트를 생성한다. 두 주소 모두 동일한 seed에서 유도된 유효한 Zcash 주소이다.</p>
 </div>
 
 <!-- ============================================================ -->
-<!-- 8. Testing                                                    -->
+<!-- 8. 테스트                                                      -->
 <!-- ============================================================ -->
 
-<h2 id="testing">8. Testing</h2>
+<h2 id="testing">8. 테스트</h2>
 
-<h3 id="test-rust">8.1 Rust Unit Tests (8 tests)</h3>
+<h3 id="test-rust">8.1 Rust 단위 테스트 (8개)</h3>
 <pre><code>cd rust && cargo test</code></pre>
 <table>
-  <tr><th>Test</th><th>What it verifies</th></tr>
-  <tr><td><code>test_generate_mnemonic_is_24_words</code></td><td>Generated mnemonic has exactly 24 words</td></tr>
-  <tr><td><code>test_mnemonic_to_seed_roundtrip</code></td><td>Mnemonic produces a 64-byte seed</td></tr>
-  <tr><td><code>test_invalid_mnemonic</code></td><td>Invalid mnemonic is rejected (BIP-39 checksum)</td></tr>
-  <tr><td><code>test_parse_network</code></td><td>"main" / "test" / "invalid" parsing</td></tr>
-  <tr><td><code>test_create_wallet_and_get_address</code></td><td>Full wallet creation + address retrieval roundtrip</td></tr>
-  <tr><td><code>test_create_testnet_wallet</code></td><td>Testnet wallet produces <code>utest1...</code> prefix</td></tr>
-  <tr><td><code>test_deterministic_address_from_same_seed</code></td><td>Same seed always produces the same address</td></tr>
-  <tr><td><code>test_shielded_address_has_sapling_and_orchard_only</code></td><td>UA contains Sapling+Orchard, no transparent</td></tr>
+  <tr><th>Test</th><th>검증 내용</th></tr>
+  <tr><td><code>test_generate_mnemonic_is_24_words</code></td><td>생성된 니모닉이 정확히 24단어인지</td></tr>
+  <tr><td><code>test_mnemonic_to_seed_roundtrip</code></td><td>니모닉이 64바이트 seed를 생성하는지</td></tr>
+  <tr><td><code>test_invalid_mnemonic</code></td><td>잘못된 니모닉이 거부되는지 (BIP-39 체크섬)</td></tr>
+  <tr><td><code>test_parse_network</code></td><td>"main" / "test" / "invalid" 파싱</td></tr>
+  <tr><td><code>test_create_wallet_and_get_address</code></td><td>전체 월렛 생성 + 주소 조회 라운드트립</td></tr>
+  <tr><td><code>test_create_testnet_wallet</code></td><td>테스트넷 월렛이 <code>utest1...</code> 접두사를 생성하는지</td></tr>
+  <tr><td><code>test_deterministic_address_from_same_seed</code></td><td>같은 seed가 항상 같은 주소를 생성하는지</td></tr>
+  <tr><td><code>test_shielded_address_has_sapling_and_orchard_only</code></td><td>UA에 Sapling+Orchard만 포함되고 transparent가 없는지</td></tr>
 </table>
 
-<h3 id="test-dart">8.2 Dart Tests</h3>
+<h3 id="test-dart">8.2 Dart 테스트</h3>
 <pre><code>fvm flutter test</code></pre>
-<p>Currently 2 unit tests for data class equality. Widget tests and integration tests require FRB initialization with a running Rust backend.</p>
+<p>현재 데이터 클래스 equality를 위한 2개의 단위 테스트가 있다. 위젯 테스트와 통합 테스트는 실행 중인 Rust 백엔드와 함께 FRB 초기화가 필요하다.</p>
 
 <!-- ============================================================ -->
-<!-- 9. Development Commands                                       -->
+<!-- 9. 개발 명령어                                                 -->
 <!-- ============================================================ -->
 
-<h2 id="dev-commands">9. Development Commands</h2>
+<h2 id="dev-commands">9. 개발 명령어</h2>
 
-<pre><code># Flutter (always use fvm)
-fvm flutter run                  # Run on connected device/simulator
-fvm flutter test                 # Dart unit tests
-fvm flutter analyze              # Static analysis
+<pre><code># Flutter (항상 fvm 사용)
+fvm flutter run                  # 연결된 디바이스/시뮬레이터에서 실행
+fvm flutter test                 # Dart 단위 테스트
+fvm flutter analyze              # 정적 분석
 
 # Rust
-cd rust && cargo test            # Rust unit tests
-cd rust && cargo check           # Fast compilation check
+cd rust && cargo test            # Rust 단위 테스트
+cd rust && cargo check           # 빠른 컴파일 체크
 
-# FRB codegen (after changing rust/src/api/*.rs)
-flutter_rust_bridge_codegen generate   # Run from project root!
+# FRB codegen (rust/src/api/*.rs 변경 후)
+flutter_rust_bridge_codegen generate   # 프로젝트 루트에서 실행!
 
-# Proto codegen (after changing protos/*.proto)
+# Proto codegen (protos/*.proto 변경 후)
 protoc --dart_out=grpc:lib/src/generated -Iprotos \
   protos/service.proto protos/compact_formats.proto
 
-# iOS simulator
-./clear-app.sh                   # Reset app + keychain on simulator</code></pre>
+# iOS 시뮬레이터
+./clear-app.sh                   # 시뮬레이터에서 앱 + 키체인 초기화</code></pre>
 
 </body>
 </html>
