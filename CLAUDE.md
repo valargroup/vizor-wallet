@@ -14,7 +14,14 @@ cd rust && cargo test
 # After changing Rust API files (rust/src/api/*.rs):
 # MUST run from project root, not rust/
 flutter_rust_bridge_codegen generate
+
+# Clear app from iOS simulator (keychain + state + uninstall)
+./clear-app.sh
 ```
+
+### clear-app.sh
+
+Removes the app from the booted iOS simulator including Keychain data. This is necessary when testing wallet creation/import because the mnemonic is stored in iOS Keychain via `flutter_secure_storage`, which persists even after a normal app uninstall.
 
 ## Architecture
 
