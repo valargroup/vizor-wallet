@@ -47,4 +47,8 @@ FRB codegen works best with simple types. Keep the `rust/src/api/` surface limit
 
 ## Crate Versions
 
-Pinned in `rust/Cargo.toml`. Key crates: `zcash_client_backend` 0.21.2, `zcash_client_sqlite` 0.19.5, `orchard` 0.12.0, `sapling-crypto` 0.6.1. These must stay compatible — check librustzcash releases before bumping.
+Pinned in `rust/Cargo.toml`. Key crates: `zcash_client_backend` 0.21.2, `zcash_client_sqlite` 0.19.5, `orchard` 0.11, `sapling-crypto` 0.5. These must stay compatible — check librustzcash releases before bumping.
+
+## Ignored Paths
+
+`onboarding/` — Developer onboarding documentation. Do not read or modify during normal development. Only update when explicitly asked.
