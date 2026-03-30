@@ -31,4 +31,12 @@ enum ZcashNetwork {
         mainnet => 9067,
         testnet => 18232,
       };
+
+  String get lightwalletdHost => switch (this) {
+        mainnet => 'mainnet.lightwalletd.com',
+        testnet => 'testnet.lightwalletd.com',
+      };
+
+  String get lightwalletdUrl =>
+      'https://$lightwalletdHost:$defaultPort';
 }

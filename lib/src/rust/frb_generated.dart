@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/simple.dart';
+import 'api/sync.dart';
 import 'api/wallet.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -67,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 1740094682;
+  int get rustContentHash => 450838099;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,6 +82,18 @@ abstract class RustLibApi extends BaseApi {
   Future<WalletCreationResult> crateApiWalletCreateWallet({
     required String network,
     required String dbPath,
+  });
+
+  Future<WalletBalance> crateApiSyncGetBalance({
+    required String dbPath,
+    required String network,
+  });
+
+  String crateApiSyncGetBlocksDir({required String cachePath});
+
+  Future<SyncProgress> crateApiSyncGetSyncStatus({
+    required String dbPath,
+    required String network,
   });
 
   Future<String> crateApiWalletGetTransparentAddress({
@@ -104,9 +117,46 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiSimpleInitApp();
 
+  Future<void> crateApiSyncPutSubtreeRoots({
+    required String dbPath,
+    required String network,
+    required List<SubtreeRoot> saplingRoots,
+    required List<SubtreeRoot> orchardRoots,
+  });
+
+  Future<ScanResult> crateApiSyncScanBlocks({
+    required String dbPath,
+    required String cachePath,
+    required String network,
+    required BigInt fromHeight,
+    required String treeStateNetwork,
+    required BigInt treeStateHeight,
+    required String treeStateHash,
+    required int treeStateTime,
+    required String treeStateSaplingTree,
+    required String treeStateOrchardTree,
+    required BigInt limit,
+  });
+
+  Future<List<ScanRangeInfo>> crateApiSyncSuggestScanRanges({
+    required String dbPath,
+    required String network,
+  });
+
+  Future<void> crateApiSyncUpdateChainTip({
+    required String dbPath,
+    required String network,
+    required BigInt height,
+  });
+
   bool crateApiWalletValidateMnemonic({required String mnemonic});
 
   bool crateApiWalletWalletExists({required String dbPath});
+
+  Future<void> crateApiSyncWriteBlockMetadata({
+    required String cachePath,
+    required List<BlockMetaInfo> blocks,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -152,7 +202,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<String> crateApiWalletGetTransparentAddress({
+  Future<WalletBalance> crateApiSyncGetBalance({
     required String dbPath,
     required String network,
   }) {
@@ -166,6 +216,97 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_wallet_balance,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSyncGetBalanceConstMeta,
+        argValues: [dbPath, network],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncGetBalanceConstMeta => const TaskConstMeta(
+    debugName: "get_balance",
+    argNames: ["dbPath", "network"],
+  );
+
+  @override
+  String crateApiSyncGetBlocksDir({required String cachePath}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(cachePath, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSyncGetBlocksDirConstMeta,
+        argValues: [cachePath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncGetBlocksDirConstMeta =>
+      const TaskConstMeta(debugName: "get_blocks_dir", argNames: ["cachePath"]);
+
+  @override
+  Future<SyncProgress> crateApiSyncGetSyncStatus({
+    required String dbPath,
+    required String network,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(network, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_sync_progress,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSyncGetSyncStatusConstMeta,
+        argValues: [dbPath, network],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncGetSyncStatusConstMeta => const TaskConstMeta(
+    debugName: "get_sync_status",
+    argNames: ["dbPath", "network"],
+  );
+
+  @override
+  Future<String> crateApiWalletGetTransparentAddress({
+    required String dbPath,
+    required String network,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(network, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
             port: port_,
           );
         },
@@ -200,7 +341,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 6,
             port: port_,
           );
         },
@@ -228,7 +369,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(name, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -262,7 +403,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 8,
             port: port_,
           );
         },
@@ -291,7 +432,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 9,
             port: port_,
           );
         },
@@ -310,13 +451,199 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<void> crateApiSyncPutSubtreeRoots({
+    required String dbPath,
+    required String network,
+    required List<SubtreeRoot> saplingRoots,
+    required List<SubtreeRoot> orchardRoots,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(network, serializer);
+          sse_encode_list_subtree_root(saplingRoots, serializer);
+          sse_encode_list_subtree_root(orchardRoots, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSyncPutSubtreeRootsConstMeta,
+        argValues: [dbPath, network, saplingRoots, orchardRoots],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncPutSubtreeRootsConstMeta =>
+      const TaskConstMeta(
+        debugName: "put_subtree_roots",
+        argNames: ["dbPath", "network", "saplingRoots", "orchardRoots"],
+      );
+
+  @override
+  Future<ScanResult> crateApiSyncScanBlocks({
+    required String dbPath,
+    required String cachePath,
+    required String network,
+    required BigInt fromHeight,
+    required String treeStateNetwork,
+    required BigInt treeStateHeight,
+    required String treeStateHash,
+    required int treeStateTime,
+    required String treeStateSaplingTree,
+    required String treeStateOrchardTree,
+    required BigInt limit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(cachePath, serializer);
+          sse_encode_String(network, serializer);
+          sse_encode_u_64(fromHeight, serializer);
+          sse_encode_String(treeStateNetwork, serializer);
+          sse_encode_u_64(treeStateHeight, serializer);
+          sse_encode_String(treeStateHash, serializer);
+          sse_encode_u_32(treeStateTime, serializer);
+          sse_encode_String(treeStateSaplingTree, serializer);
+          sse_encode_String(treeStateOrchardTree, serializer);
+          sse_encode_u_64(limit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_scan_result,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSyncScanBlocksConstMeta,
+        argValues: [
+          dbPath,
+          cachePath,
+          network,
+          fromHeight,
+          treeStateNetwork,
+          treeStateHeight,
+          treeStateHash,
+          treeStateTime,
+          treeStateSaplingTree,
+          treeStateOrchardTree,
+          limit,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncScanBlocksConstMeta => const TaskConstMeta(
+    debugName: "scan_blocks",
+    argNames: [
+      "dbPath",
+      "cachePath",
+      "network",
+      "fromHeight",
+      "treeStateNetwork",
+      "treeStateHeight",
+      "treeStateHash",
+      "treeStateTime",
+      "treeStateSaplingTree",
+      "treeStateOrchardTree",
+      "limit",
+    ],
+  );
+
+  @override
+  Future<List<ScanRangeInfo>> crateApiSyncSuggestScanRanges({
+    required String dbPath,
+    required String network,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(network, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_scan_range_info,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSyncSuggestScanRangesConstMeta,
+        argValues: [dbPath, network],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncSuggestScanRangesConstMeta =>
+      const TaskConstMeta(
+        debugName: "suggest_scan_ranges",
+        argNames: ["dbPath", "network"],
+      );
+
+  @override
+  Future<void> crateApiSyncUpdateChainTip({
+    required String dbPath,
+    required String network,
+    required BigInt height,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(network, serializer);
+          sse_encode_u_64(height, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSyncUpdateChainTipConstMeta,
+        argValues: [dbPath, network, height],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncUpdateChainTipConstMeta => const TaskConstMeta(
+    debugName: "update_chain_tip",
+    argNames: ["dbPath", "network", "height"],
+  );
+
+  @override
   bool crateApiWalletValidateMnemonic({required String mnemonic}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(mnemonic, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -342,7 +669,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -358,10 +685,60 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiWalletWalletExistsConstMeta =>
       const TaskConstMeta(debugName: "wallet_exists", argNames: ["dbPath"]);
 
+  @override
+  Future<void> crateApiSyncWriteBlockMetadata({
+    required String cachePath,
+    required List<BlockMetaInfo> blocks,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(cachePath, serializer);
+          sse_encode_list_block_meta_info(blocks, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSyncWriteBlockMetadataConstMeta,
+        argValues: [cachePath, blocks],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncWriteBlockMetadataConstMeta =>
+      const TaskConstMeta(
+        debugName: "write_block_metadata",
+        argNames: ["cachePath", "blocks"],
+      );
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as String;
+  }
+
+  @protected
+  BlockMetaInfo dco_decode_block_meta_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return BlockMetaInfo(
+      height: dco_decode_u_64(arr[0]),
+      hash: dco_decode_list_prim_u_8_strict(arr[1]),
+      time: dco_decode_u_32(arr[2]),
+      saplingOutputsCount: dco_decode_u_32(arr[3]),
+      orchardActionsCount: dco_decode_u_32(arr[4]),
+    );
   }
 
   @protected
@@ -377,15 +754,86 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<BlockMetaInfo> dco_decode_list_block_meta_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_block_meta_info).toList();
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
   }
 
   @protected
+  List<ScanRangeInfo> dco_decode_list_scan_range_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_scan_range_info).toList();
+  }
+
+  @protected
+  List<SubtreeRoot> dco_decode_list_subtree_root(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_subtree_root).toList();
+  }
+
+  @protected
   BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_64(raw);
+  }
+
+  @protected
+  ScanRangeInfo dco_decode_scan_range_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ScanRangeInfo(
+      start: dco_decode_u_64(arr[0]),
+      end: dco_decode_u_64(arr[1]),
+      priority: dco_decode_u_8(arr[2]),
+    );
+  }
+
+  @protected
+  ScanResult dco_decode_scan_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return ScanResult(blocksScanned: dco_decode_u_64(arr[0]));
+  }
+
+  @protected
+  SubtreeRoot dco_decode_subtree_root(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return SubtreeRoot(
+      completingBlockHeight: dco_decode_u_64(arr[0]),
+      rootHash: dco_decode_list_prim_u_8_strict(arr[1]),
+    );
+  }
+
+  @protected
+  SyncProgress dco_decode_sync_progress(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return SyncProgress(
+      scannedHeight: dco_decode_u_64(arr[0]),
+      chainTipHeight: dco_decode_u_64(arr[1]),
+      isSyncing: dco_decode_bool(arr[2]),
+    );
+  }
+
+  @protected
+  int dco_decode_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -404,6 +852,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
+  }
+
+  @protected
+  WalletBalance dco_decode_wallet_balance(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return WalletBalance(
+      transparent: dco_decode_u_64(arr[0]),
+      sapling: dco_decode_u_64(arr[1]),
+      orchard: dco_decode_u_64(arr[2]),
+      total: dco_decode_u_64(arr[3]),
+    );
   }
 
   @protected
@@ -435,6 +897,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BlockMetaInfo sse_decode_block_meta_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_height = sse_decode_u_64(deserializer);
+    var var_hash = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_time = sse_decode_u_32(deserializer);
+    var var_saplingOutputsCount = sse_decode_u_32(deserializer);
+    var var_orchardActionsCount = sse_decode_u_32(deserializer);
+    return BlockMetaInfo(
+      height: var_height,
+      hash: var_hash,
+      time: var_time,
+      saplingOutputsCount: var_saplingOutputsCount,
+      orchardActionsCount: var_orchardActionsCount,
+    );
+  }
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint8() != 0;
@@ -447,10 +926,50 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<BlockMetaInfo> sse_decode_list_block_meta_info(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <BlockMetaInfo>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_block_meta_info(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  List<ScanRangeInfo> sse_decode_list_scan_range_info(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ScanRangeInfo>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_scan_range_info(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<SubtreeRoot> sse_decode_list_subtree_root(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <SubtreeRoot>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_subtree_root(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -462,6 +981,56 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     } else {
       return null;
     }
+  }
+
+  @protected
+  ScanRangeInfo sse_decode_scan_range_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_start = sse_decode_u_64(deserializer);
+    var var_end = sse_decode_u_64(deserializer);
+    var var_priority = sse_decode_u_8(deserializer);
+    return ScanRangeInfo(
+      start: var_start,
+      end: var_end,
+      priority: var_priority,
+    );
+  }
+
+  @protected
+  ScanResult sse_decode_scan_result(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_blocksScanned = sse_decode_u_64(deserializer);
+    return ScanResult(blocksScanned: var_blocksScanned);
+  }
+
+  @protected
+  SubtreeRoot sse_decode_subtree_root(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_completingBlockHeight = sse_decode_u_64(deserializer);
+    var var_rootHash = sse_decode_list_prim_u_8_strict(deserializer);
+    return SubtreeRoot(
+      completingBlockHeight: var_completingBlockHeight,
+      rootHash: var_rootHash,
+    );
+  }
+
+  @protected
+  SyncProgress sse_decode_sync_progress(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_scannedHeight = sse_decode_u_64(deserializer);
+    var var_chainTipHeight = sse_decode_u_64(deserializer);
+    var var_isSyncing = sse_decode_bool(deserializer);
+    return SyncProgress(
+      scannedHeight: var_scannedHeight,
+      chainTipHeight: var_chainTipHeight,
+      isSyncing: var_isSyncing,
+    );
+  }
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint32();
   }
 
   @protected
@@ -479,6 +1048,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  WalletBalance sse_decode_wallet_balance(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_transparent = sse_decode_u_64(deserializer);
+    var var_sapling = sse_decode_u_64(deserializer);
+    var var_orchard = sse_decode_u_64(deserializer);
+    var var_total = sse_decode_u_64(deserializer);
+    return WalletBalance(
+      transparent: var_transparent,
+      sapling: var_sapling,
+      orchard: var_orchard,
+      total: var_total,
+    );
   }
 
   @protected
@@ -516,6 +1100,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_block_meta_info(
+    BlockMetaInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.height, serializer);
+    sse_encode_list_prim_u_8_strict(self.hash, serializer);
+    sse_encode_u_32(self.time, serializer);
+    sse_encode_u_32(self.saplingOutputsCount, serializer);
+    sse_encode_u_32(self.orchardActionsCount, serializer);
+  }
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self ? 1 : 0);
@@ -525,6 +1122,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_list_block_meta_info(
+    List<BlockMetaInfo> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_block_meta_info(item, serializer);
+    }
   }
 
   @protected
@@ -538,6 +1147,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_scan_range_info(
+    List<ScanRangeInfo> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_scan_range_info(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_subtree_root(
+    List<SubtreeRoot> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_subtree_root(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -545,6 +1178,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_box_autoadd_u_64(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_scan_range_info(
+    ScanRangeInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.start, serializer);
+    sse_encode_u_64(self.end, serializer);
+    sse_encode_u_8(self.priority, serializer);
+  }
+
+  @protected
+  void sse_encode_scan_result(ScanResult self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.blocksScanned, serializer);
+  }
+
+  @protected
+  void sse_encode_subtree_root(SubtreeRoot self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.completingBlockHeight, serializer);
+    sse_encode_list_prim_u_8_strict(self.rootHash, serializer);
+  }
+
+  @protected
+  void sse_encode_sync_progress(SyncProgress self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.scannedHeight, serializer);
+    sse_encode_u_64(self.chainTipHeight, serializer);
+    sse_encode_bool(self.isSyncing, serializer);
+  }
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint32(self);
   }
 
   @protected
@@ -562,6 +1233,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  void sse_encode_wallet_balance(WalletBalance self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.transparent, serializer);
+    sse_encode_u_64(self.sapling, serializer);
+    sse_encode_u_64(self.orchard, serializer);
+    sse_encode_u_64(self.total, serializer);
   }
 
   @protected

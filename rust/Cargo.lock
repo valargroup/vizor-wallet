@@ -962,26 +962,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "halo2_gadgets"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45824ce0dd12e91ec0c68ebae2a7ed8ae19b70946624c849add59f1d1a62a143"
-dependencies = [
- "arrayvec",
- "bitvec",
- "ff",
- "group",
- "halo2_poseidon",
- "halo2_proofs",
- "lazy_static",
- "pasta_curves",
- "rand",
- "sinsemilla",
- "subtle",
- "uint",
-]
-
-[[package]]
 name = "halo2_legacy_pdqsort"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1504,7 +1484,7 @@ dependencies = [
  "fpe",
  "getset",
  "group",
- "halo2_gadgets 0.3.1",
+ "halo2_gadgets",
  "halo2_poseidon",
  "halo2_proofs",
  "hex",
@@ -1514,42 +1494,6 @@ dependencies = [
  "nonempty",
  "pasta_curves",
  "rand",
- "reddsa",
- "serde",
- "sinsemilla",
- "subtle",
- "tracing",
- "visibility",
- "zcash_note_encryption",
- "zcash_spec",
- "zip32",
-]
-
-[[package]]
-name = "orchard"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c01cd4ea711aab5f263f2b7aa6966687a2d6c7df4f78eb1b97a66a7a4e78e3b"
-dependencies = [
- "aes",
- "bitvec",
- "blake2b_simd",
- "core2",
- "ff",
- "fpe",
- "getset",
- "group",
- "halo2_gadgets 0.4.0",
- "halo2_poseidon",
- "halo2_proofs",
- "hex",
- "incrementalmerkletree",
- "lazy_static",
- "memuse",
- "nonempty",
- "pasta_curves",
- "rand",
- "rand_core",
  "reddsa",
  "serde",
  "sinsemilla",
@@ -2046,11 +1990,11 @@ dependencies = [
  "bip0039",
  "flutter_rust_bridge",
  "hex",
- "orchard 0.12.0",
+ "orchard",
  "prost 0.13.5",
  "rand",
  "rusqlite",
- "sapling-crypto 0.6.1",
+ "sapling-crypto",
  "secrecy",
  "tempfile",
  "tokio",
@@ -2121,39 +2065,6 @@ name = "sapling-crypto"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9d3c081c83f1dc87403d9d71a06f52301c0aa9ea4c17da2a3435bbf493ffba4"
-dependencies = [
- "aes",
- "bellman",
- "bitvec",
- "blake2b_simd",
- "blake2s_simd",
- "bls12_381",
- "core2",
- "document-features",
- "ff",
- "fpe",
- "getset",
- "group",
- "hex",
- "incrementalmerkletree",
- "jubjub",
- "lazy_static",
- "memuse",
- "rand",
- "rand_core",
- "redjubjub",
- "subtle",
- "tracing",
- "zcash_note_encryption",
- "zcash_spec",
- "zip32",
-]
-
-[[package]]
-name = "sapling-crypto"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9624fbc19039ac9650457589329135d18ca8d4bbbc59e2d95a9070d349fea1f"
 dependencies = [
  "aes",
  "bellman",
@@ -3050,13 +2961,13 @@ dependencies = [
  "incrementalmerkletree",
  "memuse",
  "nonempty",
- "orchard 0.11.0",
+ "orchard",
  "pasta_curves",
  "percent-encoding",
  "prost 0.14.3",
  "rand_core",
  "rayon",
- "sapling-crypto 0.5.0",
+ "sapling-crypto",
  "secp256k1",
  "secrecy",
  "shardtree",
@@ -3097,14 +3008,14 @@ dependencies = [
  "jubjub",
  "maybe-rayon",
  "nonempty",
- "orchard 0.11.0",
+ "orchard",
  "prost 0.14.3",
  "rand",
  "rand_core",
  "rand_distr",
  "regex",
  "rusqlite",
- "sapling-crypto 0.5.0",
+ "sapling-crypto",
  "schemerz",
  "schemerz-rusqlite",
  "secp256k1",
@@ -3153,9 +3064,9 @@ dependencies = [
  "group",
  "memuse",
  "nonempty",
- "orchard 0.11.0",
+ "orchard",
  "rand_core",
- "sapling-crypto 0.5.0",
+ "sapling-crypto",
  "secrecy",
  "subtle",
  "tracing",
@@ -3202,12 +3113,12 @@ dependencies = [
  "jubjub",
  "memuse",
  "nonempty",
- "orchard 0.11.0",
+ "orchard",
  "rand",
  "rand_core",
  "redjubjub",
  "ripemd 0.1.3",
- "sapling-crypto 0.5.0",
+ "sapling-crypto",
  "secp256k1",
  "sha2 0.10.9",
  "subtle",

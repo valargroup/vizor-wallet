@@ -7,6 +7,7 @@
 // ignore_for_file: argument_type_not_assignable
 
 import 'api/simple.dart';
+import 'api/sync.dart';
 import 'api/wallet.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -25,16 +26,43 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  BlockMetaInfo dco_decode_block_meta_info(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
 
   @protected
+  List<BlockMetaInfo> dco_decode_list_block_meta_info(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<ScanRangeInfo> dco_decode_list_scan_range_info(dynamic raw);
+
+  @protected
+  List<SubtreeRoot> dco_decode_list_subtree_root(dynamic raw);
+
+  @protected
   BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  ScanRangeInfo dco_decode_scan_range_info(dynamic raw);
+
+  @protected
+  ScanResult dco_decode_scan_result(dynamic raw);
+
+  @protected
+  SubtreeRoot dco_decode_subtree_root(dynamic raw);
+
+  @protected
+  SyncProgress dco_decode_sync_progress(dynamic raw);
+
+  @protected
+  int dco_decode_u_32(dynamic raw);
 
   @protected
   BigInt dco_decode_u_64(dynamic raw);
@@ -46,6 +74,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  WalletBalance dco_decode_wallet_balance(dynamic raw);
+
+  @protected
   WalletCreationResult dco_decode_wallet_creation_result(dynamic raw);
 
   @protected
@@ -55,16 +86,47 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  BlockMetaInfo sse_decode_block_meta_info(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
+  List<BlockMetaInfo> sse_decode_list_block_meta_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<ScanRangeInfo> sse_decode_list_scan_range_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<SubtreeRoot> sse_decode_list_subtree_root(SseDeserializer deserializer);
+
+  @protected
   BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  ScanRangeInfo sse_decode_scan_range_info(SseDeserializer deserializer);
+
+  @protected
+  ScanResult sse_decode_scan_result(SseDeserializer deserializer);
+
+  @protected
+  SubtreeRoot sse_decode_subtree_root(SseDeserializer deserializer);
+
+  @protected
+  SyncProgress sse_decode_sync_progress(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer);
@@ -74,6 +136,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_decode_unit(SseDeserializer deserializer);
+
+  @protected
+  WalletBalance sse_decode_wallet_balance(SseDeserializer deserializer);
 
   @protected
   WalletCreationResult sse_decode_wallet_creation_result(
@@ -92,10 +157,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_block_meta_info(BlockMetaInfo self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_block_meta_info(
+    List<BlockMetaInfo> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(
@@ -104,7 +178,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_scan_range_info(
+    List<ScanRangeInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_subtree_root(
+    List<SubtreeRoot> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_scan_range_info(ScanRangeInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_scan_result(ScanResult self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_subtree_root(SubtreeRoot self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_sync_progress(SyncProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer);
@@ -114,6 +215,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wallet_balance(WalletBalance self, SseSerializer serializer);
 
   @protected
   void sse_encode_wallet_creation_result(
