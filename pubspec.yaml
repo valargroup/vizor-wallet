@@ -41,6 +41,9 @@ dependencies:
   go_router: ^17.1.0
   flutter_secure_storage: ^10.0.0
   path_provider: ^2.1.5
+  grpc: ^5.1.0
+  protobuf: ^6.0.0
+  fixnum: ^1.1.1
 
 dev_dependencies:
   flutter_test:
