@@ -7,35 +7,18 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Register background task
     BackgroundSyncManager.shared.registerBackgroundTask()
-
-    // Set up MethodChannel for background sync
-    if let controller = window?.rootViewController as? FlutterViewController {
-      setupMethodChannel(controller: controller)
-    }
-
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
-    // Retry MethodChannel setup if not done in didFinishLaunching
-    if let controller = window?.rootViewController as? FlutterViewController {
-      setupMethodChannel(controller: controller)
-    }
-  }
-
-  private var channelConfigured = false
-
-  private func setupMethodChannel(controller: FlutterViewController) {
-    guard !channelConfigured else { return }
-    channelConfigured = true
-
+    // Register MethodChannel via plugin registry (works with UISceneDelegate)
+    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BackgroundSyncPlugin")
     let channel = FlutterMethodChannel(
       name: "com.zcash.wallet/background_sync",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: registrar.messenger()
     )
 
     channel.setMethodCallHandler { (call, result) in
