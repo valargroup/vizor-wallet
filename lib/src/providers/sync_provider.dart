@@ -12,12 +12,14 @@ import '../core/config/network_config.dart';
 import '../generated/service.pbgrpc.dart' as grpc;
 import '../generated/service.pb.dart' as pb;
 import '../rust/api/sync.dart' as rust_sync;
+import '../services/background_sync_service.dart' as bg_sync;
 
 const _batchSize = 1000;
 const _saplingActivationHeight = 419200; // mainnet
 
 class SyncState {
   final bool isSyncing;
+  final bool isBackgroundMode;
   final double percentage;
   final int scannedHeight;
   final int chainTipHeight;
@@ -29,6 +31,7 @@ class SyncState {
 
   SyncState({
     this.isSyncing = false,
+    this.isBackgroundMode = false,
     this.percentage = 0,
     this.scannedHeight = 0,
     this.chainTipHeight = 0,
@@ -45,15 +48,20 @@ class SyncState {
 
 class SyncNotifier extends AsyncNotifier<SyncState> {
   bool _cancelled = false;
+  bool _backgroundMode = false;
 
   @override
   Future<SyncState> build() async {
-    ref.onDispose(() => _cancelled = true);
+    ref.onDispose(() {
+      _cancelled = true;
+      if (_backgroundMode) bg_sync.stopBackgroundSync();
+    });
     return SyncState();
   }
 
   Future<void> startSync() async {
     _cancelled = false;
+    _backgroundMode = false;
     state = AsyncData(SyncState(isSyncing: true));
 
     try {
@@ -66,6 +74,33 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
   void stopSync() {
     _cancelled = true;
+    if (_backgroundMode) {
+      bg_sync.stopBackgroundSync();
+      _backgroundMode = false;
+    }
+  }
+
+  /// Switch to background sync mode (starts platform foreground service / BG task).
+  Future<void> enableBackgroundSync() async {
+    if (_backgroundMode) return;
+    _backgroundMode = true;
+    await bg_sync.startBackgroundSync();
+    log('SyncNotifier: background sync enabled');
+    // Update state to reflect background mode
+    final current = state.value;
+    if (current != null) {
+      state = AsyncData(SyncState(
+        isSyncing: current.isSyncing,
+        isBackgroundMode: true,
+        percentage: current.percentage,
+        scannedHeight: current.scannedHeight,
+        chainTipHeight: current.chainTipHeight,
+        transparentBalance: current.transparentBalance,
+        saplingBalance: current.saplingBalance,
+        orchardBalance: current.orchardBalance,
+        totalBalance: current.totalBalance,
+      ));
+    }
   }
 
   Future<void> _runSync() async {
@@ -179,6 +214,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
         state = AsyncData(SyncState(
           isSyncing: true,
+          isBackgroundMode: _backgroundMode,
           percentage: pct,
           scannedHeight: scanned,
           chainTipHeight: tip,
@@ -187,6 +223,15 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
           orchardBalance: balance.orchard,
           totalBalance: balance.total,
         ));
+
+        // Update background notification if in background mode
+        if (_backgroundMode) {
+          bg_sync.updateBackgroundSyncProgress(
+            percentage: pct,
+            scannedHeight: scanned,
+            chainTipHeight: tip,
+          );
+        }
       }
 
       // Final balance update
@@ -209,6 +254,13 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         orchardBalance: balance.orchard,
         totalBalance: balance.total,
       ));
+
+      // Stop background service when sync completes
+      if (_backgroundMode) {
+        await bg_sync.stopBackgroundSync();
+        _backgroundMode = false;
+        log('SyncNotifier: background sync completed, service stopped');
+      }
     } finally {
       await channel.shutdown();
     }

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../providers/sync_provider.dart';
 import '../../../providers/wallet_provider.dart';
+import '../../../services/background_sync_service.dart' as bg_sync;
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -14,13 +15,20 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  bool _canBackgroundSync = false;
+
   @override
   void initState() {
     super.initState();
-    // Auto-start sync when home screen loads
     Future.microtask(() {
       ref.read(syncProvider.notifier).startSync();
+      _checkBackgroundSyncAvailability();
     });
+  }
+
+  Future<void> _checkBackgroundSyncAvailability() async {
+    final available = await bg_sync.isBackgroundSyncAvailable();
+    if (mounted) setState(() => _canBackgroundSync = available);
   }
 
   @override
@@ -160,6 +168,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 8),
             _buildSyncBadge(context, sync),
+            if (_canBackgroundSync && sync.isSyncing && !sync.isBackgroundMode)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: TextButton.icon(
+                  onPressed: () => ref.read(syncProvider.notifier).enableBackgroundSync(),
+                  icon: const Icon(Icons.sync, size: 16),
+                  label: const Text('Sync on Background'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+            if (sync.isBackgroundMode)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Background sync active',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
             const SizedBox(height: 24),
             // Send / Receive buttons
             Row(
