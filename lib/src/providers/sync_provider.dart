@@ -2,16 +2,18 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../main.dart' show log;
 import '../core/config/network_config.dart';
 import '../rust/api/sync.dart' as rust_sync;
+import '../services/background_sync_service.dart' as bg_sync;
 
-const _pollIntervalMs = 2000;
-const _iosBackgroundSyncChannel =
-    MethodChannel('com.zcash.wallet/background_sync');
+const _pollIntervalMs = 10000;
+const _progressChannel = EventChannel('com.zcash.wallet/sync_progress');
 
 class SyncState {
   final bool isSyncing;
@@ -47,38 +49,88 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   Timer? _pollTimer;
   int _lastLoggedHeight = 0;
   String? _cachedDbPath;
+  StreamSubscription? _eventChannelSub;
+  AppLifecycleListener? _lifecycleListener;
 
   @override
   Future<SyncState> build() async {
+    // Listen for iOS background sync progress via EventChannel
+    _eventChannelSub = _progressChannel.receiveBroadcastStream().listen(
+      (event) {
+        final map = event as Map;
+        _onSyncProgress(
+          scannedHeight: (map['scannedHeight'] as num).toInt(),
+          chainTipHeight: (map['chainTipHeight'] as num).toInt(),
+          percentage: (map['percentage'] as num).toDouble(),
+          isBackground: true,
+        );
+      },
+      onError: (_) {},
+    );
+
+    // Listen for Android foreground service stop signal
+    FlutterForegroundTask.receivePort?.listen((message) {
+      if (message == 'stop_sync') {
+        log('SyncNotifier: received stop_sync from notification');
+        stopSync();
+      }
+    });
+
+    // Refresh progress when app returns to foreground
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () => _updateProgress(),
+    );
+
     ref.onDispose(() {
       _pollTimer?.cancel();
+      _eventChannelSub?.cancel();
+      _lifecycleListener?.dispose();
+      if (_backgroundMode) bg_sync.stopBackgroundSync();
     });
+
     return SyncState();
   }
 
   Future<void> startSync() async {
     _backgroundMode = false;
+    _lastLoggedHeight = 0;
     state = AsyncData(SyncState(isSyncing: true));
 
+    // Start fallback polling (10s)
     _startProgressPolling();
 
     try {
       final dbPath = await _getDbPath();
       final network = ZcashNetwork.mainnet;
 
-      log('Sync: starting full sync via Rust');
-      await rust_sync.startFullSync(
+      log('Sync: starting full sync via Rust Stream');
+      final stream = rust_sync.startFullSync(
         dbPath: dbPath,
         lightwalletdUrl: network.lightwalletdUrl,
         network: network.name,
       );
+
+      await for (final event in stream) {
+        _onSyncProgress(
+          scannedHeight: event.scannedHeight.toInt(),
+          chainTipHeight: event.chainTipHeight.toInt(),
+          percentage: event.percentage,
+          isBackground: false,
+          isSyncing: event.isSyncing,
+          isComplete: event.isComplete,
+        );
+      }
+
       log('Sync: full sync completed');
     } catch (e, st) {
       log('SyncNotifier: ERROR: $e\n$st');
       state = AsyncData(SyncState(error: e.toString()));
     } finally {
       _pollTimer?.cancel();
-      _backgroundMode = false;
+      if (_backgroundMode) {
+        await bg_sync.stopBackgroundSync();
+        _backgroundMode = false;
+      }
       await _updateProgress();
     }
   }
@@ -86,37 +138,80 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   void stopSync() {
     rust_sync.cancelFullSync();
     _pollTimer?.cancel();
-    _backgroundMode = false;
+    if (_backgroundMode) {
+      bg_sync.stopBackgroundSync();
+      _backgroundMode = false;
+    }
   }
 
-  /// Enable background sync (iOS 26+ only via BGContinuedProcessingTask).
   Future<void> enableBackgroundSync() async {
     if (_backgroundMode) return;
-    if (!Platform.isIOS) return;
-
-    try {
-      final success = await _iosBackgroundSyncChannel
-          .invokeMethod<bool>('startBackgroundSync');
-      if (success == true) {
-        _backgroundMode = true;
-        log('SyncNotifier: iOS background sync submitted');
-      }
-    } catch (e) {
-      log('SyncNotifier: background sync failed: $e');
-    }
+    _backgroundMode = true;
+    await bg_sync.startBackgroundSync();
+    log('SyncNotifier: background sync enabled');
   }
 
-  /// Check if background sync is available on this device.
   static Future<bool> isBackgroundSyncAvailable() async {
-    if (!Platform.isIOS) return false;
+    return bg_sync.isBackgroundSyncAvailable();
+  }
+
+  // ======================== Progress Handling ========================
+
+  Future<void> _onSyncProgress({
+    required int scannedHeight,
+    required int chainTipHeight,
+    required double percentage,
+    required bool isBackground,
+    bool isSyncing = true,
+    bool isComplete = false,
+  }) async {
+    // Log only when height changes
+    if (scannedHeight != _lastLoggedHeight) {
+      log('Sync: ${(percentage * 100).toStringAsFixed(1)}% ($scannedHeight/$chainTipHeight)');
+      _lastLoggedHeight = scannedHeight;
+    }
+
+    // Fetch balance alongside progress
     try {
-      final available = await _iosBackgroundSyncChannel
-          .invokeMethod<bool>('isAvailable');
-      return available ?? false;
+      final dbPath = await _getDbPath();
+      final balance = await rust_sync.getBalance(
+        dbPath: dbPath,
+        network: ZcashNetwork.mainnet.name,
+      );
+
+      state = AsyncData(SyncState(
+        isSyncing: isSyncing && !isComplete,
+        isBackgroundMode: isBackground || _backgroundMode,
+        percentage: percentage,
+        scannedHeight: scannedHeight,
+        chainTipHeight: chainTipHeight,
+        transparentBalance: balance.transparent,
+        saplingBalance: balance.sapling,
+        orchardBalance: balance.orchard,
+        totalBalance: balance.total,
+      ));
     } catch (_) {
-      return false;
+      // Balance fetch failed — update progress without balance
+      state = AsyncData(SyncState(
+        isSyncing: isSyncing && !isComplete,
+        isBackgroundMode: isBackground || _backgroundMode,
+        percentage: percentage,
+        scannedHeight: scannedHeight,
+        chainTipHeight: chainTipHeight,
+      ));
+    }
+
+    // Update Android notification
+    if (_backgroundMode && Platform.isAndroid) {
+      bg_sync.updateBackgroundSyncProgress(
+        percentage: percentage,
+        scannedHeight: scannedHeight,
+        chainTipHeight: chainTipHeight,
+      );
     }
   }
+
+  // ======================== Polling Fallback ========================
 
   void _startProgressPolling() {
     _pollTimer?.cancel();
@@ -143,11 +238,6 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       final scanned = progress.scannedHeight.toInt();
       final tip = progress.chainTipHeight.toInt();
       final pct = tip > 0 ? scanned / tip : 0.0;
-
-      if (scanned != _lastLoggedHeight) {
-        log('Sync: ${(pct * 100).toStringAsFixed(1)}% ($scanned/$tip)');
-        _lastLoggedHeight = scanned;
-      }
 
       state = AsyncData(SyncState(
         isSyncing: progress.isSyncing,

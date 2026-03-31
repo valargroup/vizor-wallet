@@ -8,10 +8,9 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `catch`
 
-/// Start a full sync. Blocks until complete or cancelled.
-/// Dart should call this from an async context and poll get_sync_status() for progress.
-/// All gRPC, file I/O, scanning, and enhancement happen inside Rust.
-Future<void> startFullSync({
+/// Start a full sync. Streams progress events to Dart via StreamSink.
+/// All gRPC, scanning, and enhancement happen inside Rust.
+Stream<ApiSyncProgressEvent> startFullSync({
   required String dbPath,
   required String lightwalletdUrl,
   required String network,
@@ -23,6 +22,9 @@ Future<void> startFullSync({
 
 /// Cancel a running full sync.
 void cancelFullSync() => RustLib.instance.api.crateApiSyncCancelFullSync();
+
+/// Check if a sync is currently running.
+bool isSyncRunning() => RustLib.instance.api.crateApiSyncIsSyncRunning();
 
 Future<void> updateChainTip({
   required String dbPath,
@@ -230,6 +232,42 @@ class AddressValidationResult {
           runtimeType == other.runtimeType &&
           isValid == other.isValid &&
           addressType == other.addressType;
+}
+
+/// Progress event streamed to Dart during sync.
+class ApiSyncProgressEvent {
+  final BigInt scannedHeight;
+  final BigInt chainTipHeight;
+  final double percentage;
+  final bool isSyncing;
+  final bool isComplete;
+
+  const ApiSyncProgressEvent({
+    required this.scannedHeight,
+    required this.chainTipHeight,
+    required this.percentage,
+    required this.isSyncing,
+    required this.isComplete,
+  });
+
+  @override
+  int get hashCode =>
+      scannedHeight.hashCode ^
+      chainTipHeight.hashCode ^
+      percentage.hashCode ^
+      isSyncing.hashCode ^
+      isComplete.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiSyncProgressEvent &&
+          runtimeType == other.runtimeType &&
+          scannedHeight == other.scannedHeight &&
+          chainTipHeight == other.chainTipHeight &&
+          percentage == other.percentage &&
+          isSyncing == other.isSyncing &&
+          isComplete == other.isComplete;
 }
 
 class BlockMetaInfo {

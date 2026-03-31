@@ -2,19 +2,35 @@ use std::panic;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use flutter_rust_bridge::frb;
+
+use crate::frb_generated::StreamSink;
 use crate::wallet::{keys, sync as wallet_sync, sync_engine};
 
 // ======================== Full Sync ========================
 
-/// Start a full sync. Blocks until complete or cancelled.
-/// Dart should call this from an async context and poll get_sync_status() for progress.
-/// All gRPC, file I/O, scanning, and enhancement happen inside Rust.
+/// Progress event streamed to Dart during sync.
+pub struct ApiSyncProgressEvent {
+    pub scanned_height: u64,
+    pub chain_tip_height: u64,
+    pub percentage: f64,
+    pub is_syncing: bool,
+    pub is_complete: bool,
+}
+
+/// Start a full sync. Streams progress events to Dart via StreamSink.
+/// All gRPC, scanning, and enhancement happen inside Rust.
 pub fn start_full_sync(
     db_path: String,
     lightwalletd_url: String,
     network: String,
+    sink: StreamSink<ApiSyncProgressEvent>,
 ) -> Result<(), String> {
-    catch(|| {
+    if SYNC_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        return Err("Sync already running".into());
+    }
+
+    let result = catch(|| {
         let network = keys::parse_network(&network)?;
         let cancel = SYNC_CANCEL.clone();
         cancel.store(false, Ordering::Relaxed);
@@ -26,23 +42,40 @@ pub fn start_full_sync(
                 &lightwalletd_url,
                 network,
                 cancel,
-                |_progress| {
-                    // Progress is available via get_sync_status() polling
+                |progress| {
+                    let _ = sink.add(ApiSyncProgressEvent {
+                        scanned_height: progress.scanned_height,
+                        chain_tip_height: progress.chain_tip_height,
+                        percentage: progress.percentage,
+                        is_syncing: progress.is_syncing,
+                        is_complete: progress.is_complete,
+                    });
                 },
             )
             .await
         })
-    })
+    });
+
+    SYNC_RUNNING.store(false, Ordering::SeqCst);
+    result
 }
 
 /// Cancel a running full sync.
-#[flutter_rust_bridge::frb(sync)]
+#[frb(sync)]
 pub fn cancel_full_sync() {
     SYNC_CANCEL.store(true, Ordering::Relaxed);
 }
 
+/// Check if a sync is currently running.
+#[frb(sync)]
+pub fn is_sync_running() -> bool {
+    SYNC_RUNNING.load(Ordering::SeqCst)
+}
+
 static SYNC_CANCEL: std::sync::LazyLock<Arc<AtomicBool>> =
     std::sync::LazyLock::new(|| Arc::new(AtomicBool::new(false)));
+
+pub(crate) static SYNC_RUNNING: AtomicBool = AtomicBool::new(false);
 
 // ======================== Data Structures ========================
 

@@ -5,6 +5,7 @@ use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::api::sync::SYNC_RUNNING;
 use crate::wallet::{keys, sync_engine};
 
 /// Progress data passed to the C callback.
@@ -32,6 +33,10 @@ pub extern "C" fn zcash_run_full_sync(
     network: *const c_char,
     progress_callback: SyncProgressCallback,
 ) -> i32 {
+    if SYNC_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        return 3; // already running
+    }
+
     let result = std::panic::catch_unwind(|| {
         let db_path = unsafe { CStr::from_ptr(db_path) }.to_str().unwrap_or("");
         let lightwalletd_url = unsafe { CStr::from_ptr(lightwalletd_url) }.to_str().unwrap_or("");
@@ -73,6 +78,8 @@ pub extern "C" fn zcash_run_full_sync(
             Err(_) => 1,
         }
     });
+
+    SYNC_RUNNING.store(false, Ordering::SeqCst);
 
     match result {
         Ok(code) => code,
