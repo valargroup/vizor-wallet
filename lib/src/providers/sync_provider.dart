@@ -313,12 +313,28 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     String dbPath,
     ZcashNetwork network,
   ) async {
+    var iteration = 0;
     while (true) {
+      iteration++;
       final requests = await rust_sync.getTransactionDataRequests(
         dbPath: dbPath,
         network: network.name,
       );
+      log('Enhancement: iteration=$iteration, requests=${requests.length}');
       if (requests.isEmpty) break;
+
+      // Log all requests in first iteration
+      if (iteration <= 2) {
+        for (final r in requests) {
+          log('Enhancement:   type=${r.requestType}, txid=${r.txid}, addr=${r.address}');
+        }
+      }
+
+      // Safety: break after too many iterations
+      if (iteration > 5) {
+        log('Enhancement: breaking after $iteration iterations (safety limit)');
+        break;
+      }
 
       for (final req in requests) {
         try {
@@ -329,20 +345,27 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
                 pb.TxFilter(hash: txidBytes),
               );
               final height = response.height.toInt();
+              log('Enhancement: get_status TX ${req.txid!.substring(0, 16)}... height=$height');
               await rust_sync.setTransactionStatus(
                 dbPath: dbPath,
                 network: network.name,
                 txidHex: req.txid!,
                 status: height > 0 ? height : -1,
               );
-            } on GrpcError {
-              log('Enhancement: TX ${req.txid!.substring(0, 16)}... not found, marking as not recognized');
-              await rust_sync.setTransactionStatus(
-                dbPath: dbPath,
-                network: network.name,
-                txidHex: req.txid!,
-                status: -2, // TxidNotRecognized
-              );
+              log('Enhancement: set_transaction_status succeeded for ${req.txid!.substring(0, 16)}...');
+            } on GrpcError catch (e) {
+              log('Enhancement: get_status gRPC error code=${e.code} for ${req.txid!.substring(0, 16)}...');
+              try {
+                await rust_sync.setTransactionStatus(
+                  dbPath: dbPath,
+                  network: network.name,
+                  txidHex: req.txid!,
+                  status: -2,
+                );
+                log('Enhancement: set_transaction_status(-2) succeeded for ${req.txid!.substring(0, 16)}...');
+              } catch (setErr) {
+                log('Enhancement: set_transaction_status(-2) FAILED: $setErr');
+              }
             }
           } else if (req.requestType == 'enhancement' && req.txid != null) {
             final txidBytes = _hexToBytes(req.txid!);
@@ -350,6 +373,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
               final response = await stub.getTransaction(
                 pb.TxFilter(hash: txidBytes),
               );
+              log('Enhancement: got TX data, size=${response.data.length}, height=${response.height}');
               if (response.data.isNotEmpty) {
                 final height = response.height.toInt();
                 await rust_sync.decryptAndStoreTransaction(
@@ -358,21 +382,62 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
                   txBytes: Uint8List.fromList(response.data),
                   minedHeight: height > 0 ? BigInt.from(height) : null,
                 );
+                log('Enhancement: decryptAndStore succeeded for ${req.txid!.substring(0, 16)}...');
               }
-            } on GrpcError {
-              log('Enhancement: TX ${req.txid!.substring(0, 16)}... not found, marking as not recognized');
-              await rust_sync.setTransactionStatus(
-                dbPath: dbPath,
-                network: network.name,
-                txidHex: req.txid!,
-                status: -2, // TxidNotRecognized
-              );
+            } on GrpcError catch (e) {
+              log('Enhancement: enhancement gRPC error code=${e.code} for ${req.txid!.substring(0, 16)}...');
+              try {
+                await rust_sync.setTransactionStatus(
+                  dbPath: dbPath,
+                  network: network.name,
+                  txidHex: req.txid!,
+                  status: -2,
+                );
+                log('Enhancement: set_transaction_status(-2) succeeded for ${req.txid!.substring(0, 16)}...');
+              } catch (setErr) {
+                log('Enhancement: set_transaction_status(-2) FAILED: $setErr');
+              }
+            }
+          } else if (req.requestType == 'address_txids' && req.address != null) {
+            final startHeight = req.blockRangeStart?.toInt() ?? 0;
+            final endHeight = req.blockRangeEnd?.toInt();
+
+            if (endHeight == null) {
+              log('Enhancement: address_txids for ${req.address!.substring(0, 10)}... has no endHeight, skipping');
+              continue;
+            }
+
+            log('Enhancement: fetching txids for ${req.address!.substring(0, 10)}... range=$startHeight..$endHeight');
+            try {
+              final txStream = stub.getTaddressTxids(pb.TransparentAddressBlockFilter(
+                address: req.address!,
+                range: pb.BlockRange(
+                  start: pb.BlockID(height: Int64(startHeight)),
+                  end: pb.BlockID(height: Int64(endHeight - 1)),
+                ),
+              ));
+
+              var txCount = 0;
+              await for (final rawTx in txStream) {
+                txCount++;
+                if (rawTx.data.isNotEmpty) {
+                  final height = rawTx.height.toInt();
+                  await rust_sync.decryptAndStoreTransaction(
+                    dbPath: dbPath,
+                    network: network.name,
+                    txBytes: Uint8List.fromList(rawTx.data),
+                    minedHeight: height > 0 ? BigInt.from(height) : null,
+                  );
+                }
+              }
+              log('Enhancement: found $txCount txs for ${req.address!.substring(0, 10)}...');
+            } on GrpcError catch (e) {
+              log('Enhancement: address_txids gRPC error code=${e.code} for ${req.address!.substring(0, 10)}...');
             }
           }
-          // address_txids requests are skipped for now
         } catch (e) {
-          log('Enhancement: error processing ${req.requestType}: $e');
-          break; // avoid infinite loop on unexpected errors
+          log('Enhancement: unexpected error: $e');
+          break;
         }
       }
     }
