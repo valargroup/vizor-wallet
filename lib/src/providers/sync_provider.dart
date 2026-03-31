@@ -323,6 +323,19 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       log('Enhancement: iteration=$iteration, requests=${requests.length}');
       if (requests.isEmpty) break;
 
+      // Check if all remaining requests are address_txids with no endHeight (not actionable yet)
+      final actionable = requests.where((r) {
+        if (r.requestType == 'address_txids') {
+          return r.blockRangeEnd != null;
+        }
+        return true;
+      }).toList();
+
+      if (actionable.isEmpty) {
+        log('Enhancement: ${requests.length} requests remaining but none actionable (no endHeight), moving on');
+        break;
+      }
+
       // Log all requests in first iteration
       if (iteration <= 2) {
         for (final r in requests) {
