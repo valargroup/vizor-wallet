@@ -1,11 +1,28 @@
 use std::panic;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
 
 use crate::frb_generated::StreamSink;
 use crate::wallet::{keys, sync as wallet_sync, sync_engine};
+
+// ======================== Sync Mode ========================
+// 0 = None, 1 = Foreground, 2 = Background
+pub(crate) static DESIRED_SYNC_MODE: AtomicU8 = AtomicU8::new(0);
+
+/// Set the desired sync mode. 0=none, 1=foreground, 2=background.
+/// The running sync loop checks this each batch and exits if mismatched.
+#[frb(sync)]
+pub fn set_sync_mode(mode: u8) {
+    DESIRED_SYNC_MODE.store(mode, Ordering::SeqCst);
+}
+
+/// Get the current desired sync mode.
+#[frb(sync)]
+pub fn get_sync_mode() -> u8 {
+    DESIRED_SYNC_MODE.load(Ordering::SeqCst)
+}
 
 // ======================== Full Sync ========================
 
@@ -19,16 +36,19 @@ pub struct ApiSyncProgressEvent {
 }
 
 /// Start a full sync. Streams progress events to Dart via StreamSink.
-/// All gRPC, scanning, and enhancement happen inside Rust.
+/// mode: 1=foreground, 2=background. Sync exits if desired mode changes.
 pub fn start_full_sync(
     db_path: String,
     lightwalletd_url: String,
     network: String,
+    mode: u8,
     sink: StreamSink<ApiSyncProgressEvent>,
 ) -> Result<(), String> {
     if SYNC_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
         return Err("Sync already running".into());
     }
+
+    DESIRED_SYNC_MODE.store(mode, Ordering::SeqCst);
 
     let result = catch(|| {
         let network = keys::parse_network(&network)?;
@@ -42,6 +62,8 @@ pub fn start_full_sync(
                 &lightwalletd_url,
                 network,
                 cancel,
+                mode,
+                &DESIRED_SYNC_MODE,
                 |progress| {
                     let _ = sink.add(ApiSyncProgressEvent {
                         scanned_height: progress.scanned_height,

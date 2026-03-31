@@ -25,4 +25,7 @@ int32_t zcash_run_full_sync(
 /// Cancel a running sync.
 void zcash_cancel_sync(void);
 
+/// Get the current desired sync mode (0=none, 1=foreground, 2=background).
+uint8_t zcash_get_sync_mode(void);
+
 #endif // ZCASH_SYNC_H

@@ -55,6 +55,13 @@ class BackgroundSyncManager {
         )
 
         taskProgress = nil
+
+        // If mode is still background and sync ended normally (not cancelled),
+        // resubmit to continue syncing
+        if result == 0 && zcash_get_sync_mode() == 2 {
+            _ = startBackgroundSync()
+        }
+
         task.setTaskCompleted(success: result == 0)
     }
 

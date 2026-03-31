@@ -49,6 +49,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   Timer? _pollTimer;
   int _lastLoggedHeight = 0;
   String? _cachedDbPath;
+  StreamSubscription? _syncSub;
   StreamSubscription? _eventChannelSub;
   AppLifecycleListener? _lifecycleListener;
 
@@ -83,60 +84,68 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
     ref.onDispose(() {
       _pollTimer?.cancel();
+      _syncSub?.cancel();
       _eventChannelSub?.cancel();
       _lifecycleListener?.dispose();
-      if (_backgroundMode) bg_sync.stopBackgroundSync();
     });
 
     return SyncState();
   }
+
+  // ======================== Sync Control ========================
 
   Future<void> startSync() async {
     _backgroundMode = false;
     _lastLoggedHeight = 0;
     state = AsyncData(SyncState(isSyncing: true));
 
-    // Start fallback polling (10s)
     _startProgressPolling();
 
     try {
       final dbPath = await _getDbPath();
       final network = ZcashNetwork.mainnet;
 
-      log('Sync: starting full sync via Rust Stream');
+      log('Sync: starting foreground sync');
       final stream = rust_sync.startFullSync(
         dbPath: dbPath,
         lightwalletdUrl: network.lightwalletdUrl,
         network: network.name,
+        mode: 1, // foreground
       );
 
-      await for (final event in stream) {
-        _onSyncProgress(
+      final completer = Completer<void>();
+      _syncSub = stream.listen(
+        (event) => _onSyncProgress(
           scannedHeight: event.scannedHeight.toInt(),
           chainTipHeight: event.chainTipHeight.toInt(),
           percentage: event.percentage,
           isBackground: false,
           isSyncing: event.isSyncing,
           isComplete: event.isComplete,
-        );
-      }
+        ),
+        onDone: () {
+          log('Sync: stream ended');
+          _onSyncDone();
+          if (!completer.isCompleted) completer.complete();
+        },
+        onError: (e) {
+          log('Sync: stream error: $e');
+          state = AsyncData(SyncState(error: e.toString()));
+          if (!completer.isCompleted) completer.completeError(e);
+        },
+      );
 
-      log('Sync: full sync completed');
+      await completer.future;
     } catch (e, st) {
       log('SyncNotifier: ERROR: $e\n$st');
       state = AsyncData(SyncState(error: e.toString()));
-    } finally {
-      _pollTimer?.cancel();
-      if (_backgroundMode) {
-        await bg_sync.stopBackgroundSync();
-        _backgroundMode = false;
-      }
-      await _updateProgress();
     }
   }
 
   void stopSync() {
     rust_sync.cancelFullSync();
+    _syncSub?.cancel();
+    _syncSub = null;
     _pollTimer?.cancel();
     if (_backgroundMode) {
       bg_sync.stopBackgroundSync();
@@ -147,8 +156,37 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   Future<void> enableBackgroundSync() async {
     if (_backgroundMode) return;
     _backgroundMode = true;
-    await bg_sync.startBackgroundSync();
+
+    if (Platform.isAndroid) {
+      // Android: just add notification, sync continues via same FRB stream
+      await bg_sync.startBackgroundSync();
+    } else if (Platform.isIOS) {
+      // iOS: switch mode → Rust foreground sync exits → BGTask takes over
+      rust_sync.setSyncMode(mode: 2);
+      await bg_sync.startBackgroundSync();
+      // Keep polling for progress (EventChannel + fallback)
+      _startProgressPolling();
+    }
+
     log('SyncNotifier: background sync enabled');
+  }
+
+  Future<void> disableBackgroundSync() async {
+    if (!_backgroundMode) return;
+    _backgroundMode = false;
+
+    if (Platform.isAndroid) {
+      // Android: just remove notification, sync continues
+      await bg_sync.stopBackgroundSync();
+    } else if (Platform.isIOS) {
+      // iOS: switch mode → Rust background sync exits → restart foreground
+      rust_sync.setSyncMode(mode: 1);
+      await bg_sync.stopBackgroundSync();
+      // Wait briefly for background sync to exit, then start foreground
+      startSync();
+    }
+
+    log('SyncNotifier: background sync disabled');
   }
 
   static Future<bool> isBackgroundSyncAvailable() async {
@@ -156,6 +194,17 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   }
 
   // ======================== Progress Handling ========================
+
+  void _onSyncDone() {
+    _pollTimer?.cancel();
+    _syncSub = null;
+    _updateProgress();
+
+    // If mode switched to background, keep polling for updates
+    if (_backgroundMode) {
+      _startProgressPolling();
+    }
+  }
 
   Future<void> _onSyncProgress({
     required int scannedHeight,
@@ -165,13 +214,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     bool isSyncing = true,
     bool isComplete = false,
   }) async {
-    // Log only when height changes
     if (scannedHeight != _lastLoggedHeight) {
       log('Sync: ${(percentage * 100).toStringAsFixed(1)}% ($scannedHeight/$chainTipHeight)');
       _lastLoggedHeight = scannedHeight;
     }
 
-    // Fetch balance alongside progress
     try {
       final dbPath = await _getDbPath();
       final balance = await rust_sync.getBalance(
@@ -191,7 +238,6 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         totalBalance: balance.total,
       ));
     } catch (_) {
-      // Balance fetch failed — update progress without balance
       state = AsyncData(SyncState(
         isSyncing: isSyncing && !isComplete,
         isBackgroundMode: isBackground || _backgroundMode,

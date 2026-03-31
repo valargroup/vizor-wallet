@@ -184,10 +184,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             if (sync.isBackgroundMode)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Background sync active',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
+                child: TextButton.icon(
+                  onPressed: () => ref.read(syncProvider.notifier).disableBackgroundSync(),
+                  icon: const Icon(Icons.sync_disabled, size: 16),
+                  label: const Text('Stop Background Sync'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
                   ),
                 ),
               ),

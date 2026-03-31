@@ -8,16 +8,26 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `catch`
 
+/// Set the desired sync mode. 0=none, 1=foreground, 2=background.
+/// The running sync loop checks this each batch and exits if mismatched.
+void setSyncMode({required int mode}) =>
+    RustLib.instance.api.crateApiSyncSetSyncMode(mode: mode);
+
+/// Get the current desired sync mode.
+int getSyncMode() => RustLib.instance.api.crateApiSyncGetSyncMode();
+
 /// Start a full sync. Streams progress events to Dart via StreamSink.
-/// All gRPC, scanning, and enhancement happen inside Rust.
+/// mode: 1=foreground, 2=background. Sync exits if desired mode changes.
 Stream<ApiSyncProgressEvent> startFullSync({
   required String dbPath,
   required String lightwalletdUrl,
   required String network,
+  required int mode,
 }) => RustLib.instance.api.crateApiSyncStartFullSync(
   dbPath: dbPath,
   lightwalletdUrl: lightwalletdUrl,
   network: network,
+  mode: mode,
 );
 
 /// Cancel a running full sync.

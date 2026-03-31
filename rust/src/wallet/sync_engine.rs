@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use rand::rngs::OsRng;
@@ -35,7 +35,7 @@ pub struct SyncProgressEvent {
     pub is_complete: bool,
 }
 
-const BATCH_SIZE: u32 = 1000;
+const BATCH_SIZE: u32 = 100;
 const SAPLING_ACTIVATION_HEIGHT: u32 = 419200;
 
 // ==================== In-memory BlockSource ====================
@@ -86,11 +86,15 @@ impl chain::BlockSource for MemoryBlockSource {
 // ==================== Main sync ====================
 
 /// Run the full sync loop. This is the unified entry point called by both Dart (FRB) and Swift (C FFI).
+/// `running_mode`: the mode this sync was started in (1=foreground, 2=background).
+/// `desired_mode`: shared atomic — if it changes to a different value, sync exits gracefully.
 pub async fn run_sync_inner(
     db_data_path: &str,
     lightwalletd_url: &str,
     network: Network,
     cancel: Arc<AtomicBool>,
+    running_mode: u8,
+    desired_mode: &AtomicU8,
     progress_fn: impl Fn(SyncProgressEvent) + Send + Sync,
 ) -> Result<(), String> {
     // 1. Connect gRPC
@@ -125,6 +129,9 @@ pub async fn run_sync_inner(
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
         }
+        if desired_mode.load(Ordering::SeqCst) != running_mode {
+            return Ok(());
+        }
 
         let ranges = {
             let db = open_db(db_data_path, network)?;
@@ -144,6 +151,10 @@ pub async fn run_sync_inner(
         // Download blocks into memory
         let block_source = download_blocks(&mut client, start, end - 1).await?;
 
+        if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
+            return Ok(());
+        }
+
         // Get tree state
         let from_state = if u32::from(start) <= SAPLING_ACTIVATION_HEIGHT {
             chain::ChainState::empty(start - 1, BlockHash([0u8; 32]))
@@ -161,6 +172,10 @@ pub async fn run_sync_inner(
             let mut db_data = open_db(db_data_path, network)?;
             scan_cached_blocks(&network, &block_source, &mut db_data, start, &from_state, BATCH_SIZE as usize)
                 .map_err(|e| format!("scan: {e}"))?;
+        }
+
+        if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
+            return Ok(());
         }
 
         // Enhancement

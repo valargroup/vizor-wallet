@@ -5,7 +5,7 @@ use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::api::sync::SYNC_RUNNING;
+use crate::api::sync::{DESIRED_SYNC_MODE, SYNC_RUNNING};
 use crate::wallet::{keys, sync_engine};
 
 /// Progress data passed to the C callback.
@@ -37,6 +37,8 @@ pub extern "C" fn zcash_run_full_sync(
         return 3; // already running
     }
 
+    DESIRED_SYNC_MODE.store(2, Ordering::SeqCst); // background mode
+
     let result = std::panic::catch_unwind(|| {
         let db_path = unsafe { CStr::from_ptr(db_path) }.to_str().unwrap_or("");
         let lightwalletd_url = unsafe { CStr::from_ptr(lightwalletd_url) }.to_str().unwrap_or("");
@@ -61,6 +63,8 @@ pub extern "C" fn zcash_run_full_sync(
                 lightwalletd_url,
                 network,
                 cancel,
+                2, // background mode
+                &DESIRED_SYNC_MODE,
                 |progress| {
                     progress_callback(CSyncProgress {
                         scanned_height: progress.scanned_height,
@@ -91,4 +95,10 @@ pub extern "C" fn zcash_run_full_sync(
 #[no_mangle]
 pub extern "C" fn zcash_cancel_sync() {
     C_CANCEL.store(true, Ordering::Relaxed);
+}
+
+/// Get the current desired sync mode (0=none, 1=foreground, 2=background).
+#[no_mangle]
+pub extern "C" fn zcash_get_sync_mode() -> u8 {
+    DESIRED_SYNC_MODE.load(Ordering::SeqCst)
 }
