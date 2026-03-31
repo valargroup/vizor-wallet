@@ -28,6 +28,7 @@ migrate_working_dir/
 
 # Rust
 rust/target/
+rust/build/
 
 # Flutter/Dart/Pub related
 **/doc/api/
