@@ -59,8 +59,9 @@ class BackgroundSyncManager {
     }
 
     func startBackgroundSync() -> Bool {
+        // Submit with a concrete identifier matching the wildcard pattern
         let request = BGContinuedProcessingTaskRequest(
-            identifier: Self.taskIdentifier,
+            identifier: "com.zcash.zcashWallet.sync.main",
             title: "Syncing Zcash Wallet",
             subtitle: "Scanning blockchain blocks"
         )
