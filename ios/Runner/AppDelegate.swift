@@ -26,11 +26,15 @@ import UIKit
     methodChannel.setMethodCallHandler { (call, result) in
       switch call.method {
       case "isAvailable":
-        if #available(iOS 26.0, *) {
-          result(true)
-        } else {
+        #if targetEnvironment(simulator)
           result(false)
-        }
+        #else
+          if #available(iOS 26.0, *) {
+            result(true)
+          } else {
+            result(false)
+          }
+        #endif
       case "startBackgroundSync":
         if #available(iOS 26.0, *) {
           let success = BackgroundSyncManager.shared.startBackgroundSync()
