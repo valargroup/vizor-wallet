@@ -11,6 +11,8 @@
 	<array>
 		<string>com.zcash.zcashWallet.sync</string>
 	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
