@@ -11,9 +11,18 @@ class LiveActivityService {
   static LiveActivityService get instance => _instance;
   LiveActivityService._();
 
+  static const _appGroupId = 'group.com.zcash.zcashWallet';
+
   final _liveActivitiesPlugin = LiveActivities();
   String? _activityId;
   bool _enabled = false;
+  bool _initialized = false;
+
+  Future<void> _ensureInit() async {
+    if (_initialized) return;
+    await _liveActivitiesPlugin.init(appGroupId: _appGroupId);
+    _initialized = true;
+  }
 
   /// Check if Live Activities are supported on this device.
   Future<bool> isSupported() async {
@@ -30,6 +39,7 @@ class LiveActivityService {
     if (!Platform.isIOS || _activityId != null) return;
 
     try {
+      await _ensureInit();
       final supported = await isSupported();
       if (!supported) return;
 
