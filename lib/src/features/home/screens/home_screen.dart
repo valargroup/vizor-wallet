@@ -181,6 +181,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => context.push('/history'),
+                icon: const Icon(Icons.history, size: 18),
+                label: const Text('Transaction History'),
+              ),
+            ),
             const SizedBox(height: 24),
             Card(
               child: Padding(

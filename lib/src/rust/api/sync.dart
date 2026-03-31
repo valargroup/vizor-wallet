@@ -129,6 +129,46 @@ Future<String> getNextAvailableAddress({
   network: network,
 );
 
+Future<List<TxDataRequest>> getTransactionDataRequests({
+  required String dbPath,
+  required String network,
+}) => RustLib.instance.api.crateApiSyncGetTransactionDataRequests(
+  dbPath: dbPath,
+  network: network,
+);
+
+Future<void> decryptAndStoreTransaction({
+  required String dbPath,
+  required String network,
+  required List<int> txBytes,
+  BigInt? minedHeight,
+}) => RustLib.instance.api.crateApiSyncDecryptAndStoreTransaction(
+  dbPath: dbPath,
+  network: network,
+  txBytes: txBytes,
+  minedHeight: minedHeight,
+);
+
+Future<void> setTransactionStatus({
+  required String dbPath,
+  required String network,
+  required String txidHex,
+  required PlatformInt64 status,
+}) => RustLib.instance.api.crateApiSyncSetTransactionStatus(
+  dbPath: dbPath,
+  network: network,
+  txidHex: txidHex,
+  status: status,
+);
+
+Future<List<TransactionInfo>> getTransactionHistory({
+  required String dbPath,
+  required String network,
+}) => RustLib.instance.api.crateApiSyncGetTransactionHistory(
+  dbPath: dbPath,
+  network: network,
+);
+
 String getBlocksDir({required String cachePath}) =>
     RustLib.instance.api.crateApiSyncGetBlocksDir(cachePath: cachePath);
 
@@ -272,6 +312,80 @@ class SyncProgress {
           scannedHeight == other.scannedHeight &&
           chainTipHeight == other.chainTipHeight &&
           isSyncing == other.isSyncing;
+}
+
+class TransactionInfo {
+  final String txidHex;
+  final BigInt minedHeight;
+  final bool expiredUnmined;
+  final PlatformInt64 accountBalanceDelta;
+  final BigInt fee;
+  final BigInt blockTime;
+
+  const TransactionInfo({
+    required this.txidHex,
+    required this.minedHeight,
+    required this.expiredUnmined,
+    required this.accountBalanceDelta,
+    required this.fee,
+    required this.blockTime,
+  });
+
+  @override
+  int get hashCode =>
+      txidHex.hashCode ^
+      minedHeight.hashCode ^
+      expiredUnmined.hashCode ^
+      accountBalanceDelta.hashCode ^
+      fee.hashCode ^
+      blockTime.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TransactionInfo &&
+          runtimeType == other.runtimeType &&
+          txidHex == other.txidHex &&
+          minedHeight == other.minedHeight &&
+          expiredUnmined == other.expiredUnmined &&
+          accountBalanceDelta == other.accountBalanceDelta &&
+          fee == other.fee &&
+          blockTime == other.blockTime;
+}
+
+class TxDataRequest {
+  final String requestType;
+  final String? txid;
+  final String? address;
+  final BigInt? blockRangeStart;
+  final BigInt? blockRangeEnd;
+
+  const TxDataRequest({
+    required this.requestType,
+    this.txid,
+    this.address,
+    this.blockRangeStart,
+    this.blockRangeEnd,
+  });
+
+  @override
+  int get hashCode =>
+      requestType.hashCode ^
+      txid.hashCode ^
+      address.hashCode ^
+      blockRangeStart.hashCode ^
+      blockRangeEnd.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TxDataRequest &&
+          runtimeType == other.runtimeType &&
+          requestType == other.requestType &&
+          txid == other.txid &&
+          address == other.address &&
+          blockRangeStart == other.blockRangeStart &&
+          blockRangeEnd == other.blockRangeEnd;
 }
 
 class WalletBalance {

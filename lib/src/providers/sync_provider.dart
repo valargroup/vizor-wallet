@@ -160,6 +160,9 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
         log('Sync: scanned ${result.blocksScanned} blocks');
 
+        // 6b. Enhancement loop — fetch full TX data for discovered notes
+        await _runEnhancement(stub, dbPath, network);
+
         // 7. Update progress
         final progress = await rust_sync.getSyncStatus(
           dbPath: dbPath,
@@ -303,6 +306,65 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         blocks: metas,
       );
     }
+  }
+
+  Future<void> _runEnhancement(
+    grpc.CompactTxStreamerClient stub,
+    String dbPath,
+    ZcashNetwork network,
+  ) async {
+    while (true) {
+      final requests = await rust_sync.getTransactionDataRequests(
+        dbPath: dbPath,
+        network: network.name,
+      );
+      if (requests.isEmpty) break;
+
+      for (final req in requests) {
+        try {
+          if (req.requestType == 'get_status' && req.txid != null) {
+            // Check if TX is mined
+            final txidBytes = _hexToBytes(req.txid!);
+            final response = await stub.getTransaction(
+              pb.TxFilter(hash: txidBytes),
+            );
+            final height = response.height.toInt();
+            await rust_sync.setTransactionStatus(
+              dbPath: dbPath,
+              network: network.name,
+              txidHex: req.txid!,
+              status: height > 0 ? height : -1,
+            );
+          } else if (req.requestType == 'enhancement' && req.txid != null) {
+            // Download full TX and decrypt
+            final txidBytes = _hexToBytes(req.txid!);
+            final response = await stub.getTransaction(
+              pb.TxFilter(hash: txidBytes),
+            );
+            if (response.data.isNotEmpty) {
+              final height = response.height.toInt();
+              await rust_sync.decryptAndStoreTransaction(
+                dbPath: dbPath,
+                network: network.name,
+                txBytes: Uint8List.fromList(response.data),
+                minedHeight: height > 0 ? BigInt.from(height) : null,
+              );
+            }
+          }
+          // address_txids requests are skipped for now (transparent address tracking)
+        } catch (e) {
+          log('Enhancement: error processing ${req.requestType}: $e');
+        }
+      }
+    }
+  }
+
+  List<int> _hexToBytes(String hex) {
+    final result = <int>[];
+    for (var i = 0; i < hex.length; i += 2) {
+      result.add(int.parse(hex.substring(i, i + 2), radix: 16));
+    }
+    return result;
   }
 
   Future<String> _getDbPath() async {

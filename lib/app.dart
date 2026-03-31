@@ -7,6 +7,7 @@ import 'src/features/home/screens/home_screen.dart';
 import 'src/features/onboarding/screens/create_wallet_screen.dart';
 import 'src/features/onboarding/screens/import_wallet_screen.dart';
 import 'src/features/onboarding/screens/welcome_screen.dart';
+import 'src/features/history/screens/history_screen.dart';
 import 'src/features/receive/screens/receive_screen.dart';
 import 'src/features/send/screens/send_screen.dart';
 import 'src/providers/wallet_provider.dart';
@@ -62,6 +63,10 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/receive',
         builder: (_, _) => const ReceiveScreen(),
+      ),
+      GoRoute(
+        path: '/history',
+        builder: (_, _) => const HistoryScreen(),
       ),
     ],
   );

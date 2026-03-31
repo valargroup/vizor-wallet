@@ -1,13 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../../../main.dart' show log;
 import '../../../rust/api/sync.dart' as rust_sync;
-import '../../../rust/api/wallet.dart' as rust_wallet;
 
 class SendScreen extends ConsumerStatefulWidget {
   const SendScreen({super.key});
@@ -54,38 +49,16 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       final address = _addressController.text.trim();
       final amountZec = double.tryParse(_amountController.text.trim()) ?? 0;
       final amountZatoshi = (amountZec * 100000000).round();
-      final memo = _memoController.text.trim();
 
       if (amountZatoshi <= 0) {
         setState(() { _error = 'Invalid amount'; _isSending = false; });
         return;
       }
 
-      // Get seed from secure storage
-      const storage = FlutterSecureStorage();
-      final mnemonic = await storage.read(key: 'zcash_wallet_mnemonic');
-      if (mnemonic == null) {
-        setState(() { _error = 'Mnemonic not found'; _isSending = false; });
-        return;
-      }
-
-      final dir = await getApplicationDocumentsDirectory();
-      final dbPath = '${dir.path}${Platform.pathSeparator}zcash_wallet.db';
-
-      // Derive seed from mnemonic (Rust validates and derives)
-      final seed = await rust_wallet.importWallet(
-        mnemonic: mnemonic,
-        network: 'main',
-        dbPath: '${dir.path}${Platform.pathSeparator}temp_seed_derive.db',
-      );
-      // Actually we need to get raw seed bytes. For now use the send_to_address
-      // which takes seed bytes internally.
-
       log('Send: to=$address amount=$amountZatoshi zatoshi');
 
-      // TODO: Implement proper seed derivation for send
-      // For now, send_to_address needs seed bytes, spend params, output params
-      // These proving parameters need to be downloaded first (~50MB)
+      // send_to_address needs seed bytes + Sapling proving parameters (~50MB)
+      // Parameter download is not yet implemented
       setState(() {
         _error = 'Send functionality requires Sapling proving parameters.\n'
             'Parameter download not yet implemented.';

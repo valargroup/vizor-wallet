@@ -38,6 +38,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
 
   @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
   List<BlockMetaInfo> dco_decode_list_block_meta_info(dynamic raw);
 
   @protected
@@ -51,6 +54,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<SubtreeRoot> dco_decode_list_subtree_root(dynamic raw);
+
+  @protected
+  List<TransactionInfo> dco_decode_list_transaction_info(dynamic raw);
+
+  @protected
+  List<TxDataRequest> dco_decode_list_tx_data_request(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
@@ -69,6 +78,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SyncProgress dco_decode_sync_progress(dynamic raw);
+
+  @protected
+  TransactionInfo dco_decode_transaction_info(dynamic raw);
+
+  @protected
+  TxDataRequest dco_decode_tx_data_request(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -109,6 +124,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
   List<BlockMetaInfo> sse_decode_list_block_meta_info(
     SseDeserializer deserializer,
   );
@@ -128,6 +146,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<SubtreeRoot> sse_decode_list_subtree_root(SseDeserializer deserializer);
 
   @protected
+  List<TransactionInfo> sse_decode_list_transaction_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<TxDataRequest> sse_decode_list_tx_data_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
@@ -144,6 +172,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SyncProgress sse_decode_sync_progress(SseDeserializer deserializer);
+
+  @protected
+  TransactionInfo sse_decode_transaction_info(SseDeserializer deserializer);
+
+  @protected
+  TxDataRequest sse_decode_tx_data_request(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -192,6 +226,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_block_meta_info(
     List<BlockMetaInfo> self,
     SseSerializer serializer,
@@ -219,6 +256,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_transaction_info(
+    List<TransactionInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_tx_data_request(
+    List<TxDataRequest> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
@@ -235,6 +284,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_sync_progress(SyncProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_transaction_info(
+    TransactionInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_tx_data_request(TxDataRequest self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

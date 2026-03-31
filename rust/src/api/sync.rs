@@ -183,6 +183,67 @@ pub fn get_next_available_address(db_path: String, network: String) -> Result<St
     })
 }
 
+// ======================== Enhancement ========================
+
+pub struct TxDataRequest {
+    pub request_type: String,
+    pub txid: Option<String>,
+    pub address: Option<String>,
+    pub block_range_start: Option<u64>,
+    pub block_range_end: Option<u64>,
+}
+
+pub fn get_transaction_data_requests(db_path: String, network: String) -> Result<Vec<TxDataRequest>, String> {
+    catch(|| {
+        let network = keys::parse_network(&network)?;
+        let reqs = wallet_sync::get_transaction_data_requests(&db_path, network)?;
+        Ok(reqs.into_iter().map(|r| TxDataRequest {
+            request_type: r.request_type, txid: r.txid, address: r.address,
+            block_range_start: r.block_range_start, block_range_end: r.block_range_end,
+        }).collect())
+    })
+}
+
+pub fn decrypt_and_store_transaction(
+    db_path: String, network: String, tx_bytes: Vec<u8>, mined_height: Option<u64>,
+) -> Result<(), String> {
+    catch(|| {
+        let network = keys::parse_network(&network)?;
+        wallet_sync::decrypt_and_store_transaction(&db_path, network, &tx_bytes, mined_height)
+    })
+}
+
+pub fn set_transaction_status(
+    db_path: String, network: String, txid_hex: String, status: i64,
+) -> Result<(), String> {
+    catch(|| {
+        let network = keys::parse_network(&network)?;
+        wallet_sync::set_transaction_status(&db_path, network, &txid_hex, status)
+    })
+}
+
+// ======================== Transaction History ========================
+
+pub struct TransactionInfo {
+    pub txid_hex: String,
+    pub mined_height: u64,
+    pub expired_unmined: bool,
+    pub account_balance_delta: i64,
+    pub fee: u64,
+    pub block_time: u64,
+}
+
+pub fn get_transaction_history(db_path: String, network: String) -> Result<Vec<TransactionInfo>, String> {
+    catch(|| {
+        let network = keys::parse_network(&network)?;
+        let txs = wallet_sync::get_transaction_history(&db_path, network)?;
+        Ok(txs.into_iter().map(|t| TransactionInfo {
+            txid_hex: t.txid_hex, mined_height: t.mined_height, expired_unmined: t.expired_unmined,
+            account_balance_delta: t.account_balance_delta, fee: t.fee, block_time: t.block_time,
+        }).collect())
+    })
+}
+
 // ======================== Utility ========================
 
 #[flutter_rust_bridge::frb(sync)]

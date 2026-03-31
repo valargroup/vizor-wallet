@@ -277,6 +277,133 @@ pub fn get_next_available_address(db_path: &str, network: Network) -> Result<Str
     Ok(ua.encode(&network))
 }
 
+// ======================== Enhancement ========================
+
+pub(crate) struct TxDataRequest {
+    pub request_type: String, // "get_status", "enhancement", "address_txids"
+    pub txid: Option<String>,
+    pub address: Option<String>,
+    pub block_range_start: Option<u64>,
+    pub block_range_end: Option<u64>,
+}
+
+pub fn get_transaction_data_requests(
+    db_path: &str, network: Network,
+) -> Result<Vec<TxDataRequest>, String> {
+    use zcash_client_backend::data_api::TransactionDataRequest;
+
+    let db = open_wallet_db(db_path, network)?;
+    let requests = db.transaction_data_requests().map_err(|e| format!("{e}"))?;
+
+    Ok(requests.into_iter().map(|r| match r {
+        TransactionDataRequest::GetStatus(txid) => TxDataRequest {
+            request_type: "get_status".into(),
+            txid: Some(format!("{txid}")),
+            address: None, block_range_start: None, block_range_end: None,
+        },
+        TransactionDataRequest::Enhancement(txid) => TxDataRequest {
+            request_type: "enhancement".into(),
+            txid: Some(format!("{txid}")),
+            address: None, block_range_start: None, block_range_end: None,
+        },
+        TransactionDataRequest::TransactionsInvolvingAddress(req) => {
+            let addr = zcash_keys::encoding::encode_transparent_address_p(&network, &req.address());
+            TxDataRequest {
+                request_type: "address_txids".into(),
+                txid: None,
+                address: Some(addr),
+                block_range_start: Some(u32::from(req.block_range_start()) as u64),
+                block_range_end: req.block_range_end().map(|h| u32::from(h) as u64),
+            }
+        }
+    }).collect())
+}
+
+pub fn decrypt_and_store_transaction(
+    db_path: &str, network: Network, tx_bytes: &[u8], mined_height: Option<u64>,
+) -> Result<(), String> {
+    use zcash_client_backend::data_api::wallet::decrypt_and_store_transaction;
+    use zcash_primitives::transaction::Transaction;
+    use zcash_protocol::consensus::BranchId;
+
+    let mut db = open_wallet_db(db_path, network)?;
+    let tx = Transaction::read(tx_bytes, BranchId::Sapling)
+        .map_err(|e| format!("Failed to read transaction: {e}"))?;
+    let height = mined_height.map(|h| BlockHeight::from_u32(h as u32));
+
+    decrypt_and_store_transaction(&network, &mut db, &tx, height)
+        .map_err(|e| format!("Failed to decrypt/store transaction: {e}"))
+}
+
+pub fn set_transaction_status(
+    db_path: &str, network: Network, txid_hex: &str, status: i64,
+) -> Result<(), String> {
+    use zcash_client_backend::data_api::TransactionStatus;
+
+    let mut db = open_wallet_db(db_path, network)?;
+    let txid_bytes = hex::decode(txid_hex).map_err(|e| format!("Bad txid hex: {e}"))?;
+    let txid = zcash_primitives::transaction::TxId::from_bytes(
+        txid_bytes.try_into().map_err(|_| "TxId must be 32 bytes")?,
+    );
+
+    let tx_status = match status {
+        -2 => TransactionStatus::TxidNotRecognized,
+        -1 => TransactionStatus::NotInMainChain,
+        h => TransactionStatus::Mined(BlockHeight::from_u32(h as u32)),
+    };
+
+    db.set_transaction_status(txid, tx_status)
+        .map_err(|e| format!("Failed to set status: {e}"))
+}
+
+// ======================== Transaction History (SQL) ========================
+
+pub(crate) struct TransactionInfo {
+    pub txid_hex: String,
+    pub mined_height: u64,
+    pub expired_unmined: bool,
+    pub account_balance_delta: i64,
+    pub fee: u64,
+    pub block_time: u64,
+}
+
+pub fn get_transaction_history(
+    db_path: &str, _network: Network,
+) -> Result<Vec<TransactionInfo>, String> {
+    // Open a separate read-only connection (WalletDb.conn is private)
+    let conn = rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    ).map_err(|e| format!("Failed to open DB: {e}"))?;
+    let mut stmt = conn.prepare(
+        "SELECT txid, mined_height, expired_unmined, account_balance_delta, \
+         COALESCE(fee_paid, 0), COALESCE(block_time, 0) \
+         FROM v_transactions \
+         ORDER BY COALESCE(mined_height, 999999999) DESC, tx_index DESC"
+    ).map_err(|e| format!("SQL error: {e}"))?;
+
+    let rows = stmt.query_map([], |row| {
+        let txid_blob: Vec<u8> = row.get(0)?;
+        let mined_height: Option<u32> = row.get(1)?;
+        let expired_unmined: bool = row.get(2)?;
+        let balance_delta: i64 = row.get(3)?;
+        let fee: u64 = row.get::<_, i64>(4)?.unsigned_abs();
+        let block_time: u64 = row.get::<_, i64>(5)?.unsigned_abs();
+
+        Ok(TransactionInfo {
+            txid_hex: hex::encode(&txid_blob),
+            mined_height: mined_height.unwrap_or(0) as u64,
+            expired_unmined,
+            account_balance_delta: balance_delta,
+            fee,
+            block_time,
+        })
+    }).map_err(|e| format!("Query error: {e}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Row error: {e}"))
+}
+
 // ======================== Helpers ========================
 
 pub fn get_blocks_dir(cache_path: &str) -> String {
