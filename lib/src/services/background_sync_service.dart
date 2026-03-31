@@ -129,7 +129,9 @@ Future<void> _startAndroidForegroundService() async {
     callback: _foregroundTaskCallback,
   );
 
-  log('BackgroundSync: startService result: success=${result.success}, message=${result.message}');
+  final success = result is ServiceRequestSuccess;
+  final errorMsg = result is ServiceRequestFailure ? (result as ServiceRequestFailure).error : '';
+  log('BackgroundSync: startService result: success=$success, error=$errorMsg');
 
   final isRunning = await FlutterForegroundTask.isRunningService;
   log('BackgroundSync: isRunningService=$isRunning');
