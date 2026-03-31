@@ -53,6 +53,7 @@ class LiveActivityService {
           'status': 'Starting sync...',
         },
         removeWhenAppIsKilled: true,
+        iOSEnableRemoteUpdates: false,
       );
       _enabled = true;
       log('LiveActivity: started with id=$_activityId');
