@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../main.dart' show log;
 import '../../../providers/sync_provider.dart';
 import '../../../providers/wallet_provider.dart';
 import '../../../services/background_sync_service.dart' as bg_sync;
@@ -28,6 +29,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _checkBackgroundSyncAvailability() async {
     final available = await bg_sync.isBackgroundSyncAvailable();
+    log('[zcash] BackgroundSync available: $available');
     if (mounted) setState(() => _canBackgroundSync = available);
   }
 
