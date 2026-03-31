@@ -323,37 +323,56 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       for (final req in requests) {
         try {
           if (req.requestType == 'get_status' && req.txid != null) {
-            // Check if TX is mined
             final txidBytes = _hexToBytes(req.txid!);
-            final response = await stub.getTransaction(
-              pb.TxFilter(hash: txidBytes),
-            );
-            final height = response.height.toInt();
-            await rust_sync.setTransactionStatus(
-              dbPath: dbPath,
-              network: network.name,
-              txidHex: req.txid!,
-              status: height > 0 ? height : -1,
-            );
-          } else if (req.requestType == 'enhancement' && req.txid != null) {
-            // Download full TX and decrypt
-            final txidBytes = _hexToBytes(req.txid!);
-            final response = await stub.getTransaction(
-              pb.TxFilter(hash: txidBytes),
-            );
-            if (response.data.isNotEmpty) {
+            try {
+              final response = await stub.getTransaction(
+                pb.TxFilter(hash: txidBytes),
+              );
               final height = response.height.toInt();
-              await rust_sync.decryptAndStoreTransaction(
+              await rust_sync.setTransactionStatus(
                 dbPath: dbPath,
                 network: network.name,
-                txBytes: Uint8List.fromList(response.data),
-                minedHeight: height > 0 ? BigInt.from(height) : null,
+                txidHex: req.txid!,
+                status: height > 0 ? height : -1,
+              );
+            } on GrpcError {
+              log('Enhancement: TX ${req.txid!.substring(0, 16)}... not found, marking as not recognized');
+              await rust_sync.setTransactionStatus(
+                dbPath: dbPath,
+                network: network.name,
+                txidHex: req.txid!,
+                status: -2, // TxidNotRecognized
+              );
+            }
+          } else if (req.requestType == 'enhancement' && req.txid != null) {
+            final txidBytes = _hexToBytes(req.txid!);
+            try {
+              final response = await stub.getTransaction(
+                pb.TxFilter(hash: txidBytes),
+              );
+              if (response.data.isNotEmpty) {
+                final height = response.height.toInt();
+                await rust_sync.decryptAndStoreTransaction(
+                  dbPath: dbPath,
+                  network: network.name,
+                  txBytes: Uint8List.fromList(response.data),
+                  minedHeight: height > 0 ? BigInt.from(height) : null,
+                );
+              }
+            } on GrpcError {
+              log('Enhancement: TX ${req.txid!.substring(0, 16)}... not found, marking as not recognized');
+              await rust_sync.setTransactionStatus(
+                dbPath: dbPath,
+                network: network.name,
+                txidHex: req.txid!,
+                status: -2, // TxidNotRecognized
               );
             }
           }
-          // address_txids requests are skipped for now (transparent address tracking)
+          // address_txids requests are skipped for now
         } catch (e) {
           log('Enhancement: error processing ${req.requestType}: $e');
+          break; // avoid infinite loop on unexpected errors
         }
       }
     }
