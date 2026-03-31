@@ -14,11 +14,10 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
-    // Register MethodChannel via plugin registry (works with UISceneDelegate)
-    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BackgroundSyncPlugin")
+    // Set up MethodChannel via applicationRegistrar (UISceneDelegate compatible)
     let channel = FlutterMethodChannel(
       name: "com.zcash.wallet/background_sync",
-      binaryMessenger: registrar.messenger()
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
 
     channel.setMethodCallHandler { (call, result) in
