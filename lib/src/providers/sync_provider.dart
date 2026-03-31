@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:grpc/grpc.dart';
 import 'package:path_provider/path_provider.dart';
@@ -57,6 +58,15 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       _cancelled = true;
       if (_backgroundMode) bg_sync.stopBackgroundSync();
     });
+
+    // Listen for stop signal from foreground service notification button
+    FlutterForegroundTask.receivePort?.listen((message) {
+      if (message == 'stop_sync') {
+        log('SyncNotifier: received stop_sync from notification');
+        stopSync();
+      }
+    });
+
     return SyncState();
   }
 
