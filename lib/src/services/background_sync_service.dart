@@ -94,6 +94,13 @@ Future<bool> isBackgroundSyncRunning() async {
 // ======================== Android ========================
 
 Future<void> _startAndroidForegroundService() async {
+  // Request notification permission on Android 13+
+  final notifPermission = await FlutterForegroundTask.checkNotificationPermission();
+  log('BackgroundSync: notification permission=$notifPermission');
+  if (notifPermission != NotificationPermission.granted) {
+    await FlutterForegroundTask.requestNotificationPermission();
+  }
+
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'zcash_sync',
@@ -115,12 +122,15 @@ Future<void> _startAndroidForegroundService() async {
     ),
   );
 
-  await FlutterForegroundTask.startService(
+  final result = await FlutterForegroundTask.startService(
     notificationTitle: 'Zcash Wallet',
     notificationText: 'Syncing blockchain...',
     serviceId: 1001,
     callback: _foregroundTaskCallback,
   );
 
-  log('BackgroundSync: Android foreground service started');
+  log('BackgroundSync: startService result: success=${result.success}, message=${result.message}');
+
+  final isRunning = await FlutterForegroundTask.isRunningService;
+  log('BackgroundSync: isRunningService=$isRunning');
 }
