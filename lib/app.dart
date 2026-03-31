@@ -7,6 +7,8 @@ import 'src/features/home/screens/home_screen.dart';
 import 'src/features/onboarding/screens/create_wallet_screen.dart';
 import 'src/features/onboarding/screens/import_wallet_screen.dart';
 import 'src/features/onboarding/screens/welcome_screen.dart';
+import 'src/features/receive/screens/receive_screen.dart';
+import 'src/features/send/screens/send_screen.dart';
 import 'src/providers/wallet_provider.dart';
 
 final _routerProvider = Provider<GoRouter>((ref) {
@@ -52,6 +54,14 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/home',
         builder: (_, _) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: '/send',
+        builder: (_, _) => const SendScreen(),
+      ),
+      GoRoute(
+        path: '/receive',
+        builder: (_, _) => const ReceiveScreen(),
       ),
     ],
   );

@@ -46,8 +46,6 @@ Future<void> writeBlockMetadata({
   blocks: blocks,
 );
 
-/// Scan cached blocks with trial decryption.
-/// TreeState fields passed individually. Empty hash = Sapling activation (empty tree state).
 Future<ScanResult> scanBlocks({
   required String dbPath,
   required String cachePath,
@@ -90,9 +88,70 @@ Future<WalletBalance> getBalance({
   network: network,
 );
 
-/// Get the blocks directory path where Dart should write compact block files.
+Future<BigInt> rewindToHeight({
+  required String dbPath,
+  required String network,
+  required BigInt height,
+}) => RustLib.instance.api.crateApiSyncRewindToHeight(
+  dbPath: dbPath,
+  network: network,
+  height: height,
+);
+
+Future<AddressValidationResult> validateAddress({required String address}) =>
+    RustLib.instance.api.crateApiSyncValidateAddress(address: address);
+
+Future<String> sendToAddress({
+  required String dbPath,
+  required String network,
+  required List<int> seed,
+  required String toAddress,
+  required BigInt amountZatoshi,
+  String? memo,
+  required String spendParamsPath,
+  required String outputParamsPath,
+}) => RustLib.instance.api.crateApiSyncSendToAddress(
+  dbPath: dbPath,
+  network: network,
+  seed: seed,
+  toAddress: toAddress,
+  amountZatoshi: amountZatoshi,
+  memo: memo,
+  spendParamsPath: spendParamsPath,
+  outputParamsPath: outputParamsPath,
+);
+
+Future<String> getNextAvailableAddress({
+  required String dbPath,
+  required String network,
+}) => RustLib.instance.api.crateApiSyncGetNextAvailableAddress(
+  dbPath: dbPath,
+  network: network,
+);
+
 String getBlocksDir({required String cachePath}) =>
     RustLib.instance.api.crateApiSyncGetBlocksDir(cachePath: cachePath);
+
+class AddressValidationResult {
+  final bool isValid;
+  final String addressType;
+
+  const AddressValidationResult({
+    required this.isValid,
+    required this.addressType,
+  });
+
+  @override
+  int get hashCode => isValid.hashCode ^ addressType.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AddressValidationResult &&
+          runtimeType == other.runtimeType &&
+          isValid == other.isValid &&
+          addressType == other.addressType;
+}
 
 class BlockMetaInfo {
   final BigInt height;
@@ -219,12 +278,16 @@ class WalletBalance {
   final BigInt transparent;
   final BigInt sapling;
   final BigInt orchard;
+  final BigInt saplingPending;
+  final BigInt orchardPending;
   final BigInt total;
 
   const WalletBalance({
     required this.transparent,
     required this.sapling,
     required this.orchard,
+    required this.saplingPending,
+    required this.orchardPending,
     required this.total,
   });
 
@@ -233,6 +296,8 @@ class WalletBalance {
       transparent.hashCode ^
       sapling.hashCode ^
       orchard.hashCode ^
+      saplingPending.hashCode ^
+      orchardPending.hashCode ^
       total.hashCode;
 
   @override
@@ -243,5 +308,7 @@ class WalletBalance {
           transparent == other.transparent &&
           sapling == other.sapling &&
           orchard == other.orchard &&
+          saplingPending == other.saplingPending &&
+          orchardPending == other.orchardPending &&
           total == other.total;
 }

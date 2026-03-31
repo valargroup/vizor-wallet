@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../providers/sync_provider.dart';
 import '../../../providers/wallet_provider.dart';
@@ -159,7 +160,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 8),
             _buildSyncBadge(context, sync),
-            const SizedBox(height: 48),
+            const SizedBox(height: 24),
+            // Send / Receive buttons
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => context.push('/send'),
+                    icon: const Icon(Icons.arrow_upward),
+                    label: const Text('Send'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: () => context.push('/receive'),
+                    icon: const Icon(Icons.arrow_downward),
+                    label: const Text('Receive'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
