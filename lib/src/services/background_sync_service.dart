@@ -1,8 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import '../../main.dart' show log;
+import 'live_activity_service.dart';
+
+const _iosChannel = MethodChannel('com.zcash.wallet/background_sync');
 
 /// Checks if background sync is available on this platform/version.
 Future<bool> isBackgroundSyncAvailable() async {
@@ -10,15 +14,12 @@ Future<bool> isBackgroundSyncAvailable() async {
     return true; // Always available on Android via foreground service
   }
   if (Platform.isIOS) {
-    // BGContinuedProcessingTask requires iOS 26+
-    // Parse version from Platform.operatingSystemVersion
-    final versionStr = Platform.operatingSystemVersion;
-    final match = RegExp(r'(\d+)\.').firstMatch(versionStr);
-    if (match != null) {
-      final major = int.tryParse(match.group(1)!) ?? 0;
-      return major >= 26;
+    try {
+      final available = await _iosChannel.invokeMethod<bool>('isAvailable');
+      return available ?? false;
+    } catch (_) {
+      return false;
     }
-    return false;
   }
   return false;
 }
@@ -28,9 +29,13 @@ Future<void> startBackgroundSync() async {
   if (Platform.isAndroid) {
     await _startAndroidForegroundService();
   } else if (Platform.isIOS) {
-    // iOS BGContinuedProcessingTask will be implemented in Step 3
-    // For now, sync continues in foreground
-    log('BackgroundSync: iOS background sync not yet implemented');
+    await LiveActivityService.instance.startSyncActivity();
+    try {
+      final success = await _iosChannel.invokeMethod<bool>('startBackgroundSync');
+      log('BackgroundSync: iOS BGTask submitted: $success');
+    } catch (e) {
+      log('BackgroundSync: iOS BGTask failed: $e');
+    }
   }
 }
 
@@ -46,14 +51,21 @@ Future<void> updateBackgroundSyncProgress({
       notificationTitle: 'Zcash Wallet — Syncing $pct%',
       notificationText: 'Block $scannedHeight / $chainTipHeight',
     );
+  } else if (Platform.isIOS) {
+    await LiveActivityService.instance.updateProgress(
+      percentage: percentage,
+      scannedHeight: scannedHeight,
+      chainTipHeight: chainTipHeight,
+    );
   }
-  // iOS: Live Activity update will be added in Step 4
 }
 
 /// Stop background sync service.
 Future<void> stopBackgroundSync() async {
   if (Platform.isAndroid) {
     await FlutterForegroundTask.stopService();
+  } else if (Platform.isIOS) {
+    await LiveActivityService.instance.stopSyncActivity();
   }
 }
 
