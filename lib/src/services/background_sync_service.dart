@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import '../../main.dart' show log;
-import 'live_activity_service.dart';
 
 const _iosChannel = MethodChannel('com.zcash.wallet/background_sync');
 
@@ -29,7 +28,7 @@ Future<void> startBackgroundSync() async {
   if (Platform.isAndroid) {
     await _startAndroidForegroundService();
   } else if (Platform.isIOS) {
-    await LiveActivityService.instance.startSyncActivity();
+    // Live Activity is started/managed by SyncNotifier directly
     try {
       final success = await _iosChannel.invokeMethod<bool>('startBackgroundSync');
       log('BackgroundSync: iOS BGTask submitted: $success');
@@ -51,22 +50,16 @@ Future<void> updateBackgroundSyncProgress({
       notificationTitle: 'Zcash Wallet — Syncing $pct%',
       notificationText: 'Block $scannedHeight / $chainTipHeight',
     );
-  } else if (Platform.isIOS) {
-    await LiveActivityService.instance.updateProgress(
-      percentage: percentage,
-      scannedHeight: scannedHeight,
-      chainTipHeight: chainTipHeight,
-    );
   }
+  // iOS Live Activity updates are handled by SyncNotifier directly
 }
 
 /// Stop background sync service.
 Future<void> stopBackgroundSync() async {
   if (Platform.isAndroid) {
     await FlutterForegroundTask.stopService();
-  } else if (Platform.isIOS) {
-    await LiveActivityService.instance.stopSyncActivity();
   }
+  // iOS Live Activity stop is handled by SyncNotifier directly
 }
 
 /// Check if background sync is currently running.

@@ -13,6 +13,7 @@ import '../generated/service.pbgrpc.dart' as grpc;
 import '../generated/service.pb.dart' as pb;
 import '../rust/api/sync.dart' as rust_sync;
 import '../services/background_sync_service.dart' as bg_sync;
+import '../services/live_activity_service.dart';
 
 const _batchSize = 1000;
 const _saplingActivationHeight = 419200; // mainnet
@@ -64,11 +65,17 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     _backgroundMode = false;
     state = AsyncData(SyncState(isSyncing: true));
 
+    // Start Live Activity on supported devices (Dynamic Island)
+    await LiveActivityService.instance.startSyncActivity();
+
     try {
       await _runSync();
     } catch (e, st) {
       log('SyncNotifier: ERROR: $e\n$st');
       state = AsyncData(SyncState(error: e.toString()));
+    } finally {
+      // Stop Live Activity when sync ends (success or error)
+      await LiveActivityService.instance.stopSyncActivity();
     }
   }
 
@@ -224,7 +231,14 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
           totalBalance: balance.total,
         ));
 
-        // Update background notification if in background mode
+        // Update Live Activity (Dynamic Island) on every batch
+        await LiveActivityService.instance.updateProgress(
+          percentage: pct,
+          scannedHeight: scanned,
+          chainTipHeight: tip,
+        );
+
+        // Update platform notification if in background mode
         if (_backgroundMode) {
           bg_sync.updateBackgroundSyncProgress(
             percentage: pct,
