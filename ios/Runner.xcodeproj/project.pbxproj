@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 70;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -98,7 +98,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		265BA9BF2F7BDB1E00287691 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		265BA9BF2F7BDB1E00287691 /* Exceptions for "SyncWidget" folder in "SyncWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -108,7 +108,18 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		265BA9AE2F7BDB1D00287691 /* SyncWidget */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (265BA9BF2F7BDB1E00287691 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = SyncWidget; sourceTree = "<group>"; };
+		265BA9AE2F7BDB1D00287691 /* SyncWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				265BA9BF2F7BDB1E00287691 /* Exceptions for "SyncWidget" folder in "SyncWidgetExtension" target */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = SyncWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -244,8 +255,6 @@
 				265BA9AE2F7BDB1D00287691 /* SyncWidget */,
 			);
 			name = SyncWidgetExtension;
-			packageProductDependencies = (
-			);
 			productName = SyncWidgetExtension;
 			productReference = 265BA9A92F7BDB1D00287691 /* SyncWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -279,10 +288,10 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				265BA9BB2F7BDB1E00287691 /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				45AD813E8FF520B9F7BEAAC2 /* [CP] Embed Pods Frameworks */,
 				88DC5E173B7D56EAE02B72EB /* [CP] Copy Pods Resources */,
-				265BA9BB2F7BDB1E00287691 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -413,13 +422,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -456,13 +461,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
