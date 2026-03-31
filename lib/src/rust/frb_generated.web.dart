@@ -23,10 +23,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   });
 
   @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  RustStreamSink<ApiSyncProgressEvent>
+  dco_decode_StreamSink_api_sync_progress_event_Sse(dynamic raw);
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
   AddressValidationResult dco_decode_address_validation_result(dynamic raw);
+
+  @protected
+  ApiSyncProgressEvent dco_decode_api_sync_progress_event(dynamic raw);
 
   @protected
   BlockMetaInfo dco_decode_block_meta_info(dynamic raw);
@@ -36,6 +46,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  double dco_decode_f_64(dynamic raw);
 
   @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
@@ -113,10 +126,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   WalletImportResult dco_decode_wallet_import_result(dynamic raw);
 
   @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<ApiSyncProgressEvent>
+  sse_decode_StreamSink_api_sync_progress_event_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
   AddressValidationResult sse_decode_address_validation_result(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ApiSyncProgressEvent sse_decode_api_sync_progress_event(
     SseDeserializer deserializer,
   );
 
@@ -128,6 +155,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
@@ -220,11 +250,29 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_api_sync_progress_event_Sse(
+    RustStreamSink<ApiSyncProgressEvent> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
   void sse_encode_address_validation_result(
     AddressValidationResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_api_sync_progress_event(
+    ApiSyncProgressEvent self,
     SseSerializer serializer,
   );
 
@@ -236,6 +284,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
