@@ -35,7 +35,7 @@ class BackgroundSyncManager {
 
         // Wait for mode=background AND previous sync to finish
         while zcash_get_sync_mode() != 2 || zcash_is_sync_running() {
-            Thread.sleep(forTimeInterval: 0.2)
+            Thread.sleep(forTimeInterval: 2.0)
         }
 
         let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
