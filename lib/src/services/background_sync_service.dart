@@ -7,10 +7,34 @@ import '../../main.dart' show log;
 
 const _iosChannel = MethodChannel('com.zcash.wallet/background_sync');
 
+// Top-level callback required by flutter_foreground_task
+@pragma('vm:entry-point')
+void _foregroundTaskCallback() {
+  FlutterForegroundTask.setTaskHandler(_SyncTaskHandler());
+}
+
+class _SyncTaskHandler extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    // Task started — sync is already running in the main isolate
+    // This handler just keeps the foreground service alive
+  }
+
+  @override
+  void onRepeatEvent(DateTime timestamp) {
+    // Not used — we update notification manually via updateService()
+  }
+
+  @override
+  Future<void> onDestroy(DateTime timestamp, bool isAppTerminated) async {
+    // Service being destroyed
+  }
+}
+
 /// Checks if background sync is available on this platform/version.
 Future<bool> isBackgroundSyncAvailable() async {
   if (Platform.isAndroid) {
-    return true; // Always available on Android via foreground service
+    return true;
   }
   if (Platform.isIOS) {
     try {
@@ -28,7 +52,6 @@ Future<void> startBackgroundSync() async {
   if (Platform.isAndroid) {
     await _startAndroidForegroundService();
   } else if (Platform.isIOS) {
-    // Live Activity is started/managed by SyncNotifier directly
     try {
       final success = await _iosChannel.invokeMethod<bool>('startBackgroundSync');
       log('BackgroundSync: iOS BGTask submitted: $success');
@@ -51,7 +74,6 @@ Future<void> updateBackgroundSyncProgress({
       notificationText: 'Block $scannedHeight / $chainTipHeight',
     );
   }
-  // iOS Live Activity updates are handled by SyncNotifier directly
 }
 
 /// Stop background sync service.
@@ -59,7 +81,6 @@ Future<void> stopBackgroundSync() async {
   if (Platform.isAndroid) {
     await FlutterForegroundTask.stopService();
   }
-  // iOS Live Activity stop is handled by SyncNotifier directly
 }
 
 /// Check if background sync is currently running.
@@ -98,6 +119,7 @@ Future<void> _startAndroidForegroundService() async {
     notificationTitle: 'Zcash Wallet',
     notificationText: 'Syncing blockchain...',
     serviceId: 1001,
+    callback: _foregroundTaskCallback,
   );
 
   log('BackgroundSync: Android foreground service started');
