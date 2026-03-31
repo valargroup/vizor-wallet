@@ -17,7 +17,6 @@ typedef void (*SyncProgressCallback)(CSyncProgress);
 /// Returns 0 on success, 1 on error, 2 on panic.
 int32_t zcash_run_full_sync(
     const char* db_path,
-    const char* cache_path,
     const char* lightwalletd_url,
     const char* network,
     SyncProgressCallback progress_callback

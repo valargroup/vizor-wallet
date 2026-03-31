@@ -26,25 +26,20 @@ class BackgroundSyncManager {
         // Get paths
         let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let dbPath = documentsDir.appendingPathComponent("zcash_wallet.db").path
-        let cachePath = documentsDir.appendingPathComponent("zcash_cache").path
-
-        // Create cache dir if needed
-        try? FileManager.default.createDirectory(atPath: cachePath, withIntermediateDirectories: true)
 
         // Start Dynamic Island
-        if #available(iOS 16.1, *) {
+        if #available(iOS 16.2, *) {
             LiveActivityManager.shared.start()
         }
 
         // Run sync via C FFI (blocking)
         let result = zcash_run_full_sync(
             dbPath,
-            cachePath,
             "https://zec.rocks:443",
             "main",
             { progress in
                 // Update Dynamic Island
-                if #available(iOS 16.1, *) {
+                if #available(iOS 16.2, *) {
                     LiveActivityManager.shared.update(
                         percentage: progress.percentage,
                         scannedHeight: progress.scanned_height,
@@ -58,7 +53,7 @@ class BackgroundSyncManager {
         )
 
         // Stop Dynamic Island
-        if #available(iOS 16.1, *) {
+        if #available(iOS 16.2, *) {
             LiveActivityManager.shared.stop()
         }
 

@@ -73,13 +73,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
     try {
       final dbPath = await _getDbPath();
-      final cachePath = await _getCachePath();
       final network = ZcashNetwork.mainnet;
 
       log('Sync: starting full sync via Rust');
       await rust_sync.startFullSync(
         dbPath: dbPath,
-        cachePath: cachePath,
         lightwalletdUrl: network.lightwalletdUrl,
         network: network.name,
       );
@@ -178,12 +176,6 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     return '${dir.path}${Platform.pathSeparator}zcash_wallet.db';
   }
 
-  Future<String> _getCachePath() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final path = '${dir.path}${Platform.pathSeparator}zcash_cache';
-    await Directory(path).create(recursive: true);
-    return path;
-  }
 }
 
 final syncProvider =

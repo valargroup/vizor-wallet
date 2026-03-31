@@ -13,12 +13,10 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// All gRPC, file I/O, scanning, and enhancement happen inside Rust.
 Future<void> startFullSync({
   required String dbPath,
-  required String cachePath,
   required String lightwalletdUrl,
   required String network,
 }) => RustLib.instance.api.crateApiSyncStartFullSync(
   dbPath: dbPath,
-  cachePath: cachePath,
   lightwalletdUrl: lightwalletdUrl,
   network: network,
 );

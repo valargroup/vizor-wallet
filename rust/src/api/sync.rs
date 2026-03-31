@@ -11,7 +11,6 @@ use crate::wallet::{keys, sync as wallet_sync, sync_engine};
 /// All gRPC, file I/O, scanning, and enhancement happen inside Rust.
 pub fn start_full_sync(
     db_path: String,
-    cache_path: String,
     lightwalletd_url: String,
     network: String,
 ) -> Result<(), String> {
@@ -24,7 +23,6 @@ pub fn start_full_sync(
         rt.block_on(async {
             sync_engine::run_sync_inner(
                 &db_path,
-                &cache_path,
                 &lightwalletd_url,
                 network,
                 cancel,

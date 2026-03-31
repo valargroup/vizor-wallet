@@ -202,7 +202,6 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiSyncStartFullSync({
     required String dbPath,
-    required String cachePath,
     required String lightwalletdUrl,
     required String network,
   });
@@ -1056,7 +1055,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiSyncStartFullSync({
     required String dbPath,
-    required String cachePath,
     required String lightwalletdUrl,
     required String network,
   }) {
@@ -1065,7 +1063,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(cachePath, serializer);
           sse_encode_String(lightwalletdUrl, serializer);
           sse_encode_String(network, serializer);
           pdeCallFfi(
@@ -1080,7 +1077,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiSyncStartFullSyncConstMeta,
-        argValues: [dbPath, cachePath, lightwalletdUrl, network],
+        argValues: [dbPath, lightwalletdUrl, network],
         apiImpl: this,
       ),
     );
@@ -1088,7 +1085,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSyncStartFullSyncConstMeta => const TaskConstMeta(
     debugName: "start_full_sync",
-    argNames: ["dbPath", "cachePath", "lightwalletdUrl", "network"],
+    argNames: ["dbPath", "lightwalletdUrl", "network"],
   );
 
   @override

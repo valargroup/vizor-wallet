@@ -28,14 +28,12 @@ static C_CANCEL: std::sync::LazyLock<Arc<AtomicBool>> =
 #[no_mangle]
 pub extern "C" fn zcash_run_full_sync(
     db_path: *const c_char,
-    cache_path: *const c_char,
     lightwalletd_url: *const c_char,
     network: *const c_char,
     progress_callback: SyncProgressCallback,
 ) -> i32 {
     let result = std::panic::catch_unwind(|| {
         let db_path = unsafe { CStr::from_ptr(db_path) }.to_str().unwrap_or("");
-        let cache_path = unsafe { CStr::from_ptr(cache_path) }.to_str().unwrap_or("");
         let lightwalletd_url = unsafe { CStr::from_ptr(lightwalletd_url) }.to_str().unwrap_or("");
         let network_str = unsafe { CStr::from_ptr(network) }.to_str().unwrap_or("main");
 
@@ -55,7 +53,6 @@ pub extern "C" fn zcash_run_full_sync(
         let result = rt.block_on(async {
             sync_engine::run_sync_inner(
                 db_path,
-                cache_path,
                 lightwalletd_url,
                 network,
                 cancel,

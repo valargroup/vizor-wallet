@@ -886,7 +886,6 @@ fn wire__crate__api__sync__start_full_sync_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_cache_path = <String>::sse_decode(&mut deserializer);
             let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
             let api_network = <String>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -894,7 +893,6 @@ fn wire__crate__api__sync__start_full_sync_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::sync::start_full_sync(
                         api_db_path,
-                        api_cache_path,
                         api_lightwalletd_url,
                         api_network,
                     )?;

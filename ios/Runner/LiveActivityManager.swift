@@ -2,7 +2,7 @@ import ActivityKit
 import Foundation
 
 /// Manages Live Activity (Dynamic Island) from Swift for background sync.
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 class LiveActivityManager {
     static let shared = LiveActivityManager()
     private let appGroupId = "group.com.zcash.zcashWallet"
