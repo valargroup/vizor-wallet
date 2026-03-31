@@ -352,7 +352,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       for (final req in requests) {
         try {
           if (req.requestType == 'get_status' && req.txid != null) {
-            final txidBytes = _hexToBytes(req.txid!);
+            final txidBytes = _txidHexToBytes(req.txid!);
             try {
               final response = await stub.getTransaction(
                 pb.TxFilter(hash: txidBytes),
@@ -381,7 +381,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
               }
             }
           } else if (req.requestType == 'enhancement' && req.txid != null) {
-            final txidBytes = _hexToBytes(req.txid!);
+            final txidBytes = _txidHexToBytes(req.txid!);
             try {
               final response = await stub.getTransaction(
                 pb.TxFilter(hash: txidBytes),
@@ -456,12 +456,16 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     }
   }
 
-  List<int> _hexToBytes(String hex) {
+  /// Convert hex string to bytes.
+  /// TxId from Rust is Display-formatted (byte-reversed hex),
+  /// but lightwalletd TxFilter.hash expects original byte order.
+  /// So we reverse after hex decode.
+  List<int> _txidHexToBytes(String hex) {
     final result = <int>[];
     for (var i = 0; i < hex.length; i += 2) {
       result.add(int.parse(hex.substring(i, i + 2), radix: 16));
     }
-    return result;
+    return result.reversed.toList();
   }
 
   Future<String> _getDbPath() async {
