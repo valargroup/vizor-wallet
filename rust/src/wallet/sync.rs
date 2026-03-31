@@ -73,8 +73,18 @@ pub fn update_chain_tip(db_path: &str, network: Network, height: u64) -> Result<
         .map_err(|e| format!("Failed to update chain tip: {e}"))
 }
 
+/// Get next subtree indices to know where to start downloading from.
+pub fn get_next_subtree_indices(db_path: &str, network: Network) -> Result<(u64, u64), String> {
+    let db = open_wallet_db(db_path, network)?;
+    let summary = db.get_wallet_summary(ConfirmationsPolicy::default()).map_err(|e| format!("{e}"))?;
+    match summary {
+        Some(s) => Ok((s.next_sapling_subtree_index(), s.next_orchard_subtree_index())),
+        None => Ok((0, 0)),
+    }
+}
+
 pub fn put_sapling_subtree_roots(
-    db_path: &str, network: Network, roots: &[(u64, Vec<u8>)],
+    db_path: &str, network: Network, start_index: u64, roots: &[(u64, Vec<u8>)],
 ) -> Result<(), String> {
     let mut db = open_wallet_db(db_path, network)?;
     let parsed: Vec<_> = roots.iter().map(|(h, bytes)| {
@@ -83,14 +93,14 @@ pub fn put_sapling_subtree_roots(
         Ok::<_, String>(CommitmentTreeRoot::from_parts(BlockHeight::from_u32(*h as u32), node))
     }).collect::<Result<Vec<_>, _>>()?;
     if !parsed.is_empty() {
-        db.put_sapling_subtree_roots(0, parsed.as_slice())
+        db.put_sapling_subtree_roots(start_index, parsed.as_slice())
             .map_err(|e| format!("{e}"))?;
     }
     Ok(())
 }
 
 pub fn put_orchard_subtree_roots(
-    db_path: &str, network: Network, roots: &[(u64, Vec<u8>)],
+    db_path: &str, network: Network, start_index: u64, roots: &[(u64, Vec<u8>)],
 ) -> Result<(), String> {
     let mut db = open_wallet_db(db_path, network)?;
     let parsed: Vec<_> = roots.iter().map(|(h, bytes)| {
@@ -99,7 +109,7 @@ pub fn put_orchard_subtree_roots(
         Ok::<_, String>(CommitmentTreeRoot::from_parts(BlockHeight::from_u32(*h as u32), node))
     }).collect::<Result<Vec<_>, _>>()?;
     if !parsed.is_empty() {
-        db.put_orchard_subtree_roots(0, parsed.as_slice())
+        db.put_orchard_subtree_roots(start_index, parsed.as_slice())
             .map_err(|e| format!("{e}"))?;
     }
     Ok(())

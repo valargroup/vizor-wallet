@@ -70,16 +70,30 @@ pub fn update_chain_tip(db_path: String, network: String, height: u64) -> Result
     })
 }
 
+pub struct SubtreeIndices {
+    pub next_sapling: u64,
+    pub next_orchard: u64,
+}
+
+pub fn get_next_subtree_indices(db_path: String, network: String) -> Result<SubtreeIndices, String> {
+    catch(|| {
+        let network = keys::parse_network(&network)?;
+        let (s, o) = wallet_sync::get_next_subtree_indices(&db_path, network)?;
+        Ok(SubtreeIndices { next_sapling: s, next_orchard: o })
+    })
+}
+
 pub fn put_subtree_roots(
     db_path: String, network: String,
-    sapling_roots: Vec<SubtreeRoot>, orchard_roots: Vec<SubtreeRoot>,
+    sapling_start_index: u64, sapling_roots: Vec<SubtreeRoot>,
+    orchard_start_index: u64, orchard_roots: Vec<SubtreeRoot>,
 ) -> Result<(), String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
         let sapling: Vec<(u64, Vec<u8>)> = sapling_roots.into_iter().map(|r| (r.completing_block_height, r.root_hash)).collect();
-        wallet_sync::put_sapling_subtree_roots(&db_path, network, &sapling)?;
+        wallet_sync::put_sapling_subtree_roots(&db_path, network, sapling_start_index, &sapling)?;
         let orchard: Vec<(u64, Vec<u8>)> = orchard_roots.into_iter().map(|r| (r.completing_block_height, r.root_hash)).collect();
-        wallet_sync::put_orchard_subtree_roots(&db_path, network, &orchard)?;
+        wallet_sync::put_orchard_subtree_roots(&db_path, network, orchard_start_index, &orchard)?;
         Ok(())
     })
 }

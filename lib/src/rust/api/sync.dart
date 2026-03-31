@@ -18,15 +18,27 @@ Future<void> updateChainTip({
   height: height,
 );
 
+Future<SubtreeIndices> getNextSubtreeIndices({
+  required String dbPath,
+  required String network,
+}) => RustLib.instance.api.crateApiSyncGetNextSubtreeIndices(
+  dbPath: dbPath,
+  network: network,
+);
+
 Future<void> putSubtreeRoots({
   required String dbPath,
   required String network,
+  required BigInt saplingStartIndex,
   required List<SubtreeRoot> saplingRoots,
+  required BigInt orchardStartIndex,
   required List<SubtreeRoot> orchardRoots,
 }) => RustLib.instance.api.crateApiSyncPutSubtreeRoots(
   dbPath: dbPath,
   network: network,
+  saplingStartIndex: saplingStartIndex,
   saplingRoots: saplingRoots,
+  orchardStartIndex: orchardStartIndex,
   orchardRoots: orchardRoots,
 );
 
@@ -302,6 +314,24 @@ class ScanResult {
       other is ScanResult &&
           runtimeType == other.runtimeType &&
           blocksScanned == other.blocksScanned;
+}
+
+class SubtreeIndices {
+  final BigInt nextSapling;
+  final BigInt nextOrchard;
+
+  const SubtreeIndices({required this.nextSapling, required this.nextOrchard});
+
+  @override
+  int get hashCode => nextSapling.hashCode ^ nextOrchard.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SubtreeIndices &&
+          runtimeType == other.runtimeType &&
+          nextSapling == other.nextSapling &&
+          nextOrchard == other.nextOrchard;
 }
 
 class SubtreeRoot {

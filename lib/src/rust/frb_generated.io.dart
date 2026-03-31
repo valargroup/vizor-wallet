@@ -75,6 +75,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ScanResult dco_decode_scan_result(dynamic raw);
 
   @protected
+  SubtreeIndices dco_decode_subtree_indices(dynamic raw);
+
+  @protected
   SubtreeRoot dco_decode_subtree_root(dynamic raw);
 
   @protected
@@ -170,6 +173,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ScanResult sse_decode_scan_result(SseDeserializer deserializer);
+
+  @protected
+  SubtreeIndices sse_decode_subtree_indices(SseDeserializer deserializer);
 
   @protected
   SubtreeRoot sse_decode_subtree_root(SseDeserializer deserializer);
@@ -288,6 +294,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_scan_result(ScanResult self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_subtree_indices(
+    SubtreeIndices self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_subtree_root(SubtreeRoot self, SseSerializer serializer);

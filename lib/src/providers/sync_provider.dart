@@ -285,10 +285,19 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     String dbPath,
     ZcashNetwork network,
   ) async {
+    // Get already-stored indices to skip re-downloading
+    final indices = await rust_sync.getNextSubtreeIndices(
+      dbPath: dbPath,
+      network: network.name,
+    );
+    final saplingStart = indices.nextSapling.toInt();
+    final orchardStart = indices.nextOrchard.toInt();
+    log('Sync: subtree indices — sapling starts at $saplingStart, orchard starts at $orchardStart');
+
     // Sapling
     final saplingRoots = <rust_sync.SubtreeRoot>[];
     await for (final root in stub.getSubtreeRoots(pb.GetSubtreeRootsArg(
-      startIndex: 0,
+      startIndex: saplingStart,
       shieldedProtocol: pb.ShieldedProtocol.sapling,
       maxEntries: 0,
     ))) {
@@ -297,12 +306,12 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         rootHash: Uint8List.fromList(root.rootHash),
       ));
     }
-    log('Sync: got ${saplingRoots.length} Sapling subtree roots');
+    log('Sync: got ${saplingRoots.length} new Sapling subtree roots');
 
     // Orchard
     final orchardRoots = <rust_sync.SubtreeRoot>[];
     await for (final root in stub.getSubtreeRoots(pb.GetSubtreeRootsArg(
-      startIndex: 0,
+      startIndex: orchardStart,
       shieldedProtocol: pb.ShieldedProtocol.orchard,
       maxEntries: 0,
     ))) {
@@ -311,14 +320,20 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         rootHash: Uint8List.fromList(root.rootHash),
       ));
     }
-    log('Sync: got ${orchardRoots.length} Orchard subtree roots');
+    log('Sync: got ${orchardRoots.length} new Orchard subtree roots');
 
-    await rust_sync.putSubtreeRoots(
-      dbPath: dbPath,
-      network: network.name,
-      saplingRoots: saplingRoots,
-      orchardRoots: orchardRoots,
-    );
+    if (saplingRoots.isNotEmpty || orchardRoots.isNotEmpty) {
+      await rust_sync.putSubtreeRoots(
+        dbPath: dbPath,
+        network: network.name,
+        saplingStartIndex: BigInt.from(saplingStart),
+        saplingRoots: saplingRoots,
+        orchardStartIndex: BigInt.from(orchardStart),
+        orchardRoots: orchardRoots,
+      );
+    } else {
+      log('Sync: all subtree roots already stored, skipping');
+    }
   }
 
   Future<void> _downloadAndCacheBlocks(
