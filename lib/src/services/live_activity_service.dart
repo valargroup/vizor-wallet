@@ -41,6 +41,7 @@ class LiveActivityService {
     try {
       await _ensureInit();
       final supported = await isSupported();
+      log('LiveActivity: supported=$supported, platform=${Platform.operatingSystem}');
       if (!supported) return;
 
       _activityId = await _liveActivitiesPlugin.createActivity(
