@@ -157,6 +157,7 @@ pub async fn run_sync_inner(
         let block_source = download_blocks(&mut client, start, end - 1).await?;
 
         if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
+            log::info!("sync: exiting after download (cancel or mode change)");
             return Ok(());
         }
 
@@ -180,6 +181,7 @@ pub async fn run_sync_inner(
         }
 
         if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
+            log::info!("sync: exiting after scan (cancel or mode change)");
             return Ok(());
         }
 

@@ -5,6 +5,8 @@ pub fn greet(name: String) -> String {
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
-    // Default utilities - feel free to customize
     flutter_rust_bridge::setup_default_user_utils();
+
+    // Filter out verbose TLS/gRPC debug logs — only show our sync logs
+    log::set_max_level(log::LevelFilter::Info);
 }
