@@ -13,11 +13,13 @@ class BackgroundSyncManager {
 
     private init() {}
 
+    private let syncQueue = DispatchQueue(label: "com.zcash.sync", qos: .utility)
+
     func registerBackgroundTask() {
         print("[BGSync] registerBackgroundTask: registering \(Self.taskIdentifier)")
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: Self.taskIdentifier,
-            using: nil
+            using: syncQueue
         ) { task in
             print("[BGSync] handler invoked, task type: \(type(of: task))")
             guard let continuedTask = task as? BGContinuedProcessingTask else {
@@ -63,7 +65,7 @@ class BackgroundSyncManager {
 
         // Heartbeat timer: increment completedUnitCount every 5s to prevent OS stalled detection.
         // Actual batch callbacks jump by 100, heartbeats fill in between with +1.
-        let hb = DispatchSource.makeTimerSource(queue: .global())
+        let hb = DispatchSource.makeTimerSource(queue: syncQueue)
         hb.schedule(deadline: .now() + 5.0, repeating: 5.0)
         hb.setEventHandler { [weak self] in
             guard let self, let progress = self.taskProgress else { return }
