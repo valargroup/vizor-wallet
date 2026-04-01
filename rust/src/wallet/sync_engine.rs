@@ -152,6 +152,7 @@ pub async fn run_sync_inner(
 
         let start = range.block_range().start;
         let end = std::cmp::min(start + BATCH_SIZE, range.block_range().end);
+        log::info!("sync: scanning {}-{} (priority {:?})", u32::from(start), u32::from(end) - 1, range.priority());
 
         // Download blocks into memory
         let block_source = download_blocks(&mut client, start, end - 1).await?;
