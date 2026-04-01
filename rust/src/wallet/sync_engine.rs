@@ -101,12 +101,12 @@ pub async fn run_sync_inner(
 
     // 1. Connect gRPC
     let channel = Endpoint::from_shared(lightwalletd_url.to_string())
-        .map_err(|e| format!("Invalid URL: {e}"))?
+        .map_err(|e| err(&format!("Invalid URL: {e}")))?
         .tls_config(ClientTlsConfig::new().with_webpki_roots())
-        .map_err(|e| format!("TLS error: {e}"))?
+        .map_err(|e| err(&format!("TLS error: {e}")))?
         .connect()
         .await
-        .map_err(|e| format!("gRPC connect failed: {e}"))?;
+        .map_err(|e| err(&format!("gRPC connect failed: {e}")))?;
 
     let mut client = CompactTxStreamerClient::new(channel);
 
@@ -114,14 +114,14 @@ pub async fn run_sync_inner(
     let tip = client
         .get_latest_block(ChainSpec::default())
         .await
-        .map_err(|e| format!("get_latest_block: {e}"))?
+        .map_err(|e| err(&format!("get_latest_block: {e}")))?
         .into_inner();
     let tip_height = BlockHeight::from_u32(tip.height as u32);
     log::info!("sync: chain tip = {}", tip.height);
 
     {
         let mut db_data = open_db(db_data_path, network)?;
-        db_data.update_chain_tip(tip_height).map_err(|e| format!("update_chain_tip: {e}"))?;
+        db_data.update_chain_tip(tip_height).map_err(|e| err(&format!("update_chain_tip: {e}")))?;
     }
 
     // 3. Download subtree roots (incremental)
@@ -140,7 +140,7 @@ pub async fn run_sync_inner(
 
         let ranges = {
             let db = open_db(db_data_path, network)?;
-            db.suggest_scan_ranges().map_err(|e| format!("{e}"))?
+            db.suggest_scan_ranges().map_err(|e| err(&format!("suggest_scan_ranges: {e}")))?
         };
 
         let range = match ranges.iter().find(|r| {
@@ -167,16 +167,16 @@ pub async fn run_sync_inner(
             let ts = client
                 .get_tree_state(BlockId { height: u32::from(start - 1) as u64, hash: vec![] })
                 .await
-                .map_err(|e| format!("get_tree_state: {e}"))?
+                .map_err(|e| err(&format!("get_tree_state: {e}")))?
                 .into_inner();
-            ts.to_chain_state().map_err(|e| format!("parse tree state: {e}"))?
+            ts.to_chain_state().map_err(|e| err(&format!("parse tree state: {e}")))?
         };
 
         // Scan from memory
         {
             let mut db_data = open_db(db_data_path, network)?;
             scan_cached_blocks(&network, &block_source, &mut db_data, start, &from_state, BATCH_SIZE as usize)
-                .map_err(|e| format!("scan: {e}"))?;
+                .map_err(|e| err(&format!("scan: {e}")))?;
         }
 
         if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
@@ -204,9 +204,15 @@ pub async fn run_sync_inner(
 
 // ==================== Helpers ====================
 
+/// Log and return an error string.
+fn err(msg: &str) -> String {
+    log::error!("sync: {msg}");
+    msg.to_string()
+}
+
 fn open_db(path: &str, network: Network) -> Result<WalletDb<rusqlite::Connection, Network, SystemClock, OsRng>, String> {
     WalletDb::for_path(path, network, SystemClock, OsRng)
-        .map_err(|e| format!("DB open: {e}"))
+        .map_err(|e| err(&format!("DB open: {e}")))
 }
 
 fn get_progress(db_path: &str, network: Network) -> Result<SyncProgressEvent, String> {
@@ -251,7 +257,7 @@ async fn download_subtree_roots(
             max_entries: 0,
         })
         .await
-        .map_err(|e| format!("sapling subtree roots: {e}"))?
+        .map_err(|e| err(&format!("sapling subtree roots: {e}")))?
         .into_inner();
 
     let mut roots = Vec::new();
@@ -262,7 +268,7 @@ async fn download_subtree_roots(
     }
     if !roots.is_empty() {
         let mut db = open_db(db_path, network)?;
-        db.put_sapling_subtree_roots(sap_start, roots.as_slice()).map_err(|e| format!("{e}"))?;
+        db.put_sapling_subtree_roots(sap_start, roots.as_slice()).map_err(|e| err(&format!("put_sapling_subtree_roots: {e}")))?;
     }
 
     // Orchard
@@ -273,7 +279,7 @@ async fn download_subtree_roots(
             max_entries: 0,
         })
         .await
-        .map_err(|e| format!("orchard subtree roots: {e}"))?
+        .map_err(|e| err(&format!("orchard subtree roots: {e}")))?
         .into_inner();
 
     let mut roots = Vec::new();
@@ -284,7 +290,7 @@ async fn download_subtree_roots(
     }
     if !roots.is_empty() {
         let mut db = open_db(db_path, network)?;
-        db.put_orchard_subtree_roots(orch_start, roots.as_slice()).map_err(|e| format!("{e}"))?;
+        db.put_orchard_subtree_roots(orch_start, roots.as_slice()).map_err(|e| err(&format!("put_orchard_subtree_roots: {e}")))?;
     }
 
     Ok(())
@@ -301,7 +307,7 @@ async fn download_blocks(
             end: Some(BlockId { height: u32::from(end) as u64, hash: vec![] }),
         })
         .await
-        .map_err(|e| format!("get_block_range: {e}"))?
+        .map_err(|e| err(&format!("get_block_range: {e}")))?
         .into_inner();
 
     let mut blocks = Vec::new();
@@ -322,7 +328,7 @@ async fn run_enhancement(
     for _ in 0..3 {
         let requests = {
             let db = open_db(db_path, network)?;
-            db.transaction_data_requests().map_err(|e| format!("{e}"))?
+            db.transaction_data_requests().map_err(|e| err(&format!("transaction_data_requests: {e}")))?
         };
         if requests.is_empty() { break; }
 
