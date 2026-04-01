@@ -232,7 +232,25 @@ fn get_progress(db: &WalletDatabase) -> Result<SyncProgressEvent, String> {
         Some(s) => {
             let scanned = u32::from(s.fully_scanned_height()) as u64;
             let tip = u32::from(s.chain_tip_height()) as u64;
-            let pct = if tip > 0 { scanned as f64 / tip as f64 } else { 0.0 };
+
+            // Use note-based progress from WalletSummary::progress()
+            // This tracks scanned notes / total notes, works correctly
+            // even when blocks are scanned out of order.
+            let progress = s.progress();
+            let scan = progress.scan();
+            let recovery = progress.recovery();
+            let pct = if *scan.denominator() > 0 {
+                *scan.numerator() as f64 / *scan.denominator() as f64
+            } else if let Some(r) = recovery {
+                if *r.denominator() > 0 {
+                    *r.numerator() as f64 / *r.denominator() as f64
+                } else {
+                    if tip > 0 { scanned as f64 / tip as f64 } else { 0.0 }
+                }
+            } else {
+                if tip > 0 { scanned as f64 / tip as f64 } else { 0.0 }
+            };
+
             Ok(SyncProgressEvent {
                 scanned_height: scanned, chain_tip_height: tip, percentage: pct,
                 is_syncing: scanned < tip, is_complete: false,
