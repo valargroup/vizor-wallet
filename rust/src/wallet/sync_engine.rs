@@ -345,7 +345,9 @@ async fn run_enhancement(
                             if !raw.data.is_empty() {
                                 if let Ok(tx) = Transaction::read(&raw.data[..], BranchId::Sapling) {
                                     let height = if raw.height > 0 { Some(BlockHeight::from_u32(raw.height as u32)) } else { None };
-                                    let _ = decrypt_and_store_transaction(&network, db, &tx, height);
+                                    if let Err(e) = decrypt_and_store_transaction(&network, db, &tx, height) {
+                                        log::error!("sync: decrypt_and_store_transaction failed: {e}");
+                                    }
                                 }
                             }
                             if matches!(req, TransactionDataRequest::GetStatus(_)) {
@@ -355,12 +357,17 @@ async fn run_enhancement(
                                 } else {
                                     TransactionStatus::NotInMainChain
                                 };
-                                let _ = db.set_transaction_status(*txid, status);
+                                if let Err(e) = db.set_transaction_status(*txid, status) {
+                                    log::error!("sync: set_transaction_status failed: {e}");
+                                }
                             }
                         }
-                        Err(_) => {
+                        Err(e) => {
+                            log::warn!("sync: get_transaction failed for {txid_str}: {e}");
                             failed_txids.insert(txid_str);
-                            let _ = db.set_transaction_status(*txid, TransactionStatus::TxidNotRecognized);
+                            if let Err(e) = db.set_transaction_status(*txid, TransactionStatus::TxidNotRecognized) {
+                                log::error!("sync: set_transaction_status failed: {e}");
+                            }
                         }
                     }
                 }
@@ -386,12 +393,16 @@ async fn run_enhancement(
                                 if !raw.data.is_empty() {
                                     if let Ok(tx) = Transaction::read(&raw.data[..], BranchId::Sapling) {
                                         let height = if raw.height > 0 { Some(BlockHeight::from_u32(raw.height as u32)) } else { None };
-                                        let _ = decrypt_and_store_transaction(&network, db, &tx, height);
+                                        if let Err(e) = decrypt_and_store_transaction(&network, db, &tx, height) {
+                                            log::error!("sync: decrypt_and_store_transaction (addr) failed: {e}");
+                                        }
                                     }
                                 }
                             }
                         }
-                        Err(_) => {}
+                        Err(e) => {
+                            log::warn!("sync: get_taddress_txids failed: {e}");
+                        }
                     }
                 }
             }

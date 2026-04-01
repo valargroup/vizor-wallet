@@ -39,7 +39,8 @@ Future<bool> isBackgroundSyncAvailable() async {
     try {
       final available = await _iosChannel.invokeMethod<bool>('isAvailable');
       return available ?? false;
-    } catch (_) {
+    } catch (e) {
+      log('BackgroundSync: isAvailable check failed: $e');
       return false;
     }
   }

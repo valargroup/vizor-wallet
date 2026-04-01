@@ -65,13 +65,15 @@ pub fn start_full_sync(
                 mode,
                 &DESIRED_SYNC_MODE,
                 |progress| {
-                    let _ = sink.add(ApiSyncProgressEvent {
+                    if sink.add(ApiSyncProgressEvent {
                         scanned_height: progress.scanned_height,
                         chain_tip_height: progress.chain_tip_height,
                         percentage: progress.percentage,
                         is_syncing: progress.is_syncing,
                         is_complete: progress.is_complete,
-                    });
+                    }).is_err() {
+                        log::warn!("sync: StreamSink closed, progress not delivered");
+                    }
                 },
             )
             .await

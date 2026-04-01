@@ -2,8 +2,7 @@
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use crate::api::sync::{DESIRED_SYNC_MODE, SYNC_CANCEL, SYNC_RUNNING};
 use crate::wallet::{keys, sync_engine};
@@ -20,9 +19,8 @@ pub struct CSyncProgress {
 /// C callback type for progress updates.
 pub type SyncProgressCallback = extern "C" fn(CSyncProgress);
 
-
 /// Run full sync from C (Swift). Blocks until complete or cancelled.
-/// Returns 0 on success, 1 on error.
+/// Returns 0 on success, 1 on error, 2 on panic, 3 on already running, 4 on mode conflict.
 #[no_mangle]
 pub extern "C" fn zcash_run_full_sync(
     db_path: *const c_char,
@@ -31,31 +29,46 @@ pub extern "C" fn zcash_run_full_sync(
     progress_callback: SyncProgressCallback,
 ) -> i32 {
     if SYNC_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-        return 3; // already running
+        log::warn!("ffi: sync already running");
+        return 3;
     }
 
-    DESIRED_SYNC_MODE.store(2, Ordering::SeqCst); // background mode
+    // Don't force mode — Dart/Swift caller should have set it before calling.
+    // If mode is 0 (stop requested), bail out immediately.
+    if DESIRED_SYNC_MODE.load(Ordering::SeqCst) != 2 {
+        log::warn!("ffi: mode is not background ({}), aborting", DESIRED_SYNC_MODE.load(Ordering::SeqCst));
+        SYNC_RUNNING.store(false, Ordering::SeqCst);
+        return 4;
+    }
 
     let result = std::panic::catch_unwind(|| {
-        let db_path = unsafe { CStr::from_ptr(db_path) }.to_str().unwrap_or("");
-        let lightwalletd_url = unsafe { CStr::from_ptr(lightwalletd_url) }.to_str().unwrap_or("");
-        let network_str = unsafe { CStr::from_ptr(network) }.to_str().unwrap_or("main");
+        let db_path = match unsafe { CStr::from_ptr(db_path) }.to_str() {
+            Ok(s) if !s.is_empty() => s,
+            _ => { log::error!("ffi: invalid db_path"); return 1; }
+        };
+        let lightwalletd_url = match unsafe { CStr::from_ptr(lightwalletd_url) }.to_str() {
+            Ok(s) if !s.is_empty() => s,
+            _ => { log::error!("ffi: invalid lightwalletd_url"); return 1; }
+        };
+        let network_str = match unsafe { CStr::from_ptr(network) }.to_str() {
+            Ok(s) if !s.is_empty() => s,
+            _ => { log::error!("ffi: invalid network string"); return 1; }
+        };
 
         let network = match keys::parse_network(network_str) {
             Ok(n) => n,
-            Err(_) => return 1,
+            Err(e) => { log::error!("ffi: parse_network failed: {e}"); return 1; }
         };
 
         let cancel = SYNC_CANCEL.clone();
         cancel.store(false, Ordering::Relaxed);
 
-        // Use current_thread runtime so all async work runs on the handler thread,
-        // inheriting its .utility QoS from iOS BGTask queue.
+        // current_thread runtime — inherits .utility QoS from iOS dispatch queue
         let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build() {
             Ok(rt) => rt,
-            Err(_) => return 1,
+            Err(e) => { log::error!("ffi: tokio runtime failed: {e}"); return 1; }
         };
 
         let result = rt.block_on(async {
@@ -80,7 +93,7 @@ pub extern "C" fn zcash_run_full_sync(
 
         match result {
             Ok(()) => 0,
-            Err(_) => 1,
+            Err(e) => { log::error!("ffi: sync failed: {e}"); 1 }
         }
     });
 
@@ -88,7 +101,13 @@ pub extern "C" fn zcash_run_full_sync(
 
     match result {
         Ok(code) => code,
-        Err(_) => 2, // panic
+        Err(e) => {
+            let msg = if let Some(s) = e.downcast_ref::<&str>() { s.to_string() }
+                else if let Some(s) = e.downcast_ref::<String>() { s.clone() }
+                else { "Unknown".to_string() };
+            log::error!("ffi: panic during sync: {msg}");
+            2
+        }
     }
 }
 

@@ -67,7 +67,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
             isBackground: true,
           );
         },
-        onError: (_) {},
+        onError: (e) { log('SyncNotifier: EventChannel error: $e'); },
       );
     }
 
@@ -190,9 +190,14 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       // iOS: switch mode → Rust background sync exits at next batch
       rust_sync.setSyncMode(mode: 1);
       await bg_sync.stopBackgroundSync();
-      // Wait for background sync to actually stop before starting foreground
-      while (rust_sync.isSyncRunning()) {
+      // Wait for background sync to stop (max 30 seconds)
+      var waited = 0;
+      while (rust_sync.isSyncRunning() && waited < 30000) {
         await Future.delayed(const Duration(milliseconds: 200));
+        waited += 200;
+      }
+      if (rust_sync.isSyncRunning()) {
+        log('SyncNotifier: WARNING: timed out waiting for bg sync to stop');
       }
       startSync();
     }
@@ -248,7 +253,8 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         orchardBalance: balance.orchard,
         totalBalance: balance.total,
       ));
-    } catch (_) {
+    } catch (e) {
+      log('SyncNotifier: balance fetch failed: $e');
       state = AsyncData(SyncState(
         isSyncing: isSyncing && !isComplete,
         isBackgroundMode: isBackground || _backgroundMode,
@@ -308,7 +314,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         totalBalance: balance.total,
       ));
     } catch (e) {
-      // Polling error — ignore, will retry
+      log('SyncNotifier: polling update failed: $e');
     }
   }
 

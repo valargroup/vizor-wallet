@@ -73,7 +73,6 @@ class WalletNotifier extends AsyncNotifier<WalletState> {
     log('createWallet: starting, network=$network');
     final dbPath = await _getDbPath();
     log('createWallet: dbPath=$dbPath');
-    await _deleteExistingDb(dbPath);
     try {
       // Fetch chain tip as birthday so new wallets don't full-scan
       final networkConfig = network == 'main' ? ZcashNetwork.mainnet : ZcashNetwork.testnet;
@@ -81,6 +80,9 @@ class WalletNotifier extends AsyncNotifier<WalletState> {
         lightwalletdUrl: networkConfig.lightwalletdUrl,
       );
       log('createWallet: birthday=$birthday');
+
+      // Delete existing DB only after birthday fetch succeeds
+      await _deleteExistingDb(dbPath);
 
       final result = await rust_wallet.createWallet(
         network: network,
