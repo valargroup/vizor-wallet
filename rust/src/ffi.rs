@@ -49,7 +49,11 @@ pub extern "C" fn zcash_run_full_sync(
         let cancel = SYNC_CANCEL.clone();
         cancel.store(false, Ordering::Relaxed);
 
-        let rt = match tokio::runtime::Runtime::new() {
+        // Use current_thread runtime so all async work runs on the handler thread,
+        // inheriting its .utility QoS from iOS BGTask queue.
+        let rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build() {
             Ok(rt) => rt,
             Err(_) => return 1,
         };
