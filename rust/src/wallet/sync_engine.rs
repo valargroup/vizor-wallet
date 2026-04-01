@@ -246,6 +246,7 @@ async fn download_subtree_roots(
             None => (0, 0),
         }
     };
+    log::info!("sync: subtree roots start indices: sapling={}, orchard={}", sap_start, orch_start);
 
     // Sapling
     let mut stream = client
@@ -264,6 +265,7 @@ async fn download_subtree_roots(
         let node = Option::from(sapling_crypto::Node::from_bytes(bytes)).ok_or("bad sapling node")?;
         roots.push(CommitmentTreeRoot::from_parts(BlockHeight::from_u32(root.completing_block_height as u32), node));
     }
+    log::info!("sync: downloaded {} sapling subtree roots", roots.len());
     if !roots.is_empty() {
         db.put_sapling_subtree_roots(sap_start, roots.as_slice()).map_err(|e| err(&format!("put_sapling_subtree_roots: {e}")))?;
     }
@@ -285,10 +287,12 @@ async fn download_subtree_roots(
         let node = Option::from(orchard::tree::MerkleHashOrchard::from_bytes(&bytes)).ok_or("bad orchard node")?;
         roots.push(CommitmentTreeRoot::from_parts(BlockHeight::from_u32(root.completing_block_height as u32), node));
     }
+    log::info!("sync: downloaded {} orchard subtree roots", roots.len());
     if !roots.is_empty() {
         db.put_orchard_subtree_roots(orch_start, roots.as_slice()).map_err(|e| err(&format!("put_orchard_subtree_roots: {e}")))?;
     }
 
+    log::info!("sync: subtree roots done");
     Ok(())
 }
 
