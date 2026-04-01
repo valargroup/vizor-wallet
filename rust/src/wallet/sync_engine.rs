@@ -39,6 +39,15 @@ const BATCH_SIZE_FOREGROUND: u32 = 100;
 const BATCH_SIZE_BACKGROUND: u32 = 100;
 const SAPLING_ACTIVATION_HEIGHT: u32 = 419200;
 
+/// Sync-scoped elapsed time reference. Set at sync start.
+static SYNC_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+fn elapsed() -> String {
+    SYNC_START.lock().ok()
+        .and_then(|g| g.map(|t| format!("{:.1}s", t.elapsed().as_secs_f64())))
+        .unwrap_or_default()
+}
+
 type WalletDatabase = WalletDb<rusqlite::Connection, Network, SystemClock, OsRng>;
 
 // ==================== In-memory BlockSource ====================
@@ -101,7 +110,8 @@ pub async fn run_sync_inner(
     progress_fn: impl Fn(SyncProgressEvent) + Send + Sync,
 ) -> Result<(), String> {
     let batch_size = if running_mode == 2 { BATCH_SIZE_BACKGROUND } else { BATCH_SIZE_FOREGROUND };
-    log::info!("sync: starting (mode={}, batch={})", running_mode, batch_size);
+    *SYNC_START.lock().unwrap() = Some(std::time::Instant::now());
+    log::info!("[{}] sync: starting (mode={}, batch={})", elapsed(), running_mode, batch_size);
 
     // 1. Connect gRPC
     let channel = Endpoint::from_shared(lightwalletd_url.to_string())
@@ -124,7 +134,7 @@ pub async fn run_sync_inner(
         .map_err(|e| err(&format!("get_latest_block: {e}")))?
         .into_inner();
     let tip_height = BlockHeight::from_u32(tip.height as u32);
-    log::info!("sync: chain tip = {}", tip.height);
+    log::info!("[{}] sync: chain tip = {}", elapsed(), tip.height);
 
     db.update_chain_tip(tip_height).map_err(|e| err(&format!("update_chain_tip: {e}")))?;
 
@@ -134,11 +144,11 @@ pub async fn run_sync_inner(
     // 4. Sync loop
     loop {
         if cancel.load(Ordering::Relaxed) {
-            log::info!("sync: cancelled");
+            log::info!("[{}] sync: cancelled", elapsed());
             return Ok(());
         }
         if desired_mode.load(Ordering::SeqCst) != running_mode {
-            log::info!("sync: mode changed, exiting");
+            log::info!("[{}] sync: mode changed, exiting", elapsed());
             return Ok(());
         }
 
@@ -153,13 +163,13 @@ pub async fn run_sync_inner(
 
         let start = range.block_range().start;
         let end = std::cmp::min(start + batch_size, range.block_range().end);
-        log::info!("sync: scanning {}-{} (priority {:?})", u32::from(start), u32::from(end) - 1, range.priority());
+        log::info!("[{}] sync: scanning {}-{} (priority {:?})", elapsed(), u32::from(start), u32::from(end) - 1, range.priority());
 
         // Download blocks into memory
         let block_source = download_blocks(&mut client, start, end - 1).await?;
 
         if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
-            log::info!("sync: exiting after download (cancel or mode change)");
+            log::info!("[{}] sync: exiting after download", elapsed());
             return Ok(());
         }
 
@@ -180,7 +190,7 @@ pub async fn run_sync_inner(
             .map_err(|e| err(&format!("scan: {e}")))?;
 
         if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
-            log::info!("sync: exiting after scan (cancel or mode change)");
+            log::info!("[{}] sync: exiting after scan", elapsed());
             return Ok(());
         }
 
@@ -189,11 +199,11 @@ pub async fn run_sync_inner(
 
         // Report progress
         let progress = get_progress(&db)?;
-        log::info!("sync: {:.1}% ({}/{})", progress.percentage * 100.0, progress.scanned_height, progress.chain_tip_height);
+        log::info!("[{}] sync: {:.1}% ({}/{})", elapsed(), progress.percentage * 100.0, progress.scanned_height, progress.chain_tip_height);
         progress_fn(progress);
     }
 
-    log::info!("sync: completed");
+    log::info!("[{}] sync: completed", elapsed());
     // Final progress
     let mut progress = get_progress(&db)?;
     progress.is_complete = true;
@@ -246,7 +256,7 @@ async fn download_subtree_roots(
             None => (0, 0),
         }
     };
-    log::info!("sync: subtree roots start indices: sapling={}, orchard={}", sap_start, orch_start);
+    log::info!("[{}] sync: subtree roots start: sapling={}, orchard={}", elapsed(), sap_start, orch_start);
 
     // Sapling
     let mut stream = client
@@ -265,7 +275,7 @@ async fn download_subtree_roots(
         let node = Option::from(sapling_crypto::Node::from_bytes(bytes)).ok_or("bad sapling node")?;
         roots.push(CommitmentTreeRoot::from_parts(BlockHeight::from_u32(root.completing_block_height as u32), node));
     }
-    log::info!("sync: downloaded {} sapling subtree roots", roots.len());
+    log::info!("[{}] sync: downloaded {} sapling subtree roots", elapsed(), roots.len());
     if !roots.is_empty() {
         db.put_sapling_subtree_roots(sap_start, roots.as_slice()).map_err(|e| err(&format!("put_sapling_subtree_roots: {e}")))?;
     }
@@ -287,12 +297,12 @@ async fn download_subtree_roots(
         let node = Option::from(orchard::tree::MerkleHashOrchard::from_bytes(&bytes)).ok_or("bad orchard node")?;
         roots.push(CommitmentTreeRoot::from_parts(BlockHeight::from_u32(root.completing_block_height as u32), node));
     }
-    log::info!("sync: downloaded {} orchard subtree roots", roots.len());
+    log::info!("[{}] sync: downloaded {} orchard subtree roots", elapsed(), roots.len());
     if !roots.is_empty() {
         db.put_orchard_subtree_roots(orch_start, roots.as_slice()).map_err(|e| err(&format!("put_orchard_subtree_roots: {e}")))?;
     }
 
-    log::info!("sync: subtree roots done");
+    log::info!("[{}] sync: subtree roots done", elapsed());
     Ok(())
 }
 
