@@ -32,14 +32,45 @@ fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result
     }
 }
 
+/// Get the latest block height from lightwalletd.
+pub fn get_latest_block_height(lightwalletd_url: String) -> Result<u64, String> {
+    catch(|| {
+        let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
+        rt.block_on(async {
+            use tonic::transport::{ClientTlsConfig, Endpoint};
+            use zcash_client_backend::proto::service::{
+                compact_tx_streamer_client::CompactTxStreamerClient, ChainSpec,
+            };
+
+            let channel = Endpoint::from_shared(lightwalletd_url)
+                .map_err(|e| format!("Invalid URL: {e}"))?
+                .tls_config(ClientTlsConfig::new().with_webpki_roots())
+                .map_err(|e| format!("TLS error: {e}"))?
+                .connect()
+                .await
+                .map_err(|e| format!("gRPC connect failed: {e}"))?;
+
+            let mut client = CompactTxStreamerClient::new(channel);
+            let tip = client
+                .get_latest_block(ChainSpec::default())
+                .await
+                .map_err(|e| format!("get_latest_block: {e}"))?
+                .into_inner();
+
+            Ok(tip.height)
+        })
+    })
+}
+
 /// Create a new Zcash wallet with a fresh mnemonic.
-pub fn create_wallet(network: String, db_path: String) -> Result<WalletCreationResult, String> {
+/// birthday_height should be the current chain tip (from get_latest_block_height).
+pub fn create_wallet(network: String, db_path: String, birthday_height: Option<u64>) -> Result<WalletCreationResult, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
         let mnemonic = keys::generate_mnemonic();
         let seed = keys::mnemonic_to_seed(&mnemonic)?;
 
-        let unified_address = keys::init_db_and_create_account(&db_path, network, &seed, None)?;
+        let unified_address = keys::init_db_and_create_account(&db_path, network, &seed, birthday_height)?;
 
         Ok(WalletCreationResult {
             mnemonic,

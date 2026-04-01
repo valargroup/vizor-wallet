@@ -8,13 +8,22 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `catch`
 
+/// Get the latest block height from lightwalletd.
+Future<BigInt> getLatestBlockHeight({required String lightwalletdUrl}) =>
+    RustLib.instance.api.crateApiWalletGetLatestBlockHeight(
+      lightwalletdUrl: lightwalletdUrl,
+    );
+
 /// Create a new Zcash wallet with a fresh mnemonic.
+/// birthday_height should be the current chain tip (from get_latest_block_height).
 Future<WalletCreationResult> createWallet({
   required String network,
   required String dbPath,
+  BigInt? birthdayHeight,
 }) => RustLib.instance.api.crateApiWalletCreateWallet(
   network: network,
   dbPath: dbPath,
+  birthdayHeight: birthdayHeight,
 );
 
 /// Import an existing wallet from a mnemonic phrase.

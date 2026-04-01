@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../main.dart' show log;
+import '../core/config/network_config.dart';
 import '../rust/api/wallet.dart' as rust_wallet;
 
 const _mnemonicKey = 'zcash_wallet_mnemonic';
@@ -74,9 +75,22 @@ class WalletNotifier extends AsyncNotifier<WalletState> {
     log('createWallet: dbPath=$dbPath');
     await _deleteExistingDb(dbPath);
     try {
+      // Fetch chain tip as birthday so new wallets don't full-scan
+      final networkConfig = network == 'main' ? ZcashNetwork.mainnet : ZcashNetwork.testnet;
+      BigInt? birthday;
+      try {
+        birthday = await rust_wallet.getLatestBlockHeight(
+          lightwalletdUrl: networkConfig.lightwalletdUrl,
+        );
+        log('createWallet: birthday=$birthday');
+      } catch (e) {
+        log('createWallet: failed to get chain tip, using default birthday: $e');
+      }
+
       final result = await rust_wallet.createWallet(
         network: network,
         dbPath: dbPath,
+        birthdayHeight: birthday,
       );
       log('createWallet: success, address=${result.unifiedAddress.substring(0, 20)}...');
 
