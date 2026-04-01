@@ -8,6 +8,7 @@ class BackgroundSyncManager {
 
     /// Stored reference to task's NSProgress — updated from C callback thread (thread-safe).
     private var taskProgress: Progress?
+    private var batchCount: Int64 = 0
 
     private init() {}
 
@@ -28,22 +29,18 @@ class BackgroundSyncManager {
         print("[BGSync] registerBackgroundTask: done")
     }
 
-    private var batchCount: Int64 = 0
-
     private func handleBackgroundTask(_ task: BGContinuedProcessingTask) {
         print("[BGSync] handleBackgroundTask: started")
         print("[BGSync]   mode=\(zcash_get_sync_mode()), is_running=\(zcash_is_sync_running())")
 
-        // Store progress reference for C callback to update (NSProgress is thread-safe)
         taskProgress = task.progress
         batchCount = 0
-        print("[BGSync]   taskProgress stored, totalUnitCount=\(task.progress.totalUnitCount), completedUnitCount=\(task.progress.completedUnitCount)")
 
         task.expirationHandler = { [weak self] in
             print("[BGSync] EXPIRATION HANDLER CALLED")
             print("[BGSync]   mode=\(zcash_get_sync_mode()), is_running=\(zcash_is_sync_running())")
             self?.taskProgress = nil
-            zcash_set_sync_mode(0)  // none → prevents resubmit
+            zcash_set_sync_mode(0)
             zcash_cancel_sync()
             print("[BGSync]   mode set to 0, cancel sent")
         }
@@ -61,40 +58,47 @@ class BackgroundSyncManager {
         let dbPath = documentsDir.appendingPathComponent("zcash_wallet.db").path
         print("[BGSync] dbPath=\(dbPath)")
 
+        // Heartbeat timer: increment completedUnitCount every 5s to prevent OS stalled detection.
+        // Actual batch callbacks jump by 100, heartbeats fill in between with +1.
+        let heartbeat = DispatchSource.makeTimerSource(queue: .global())
+        heartbeat.schedule(deadline: .now() + 5.0, repeating: 5.0)
+        heartbeat.setEventHandler { [weak self] in
+            guard let self, let progress = self.taskProgress else { return }
+            progress.completedUnitCount += 1
+            print("[BGSync] heartbeat: completedUnitCount=\(progress.completedUnitCount)")
+        }
+        heartbeat.resume()
+
         // Run sync via C FFI (blocking call on background queue)
         let result = zcash_run_full_sync(
             dbPath,
             "https://zec.rocks:443",
             "main",
             { progress in
-                // Called from tokio thread — NSProgress is thread-safe
                 if #available(iOS 26.0, *) {
                     let mgr = BackgroundSyncManager.shared
-                    // Use batch count for completedUnitCount so it always increases.
-                    // fully_scanned_height may not advance until contiguous ranges complete,
-                    // which makes the system think the task is stalled.
                     mgr.batchCount += 1
-                    let estimatedTotalBatches = max(
-                        Int64(progress.chain_tip_height - progress.scanned_height) / 10 + mgr.batchCount,
-                        mgr.batchCount + 1
-                    )
-                    mgr.taskProgress?.totalUnitCount = estimatedTotalBatches
-                    mgr.taskProgress?.completedUnitCount = mgr.batchCount
-                    print("[BGSync] progress: batch=\(mgr.batchCount)/~\(estimatedTotalBatches), scanned=\(progress.scanned_height)/\(progress.chain_tip_height)")
+
+                    // Jump completedUnitCount to batchCount * 100 (actual blocks processed)
+                    let completed = mgr.batchCount * 100
+                    let remaining = Int64(progress.chain_tip_height - progress.scanned_height)
+                    mgr.taskProgress?.completedUnitCount = completed
+                    mgr.taskProgress?.totalUnitCount = completed + remaining
+
+                    print("[BGSync] batch \(mgr.batchCount): completed=\(completed), total=\(completed + remaining), scanned=\(progress.scanned_height)/\(progress.chain_tip_height)")
                 }
 
-                // Send to Dart via EventChannel (if app is in foreground)
                 SyncProgressStreamHandler.shared.sendProgress(progress)
             }
         )
+
+        heartbeat.cancel()
 
         print("[BGSync] zcash_run_full_sync returned: \(result)")
         print("[BGSync]   mode=\(zcash_get_sync_mode()), is_running=\(zcash_is_sync_running())")
 
         taskProgress = nil
 
-        // If mode is still background and sync ended normally (not cancelled),
-        // resubmit to continue syncing
         if result == 0 && zcash_get_sync_mode() == 2 {
             let resubmitted = startBackgroundSync()
             print("[BGSync] resubmit: \(resubmitted)")
