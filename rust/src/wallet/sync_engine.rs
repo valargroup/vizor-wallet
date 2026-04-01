@@ -35,7 +35,8 @@ pub struct SyncProgressEvent {
     pub is_complete: bool,
 }
 
-const BATCH_SIZE: u32 = 100;
+const BATCH_SIZE_FOREGROUND: u32 = 100;
+const BATCH_SIZE_BACKGROUND: u32 = 10;
 const SAPLING_ACTIVATION_HEIGHT: u32 = 419200;
 
 // ==================== In-memory BlockSource ====================
@@ -97,7 +98,8 @@ pub async fn run_sync_inner(
     desired_mode: &AtomicU8,
     progress_fn: impl Fn(SyncProgressEvent) + Send + Sync,
 ) -> Result<(), String> {
-    log::info!("sync: starting (mode={})", running_mode);
+    let batch_size = if running_mode == 2 { BATCH_SIZE_BACKGROUND } else { BATCH_SIZE_FOREGROUND };
+    log::info!("sync: starting (mode={}, batch={})", running_mode, batch_size);
 
     // 1. Connect gRPC
     let channel = Endpoint::from_shared(lightwalletd_url.to_string())
@@ -151,7 +153,7 @@ pub async fn run_sync_inner(
         };
 
         let start = range.block_range().start;
-        let end = std::cmp::min(start + BATCH_SIZE, range.block_range().end);
+        let end = std::cmp::min(start + batch_size, range.block_range().end);
         log::info!("sync: scanning {}-{} (priority {:?})", u32::from(start), u32::from(end) - 1, range.priority());
 
         // Download blocks into memory
@@ -177,7 +179,7 @@ pub async fn run_sync_inner(
         // Scan from memory
         {
             let mut db_data = open_db(db_data_path, network)?;
-            scan_cached_blocks(&network, &block_source, &mut db_data, start, &from_state, BATCH_SIZE as usize)
+            scan_cached_blocks(&network, &block_source, &mut db_data, start, &from_state, batch_size as usize)
                 .map_err(|e| err(&format!("scan: {e}")))?;
         }
 
