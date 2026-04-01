@@ -7,7 +7,6 @@ class BackgroundSyncManager {
     static let taskIdentifier = "com.zcash.zcashWallet.sync"
 
     private var taskProgress: Progress?
-    private var batchCount: Int64 = 0
     private var heartbeat: DispatchSourceTimer?
 
     /// Sync work runs on this .utility queue so Rust inherits the QoS.
@@ -68,7 +67,6 @@ class BackgroundSyncManager {
         print("[BGSync] runSync: mode=\(zcash_get_sync_mode()), is_running=\(zcash_is_sync_running())")
 
         taskProgress = task.progress
-        batchCount = 0
 
         // Wait for mode=background AND previous sync to finish
         var waitCount = 0
@@ -88,13 +86,17 @@ class BackgroundSyncManager {
         let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let dbPath = documentsDir.appendingPathComponent("zcash_wallet.db").path
 
-        // Heartbeat on global .utility queue — syncQueue is blocked by zcash_run_full_sync
+        // Heartbeat: nudge completedUnitCount every 5s to signal "alive" to OS.
+        // Uses percentage * 10000 as base, heartbeat adds small increments between batches.
         let hb = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         hb.schedule(deadline: .now() + 5.0, repeating: 5.0)
         hb.setEventHandler { [weak self] in
-            guard let progress = self?.taskProgress else { return }
-            progress.completedUnitCount += 1
-            print("[BGSync] heartbeat: completedUnitCount=\(progress.completedUnitCount)")
+            guard let tp = self?.taskProgress else { return }
+            // Small nudge — must be less than a batch jump to avoid overtaking
+            if tp.completedUnitCount < tp.totalUnitCount {
+                tp.completedUnitCount += 1
+            }
+            print("[BGSync] heartbeat: \(tp.completedUnitCount)/\(tp.totalUnitCount)")
         }
         hb.resume()
         heartbeat = hb
@@ -107,12 +109,12 @@ class BackgroundSyncManager {
             { progress in
                 if #available(iOS 26.0, *) {
                     let mgr = BackgroundSyncManager.shared
-                    mgr.batchCount += 1
-                    let completed = mgr.batchCount * 100
-                    let remaining = Int64(progress.chain_tip_height - progress.scanned_height)
+                    // Use note-based percentage from Rust (0.0~1.0)
+                    // Scale to 10000 for fine-grained NSProgress reporting
+                    let completed = Int64(progress.percentage * 10000)
+                    mgr.taskProgress?.totalUnitCount = 10000
                     mgr.taskProgress?.completedUnitCount = completed
-                    mgr.taskProgress?.totalUnitCount = completed + remaining
-                    print("[BGSync] batch \(mgr.batchCount): completed=\(completed), total=\(completed + remaining), scanned=\(progress.scanned_height)/\(progress.chain_tip_height)")
+                    print("[BGSync] batch: \(String(format: "%.1f", progress.percentage * 100))% (\(progress.scanned_height)/\(progress.chain_tip_height))")
                 }
                 SyncProgressStreamHandler.shared.sendProgress(progress)
             }
