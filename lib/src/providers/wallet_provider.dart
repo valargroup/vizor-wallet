@@ -77,15 +77,10 @@ class WalletNotifier extends AsyncNotifier<WalletState> {
     try {
       // Fetch chain tip as birthday so new wallets don't full-scan
       final networkConfig = network == 'main' ? ZcashNetwork.mainnet : ZcashNetwork.testnet;
-      BigInt? birthday;
-      try {
-        birthday = await rust_wallet.getLatestBlockHeight(
-          lightwalletdUrl: networkConfig.lightwalletdUrl,
-        );
-        log('createWallet: birthday=$birthday');
-      } catch (e) {
-        log('createWallet: failed to get chain tip, using default birthday: $e');
-      }
+      final birthday = await rust_wallet.getLatestBlockHeight(
+        lightwalletdUrl: networkConfig.lightwalletdUrl,
+      );
+      log('createWallet: birthday=$birthday');
 
       final result = await rust_wallet.createWallet(
         network: network,
