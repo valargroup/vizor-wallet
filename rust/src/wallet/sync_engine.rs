@@ -142,7 +142,17 @@ pub async fn run_sync_inner(
     // 3. Download subtree roots (incremental)
     download_subtree_roots(&mut client, &mut db).await?;
 
-    // 4. Sync loop
+    // 4. Calculate initial scan target (before any scanning)
+    let initial_total: u64 = {
+        let ranges = db.suggest_scan_ranges().map_err(|e| err(&format!("suggest_scan_ranges: {e}")))?;
+        ranges.iter()
+            .filter(|r| r.priority() != ScanPriority::Ignored && r.priority() != ScanPriority::Scanned)
+            .map(|r| u32::from(r.block_range().end).saturating_sub(u32::from(r.block_range().start)) as u64)
+            .sum()
+    };
+    log::info!("[{}] sync: {} blocks to scan", elapsed(), initial_total);
+
+    // 5. Sync loop
     loop {
         if cancel.load(Ordering::Relaxed) {
             log::info!("[{}] sync: cancelled", elapsed());
@@ -198,7 +208,7 @@ pub async fn run_sync_inner(
         // Enhancement
         run_enhancement(&mut client, &mut db, network).await?;
 
-        // Report progress (scan-queue based: scanned / total from current queue state)
+        // Report progress
         let has_new_tx = scan_summary.received_sapling_note_count() > 0
             || scan_summary.spent_sapling_note_count() > 0
             || scan_summary.received_orchard_note_count() > 0
@@ -208,11 +218,7 @@ pub async fn run_sync_inner(
             .filter(|r| r.priority() != ScanPriority::Ignored && r.priority() != ScanPriority::Scanned)
             .map(|r| u32::from(r.block_range().end).saturating_sub(u32::from(r.block_range().start)) as u64)
             .sum();
-        let total: u64 = post_ranges.iter()
-            .filter(|r| r.priority() != ScanPriority::Ignored)
-            .map(|r| u32::from(r.block_range().end).saturating_sub(u32::from(r.block_range().start)) as u64)
-            .sum();
-        let pct = if total > 0 { 1.0 - (remaining as f64 / total as f64) } else { 1.0 };
+        let pct = if initial_total > 0 { 1.0 - (remaining as f64 / initial_total as f64) } else { 1.0 };
         let progress = SyncProgressEvent {
             scanned_height: u32::from(end) as u64,
             chain_tip_height: tip.height as u64,
@@ -221,7 +227,7 @@ pub async fn run_sync_inner(
             is_complete: false,
             has_new_tx,
         };
-        log::info!("[{}] sync: {:.1}% (remaining={}, total={}, scanned={})", elapsed(), pct * 100.0, remaining, total, total - remaining);
+        log::info!("[{}] sync: {:.1}% (remaining={}/{}, scanned={})", elapsed(), pct * 100.0, remaining, initial_total, initial_total - remaining);
         progress_fn(progress);
     }
 
