@@ -17,6 +17,11 @@ flutter_rust_bridge_codegen generate
 
 # Clear app from iOS simulator (keychain + state + uninstall)
 ./clear-app.sh
+
+# View Rust logs (log::info!, log::error!, etc.)
+# FRB routes Rust logs to os_log (subsystem "frb_user"), not Flutter console.
+# Run in a separate terminal:
+log stream --predicate 'subsystem == "frb_user"' --level info
 ```
 
 ### clear-app.sh
