@@ -61,14 +61,16 @@ WalletProvider (wallet_provider.dart)
   └── Propagates errors (does NOT mask as empty state)
 
 SyncProvider (sync_provider.dart)
-  ├── Listens to AccountProvider (ref.listen, not watch) — auto-starts sync on first account creation
+  ├── Listens to AccountProvider (ref.listen, not watch) — auto-starts sync on account creation
+  ├── startSync() is fire-and-forget with _syncGen generation counter
   ├── Polls getLatestBlockHeight every 10s after sync completes
-  ├── Re-syncs automatically when new blocks detected
+  ├── Re-syncs automatically when new blocks detected or previous sync incomplete
   ├── Duplicate sync guard: _isSyncing (Dart) + isSyncRunning() (Rust)
   ├── Passes activeAccountUuid to getBalance, getTransactionHistory
   ├── Sync itself is account-agnostic (covers all accounts)
+  ├── Delegates background sync to BackgroundSyncDelegate (Android/iOS/NoOp)
   ├── Polling pauses on app background (onHide), resumes on foreground (onResume)
-  ├── Background sync completion detected on resume via isSyncRunning() check
+  ├── Background sync completion detected on resume via delegate.onResume()
   └── refreshAfterSend() called after account switch for immediate update
 ```
 
@@ -253,23 +255,33 @@ All per-account API functions take `account_uuid: String`. Sync-level operations
 `lib/src/providers/sync_provider.dart` — Riverpod `AsyncNotifier`.
 
 **Auto-sync lifecycle:**
-- `build()` watches `accountProvider` — when account exists, triggers `_autoSync()` via `Future.microtask`
-- `_autoSync()`: runs `startSync()` (with try-catch for error state), then always starts polling
-- `_checkAndSync()`: polls `getLatestBlockHeight` every 10s, re-syncs if tip > last synced height
+- `build()` watches `accountProvider` via `ref.listen` (not `ref.watch` — avoids rebuild on switch/rename)
+- Account count increase triggers `startSync()` + `_startPolling()` (both first account and additional accounts)
+- `_checkAndSync()`: polls `getLatestBlockHeight` every 10s, re-syncs if tip > last synced height or previous sync incomplete (`percentage < 1.0`)
 - Polling stops during `_checkAndSync` execution to prevent concurrent overlap, restarts after
 - Duplicate sync guard: `_isSyncing` (Dart-side bool) + `isSyncRunning()` (Rust AtomicBool)
 
+**startSync() is fire-and-forget:**
+- Sets up FRB stream listener and returns immediately (no Completer, no await)
+- `_syncGen` generation counter: incremented by `stopSync()`, checked in `.then()` callbacks to invalidate pending operations after user-initiated stop
+- Stream `onDone` → `_onSyncDone()` (balance refresh + start polling)
+- Stream `onError` → sets error state + starts polling for auto-retry
+
 **Sync control:**
-- `startSync()`: calls `rust_sync.startFullSync(mode:1)`, listens to FRB Stream via `.listen()`, fetches balance on each progress event. When `hasNewTx` or `isComplete`, fetches recent 10 transactions.
-- `stopSync()`: calls `rust_sync.cancelFullSync()` (unified AtomicBool), immediately sets `isSyncing: false` in UI state
-- `enableBackgroundSync()`: Android=notification only, iOS=`setSyncMode(2)` + BGTask submit
-- `disableBackgroundSync()`: Android=notification remove, iOS=`setSyncMode(1)` + wait (120s timeout) + restart fg sync
+- `stopSync()`: increments `_syncGen` + `cancelFullSync()` + `_stopPolling()`. Polling does not restart until next `onResume`
+- `enableBackgroundSync()`: delegates to `BackgroundSyncDelegate`
+- `disableBackgroundSync()`: delegates to `BackgroundSyncDelegate`. `disable()` returns `bool` — iOS returns `true` (needs fg restart), Android returns `false`
+
+**BackgroundSyncDelegate** (`background_sync_delegate.dart`):
+- Abstract interface with Android/iOS/NoOp implementations
+- All `Platform.isAndroid`/`Platform.isIOS` checks isolated here (zero in sync_provider.dart)
+- `shouldSuppressPolling`: Android=`false` (notification only), iOS=`_active` (BGTask manages sync)
+- Android: `onSyncDone()` keeps `_active` true (notification persists across sync cycles)
+- iOS: `onResume()` detects bg sync completion/expiration, `onProgress()` detects EventChannel completion
 
 **Lifecycle:**
-- `onResume`: refreshes balance; detects background sync completion (`!isSyncRunning()`) or expiration (`getSyncMode()==0`); triggers `_checkAndSync` + restarts polling
+- `onResume`: refreshes balance → `_bgDelegate.onResume()` → `_checkAndSync()` (which starts polling)
 - `onHide`: stops polling (no wasted network in background)
-- Background sync completion (via EventChannel `isComplete`): resets `_backgroundMode`, starts polling
-- iOS EventChannel listener for background sync progress with all fields (isSyncing, isComplete, hasNewTx)
 - `SyncState.recentTransactions`: latest 10 transactions, updated on `hasNewTx`, sync completion, and app resume
 - All balance/history queries pass `activeAccountUuid` from `AccountProvider`
 - `background_sync_service.dart`: platform abstraction (Android foreground service + iOS MethodChannel)
