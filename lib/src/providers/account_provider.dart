@@ -260,6 +260,15 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     log('renameAccount: $uuid → $newName');
   }
 
+  /// Delete all wallet data (DB + keychain). Caller must stop sync first.
+  Future<void> resetWallet() async {
+    final dbPath = await _getDbPath();
+    _deleteExistingDb(dbPath);
+    await _storage.deleteAll();
+    state = const AsyncData(AccountState());
+    log('resetWallet: all data cleared');
+  }
+
   /// Get the mnemonic for the active account.
   Future<String?> getActiveMnemonic() async {
     final uuid = state.value?.activeAccountUuid;

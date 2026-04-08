@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,6 +24,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     _checkBackgroundSyncAvailability();
+  }
+
+  Future<void> _resetWallet(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Wallet'),
+        content: const Text('Delete all wallet data (DB + keychain)? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reset', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // 1. Stop sync and wait for Rust to finish
+    ref.read(syncProvider.notifier).stopSync();
+    var waited = 0;
+    while (rust_sync.isSyncRunning() && waited < 5000) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      waited += 100;
+    }
+    // 2. Delete DB + keychain + reset state
+    await ref.read(accountProvider.notifier).resetWallet();
+    // 3. Router will redirect to onboarding (hasWallet=false)
   }
 
   Future<void> _checkBackgroundSyncAvailability() async {
@@ -120,9 +147,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ],
             ),
           ),
-          IconButton(
-            icon: Icon(Icons.qr_code_scanner, color: colors.onSurface),
-            onPressed: () {},
+          Row(
+            children: [
+              if (kDebugMode)
+                IconButton(
+                  icon: Icon(Icons.delete_forever, color: colors.error),
+                  onPressed: () => _resetWallet(context),
+                ),
+              IconButton(
+                icon: Icon(Icons.qr_code_scanner, color: colors.onSurface),
+                onPressed: () {},
+              ),
+            ],
           ),
         ],
       ),
