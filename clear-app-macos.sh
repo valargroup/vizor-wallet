@@ -7,10 +7,10 @@ CONTAINER="$HOME/Library/Containers/$BUNDLE_ID"
 # Kill the app if running
 pkill -f "$BUNDLE_ID" 2>/dev/null
 
-# Remove app container (DB, preferences, caches)
-if [ -d "$CONTAINER" ]; then
-  rm -rf "$CONTAINER"
-  echo "Removed app container: $CONTAINER"
+# Remove app data inside container (not the container itself — macOS protects it)
+if [ -d "$CONTAINER/Data" ]; then
+  rm -rf "$CONTAINER/Data/Documents" "$CONTAINER/Data/Library" "$CONTAINER/Data/tmp" 2>/dev/null
+  echo "Removed app data from: $CONTAINER/Data"
 else
   echo "No app container found"
 fi
