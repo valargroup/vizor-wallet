@@ -7,10 +7,13 @@ CONTAINER="$HOME/Library/Containers/$BUNDLE_ID"
 # Kill the app if running
 pkill -f "$BUNDLE_ID" 2>/dev/null
 
-# Remove app data inside container (not the container itself — macOS protects it)
+# Remove app data inside container (not the container itself — macOS protects it).
+# Keep directory structure intact (Flutter needs Data/tmp to exist at launch).
 if [ -d "$CONTAINER/Data" ]; then
-  rm -rf "$CONTAINER/Data/Documents" "$CONTAINER/Data/Library" "$CONTAINER/Data/tmp" 2>/dev/null
-  echo "Removed app data from: $CONTAINER/Data"
+  rm -rf "$CONTAINER/Data/Documents/"* 2>/dev/null
+  rm -rf "$CONTAINER/Data/Library/"* 2>/dev/null
+  rm -rf "$CONTAINER/Data/tmp/"* 2>/dev/null
+  echo "Cleared app data in: $CONTAINER/Data"
 else
   echo "No app container found"
 fi
