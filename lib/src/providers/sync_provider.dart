@@ -308,19 +308,20 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     final accountUuid = _getActiveAccountUuid();
     if (accountUuid == null) { log('SyncNotifier: no active account, skipping refresh'); return; }
 
+    // Only fetch balance/history when there are new transactions or sync is complete.
+    // Skipping intermediate batches avoids opening a new DB connection per batch.
     BigInt? transparent, sapling, orchard, total;
-    try {
-      final balance = await rust_sync.getBalance(dbPath: dbPath, network: network, accountUuid: accountUuid);
-      transparent = balance.transparent;
-      sapling = balance.sapling;
-      orchard = balance.orchard;
-      total = balance.total;
-    } catch (e) {
-      log('SyncNotifier: balance fetch failed: $e');
-    }
-
     var recentTxs = prev?.recentTransactions ?? const <rust_sync.TransactionInfo>[];
     if (event.hasNewTx || event.isComplete) {
+      try {
+        final balance = await rust_sync.getBalance(dbPath: dbPath, network: network, accountUuid: accountUuid);
+        transparent = balance.transparent;
+        sapling = balance.sapling;
+        orchard = balance.orchard;
+        total = balance.total;
+      } catch (e) {
+        log('SyncNotifier: balance fetch failed: $e');
+      }
       try {
         recentTxs = await rust_sync.getTransactionHistory(dbPath: dbPath, network: network, limit: 10, accountUuid: accountUuid);
       } catch (e) {
