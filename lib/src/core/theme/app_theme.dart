@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 /// Zcash Wallet design system — Stitch-based tokens.
@@ -199,6 +201,25 @@ TextTheme _buildTextTheme(Color textColor) {
 // ThemeData builder — single source of truth for both light and dark
 // ---------------------------------------------------------------------------
 
+// Desktop platforms get instant page transitions (no slide/fade/zoom).
+// Individual routes can still override via CustomTransitionPage in GoRouter.
+class _NoTransitionsBuilder extends PageTransitionsBuilder {
+  const _NoTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) =>
+      child;
+}
+
+bool get _isDesktop =>
+    Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
 ThemeData _buildTheme(ColorScheme colorScheme) {
   return ThemeData(
     useMaterial3: true,
@@ -207,6 +228,15 @@ ThemeData _buildTheme(ColorScheme colorScheme) {
     textTheme: _buildTextTheme(colorScheme.onSurface),
     fontFamily: _bodyFamily,
     scaffoldBackgroundColor: colorScheme.surface,
+    pageTransitionsTheme: _isDesktop
+        ? const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.macOS: _NoTransitionsBuilder(),
+              TargetPlatform.windows: _NoTransitionsBuilder(),
+              TargetPlatform.linux: _NoTransitionsBuilder(),
+            },
+          )
+        : null,
     appBarTheme: AppBarTheme(
       backgroundColor: colorScheme.surface,
       foregroundColor: colorScheme.onSurface,
