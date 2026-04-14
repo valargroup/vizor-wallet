@@ -47,7 +47,7 @@ pub struct SyncProgressEvent {
 const BATCH_SIZE_FOREGROUND: u32 = 2000;
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 const BATCH_SIZE_FOREGROUND: u32 = 1000;
-const BATCH_SIZE_BACKGROUND: u32 = 100;
+const BATCH_SIZE_BACKGROUND: u32 = 300;
 
 /// Sandblasting attack range (Zcash mainnet). Blocks in this range
 /// contain a very large number of outputs from a sustained spam
