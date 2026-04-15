@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Commands
 
@@ -27,24 +27,6 @@ log stream --predicate 'subsystem == "frb_user"' --level info
 ### clear-app.sh
 
 Removes the app from the booted iOS simulator including Keychain data. This is necessary when testing wallet creation/import because the mnemonic is stored in iOS Keychain via `flutter_secure_storage`, which persists even after a normal app uninstall.
-
-### scripts/figma-export.js
-
-Exports a single Figma node as a rendered, composited image (PNG / JPG / SVG / PDF) via the Figma REST API. Reach for this instead of the Figma MCP `use_figma` + `exportAsync` path whenever you need the bytes on disk as an asset. The MCP export route returns base64 through a 20 KB-truncated tool output, forcing a multi-call chunk reassembly; the REST endpoint renders server-side and returns a single signed URL, so one HTTP call produces the file.
-
-```bash
-node scripts/figma-export.js \
-  --file <fileKey> --node <nodeId> \
-  --output assets/illustrations/foo.png \
-  [--scale 1|2|3]  # default 1
-  [--format png|jpg|svg|pdf]  # default png
-```
-
-`fileKey` and `nodeId` come from the Figma URL — `figma.com/design/<fileKey>/<name>?node-id=<nodeId>`. The node-id in the URL uses a dash (`258-5229`); the script expects the canonical colon form (`258:5229`).
-
-`FIGMA_TOKEN` (read scope is enough, Settings → Security → "Generate new token") must be set. Keep it in `~/.zshenv` rather than `~/.zshrc` — Claude Code's Bash tool spawns a non-interactive zsh which only sources `.zshenv` by default.
-
-Output is minimal: start line, "downloading rendered image", and either `ok: <path> (<KB>)` or `fail: <msg>` with a non-zero exit.
 
 ## Architecture
 
@@ -467,58 +449,6 @@ Seed-relevance rule:
 - `SyncState.recentTransactions`: latest 10 transactions, updated on `hasNewTx`, sync completion, and app resume
 - All balance/history queries pass `activeAccountUuid` from `AccountProvider`
 - `background_sync_service.dart`: platform abstraction (Android foreground service + iOS MethodChannel)
-
-### Window Transparency (desktop acrylic)
-
-Deps: `flutter_acrylic: ^1.1.4` plus a direct `macos_window_utils: ^1.9.1`. macos_window_utils is transitively in scope via flutter_acrylic but gets imported directly because the macOS path talks to `WindowManipulator.*` rather than flutter_acrylic's `Window.*` helpers (see below).
-
-**Do not mix with `window_manager`'s `TitleBarStyle`.** flutter_acrylic expects to own the titlebar / background state; combining them corrupts colors. Let window_manager handle size / aspect ratio / minimum size, and flutter_acrylic + macos_window_utils handle titlebar transparency and material.
-
-Initialization lives in `_configureTransparentWindow()` in `lib/main.dart`, guarded by `isDesktopLayoutPlatform`. Ordering matters:
-
-```
-WidgetsFlutterBinding.ensureInitialized()
-→ RustLib.init()
-→ initializeDesktopWindow()            [window_manager — creates + shows NSWindow]
-→ [desktop] _configureTransparentWindow()        [acrylic setup]
-→ [desktop] reapplyDesktopWindowConstraints()    [re-pin constraints after styleMask flip]
-→ [desktop] windowManager.setSize(defaultSize)   [re-issue size after styleMask flip]
-→ runApp()
-```
-
-Rationale for the order:
-
-- `_configureTransparentWindow` can only affect an existing NSWindow. Running it before `initializeDesktopWindow` silently no-ops on cold start (and "magically works" only after a hot restart where the prior window survived).
-- `enableFullSizeContentView()` flips the NSWindow `styleMask`. `window_manager`'s `setAspectRatio` writes to `contentAspectRatio` vs `aspectRatio` based on that bit at call time, so after the flip the aspect-ratio constraint needs to be re-applied. `reapplyDesktopWindowConstraints()` (see `lib/src/core/layout/app_layout.dart`) handles that — pure constraint refresh, never resizes the window.
-- The same styleMask flip changes how `setSize` lands on macOS. Pre-flip, the visible titlebar carves ~32 pt of macOS titlebar height out of the requested frame, so a `setSize(900, 600)` inside `initializeDesktopWindow` leaves the Flutter content at 900×568. Post-flip the titlebar overlays the content, so re-issuing `setSize` at the call site (kept out of `reapplyDesktopWindowConstraints` so that helper stays safe to reuse from any future styleMask-changing path without snapping a user-resized window back to default) lands the requested dimensions on the pixels the user actually sees.
-
-Per-platform recipe:
-
-| Platform | Calls |
-|---|---|
-| **macOS** | `WindowManipulator.initialize()` → `setWindowBackgroundColorToClear()` → `makeTitlebarTransparent()` → `enableFullSizeContentView()` → `setMaterial(NSVisualEffectViewMaterial.fullScreenUI)` → `setNSVisualEffectViewState(NSVisualEffectViewState.active)` |
-| **Windows** | `Window.initialize()` → `Window.setEffect(acrylic, color: Color(0xCC222222), dark: true)` |
-| **Linux** | `Window.initialize()` → `Window.setEffect(transparent)` — acrylic not supported |
-
-Why `WindowManipulator.*` on macOS but `Window.*` elsewhere: flutter_acrylic 1.1.4's macOS `Window.*` wrappers declare `Future<void>` but fire-and-forget the underlying `WindowManipulator` futures, so `await` on them is a lie — the method-channel call hasn't reached native by the time our next step runs. That race previously left `reapplyDesktopWindowConstraints` writing to the pre-flip `contentAspectRatio`, among other intermittent bugs. `WindowManipulator.*` actually awaits. On Windows / Linux flutter_acrylic's `Window.setEffect` goes through a different method-channel path that does await correctly, so those stay on the `Window.*` API.
-
-**macOS specifics:**
-
-- **NSWindow.delegate belongs to window_manager.** `AppLayoutNotifier` relies on window_manager's resize / fullscreen / maximize callbacks to auto-reconcile the large ↔ small layout. `macos_window_utils`'s `addNSWindowDelegate` (including flutter_acrylic's `NSWindowDelegate` hook) would clobber that by reassigning `NSWindow.delegate`, so **we must not register a macos_window_utils window delegate**. Use `NotificationCenter` observers in Swift instead (see fullscreen toggle below).
-- **Blur view state** defaults to `followsWindowActiveState`, so the acrylic material desaturates whenever the window loses focus. Pin to `NSVisualEffectViewState.active` for a stable look (three options: `active` / `inactive` / `followsWindowActiveState`).
-- **`TitlebarSafeArea` is required whenever `enableFullSizeContentView()` is called.** Wrap the app root inside `MaterialApp.builder`, under `AppTheme`; without it the macOS traffic-light controls overlap top-of-screen content.
-- **Do not call `Window.hideWindowControls()`.** It appears in the flutter_acrylic example but strips min / max / close buttons, breaking the real app.
-
-**macOS fullscreen blue-tint toggle.** The green-button fullscreen moves the window into its own Space, which has no wallpaper — just a neutral blue-gray backdrop. An acrylic material blurring that backdrop, combined with macOS wallpaper tinting, paints the whole window light blue. We drop the effect for the duration of fullscreen via:
-
-- `macos/Runner/MainFlutterWindow.swift` registers a `NotificationCenter` observer (not the NSWindow.delegate) for `NSWindow.willEnterFullScreenNotification` / `willExitFullScreenNotification` and pushes `"willEnter"` / `"willExit"` strings into `FlutterEventChannel("app.zcash/fullscreen_events")`.
-- `_installMacOSFullscreenEffectToggle()` in `lib/main.dart` subscribes to that channel: on `willEnter` it resets the NSWindow background to the opaque system default and swaps the material to `windowBackground`; on `willExit` it re-runs `_applyDesktopAcrylic()`. `willEnter` fires before the transition animation starts, so no blue-tint frame is visible.
-- macOS-only. Windows / Linux fullscreen keeps the desktop wallpaper behind the window, so the acrylic blur stays visually valid — no toggle needed.
-
-**Flutter-side transparency + design rule:**
-
-- `Scaffold.backgroundColor: Colors.transparent` is required for the native effect to show through the Flutter render surface; the Scaffold-level setting overrides `MaterialApp.theme.scaffoldBackgroundColor`.
-- Any opaque background (a widget `color`, a `ColoredBox`, a `Container.decoration` color) covers the native transparency in that region. **When designing a screen, keep any area that should reveal the window effect with no background color (or `Colors.transparent`), and only fill opaque backgrounds on regions that are meant to stay solid.** This means transparency is opt-in per-region on the Flutter side.
 
 ## Testing
 
