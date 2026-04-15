@@ -113,7 +113,8 @@ class _ActionRow extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.xs),
         AppButton(
-          onPressed: () => context.go('/create'),
+          onPressed: () =>
+              context.go(OnboardingStep.secretPassphrase.routePath),
           variant: AppButtonVariant.ghost,
           trailing: const AppIcon(AppIcons.skip),
           child: const Text('Skip'),
