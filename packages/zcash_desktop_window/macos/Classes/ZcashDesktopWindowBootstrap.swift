@@ -7,6 +7,8 @@ public enum ZcashDesktopWindowBootstrap {
 
   @discardableResult
   public static func start(mainFlutterWindow: NSWindow) -> ZcashDesktopWindowViewController {
+    configureWindowShell(mainFlutterWindow)
+
     let controller = ZcashDesktopWindowViewController()
     let windowFrame = mainFlutterWindow.frame
     mainFlutterWindow.contentViewController = controller
@@ -27,6 +29,14 @@ public enum ZcashDesktopWindowBootstrap {
     let windowFrameHeight = window.contentView?.frame.height ?? 0
     let contentLayoutRectHeight = window.contentLayoutRect.height
     return max(0, windowFrameHeight - contentLayoutRectHeight)
+  }
+
+  private static func configureWindowShell(_ window: NSWindow) {
+    window.isOpaque = false
+    window.backgroundColor = .clear
+    window.titlebarAppearsTransparent = true
+    window.titleVisibility = .hidden
+    window.styleMask.insert(.fullSizeContentView)
   }
 
   private static func installFullscreenObservers() {
@@ -62,9 +72,7 @@ public enum ZcashDesktopWindowBootstrap {
       return
     }
 
-    window.backgroundColor = .clear
-    window.titlebarAppearsTransparent = true
-    window.styleMask.insert(.fullSizeContentView)
+    configureWindowShell(window)
     window.standardWindowButton(.zoomButton)?.isEnabled = false
     controller.visualEffectView.state = .active
     if #available(macOS 10.14, *) {
@@ -80,6 +88,7 @@ public enum ZcashDesktopWindowBootstrap {
       return
     }
 
+    window.isOpaque = true
     window.backgroundColor = .windowBackgroundColor
     if #available(macOS 10.14, *) {
       controller.visualEffectView.material = .windowBackground

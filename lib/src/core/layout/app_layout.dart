@@ -87,11 +87,6 @@ Future<void> initializeDesktopWindow({
   await windowManager.waitUntilReadyToShow(options, () async {
     await windowManager.setMinimumSize(initialMode.minimumSize);
     await windowManager.setAspectRatio(initialMode.aspectRatio);
-    // On macOS this call lands before `enableFullSizeContentView` flips
-    // the styleMask, so the requested height gets carved up by the
-    // (still-visible) titlebar and the Flutter content ends up short.
-    // `reapplyDesktopWindowConstraints` runs after the flip and
-    // re-issues `setSize` to correct this — see its doc comment.
     await windowManager.setSize(initialMode.defaultSize, animate: false);
   });
 }
@@ -103,17 +98,13 @@ Future<void> showDesktopWindow() async {
   await windowManager.focus();
 }
 
-/// Re-pin window_manager's per-mode constraints after another layer
-/// flips the NSWindow styleMask (at startup that's flutter_acrylic's
-/// `enableFullSizeContentView`).
+/// Re-pin window_manager's per-mode constraints after another layer flips
+/// the NSWindow styleMask.
 ///
-/// Why this is necessary: window_manager's `setAspectRatio` on macOS
-/// branches on whether `.fullSizeContentView` is set at call time and
-/// writes the value into `contentAspectRatio` vs `aspectRatio`
-/// accordingly. If the constraint was first applied before the flip,
-/// it now lives on the wrong NSWindow property, so user-driven resize
-/// won't honor it. Re-issuing after the flip lands it on the
-/// post-flip property.
+/// The current startup path sets `.fullSizeContentView` natively before Dart
+/// runs, so this helper is not needed during initial launch. It remains useful
+/// for any future path that mutates the styleMask after window_manager has
+/// already applied constraints.
 ///
 /// `setMinimumSize` doesn't strictly need the re-issue (window_manager
 /// writes `mainWindow.minSize` directly with no styleMask branch), but
