@@ -49,8 +49,8 @@ dependencies:
     git:
       url: https://github.com/chainapsis/mobile_scanner.git
       ref: 8b4395ce9a9e862ecfd87fba33ff3e022c9e17df
-  zcash_desktop_window:
-    path: packages/zcash_desktop_window
+  desktop_window_bootstrap:
+    path: packages/desktop_window_bootstrap
   crypto: ^3.0.7
   flutter_foreground_task: ^9.2.1
   window_manager: ^0.5.1

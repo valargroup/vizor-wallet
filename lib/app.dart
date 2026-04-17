@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:zcash_desktop_window/zcash_desktop_window.dart';
+import 'package:desktop_window_bootstrap/desktop_window_bootstrap.dart';
 
 import 'main.dart' show log;
 import 'src/core/motion/onboarding_motion.dart';
@@ -220,7 +220,7 @@ class ZcashWalletApp extends ConsumerWidget {
             : AppThemeData.light;
         return AppTheme(
           data: appThemeData,
-          // `ZcashTitlebarSafeArea` pads the app content down past the macOS
+          // `DesktopWindowTitlebarSafeArea` pads the app content down past the macOS
           // titlebar area when the native full-size content view is
           // enabled, so traffic-light controls don't overlap UI. It is a
           // no-op on Windows and Linux where the native title strip does
@@ -231,7 +231,7 @@ class ZcashWalletApp extends ConsumerWidget {
           // events over empty regions while descendant GestureDetectors
           // (buttons, TextFields) win the gesture arena first, keeping
           // focused buttons focused when re-clicked.
-          child: ZcashTitlebarSafeArea(
+          child: DesktopWindowTitlebarSafeArea(
             child: GestureDetector(
               onTap: () {
                 // Leaf-only: skip when the primary focus is a

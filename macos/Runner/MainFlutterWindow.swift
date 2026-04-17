@@ -1,10 +1,10 @@
 import Cocoa
 import FlutterMacOS
-import zcash_desktop_window
+import desktop_window_bootstrap
 
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
-    let desktopWindowViewController = ZcashDesktopWindowBootstrap.start(
+    let desktopWindowViewController = DesktopWindowBootstrapMacOS.start(
       mainFlutterWindow: self
     )
     RegisterGeneratedPlugins(registry: desktopWindowViewController.flutterViewController)

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:zcash_desktop_window/zcash_desktop_window.dart';
+import 'package:desktop_window_bootstrap/desktop_window_bootstrap.dart';
 
 import 'app.dart';
 import 'src/core/layout/app_layout.dart';
@@ -20,7 +20,7 @@ Future<void> main() async {
   await initializeDesktopWindow();
   if (isDesktopLayoutPlatform) {
     log('main: initializing desktop window visuals');
-    await ZcashDesktopWindow.initialize();
+    await DesktopWindowBootstrap.initialize();
     await showDesktopWindow();
   }
   log('main: launching app');
