@@ -594,9 +594,11 @@ packages:
   mobile_scanner:
     dependency: "direct main"
     description:
-      path: "packages/mobile_scanner"
-      relative: true
-    source: path
+      path: "."
+      ref: "8b4395ce9a9e862ecfd87fba33ff3e022c9e17df"
+      resolved-ref: "8b4395ce9a9e862ecfd87fba33ff3e022c9e17df"
+      url: "https://github.com/chainapsis/mobile_scanner.git"
+    source: git
     version: "7.2.0"
   native_toolchain_c:
     dependency: transitive
