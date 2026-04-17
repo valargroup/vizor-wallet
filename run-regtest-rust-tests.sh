@@ -78,6 +78,8 @@ ensure_param_file() {
 echo "==> Resetting regtest services and state"
 "$ROOT_DIR/scripts/regtest/down.sh" >/dev/null 2>&1 || true
 "$ROOT_DIR/scripts/regtest/reset.sh"
+mkdir -p "$LOG_DIR/zcashd" "$LOG_DIR/lightwalletd"
+chmod 0777 "$LOG_DIR/zcashd" "$LOG_DIR/lightwalletd"
 
 echo "==> Ensuring Sapling params"
 mkdir -p "$SAPLING_PARAMS_DIR"
@@ -98,7 +100,7 @@ echo "==> Log file: $LOG_FILE"
   else
     export RUSTFLAGS="-Awarnings"
   fi
-  cargo test --test regtest_wallet_flow -- --ignored --nocapture
+  cargo test --test regtest_wallet_flow -- --ignored --nocapture --test-threads=1
 ) 2>&1 | tee "$LOG_FILE"
 test_status=${PIPESTATUS[0]}
 

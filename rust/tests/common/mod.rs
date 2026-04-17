@@ -1,12 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8};
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use rust_lib_zcash_wallet::{
     api::{sync as sync_api, wallet as wallet_api},
-    wallet::{keys, sync_engine},
 };
 use tempfile::TempDir;
 
@@ -27,7 +24,10 @@ pub fn repo_root() -> PathBuf {
 }
 
 pub fn exclusive_regtest() -> MutexGuard<'static, ()> {
-    REGTEST_LOCK.lock().expect("regtest mutex poisoned")
+    match REGTEST_LOCK.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    }
 }
 
 pub fn regtest_script(name: &str) -> PathBuf {
@@ -133,23 +133,13 @@ pub fn list_accounts(db_path: &Path) -> Vec<wallet_api::AccountInfo> {
 }
 
 pub fn sync_wallet(db_path: &Path) {
-    let network = keys::parse_network(REGTEST_NETWORK).expect("parse_network(regtest)");
-    let cancel = Arc::new(AtomicBool::new(false));
-    let desired_mode = AtomicU8::new(1);
-    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    rt.block_on(async {
-        sync_engine::run_sync_inner(
-            &path_str(db_path),
-            LIGHTWALLETD_URL,
-            network,
-            cancel,
-            1,
-            &desired_mode,
-            |_| {},
-        )
-        .await
-        .expect("run_sync_inner");
-    });
+    sync_api::run_full_sync_blocking(
+        path_str(db_path),
+        LIGHTWALLETD_URL.into(),
+        REGTEST_NETWORK.into(),
+        1,
+    )
+    .expect("run_full_sync_blocking");
 }
 
 pub fn get_balance(db_path: &Path, account_uuid: &str) -> sync_api::WalletBalance {

@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1782453477;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1443458602;
 
 // Section: executor
 
@@ -1659,6 +1659,47 @@ fn wire__crate__api__sync__rewind_to_height_impl(
         },
     )
 }
+fn wire__crate__api__sync__run_full_sync_blocking_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "run_full_sync_blocking",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_db_path = <String>::sse_decode(&mut deserializer);
+            let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
+            let api_network = <String>::sse_decode(&mut deserializer);
+            let api_mode = <u8>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::sync::run_full_sync_blocking(
+                        api_db_path,
+                        api_lightwalletd_url,
+                        api_network,
+                        api_mode,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__sync__scan_blocks_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -2770,18 +2811,21 @@ fn pde_ffi_dispatcher_primary_impl(
             wire__crate__api__sync__redact_pczt_for_signer_impl(port, ptr, rust_vec_len, data_len)
         }
         44 => wire__crate__api__sync__rewind_to_height_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__sync__scan_blocks_impl(port, ptr, rust_vec_len, data_len),
-        47 => {
+        45 => {
+            wire__crate__api__sync__run_full_sync_blocking_impl(port, ptr, rust_vec_len, data_len)
+        }
+        46 => wire__crate__api__sync__scan_blocks_impl(port, ptr, rust_vec_len, data_len),
+        48 => {
             wire__crate__api__sync__set_transaction_status_impl(port, ptr, rust_vec_len, data_len)
         }
-        48 => wire__crate__api__sync__start_full_sync_impl(port, ptr, rust_vec_len, data_len),
-        49 => {
+        49 => wire__crate__api__sync__start_full_sync_impl(port, ptr, rust_vec_len, data_len),
+        50 => {
             wire__crate__api__sync__start_mempool_observer_impl(port, ptr, rust_vec_len, data_len)
         }
-        51 => wire__crate__api__sync__suggest_scan_ranges_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__sync__update_chain_tip_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__sync__validate_address_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__sync__write_block_metadata_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__sync__suggest_scan_ranges_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__sync__update_chain_tip_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__sync__validate_address_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__sync__write_block_metadata_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2802,10 +2846,10 @@ fn pde_ffi_dispatcher_sync_impl(
         36 => wire__crate__api__sync__is_mempool_observer_running_impl(ptr, rust_vec_len, data_len),
         37 => wire__crate__api__sync__is_sync_running_impl(ptr, rust_vec_len, data_len),
         43 => wire__crate__api__keystone__reset_ur_session_impl(ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__sync__set_sync_mode_impl(ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__sync__stop_mempool_observer_impl(ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__wallet__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__wallet__wallet_exists_impl(ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__sync__set_sync_mode_impl(ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__sync__stop_mempool_observer_impl(ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__wallet__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__wallet__wallet_exists_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

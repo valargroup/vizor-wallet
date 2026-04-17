@@ -39,22 +39,26 @@ pub struct ApiSyncProgressEvent {
     pub phase: String,
 }
 
-/// Start a full sync. Streams progress events to Dart via StreamSink.
-/// mode: 1=foreground, 2=background. Sync exits if desired mode changes.
-pub fn start_full_sync(
+fn run_full_sync_internal<F>(
     db_path: String,
     lightwalletd_url: String,
     network: String,
     mode: u8,
-    sink: StreamSink<ApiSyncProgressEvent>,
-) -> Result<(), String> {
-    if SYNC_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    on_progress: F,
+) -> Result<(), String>
+where
+    F: Fn(&sync_engine::SyncProgressEvent) + Send + Sync,
+{
+    if SYNC_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         return Err("Sync already running".into());
     }
 
     DESIRED_SYNC_MODE.store(mode, Ordering::SeqCst);
 
-    let result = catch(|| {
+    let result = catch(panic::AssertUnwindSafe(|| {
         let network = keys::parse_network(&network)?;
         let cancel = SYNC_CANCEL.clone();
         cancel.store(false, Ordering::Relaxed);
@@ -68,26 +72,54 @@ pub fn start_full_sync(
                 cancel,
                 mode,
                 &DESIRED_SYNC_MODE,
-                |progress| {
-                    if sink.add(ApiSyncProgressEvent {
-                        scanned_height: progress.scanned_height,
-                        chain_tip_height: progress.chain_tip_height,
-                        percentage: progress.percentage,
-                        is_syncing: progress.is_syncing,
-                        is_complete: progress.is_complete,
-                        has_new_tx: progress.has_new_tx,
-                        phase: progress.phase.clone(),
-                    }).is_err() {
-                        log::warn!("sync: StreamSink closed, progress not delivered");
-                    }
-                },
+                |progress| on_progress(&progress),
             )
             .await
         })
-    });
+    }));
 
     SYNC_RUNNING.store(false, Ordering::SeqCst);
     result
+}
+
+/// Start a full sync. Streams progress events to Dart via StreamSink.
+/// mode: 1=foreground, 2=background. Sync exits if desired mode changes.
+pub fn start_full_sync(
+    db_path: String,
+    lightwalletd_url: String,
+    network: String,
+    mode: u8,
+    sink: StreamSink<ApiSyncProgressEvent>,
+) -> Result<(), String> {
+    run_full_sync_internal(db_path, lightwalletd_url, network, mode, |progress| {
+        if sink
+            .add(ApiSyncProgressEvent {
+                scanned_height: progress.scanned_height,
+                chain_tip_height: progress.chain_tip_height,
+                percentage: progress.percentage,
+                is_syncing: progress.is_syncing,
+                is_complete: progress.is_complete,
+                has_new_tx: progress.has_new_tx,
+                phase: progress.phase.clone(),
+            })
+            .is_err()
+        {
+            log::warn!("sync: StreamSink closed, progress not delivered");
+        }
+    })
+}
+
+/// Blocking sync entrypoint that uses the same API-layer network parsing,
+/// desired-mode globals, and running guard as `start_full_sync`, but without
+/// a StreamSink. Used by Rust integration tests that want to stay on the
+/// public API surface.
+pub fn run_full_sync_blocking(
+    db_path: String,
+    lightwalletd_url: String,
+    network: String,
+    mode: u8,
+) -> Result<(), String> {
+    run_full_sync_internal(db_path, lightwalletd_url, network, mode, |_| {})
 }
 
 /// Cancel a running full sync.
