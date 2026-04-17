@@ -5,6 +5,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 use rust_lib_zcash_wallet::{
     api::{sync as sync_api, wallet as wallet_api},
 };
+use uuid::Uuid;
 use tempfile::TempDir;
 
 pub const REGTEST_NETWORK: &str = "regtest";
@@ -166,6 +167,64 @@ pub fn get_transaction_history(
 
 pub fn path_str(path: &Path) -> String {
     path.to_str().expect("utf-8 path").to_string()
+}
+
+pub fn execute_send(
+    db_path: &Path,
+    sender_account_uuid: &str,
+    sender_mnemonic: &str,
+    to_address: &str,
+    amount_zatoshi: u64,
+) -> String {
+    let proposal = sync_api::propose_send(
+        path_str(db_path),
+        REGTEST_NETWORK.into(),
+        sender_account_uuid.into(),
+        to_address.into(),
+        amount_zatoshi,
+        None,
+    )
+    .expect("propose_send");
+
+    let sapling_params = if proposal.needs_sapling_params {
+        Some(
+            sapling_params().expect(
+                "proposal needs Sapling params, but REGTEST_SAPLING_PARAMS_DIR is missing or incomplete",
+            ),
+        )
+    } else {
+        None
+    };
+
+    let seed = wallet_api::derive_seed(sender_mnemonic.into()).expect("derive_seed");
+    sync_api::execute_proposal(
+        path_str(db_path),
+        LIGHTWALLETD_URL.into(),
+        proposal.proposal_id,
+        seed,
+        sapling_params.as_ref().map(|p| p.spend_path.clone()),
+        sapling_params.as_ref().map(|p| p.output_path.clone()),
+    )
+    .expect("execute_proposal")
+}
+
+pub fn positive_history_count(history: &[sync_api::TransactionInfo]) -> usize {
+    history
+        .iter()
+        .filter(|tx| tx.account_balance_delta > 0)
+        .count()
+}
+
+pub fn history_txids(history: &[sync_api::TransactionInfo]) -> Vec<String> {
+    history.iter().map(|tx| tx.txid_hex.clone()).collect()
+}
+
+pub fn unique_account_uuids(accounts: &[wallet_api::AccountInfo]) -> usize {
+    let ids: std::collections::HashSet<Uuid> = accounts
+        .iter()
+        .map(|a| Uuid::parse_str(&a.uuid).expect("valid account uuid"))
+        .collect();
+    ids.len()
 }
 
 pub fn sapling_params() -> Option<SaplingParams> {

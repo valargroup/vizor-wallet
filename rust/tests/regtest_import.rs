@@ -2,8 +2,8 @@ mod common;
 
 use common::{
     create_wallet, current_tip_height, ensure_regtest_up, exclusive_regtest, fund_wallet,
-    get_balance, get_transaction_history, import_wallet_with_birthday, list_accounts, mine_blocks,
-    sync_wallet,
+    get_balance, get_transaction_history, history_txids, import_wallet_with_birthday,
+    list_accounts, mine_blocks, positive_history_count, sync_wallet,
 };
 
 #[test]
@@ -42,5 +42,126 @@ fn import_wallet_with_historical_birthday_recovers_existing_funds() {
     assert!(
         history.iter().any(|tx| tx.account_balance_delta > 0),
         "imported wallet should show an inbound historical transaction"
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn import_wallet_with_future_birthday_does_not_rescan_old_receive() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let (_source_dir, source_wallet) = create_wallet("Future Import Source");
+    fund_wallet(&source_wallet.unified_address, "1.2");
+    mine_blocks(12);
+    let future_birthday = current_tip_height();
+
+    let (imported_dir, imported_wallet) = import_wallet_with_birthday(
+        &source_wallet.mnemonic,
+        "Future Birthday Import",
+        Some(future_birthday),
+    );
+    let imported_db = imported_dir.path().join("zcash_wallet.db");
+
+    sync_wallet(&imported_db);
+    let before_balance = get_balance(&imported_db, &imported_wallet.account_uuid);
+    assert_eq!(
+        before_balance.spendable, 0,
+        "future birthday import should not recover funds that predate its birthday"
+    );
+
+    fund_wallet(&imported_wallet.unified_address, "0.8");
+    sync_wallet(&imported_db);
+
+    let after_balance = get_balance(&imported_db, &imported_wallet.account_uuid);
+    assert!(
+        after_balance.spendable >= 80_000_000,
+        "future birthday import should still see post-birthday receives, got {}",
+        after_balance.spendable
+    );
+
+    let history = get_transaction_history(&imported_db, &imported_wallet.account_uuid);
+    assert_eq!(
+        positive_history_count(&history),
+        1,
+        "future birthday import should only record the post-birthday receive"
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn import_wallet_then_receive_new_funds_after_sync_updates_correctly() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let historical_birthday = current_tip_height();
+    let (_source_dir, source_wallet) = create_wallet("Incremental Import Source");
+    fund_wallet(&source_wallet.unified_address, "1.1");
+    mine_blocks(12);
+
+    let (imported_dir, imported_wallet) = import_wallet_with_birthday(
+        &source_wallet.mnemonic,
+        "Incremental Import",
+        Some(historical_birthday),
+    );
+    let imported_db = imported_dir.path().join("zcash_wallet.db");
+
+    sync_wallet(&imported_db);
+    let before_history = get_transaction_history(&imported_db, &imported_wallet.account_uuid);
+    let before_txids = history_txids(&before_history);
+    let before_positive = positive_history_count(&before_history);
+    let before_balance = get_balance(&imported_db, &imported_wallet.account_uuid);
+
+    fund_wallet(&imported_wallet.unified_address, "0.9");
+    sync_wallet(&imported_db);
+
+    let after_history = get_transaction_history(&imported_db, &imported_wallet.account_uuid);
+    let after_txids = history_txids(&after_history);
+    let after_positive = positive_history_count(&after_history);
+    let after_balance = get_balance(&imported_db, &imported_wallet.account_uuid);
+
+    assert!(
+        before_txids.iter().all(|txid| after_txids.contains(txid)),
+        "incremental import sync should preserve previously recovered history"
+    );
+    assert_eq!(
+        after_positive,
+        before_positive + 1,
+        "incremental import sync should add exactly one new inbound transaction"
+    );
+    assert!(
+        after_balance.spendable >= before_balance.spendable + 90_000_000,
+        "incremental import sync should add new funds on top of historical balance"
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn same_mnemonic_imported_into_fresh_db_matches_original_ua_and_balance() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let (_source_dir, source_wallet) = create_wallet("Deterministic Source");
+    fund_wallet(&source_wallet.unified_address, "1.3");
+    mine_blocks(12);
+
+    let (imported_dir, imported_wallet) = import_wallet_with_birthday(
+        &source_wallet.mnemonic,
+        "Deterministic Import",
+        Some(1),
+    );
+    let imported_db = imported_dir.path().join("zcash_wallet.db");
+    sync_wallet(&imported_db);
+
+    assert_eq!(
+        imported_wallet.unified_address, source_wallet.unified_address,
+        "fresh import should derive the same unified address from the same mnemonic"
+    );
+
+    let imported_balance = get_balance(&imported_db, &imported_wallet.account_uuid);
+    assert!(
+        imported_balance.spendable >= 130_000_000,
+        "fresh import should recover the same funded balance, got {}",
+        imported_balance.spendable
     );
 }

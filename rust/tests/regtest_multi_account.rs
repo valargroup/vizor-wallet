@@ -2,8 +2,8 @@ mod common;
 
 use common::{
     add_account_with_birthday, create_wallet, current_tip_height, ensure_regtest_up,
-    exclusive_regtest, fund_wallet, get_balance, get_transaction_history, list_accounts,
-    mine_blocks, sync_wallet,
+    exclusive_regtest, fund_wallet, get_balance, get_transaction_history, history_txids,
+    list_accounts, mine_blocks, positive_history_count, sync_wallet, unique_account_uuids,
 };
 
 #[test]
@@ -88,5 +88,253 @@ fn adding_second_account_after_tip_sync_recovers_historical_and_future_funds() {
         inbound_count >= 2,
         "second account should show both historical and new inbound transactions, got {}",
         inbound_count
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn late_added_account_with_tip_birthday_still_recovers_historical_funds() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let (main_dir, first_wallet) = create_wallet("Primary");
+    let main_db = main_dir.path().join("zcash_wallet.db");
+    sync_wallet(&main_db);
+
+    let (_external_dir, external_wallet) = create_wallet("Future Birthday Source");
+    fund_wallet(&external_wallet.unified_address, "0.9");
+    mine_blocks(12);
+    let too_new_birthday = current_tip_height();
+
+    let second_account = add_account_with_birthday(
+        &main_db,
+        "Tip Birthday",
+        &external_wallet.mnemonic,
+        Some(too_new_birthday),
+    );
+
+    sync_wallet(&main_db);
+    let before_balance = get_balance(&main_db, &second_account.account_uuid);
+    assert!(
+        before_balance.spendable >= 90_000_000,
+        "account added at tip birthday should still recover historical funds in the current add_account flow"
+    );
+
+    fund_wallet(&second_account.unified_address, "0.5");
+    sync_wallet(&main_db);
+
+    let after_balance = get_balance(&main_db, &second_account.account_uuid);
+    assert!(
+        after_balance.spendable >= before_balance.spendable + 50_000_000,
+        "account should recover both historical and post-add receives"
+    );
+    let first_balance = get_balance(&main_db, &first_wallet.account_uuid);
+    assert_eq!(
+        first_balance.spendable, 0,
+        "late-added second account activity must not leak into first account balance"
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn two_new_accounts_added_before_single_sync_are_both_recovered() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let (main_dir, _primary_wallet) = create_wallet("Primary");
+    let main_db = main_dir.path().join("zcash_wallet.db");
+    sync_wallet(&main_db);
+
+    let birthday = current_tip_height();
+    let (_second_source_dir, second_source_wallet) = create_wallet("Second Source");
+    let (_third_source_dir, third_source_wallet) = create_wallet("Third Source");
+
+    fund_wallet(&second_source_wallet.unified_address, "0.8");
+    fund_wallet(&third_source_wallet.unified_address, "0.6");
+    mine_blocks(15);
+
+    let second_account = add_account_with_birthday(
+        &main_db,
+        "Second",
+        &second_source_wallet.mnemonic,
+        Some(birthday),
+    );
+    let third_account = add_account_with_birthday(
+        &main_db,
+        "Third",
+        &third_source_wallet.mnemonic,
+        Some(birthday),
+    );
+
+    sync_wallet(&main_db);
+
+    let accounts = list_accounts(&main_db);
+    assert_eq!(accounts.len(), 3, "wallet should contain three accounts");
+    assert_eq!(
+        unique_account_uuids(&accounts),
+        3,
+        "all listed account UUIDs should stay unique after adding two accounts"
+    );
+
+    let second_balance = get_balance(&main_db, &second_account.account_uuid);
+    let third_balance = get_balance(&main_db, &third_account.account_uuid);
+    assert!(
+        second_balance.spendable >= 80_000_000,
+        "single sync should recover second account funds"
+    );
+    assert!(
+        third_balance.spendable >= 60_000_000,
+        "single sync should recover third account funds"
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn existing_account_history_is_unchanged_when_new_account_is_added() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let (main_dir, first_wallet) = create_wallet("Primary");
+    let main_db = main_dir.path().join("zcash_wallet.db");
+    fund_wallet(&first_wallet.unified_address, "0.5");
+    fund_wallet(&first_wallet.unified_address, "0.4");
+    sync_wallet(&main_db);
+
+    let first_history_before = get_transaction_history(&main_db, &first_wallet.account_uuid);
+    let first_txids_before = history_txids(&first_history_before);
+    let first_positive_before = positive_history_count(&first_history_before);
+
+    let birthday = current_tip_height();
+    let (_external_dir, external_wallet) = create_wallet("Secondary Source");
+    fund_wallet(&external_wallet.unified_address, "0.7");
+    mine_blocks(12);
+
+    let second_account = add_account_with_birthday(
+        &main_db,
+        "Secondary",
+        &external_wallet.mnemonic,
+        Some(birthday),
+    );
+    sync_wallet(&main_db);
+
+    let first_history_after = get_transaction_history(&main_db, &first_wallet.account_uuid);
+    let first_txids_after = history_txids(&first_history_after);
+    let first_positive_after = positive_history_count(&first_history_after);
+    let second_balance = get_balance(&main_db, &second_account.account_uuid);
+
+    assert_eq!(
+        first_txids_before, first_txids_after,
+        "adding a new account must not rewrite the first account history ordering"
+    );
+    assert_eq!(
+        first_positive_before, first_positive_after,
+        "adding a new account must not change the first account inbound history count"
+    );
+    assert!(
+        second_balance.spendable >= 70_000_000,
+        "new account should still recover its own historical funds"
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn multi_account_sync_keeps_balances_isolated_per_account() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let (main_dir, first_wallet) = create_wallet("Primary");
+    let main_db = main_dir.path().join("zcash_wallet.db");
+    let birthday = current_tip_height();
+    let (_second_source_dir, second_source_wallet) = create_wallet("Secondary Source");
+
+    let second_account = add_account_with_birthday(
+        &main_db,
+        "Secondary",
+        &second_source_wallet.mnemonic,
+        Some(birthday),
+    );
+
+    fund_wallet(&first_wallet.unified_address, "0.55");
+    fund_wallet(&second_account.unified_address, "0.85");
+    sync_wallet(&main_db);
+
+    let first_balance = get_balance(&main_db, &first_wallet.account_uuid);
+    let second_balance = get_balance(&main_db, &second_account.account_uuid);
+    assert!(
+        first_balance.spendable >= 55_000_000 && first_balance.spendable < 85_000_000,
+        "first account balance should reflect only first-account funding, got {}",
+        first_balance.spendable
+    );
+    assert!(
+        second_balance.spendable >= 85_000_000,
+        "second account balance should reflect only second-account funding, got {}",
+        second_balance.spendable
+    );
+
+    let first_history = get_transaction_history(&main_db, &first_wallet.account_uuid);
+    let second_history = get_transaction_history(&main_db, &second_account.account_uuid);
+    assert_eq!(
+        positive_history_count(&first_history),
+        1,
+        "first account should record exactly one inbound transaction"
+    );
+    assert_eq!(
+        positive_history_count(&second_history),
+        1,
+        "second account should record exactly one inbound transaction"
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn repeated_sync_is_idempotent_for_multi_account_wallet() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let (main_dir, first_wallet) = create_wallet("Primary");
+    let main_db = main_dir.path().join("zcash_wallet.db");
+    let birthday = current_tip_height();
+    let (_second_source_dir, second_source_wallet) = create_wallet("Secondary Source");
+    let second_account = add_account_with_birthday(
+        &main_db,
+        "Secondary",
+        &second_source_wallet.mnemonic,
+        Some(birthday),
+    );
+
+    fund_wallet(&first_wallet.unified_address, "0.45");
+    fund_wallet(&second_account.unified_address, "0.65");
+    sync_wallet(&main_db);
+
+    let first_balance_before = get_balance(&main_db, &first_wallet.account_uuid);
+    let second_balance_before = get_balance(&main_db, &second_account.account_uuid);
+    let first_history_before = get_transaction_history(&main_db, &first_wallet.account_uuid);
+    let second_history_before = get_transaction_history(&main_db, &second_account.account_uuid);
+
+    sync_wallet(&main_db);
+    sync_wallet(&main_db);
+
+    let first_balance_after = get_balance(&main_db, &first_wallet.account_uuid);
+    let second_balance_after = get_balance(&main_db, &second_account.account_uuid);
+    let first_history_after = get_transaction_history(&main_db, &first_wallet.account_uuid);
+    let second_history_after = get_transaction_history(&main_db, &second_account.account_uuid);
+
+    assert_eq!(
+        first_balance_before.spendable, first_balance_after.spendable,
+        "repeated sync without new blocks must not change first account balance"
+    );
+    assert_eq!(
+        second_balance_before.spendable, second_balance_after.spendable,
+        "repeated sync without new blocks must not change second account balance"
+    );
+    assert_eq!(
+        history_txids(&first_history_before),
+        history_txids(&first_history_after),
+        "repeated sync without new blocks must not duplicate first account history"
+    );
+    assert_eq!(
+        history_txids(&second_history_before),
+        history_txids(&second_history_after),
+        "repeated sync without new blocks must not duplicate second account history"
     );
 }

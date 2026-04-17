@@ -100,6 +100,25 @@ ensure_param_file() {
   fi
 }
 
+start_regtest_services() {
+  local attempt
+  for attempt in 1 2; do
+    if "$ROOT_DIR/scripts/regtest/up.sh"; then
+      return 0
+    fi
+
+    if [[ "$attempt" -eq 2 ]]; then
+      return 1
+    fi
+
+    echo "==> regtest startup failed; retrying once with a clean reset" >&2
+    "$ROOT_DIR/scripts/regtest/down.sh" >/dev/null 2>&1 || true
+    "$ROOT_DIR/scripts/regtest/reset.sh" >/dev/null 2>&1 || true
+    mkdir -p "$LOG_DIR/zcashd" "$LOG_DIR/lightwalletd"
+    chmod 0777 "$LOG_DIR/zcashd" "$LOG_DIR/lightwalletd"
+  done
+}
+
 echo "==> Resetting regtest services and state"
 "$ROOT_DIR/scripts/regtest/down.sh" >/dev/null 2>&1 || true
 "$ROOT_DIR/scripts/regtest/reset.sh"
@@ -112,7 +131,7 @@ ensure_param_file "$SAPLING_SPEND_PATH" "$SAPLING_SPEND_HASH" "$SAPLING_PARAM_BA
 ensure_param_file "$SAPLING_OUTPUT_PATH" "$SAPLING_OUTPUT_HASH" "$SAPLING_PARAM_BASE_URL/sapling-output.params"
 
 echo "==> Starting fresh regtest services"
-"$ROOT_DIR/scripts/regtest/up.sh"
+start_regtest_services
 
 echo "==> Running Rust regtest integration tests"
 echo "==> Log file: $LOG_FILE"

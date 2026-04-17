@@ -460,9 +460,11 @@ Seed-relevance rule:
   - The runner always starts by tearing down any existing regtest containers and resetting `.regtest/`, so each run starts from the same clean chain/wallet state.
   - Sapling proving params are cached separately at `~/.zcash-params` by default, so they survive `scripts/regtest/reset.sh`. Override with `SAPLING_PARAMS_DIR=/custom/path ./run-regtest-rust-tests.sh` if needed.
   - By default the runner also does a final `down/reset` cleanup after the tests finish. Use `./run-regtest-rust-tests.sh --keep` if you want to keep the regtest state around for debugging.
+  - These regtest scenarios are slow and heavy. Do not run them unless the user explicitly asks for regtest/integration execution.
   - Manual flow:
     - Start services: `./scripts/regtest/up.sh`
-    - Run tests: `cd rust && cargo test --test regtest_wallet_flow -- --ignored --nocapture`
+    - Run individual scenario tests: `cd rust && cargo test --test regtest_receive_sync -- --ignored --nocapture --test-threads=1`
+    - Other available targets: `regtest_send`, `regtest_import`, `regtest_multi_account`
     - Stop services: `./scripts/regtest/down.sh`
   - The one-shot runner streams the full test output to the terminal and also saves a copy to `.regtest/regtest-rust-tests.log`.
 - `scripts/regtest/` utilities:

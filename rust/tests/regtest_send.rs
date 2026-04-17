@@ -1,11 +1,10 @@
 mod common;
 
 use common::{
-    create_wallet, ensure_regtest_up, exclusive_regtest, fund_wallet, get_balance,
-    get_transaction_history, mine_blocks, sapling_params, sync_wallet, LIGHTWALLETD_URL,
-    REGTEST_NETWORK,
+    add_account_with_birthday, create_wallet, ensure_regtest_up, execute_send,
+    exclusive_regtest, fund_wallet, get_balance, get_transaction_history, mine_blocks,
+    sync_wallet,
 };
-use rust_lib_zcash_wallet::api::{sync as sync_api, wallet as wallet_api};
 
 #[test]
 #[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
@@ -28,36 +27,14 @@ fn funded_wallet_can_send_to_second_wallet() {
         sender_before.spendable
     );
 
-    let proposal = sync_api::propose_send(
-        sender_db.to_str().unwrap().into(),
-        REGTEST_NETWORK.into(),
-        sender_wallet.account_uuid.clone(),
-        receiver_wallet.unified_address.clone(),
+    let txid = execute_send(
+        &sender_db,
+        &sender_wallet.account_uuid,
+        &sender_wallet.mnemonic,
+        &receiver_wallet.unified_address,
         50_000_000,
-        None,
     )
-    .expect("propose_send");
-
-    let sapling_params = if proposal.needs_sapling_params {
-        Some(
-            sapling_params().expect(
-                "proposal needs Sapling params, but REGTEST_SAPLING_PARAMS_DIR is missing or incomplete",
-            ),
-        )
-    } else {
-        None
-    };
-
-    let seed = wallet_api::derive_seed(sender_wallet.mnemonic.clone()).expect("derive_seed");
-    let txid = sync_api::execute_proposal(
-        sender_db.to_str().unwrap().into(),
-        LIGHTWALLETD_URL.into(),
-        proposal.proposal_id,
-        seed,
-        sapling_params.as_ref().map(|p| p.spend_path.clone()),
-        sapling_params.as_ref().map(|p| p.output_path.clone()),
-    )
-    .expect("execute_proposal");
+    ;
     assert!(!txid.is_empty(), "execute_proposal should return a txid");
 
     mine_blocks(10);
@@ -81,5 +58,71 @@ fn funded_wallet_can_send_to_second_wallet() {
     assert!(
         receiver_history.iter().any(|tx| tx.account_balance_delta > 0),
         "receiver should record an inbound transaction"
+    );
+}
+
+#[test]
+#[ignore = "requires Dockerized zcashd/lightwalletd regtest services"]
+fn imported_second_account_can_send_using_its_own_seed() {
+    let _guard = exclusive_regtest();
+    ensure_regtest_up();
+
+    let (main_dir, primary_wallet) = create_wallet("Primary");
+    let main_db = main_dir.path().join("zcash_wallet.db");
+    let (_secondary_source_dir, secondary_source_wallet) = create_wallet("Secondary Source");
+    let (receiver_dir, receiver_wallet) = create_wallet("Receiver");
+    let receiver_db = receiver_dir.path().join("zcash_wallet.db");
+
+    let second_account = add_account_with_birthday(
+        &main_db,
+        "Secondary",
+        &secondary_source_wallet.mnemonic,
+        Some(1),
+    );
+
+    fund_wallet(&second_account.unified_address, "1.6");
+    sync_wallet(&main_db);
+
+    let primary_before = get_balance(&main_db, &primary_wallet.account_uuid);
+    let second_before = get_balance(&main_db, &second_account.account_uuid);
+    assert_eq!(
+        primary_before.spendable, 0,
+        "primary account should remain unfunded in this scenario"
+    );
+    assert!(
+        second_before.spendable >= 160_000_000,
+        "second account should have spendable funds before send, got {}",
+        second_before.spendable
+    );
+
+    let txid = execute_send(
+        &main_db,
+        &second_account.account_uuid,
+        &secondary_source_wallet.mnemonic,
+        &receiver_wallet.unified_address,
+        60_000_000,
+    );
+    assert!(!txid.is_empty(), "second account send should return a txid");
+
+    mine_blocks(10);
+    sync_wallet(&main_db);
+    sync_wallet(&receiver_db);
+
+    let primary_after = get_balance(&main_db, &primary_wallet.account_uuid);
+    let second_after = get_balance(&main_db, &second_account.account_uuid);
+    let receiver_after = get_balance(&receiver_db, &receiver_wallet.account_uuid);
+
+    assert_eq!(
+        primary_after.spendable, 0,
+        "sending from second account must not credit or debit the primary account"
+    );
+    assert!(
+        second_after.spendable < second_before.spendable,
+        "second account spendable balance should decrease after sending"
+    );
+    assert!(
+        receiver_after.spendable >= 60_000_000,
+        "receiver should see at least 0.6 ZEC after imported-account send, got {}",
+        receiver_after.spendable
     );
 }
