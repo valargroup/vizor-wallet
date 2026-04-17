@@ -457,7 +457,7 @@ Seed-relevance rule:
 - Integration tests: `fvm flutter test integration_test/` (requires device/simulator)
 - Zcash regtest Rust integration tests:
   - One-shot runner from repo root: `./run-regtest-rust-tests.sh`
-  - Same runner, but tear down Docker services after the run: `./run-regtest-rust-tests.sh --down`
+  - The runner always starts by tearing down any existing regtest containers and resetting `.regtest/`, so each run starts from the same clean chain/wallet state.
   - Manual flow:
     - Start services: `./scripts/regtest/up.sh`
     - Run tests: `cd rust && cargo test --test regtest_wallet_flow -- --ignored --nocapture`

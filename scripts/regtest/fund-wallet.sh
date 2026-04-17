@@ -13,16 +13,14 @@ wait_for_lightwalletd
 ensure_faucet_state
 
 sender_address="$(faucet_transparent_sender)"
-send_amount="$(python3 - "$requested_amount" <<'PY'
-import sys
+faucet_zaddr="$(zcash_cli z_getnewaddress sapling)"
 
-requested = float(sys.argv[1])
-full_reward_send = 6.2499
-print(max(requested, full_reward_send))
-PY
-)"
+shield_opid="$(extract_opid "$(zcash_cli z_shieldcoinbase "$sender_address" "$faucet_zaddr" 0.0001 1)")"
+wait_for_operation "$shield_opid" >/dev/null
+zcash_cli generate 1 >/dev/null
+wait_for_lightwalletd_tip "$(zcash_cli getblockcount)"
 
-recipients="$(python3 - "$destination" "$send_amount" <<'PY'
+recipients="$(python3 - "$destination" "$requested_amount" <<'PY'
 import json
 import sys
 
@@ -30,7 +28,7 @@ print(json.dumps([{"address": sys.argv[1], "amount": float(sys.argv[2])}]))
 PY
 )"
 
-opid="$(extract_opid "$(zcash_cli z_sendmany "$sender_address" "$recipients" 1 0.0001 AllowRevealedSenders)")"
+opid="$(extract_opid "$(zcash_cli z_sendmany "$faucet_zaddr" "$recipients" 1 0.0001)")"
 txid="$(wait_for_operation "$opid")"
 zcash_cli generate "$confirming_blocks" >/dev/null
 wait_for_lightwalletd_tip "$(zcash_cli getblockcount)"
