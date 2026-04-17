@@ -450,6 +450,35 @@ Seed-relevance rule:
 - All balance/history queries pass `activeAccountUuid` from `AccountProvider`
 - `background_sync_service.dart`: platform abstraction (Android foreground service + iOS MethodChannel)
 
+### Desktop Window Bootstrap
+
+Desktop window appearance is managed by the external [`desktop_window_bootstrap`](https://github.com/chainapsis/desktop_window_bootstrap) package plus `window_manager`, with a strict responsibility split:
+
+- `desktop_window_bootstrap` owns window appearance and titlebar overlap handling.
+  - On macOS this means the transparent titlebar / full-size content-view shell is applied natively before the window is shown, via [macos/Runner/MainFlutterWindow.swift](/Users/junghwanyun/zcash-wallet/macos/Runner/MainFlutterWindow.swift).
+  - The app calls `DesktopWindowBootstrap.initialize()` in [lib/main.dart](/Users/junghwanyun/zcash-wallet/lib/main.dart) after `initializeDesktopWindow()` has created the OS window but before `showDesktopWindow()` reveals it.
+  - `DesktopWindowTitlebarSafeArea` in [lib/app.dart](/Users/junghwanyun/zcash-wallet/lib/app.dart) pads Flutter content below the macOS traffic-light/titlebar area. Keep it wrapped around the app root.
+- `window_manager` owns sizing/lifecycle only.
+  - [lib/src/core/layout/app_layout.dart](/Users/junghwanyun/zcash-wallet/lib/src/core/layout/app_layout.dart) should remain responsible for initial size, minimum size, aspect ratio, `show()`, `focus()`, and layout-mode reconciliation from window events.
+  - Do not reintroduce `TitleBarStyle` ownership or other appearance writes through `window_manager`; that overlaps with `desktop_window_bootstrap`.
+
+Current startup order for desktop platforms:
+
+```text
+WidgetsFlutterBinding.ensureInitialized()
+→ RustLib.init()
+→ initializeDesktopWindow()      // window_manager creates the OS window
+→ DesktopWindowBootstrap.initialize()
+→ showDesktopWindow()
+→ runApp()
+```
+
+Important desktop design rule:
+
+- `Scaffold.backgroundColor: Colors.transparent` is required anywhere the native acrylic/translucent shell should remain visible.
+- Any opaque `Container`, `ColoredBox`, decoration color, or other filled background will cover the native effect in that region.
+- Treat transparency as opt-in per region: only paint solid backgrounds where the UI should actually be solid.
+
 ## Testing
 
 - Rust unit tests: `cd rust && cargo test` — 11 tests covering key derivation, address encoding / Orchard-only UA derivation, determinism, and PROPOSAL_STORE lifecycle (idempotent discard, consume-on-entry, replay rejection). Tests that need a DB use `tempfile::tempdir()`.
