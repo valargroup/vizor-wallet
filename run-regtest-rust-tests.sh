@@ -10,10 +10,11 @@ SAPLING_OUTPUT_PATH="$SAPLING_PARAMS_DIR/sapling-output.params"
 SAPLING_SPEND_HASH="a15ab54c2888880e53c823a3063820c728444126"
 SAPLING_OUTPUT_HASH="0ebc5a1ef3653948e1c46cf7a16071eac4b7e352"
 SAPLING_PARAM_BASE_URL="https://download.z.cash/downloads"
+KEEP_STATE=0
 
 usage() {
   cat <<'EOF'
-Usage: ./run-regtest-rust-tests.sh
+Usage: ./run-regtest-rust-tests.sh [--keep]
 
 Resets the local zcashd/lightwalletd regtest state, starts a fresh regtest stack,
 runs the Rust regtest integration tests, streams the full output to the terminal,
@@ -28,6 +29,11 @@ Sapling proving params are cached outside .regtest by default:
 Override with:
 
   SAPLING_PARAMS_DIR=/custom/path ./run-regtest-rust-tests.sh
+
+Options:
+
+  --keep    Skip the final down/reset cleanup so the regtest state stays
+            available for debugging after the run.
 EOF
 }
 
@@ -36,11 +42,30 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-if [[ "$#" -gt 0 ]]; then
-  echo "Unknown argument: $1" >&2
-  usage >&2
-  exit 1
-fi
+for arg in "$@"; do
+  case "$arg" in
+    --keep)
+      KEEP_STATE=1
+      ;;
+    *)
+      echo "Unknown argument: $arg" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+cleanup() {
+  if [[ "$KEEP_STATE" -eq 1 ]]; then
+    echo "==> Keeping regtest services and state for debugging"
+    return 0
+  fi
+
+  echo "==> Cleaning up regtest services and state"
+  "$ROOT_DIR/scripts/regtest/down.sh" >/dev/null 2>&1 || true
+  "$ROOT_DIR/scripts/regtest/reset.sh" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 mkdir -p "$LOG_DIR"
 
@@ -100,7 +125,14 @@ echo "==> Log file: $LOG_FILE"
   else
     export RUSTFLAGS="-Awarnings"
   fi
-  cargo test --test regtest_wallet_flow -- --ignored --nocapture --test-threads=1
+  for test_target in \
+    regtest_receive_sync \
+    regtest_send \
+    regtest_import \
+    regtest_multi_account
+  do
+    cargo test --test "$test_target" -- --ignored --nocapture --test-threads=1
+  done
 ) 2>&1 | tee "$LOG_FILE"
 test_status=${PIPESTATUS[0]}
 

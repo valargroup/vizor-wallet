@@ -529,6 +529,7 @@ Why `WindowManipulator.*` on macOS but `Window.*` elsewhere: flutter_acrylic 1.1
   - One-shot runner from repo root: `./run-regtest-rust-tests.sh`
   - The runner always starts by tearing down any existing regtest containers and resetting `.regtest/`, so each run starts from the same clean chain/wallet state.
   - Sapling proving params are cached separately at `~/.zcash-params` by default, so they survive `scripts/regtest/reset.sh`. Override with `SAPLING_PARAMS_DIR=/custom/path ./run-regtest-rust-tests.sh` if needed.
+  - By default the runner also does a final `down/reset` cleanup after the tests finish. Use `./run-regtest-rust-tests.sh --keep` if you want to keep the regtest state around for debugging.
   - Manual flow:
     - Start services: `./scripts/regtest/up.sh`
     - Run tests: `cd rust && cargo test --test regtest_wallet_flow -- --ignored --nocapture`
