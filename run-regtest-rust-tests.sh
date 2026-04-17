@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_DIR="$ROOT_DIR/.regtest"
+STATE_DIR="$ROOT_DIR/.regtest"
+LOG_DIR="$ROOT_DIR/.regtest-logs"
 LOG_FILE="$LOG_DIR/regtest-rust-tests.log"
 SAPLING_PARAMS_DIR="${SAPLING_PARAMS_DIR:-$HOME/.zcash-params}"
 SAPLING_SPEND_PATH="$SAPLING_PARAMS_DIR/sapling-spend.params"
@@ -20,7 +21,7 @@ Resets the local zcashd/lightwalletd regtest state, starts a fresh regtest stack
 runs the Rust regtest integration tests, streams the full output to the terminal,
 and saves a copy to:
 
-  .regtest/regtest-rust-tests.log
+  .regtest-logs/regtest-rust-tests.log
 
 Sapling proving params are cached outside .regtest by default:
 
@@ -114,16 +115,16 @@ start_regtest_services() {
     echo "==> regtest startup failed; retrying once with a clean reset" >&2
     "$ROOT_DIR/scripts/regtest/down.sh" >/dev/null 2>&1 || true
     "$ROOT_DIR/scripts/regtest/reset.sh" >/dev/null 2>&1 || true
-    mkdir -p "$LOG_DIR/zcashd" "$LOG_DIR/lightwalletd"
-    chmod 0777 "$LOG_DIR/zcashd" "$LOG_DIR/lightwalletd"
+    mkdir -p "$STATE_DIR/zcashd" "$STATE_DIR/lightwalletd"
+    chmod 0777 "$STATE_DIR/zcashd" "$STATE_DIR/lightwalletd"
   done
 }
 
 echo "==> Resetting regtest services and state"
 "$ROOT_DIR/scripts/regtest/down.sh" >/dev/null 2>&1 || true
 "$ROOT_DIR/scripts/regtest/reset.sh"
-mkdir -p "$LOG_DIR/zcashd" "$LOG_DIR/lightwalletd"
-chmod 0777 "$LOG_DIR/zcashd" "$LOG_DIR/lightwalletd"
+mkdir -p "$STATE_DIR/zcashd" "$STATE_DIR/lightwalletd"
+chmod 0777 "$STATE_DIR/zcashd" "$STATE_DIR/lightwalletd"
 
 echo "==> Ensuring Sapling params"
 mkdir -p "$SAPLING_PARAMS_DIR"
