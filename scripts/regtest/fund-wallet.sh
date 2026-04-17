@@ -17,7 +17,7 @@ faucet_zaddr="$(zcash_cli z_getnewaddress sapling)"
 
 shield_opid="$(extract_opid "$(zcash_cli z_shieldcoinbase "$sender_address" "$faucet_zaddr" 0.0001 1)")"
 wait_for_operation "$shield_opid" >/dev/null
-zcash_cli generate 10 >/dev/null
+zcash_cli generate 20 >/dev/null
 wait_for_lightwalletd_tip "$(zcash_cli getblockcount)"
 
 recipients="$(python3 - "$destination" "$requested_amount" <<'PY'

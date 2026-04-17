@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `catch`
+// These functions are ignored because they are not marked as `pub`: `catch`, `run_full_sync_internal`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MempoolObserverState`
 
 /// Set the desired sync mode. 0=none, 1=foreground, 2=background.
@@ -25,6 +25,22 @@ Stream<ApiSyncProgressEvent> startFullSync({
   required String network,
   required int mode,
 }) => RustLib.instance.api.crateApiSyncStartFullSync(
+  dbPath: dbPath,
+  lightwalletdUrl: lightwalletdUrl,
+  network: network,
+  mode: mode,
+);
+
+/// Blocking sync entrypoint that uses the same API-layer network parsing,
+/// desired-mode globals, and running guard as `start_full_sync`, but without
+/// a StreamSink. Used by Rust integration tests that want to stay on the
+/// public API surface.
+Future<void> runFullSyncBlocking({
+  required String dbPath,
+  required String lightwalletdUrl,
+  required String network,
+  required int mode,
+}) => RustLib.instance.api.crateApiSyncRunFullSyncBlocking(
   dbPath: dbPath,
   lightwalletdUrl: lightwalletdUrl,
   network: network,

@@ -458,6 +458,7 @@ Seed-relevance rule:
 - Zcash regtest Rust integration tests:
   - One-shot runner from repo root: `./run-regtest-rust-tests.sh`
   - The runner always starts by tearing down any existing regtest containers and resetting `.regtest/`, so each run starts from the same clean chain/wallet state.
+  - Sapling proving params are cached separately at `~/.zcash-params` by default, so they survive `scripts/regtest/reset.sh`. Override with `SAPLING_PARAMS_DIR=/custom/path ./run-regtest-rust-tests.sh` if needed.
   - Manual flow:
     - Start services: `./scripts/regtest/up.sh`
     - Run tests: `cd rust && cargo test --test regtest_wallet_flow -- --ignored --nocapture`
