@@ -12,7 +12,9 @@ use zcash_client_backend::{
 };
 use zcash_client_sqlite::{WalletDb, error::SqliteClientError, util::SystemClock};
 use zcash_primitives::block::BlockHash;
-use zcash_protocol::consensus::{BlockHeight, Network};
+use zcash_protocol::consensus::BlockHeight;
+
+use crate::wallet::network::WalletNetwork;
 
 mod block_source;
 mod enhance;
@@ -73,7 +75,7 @@ fn elapsed() -> String {
         .unwrap_or_default()
 }
 
-type WalletDatabase = WalletDb<rusqlite::Connection, Network, SystemClock, OsRng>;
+type WalletDatabase = WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>;
 
 // ==================== Main sync ====================
 
@@ -83,7 +85,7 @@ type WalletDatabase = WalletDb<rusqlite::Connection, Network, SystemClock, OsRng
 pub async fn run_sync_inner(
     db_data_path: &str,
     lightwalletd_url: &str,
-    network: Network,
+    network: WalletNetwork,
     cancel: Arc<AtomicBool>,
     running_mode: u8,
     desired_mode: &AtomicU8,
@@ -155,7 +157,7 @@ pub async fn run_sync_inner(
 async fn run_sync_impl(
     db_data_path: &str,
     lightwalletd_url: &str,
-    network: Network,
+    network: WalletNetwork,
     cancel: Arc<AtomicBool>,
     running_mode: u8,
     desired_mode: &AtomicU8,
@@ -826,7 +828,7 @@ async fn run_sync_impl(
 
 // ==================== Helpers ====================
 
-fn open_db(path: &str, network: Network) -> Result<WalletDatabase, SyncError> {
+fn open_db(path: &str, network: WalletNetwork) -> Result<WalletDatabase, SyncError> {
     WalletDb::for_path(path, network, SystemClock, OsRng)
         .map_err(|e| SyncError::db(format!("DB open: {e}")))
 }

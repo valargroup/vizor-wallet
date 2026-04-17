@@ -54,12 +54,12 @@ use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::{
     ShieldedProtocol,
-    consensus::Network,
     memo::{Memo, MemoBytes},
     value::Zatoshis,
 };
 
 use crate::wallet::keys::parse_account_uuid;
+use crate::wallet::network::WalletNetwork;
 
 use super::{
     open_wallet_db, StoredProposal, WalletDatabase, PROPOSAL_STORE,
@@ -79,7 +79,7 @@ pub(crate) struct ProposalResult {
 
 pub fn propose_send(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     account_uuid: &str,
     to_address: &str,
     amount_zatoshi: u64,
@@ -156,7 +156,7 @@ pub fn propose_send(
 /// `PROPOSAL_STORE`.
 pub fn estimate_fee(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     account_uuid: &str,
     to_address: &str,
     amount_zatoshi: u64,

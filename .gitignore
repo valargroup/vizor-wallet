@@ -39,6 +39,7 @@ rust/build/
 .pub/
 /build/
 /coverage/
+.regtest/
 
 # Symbolication related
 app.*.symbols

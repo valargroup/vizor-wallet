@@ -36,7 +36,9 @@ use zcash_client_backend::{
     },
 };
 use zcash_primitives::transaction::Transaction;
-use zcash_protocol::consensus::{BlockHeight, BranchId, Network};
+use zcash_protocol::consensus::{BlockHeight, BranchId};
+
+use crate::wallet::network::WalletNetwork;
 
 use super::{SyncError, WalletDatabase};
 
@@ -50,7 +52,7 @@ use super::{SyncError, WalletDatabase};
 pub(super) async fn run_enhancement(
     client: &mut CompactTxStreamerClient<Channel>,
     db: &mut WalletDatabase,
-    network: Network,
+    network: WalletNetwork,
 ) -> Result<(), SyncError> {
     let mut failed_txids: HashSet<String> = HashSet::new();
 

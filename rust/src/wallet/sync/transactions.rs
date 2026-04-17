@@ -20,9 +20,10 @@
 //! PROPOSAL_STORE used by both the software and PCZT send paths.
 
 use zcash_client_backend::data_api::{wallet::ConfirmationsPolicy, WalletRead, WalletWrite};
-use zcash_protocol::consensus::{BlockHeight, Network};
+use zcash_protocol::consensus::BlockHeight;
 
 use crate::wallet::keys::parse_account_uuid;
+use crate::wallet::network::WalletNetwork;
 
 use super::open_wallet_db;
 
@@ -39,7 +40,7 @@ pub(crate) struct WalletBalance {
 
 pub fn get_wallet_balance(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     account_uuid: &str,
 ) -> Result<WalletBalance, String> {
     let db = open_wallet_db(db_path, network)?;
@@ -84,7 +85,7 @@ pub fn get_wallet_balance(
 
 pub fn get_next_available_address(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     account_uuid: &str,
 ) -> Result<String, String> {
     use zcash_keys::keys::{ReceiverRequirement, UnifiedAddressRequest};
@@ -115,7 +116,7 @@ pub(crate) struct TxDataRequest {
 
 pub fn get_transaction_data_requests(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
 ) -> Result<Vec<TxDataRequest>, String> {
     use zcash_client_backend::data_api::TransactionDataRequest;
 
@@ -158,7 +159,7 @@ pub fn get_transaction_data_requests(
 
 pub fn decrypt_and_store_transaction(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     tx_bytes: &[u8],
     mined_height: Option<u64>,
 ) -> Result<(), String> {
@@ -177,7 +178,7 @@ pub fn decrypt_and_store_transaction(
 
 pub fn set_transaction_status(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     txid_hex: &str,
     status: i64,
 ) -> Result<(), String> {
@@ -212,7 +213,7 @@ pub(crate) struct TransactionInfo {
 
 pub fn get_transaction_history(
     db_path: &str,
-    _network: Network,
+    _network: WalletNetwork,
     limit: Option<u32>,
     account_uuid: &str,
 ) -> Result<Vec<TransactionInfo>, String> {

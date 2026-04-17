@@ -50,7 +50,9 @@ use std::time::{Duration, Instant};
 
 use zcash_client_backend::proto::service::RawTransaction;
 use zcash_primitives::transaction::Transaction;
-use zcash_protocol::consensus::{BranchId, Network};
+use zcash_protocol::consensus::BranchId;
+
+use crate::wallet::network::WalletNetwork;
 
 use super::lwd::start_mempool_stream;
 use super::open_lwd_channel;
@@ -94,7 +96,7 @@ pub struct MempoolTxEvent {
 /// `StreamSink` which is effectively a non-blocking push.
 pub(crate) async fn run_mempool_observer<F>(
     db_path: String,
-    _network: Network,
+    _network: WalletNetwork,
     lightwalletd_url: String,
     cancel: Arc<AtomicBool>,
     emit: F,
@@ -545,4 +547,3 @@ mod tests {
         );
     }
 }
-

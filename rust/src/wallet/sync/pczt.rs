@@ -71,7 +71,8 @@
 use std::convert::Infallible;
 
 use zcash_proofs::prover::LocalTxProver;
-use zcash_protocol::consensus::Network;
+
+use crate::wallet::network::WalletNetwork;
 
 use super::{open_wallet_db, PROPOSAL_STORE};
 
@@ -87,7 +88,7 @@ use super::{open_wallet_db, PROPOSAL_STORE};
 /// explicitly to release the stored proposal.
 pub fn create_pczt_from_proposal(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     proposal_id: u64,
 ) -> Result<Vec<u8>, String> {
     use zcash_client_backend::data_api::wallet::create_pczt_from_proposal as zcb_create_pczt;
@@ -220,7 +221,7 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
 pub async fn extract_and_broadcast_pczt(
     db_path: &str,
     lightwalletd_url: &str,
-    network: Network,
+    network: WalletNetwork,
     pczt_with_proofs_bytes: &[u8],
     pczt_with_signatures_bytes: &[u8],
     spend_params_path: Option<&str>,

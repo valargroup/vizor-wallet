@@ -2,8 +2,8 @@
 //! engine.
 //!
 //! Everything in this module is an `async` call that talks to the
-//! lightwalletd backend via tonic: opening the gRPC channel (over
-//! plain TLS), pulling down the
+//! lightwalletd backend via tonic: opening the gRPC channel (TLS for
+//! `https://`, plaintext for local `http://` regtest), pulling down the
 //! sapling + orchard subtree roots, and streaming compact blocks for
 //! one scan batch. The orchestration loop in `sync_engine::mod`
 //! treats this module as its network edge — it calls the helpers
@@ -31,8 +31,8 @@ use zcash_protocol::consensus::BlockHeight;
 use super::block_source::MemoryBlockSource;
 use super::{elapsed, SyncError, WalletDatabase};
 
-/// Opens a tonic gRPC channel to the given lightwalletd URL over
-/// plain TLS and returns a `CompactTxStreamerClient`.
+/// Opens a tonic gRPC channel to the given lightwalletd URL and
+/// returns a `CompactTxStreamerClient`.
 ///
 /// Ensures the process-wide rustls `CryptoProvider` is installed
 /// before any TLS work. This is normally done by `init_app()` on
@@ -49,13 +49,21 @@ pub(crate) async fn open_lwd_channel(
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
 
-    let channel = Endpoint::from_shared(lightwalletd_url.to_string())
-        .map_err(|e| SyncError::net(format!("invalid URL: {e}")))?
-        .tls_config(ClientTlsConfig::new().with_webpki_roots())
-        .map_err(|e| SyncError::net(format!("TLS error: {e}")))?
-        .connect()
-        .await
-        .map_err(|e| SyncError::net(format!("gRPC connect failed: {e}")))?;
+    let endpoint = Endpoint::from_shared(lightwalletd_url.to_string())
+        .map_err(|e| SyncError::net(format!("invalid URL: {e}")))?;
+    let channel = if lightwalletd_url.starts_with("https://") {
+        endpoint
+            .tls_config(ClientTlsConfig::new().with_webpki_roots())
+            .map_err(|e| SyncError::net(format!("TLS error: {e}")))?
+            .connect()
+            .await
+            .map_err(|e| SyncError::net(format!("gRPC connect failed: {e}")))?
+    } else {
+        endpoint
+            .connect()
+            .await
+            .map_err(|e| SyncError::net(format!("gRPC connect failed: {e}")))?
+    };
     Ok(CompactTxStreamerClient::new(channel))
 }
 

@@ -11,7 +11,9 @@ use zcash_client_sqlite::{AccountUuid, WalletDb, util::SystemClock, wallet::init
 use zcash_keys::keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedSpendingKey};
 use zcash_primitives::block::BlockHash;
 use zip32::fingerprint::SeedFingerprint;
-use zcash_protocol::consensus::{BlockHeight, Network, NetworkUpgrade, Parameters};
+use zcash_protocol::consensus::{BlockHeight, NetworkUpgrade, Parameters};
+
+use crate::wallet::network::WalletNetwork;
 
 /// Generate a new 24-word BIP-39 mnemonic phrase.
 pub fn generate_mnemonic() -> String {
@@ -27,20 +29,16 @@ pub fn mnemonic_to_seed(phrase: &str) -> Result<SecretVec<u8>, String> {
     Ok(SecretVec::new(mnemonic.to_seed("").to_vec()))
 }
 
-/// Parse network string to Network enum.
-pub fn parse_network(network: &str) -> Result<Network, String> {
-    match network {
-        "main" => Ok(Network::MainNetwork),
-        "test" => Ok(Network::TestNetwork),
-        _ => Err(format!("Unknown network: {network}")),
-    }
+/// Parse network string to wallet network enum.
+pub fn parse_network(network: &str) -> Result<WalletNetwork, String> {
+    WalletNetwork::from_str(network).ok_or_else(|| format!("Unknown network: {network}"))
 }
 
 /// Initialize the wallet database schema. Idempotent — safe to call multiple times.
 /// Called without seed to avoid SeedNotRelevant errors when only Imported accounts exist.
 pub fn ensure_db_initialized(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
 ) -> Result<(), String> {
     let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
@@ -53,7 +51,7 @@ pub fn ensure_db_initialized(
 /// The seed is needed so that seed-requiring migrations can run in the future.
 fn ensure_db_initialized_with_seed(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     seed: &SecretVec<u8>,
 ) -> Result<(), String> {
     let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
@@ -66,7 +64,7 @@ fn ensure_db_initialized_with_seed(
     Ok(())
 }
 
-fn make_birthday(network: Network, birthday_height: Option<u64>) -> AccountBirthday {
+fn make_birthday(network: WalletNetwork, birthday_height: Option<u64>) -> AccountBirthday {
     match birthday_height {
         Some(h) => {
             let height = BlockHeight::from_u32(h as u32);
@@ -89,7 +87,7 @@ fn make_birthday(network: Network, birthday_height: Option<u64>) -> AccountBirth
 /// The first account should be created via init_db_and_create_account (Derived).
 pub fn add_account(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     name: &str,
     seed: &SecretVec<u8>,
     birthday_height: Option<u64>,
@@ -137,7 +135,7 @@ pub fn add_account(
 /// for the Dart-side check in AccountNotifier.importKeystoneAccount.
 pub fn import_hardware_account(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     name: &str,
     ufvk_string: &str,
     seed_fingerprint_bytes: &[u8],
@@ -212,7 +210,7 @@ pub fn import_hardware_account(
 /// Returns (account_uuid, unified_address).
 pub fn init_db_and_create_account(
     db_path: &str,
-    network: Network,
+    network: WalletNetwork,
     seed: &SecretVec<u8>,
     birthday_height: Option<u64>,
     name: &str,
@@ -246,7 +244,7 @@ pub struct AccountInfo {
 }
 
 /// List all accounts in the wallet database.
-pub fn list_accounts(db_path: &str, network: Network) -> Result<Vec<AccountInfo>, String> {
+pub fn list_accounts(db_path: &str, network: WalletNetwork) -> Result<Vec<AccountInfo>, String> {
     let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
 
@@ -286,7 +284,7 @@ pub fn parse_account_uuid(s: &str) -> Result<AccountUuid, String> {
 
 /// Resolve account_id: if uuid provided, parse it; otherwise take first account.
 fn resolve_account_id(
-    db: &WalletDb<rusqlite::Connection, Network, SystemClock, OsRng>,
+    db: &WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>,
     account_uuid: Option<&str>,
 ) -> Result<AccountUuid, String> {
     match account_uuid {
@@ -299,7 +297,7 @@ fn resolve_account_id(
 }
 
 /// Get the Unified Address from an existing wallet database.
-pub fn get_address_from_db(db_path: &str, network: Network, account_uuid: Option<&str>) -> Result<String, String> {
+pub fn get_address_from_db(db_path: &str, network: WalletNetwork, account_uuid: Option<&str>) -> Result<String, String> {
     let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
 
@@ -347,7 +345,7 @@ fn orchard_address_request() -> UnifiedAddressRequest {
 }
 
 /// Get the transparent address from an existing wallet database.
-pub fn get_transparent_address_from_db(db_path: &str, network: Network, account_uuid: Option<&str>) -> Result<String, String> {
+pub fn get_transparent_address_from_db(db_path: &str, network: WalletNetwork, account_uuid: Option<&str>) -> Result<String, String> {
     let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
 
@@ -407,8 +405,9 @@ mod tests {
 
     #[test]
     fn test_parse_network() {
-        assert!(matches!(parse_network("main"), Ok(Network::MainNetwork)));
-        assert!(matches!(parse_network("test"), Ok(Network::TestNetwork)));
+        assert!(matches!(parse_network("main"), Ok(WalletNetwork::Main)));
+        assert!(matches!(parse_network("test"), Ok(WalletNetwork::Test)));
+        assert!(matches!(parse_network("regtest"), Ok(WalletNetwork::Regtest)));
         assert!(parse_network("invalid").is_err());
     }
 
@@ -422,7 +421,7 @@ mod tests {
         let seed = mnemonic_to_seed(&phrase).unwrap();
 
         let (_uuid, address) =
-            init_db_and_create_account(db_path_str, Network::MainNetwork, &seed, None, "test").unwrap();
+            init_db_and_create_account(db_path_str, WalletNetwork::Main, &seed, None, "test").unwrap();
 
         // Mainnet unified addresses start with "u1"
         assert!(
@@ -431,7 +430,7 @@ mod tests {
         );
 
         // Verify we can read the address back
-        let address2 = get_address_from_db(db_path_str, Network::MainNetwork, None).unwrap();
+        let address2 = get_address_from_db(db_path_str, WalletNetwork::Main, None).unwrap();
         assert_eq!(address, address2);
     }
 
@@ -445,7 +444,7 @@ mod tests {
         let seed = mnemonic_to_seed(&phrase).unwrap();
 
         let (_, address) =
-            init_db_and_create_account(db_path_str, Network::TestNetwork, &seed, None, "test").unwrap();
+            init_db_and_create_account(db_path_str, WalletNetwork::Test, &seed, None, "test").unwrap();
 
         assert!(
             address.starts_with("utest1"),
@@ -461,13 +460,13 @@ mod tests {
         let temp1 = tempfile::tempdir().unwrap();
         let db1 = temp1.path().join("wallet.db");
         let (_, addr1) =
-            init_db_and_create_account(db1.to_str().unwrap(), Network::MainNetwork, &seed, None, "test")
+            init_db_and_create_account(db1.to_str().unwrap(), WalletNetwork::Main, &seed, None, "test")
                 .unwrap();
 
         let temp2 = tempfile::tempdir().unwrap();
         let db2 = temp2.path().join("wallet.db");
         let (_, addr2) =
-            init_db_and_create_account(db2.to_str().unwrap(), Network::MainNetwork, &seed, None, "test")
+            init_db_and_create_account(db2.to_str().unwrap(), WalletNetwork::Main, &seed, None, "test")
                 .unwrap();
 
         assert_eq!(addr1, addr2, "Same seed should produce same address");
@@ -485,7 +484,7 @@ mod tests {
         let seed = mnemonic_to_seed(&phrase).unwrap();
 
         let (_, address) =
-            init_db_and_create_account(db_path_str, Network::MainNetwork, &seed, None, "test").unwrap();
+            init_db_and_create_account(db_path_str, WalletNetwork::Main, &seed, None, "test").unwrap();
 
         // Decode and verify receiver types
         let za = zcash_address::ZcashAddress::try_from_encoded(&address).unwrap();

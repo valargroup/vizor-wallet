@@ -16,7 +16,9 @@ use zcash_client_sqlite::{
     util::SystemClock,
 };
 use zcash_primitives::block::BlockHash;
-use zcash_protocol::consensus::{BlockHeight, Network};
+use zcash_protocol::consensus::BlockHeight;
+
+use crate::wallet::network::WalletNetwork;
 
 mod pczt;
 mod send;
@@ -49,9 +51,9 @@ pub(crate) use send::ProposalResult;
 #[allow(unused_imports)] // ditto
 pub(crate) use transactions::{PendingTxInfo, TransactionInfo, TxDataRequest, WalletBalance};
 
-pub(super) type WalletDatabase = WalletDb<rusqlite::Connection, Network, SystemClock, OsRng>;
+pub(super) type WalletDatabase = WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>;
 
-pub(super) fn open_wallet_db(db_path: &str, network: Network) -> Result<WalletDatabase, String> {
+pub(super) fn open_wallet_db(db_path: &str, network: WalletNetwork) -> Result<WalletDatabase, String> {
     WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))
 }
@@ -78,14 +80,14 @@ fn get_first_account_id(db: &WalletDatabase) -> Result<zcash_client_sqlite::Acco
 
 // ======================== Sync ========================
 
-pub fn update_chain_tip(db_path: &str, network: Network, height: u64) -> Result<(), String> {
+pub fn update_chain_tip(db_path: &str, network: WalletNetwork, height: u64) -> Result<(), String> {
     let mut db = open_wallet_db(db_path, network)?;
     db.update_chain_tip(BlockHeight::from_u32(height as u32))
         .map_err(|e| format!("Failed to update chain tip: {e}"))
 }
 
 /// Get next subtree indices to know where to start downloading from.
-pub fn get_next_subtree_indices(db_path: &str, network: Network) -> Result<(u64, u64), String> {
+pub fn get_next_subtree_indices(db_path: &str, network: WalletNetwork) -> Result<(u64, u64), String> {
     let db = open_wallet_db(db_path, network)?;
     let summary = db.get_wallet_summary(ConfirmationsPolicy::default()).map_err(|e| format!("{e}"))?;
     match summary {
@@ -95,7 +97,7 @@ pub fn get_next_subtree_indices(db_path: &str, network: Network) -> Result<(u64,
 }
 
 pub fn put_sapling_subtree_roots(
-    db_path: &str, network: Network, start_index: u64, roots: &[(u64, Vec<u8>)],
+    db_path: &str, network: WalletNetwork, start_index: u64, roots: &[(u64, Vec<u8>)],
 ) -> Result<(), String> {
     let mut db = open_wallet_db(db_path, network)?;
     let parsed: Vec<_> = roots.iter().map(|(h, bytes)| {
@@ -111,7 +113,7 @@ pub fn put_sapling_subtree_roots(
 }
 
 pub fn put_orchard_subtree_roots(
-    db_path: &str, network: Network, start_index: u64, roots: &[(u64, Vec<u8>)],
+    db_path: &str, network: WalletNetwork, start_index: u64, roots: &[(u64, Vec<u8>)],
 ) -> Result<(), String> {
     let mut db = open_wallet_db(db_path, network)?;
     let parsed: Vec<_> = roots.iter().map(|(h, bytes)| {
@@ -128,7 +130,7 @@ pub fn put_orchard_subtree_roots(
 
 pub(crate) struct ScanRangeInfo { pub start: u64, pub end: u64, pub priority: u8 }
 
-pub fn suggest_scan_ranges(db_path: &str, network: Network) -> Result<Vec<ScanRangeInfo>, String> {
+pub fn suggest_scan_ranges(db_path: &str, network: WalletNetwork) -> Result<Vec<ScanRangeInfo>, String> {
     let db = open_wallet_db(db_path, network)?;
     let ranges = db.suggest_scan_ranges().map_err(|e| format!("{e}"))?;
     Ok(ranges.into_iter()
@@ -156,7 +158,7 @@ pub fn write_block_metadata(cache_path: &str, blocks: &[(u64, Vec<u8>, u32, u32,
 }
 
 pub fn scan_blocks(
-    db_path: &str, cache_path: &str, network: Network, from_height: u64,
+    db_path: &str, cache_path: &str, network: WalletNetwork, from_height: u64,
     ts_network: &str, ts_height: u64, ts_hash: &str, ts_time: u32, ts_sapling: &str, ts_orchard: &str,
     limit: u64,
 ) -> Result<u64, String> {
@@ -179,7 +181,7 @@ pub fn scan_blocks(
 
 pub(crate) struct SyncProgress { pub scanned_height: u64, pub chain_tip_height: u64, pub is_syncing: bool }
 
-pub fn get_sync_progress(db_path: &str, network: Network) -> Result<SyncProgress, String> {
+pub fn get_sync_progress(db_path: &str, network: WalletNetwork) -> Result<SyncProgress, String> {
     let db = open_wallet_db(db_path, network)?;
     match db.get_wallet_summary(ConfirmationsPolicy::default()).map_err(|e| format!("{e}"))? {
         Some(s) => Ok(SyncProgress {
@@ -193,7 +195,7 @@ pub fn get_sync_progress(db_path: &str, network: Network) -> Result<SyncProgress
 
 // ======================== Rewind ========================
 
-pub fn rewind_to_height(db_path: &str, network: Network, height: u64) -> Result<u64, String> {
+pub fn rewind_to_height(db_path: &str, network: WalletNetwork, height: u64) -> Result<u64, String> {
     let mut db = open_wallet_db(db_path, network)?;
     let result = db.truncate_to_height(BlockHeight::from_u32(height as u32)).map_err(|e| format!("{e}"))?;
     Ok(u32::from(result) as u64)
@@ -228,7 +230,7 @@ pub(super) struct StoredProposal {
         StandardFeeRule,
         zcash_client_sqlite::ReceivedNoteId,
     >,
-    pub network: Network,
+    pub network: WalletNetwork,
     pub account_id: AccountUuid,
 }
 
@@ -303,7 +305,7 @@ mod tests {
         let id = unique_proposal_id();
         let result = create_pczt_from_proposal(
             "/nonexistent/path/that/should/not/exist.db",
-            Network::MainNetwork,
+            WalletNetwork::Main,
             id,
         );
 
@@ -327,7 +329,7 @@ mod tests {
         let id = unique_proposal_id();
         let _ = create_pczt_from_proposal(
             "/nonexistent/path/that/should/not/exist.db",
-            Network::MainNetwork,
+            WalletNetwork::Main,
             id,
         );
         discard_proposal(id); // cleanup must not panic
