@@ -13,9 +13,8 @@ use zcash_keys::{
     keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedSpendingKey},
 };
 use zcash_primitives::block::BlockHash;
-use zip32::fingerprint::SeedFingerprint;
 use zcash_protocol::consensus::{BlockHeight, NetworkConstants, NetworkUpgrade, Parameters};
-use zcash_primitives::legacy::keys::IncomingViewingKey as _;
+use zip32::fingerprint::SeedFingerprint;
 
 use crate::wallet::network::WalletNetwork;
 
@@ -355,27 +354,18 @@ pub fn get_transparent_address_from_db(db_path: &str, network: WalletNetwork, ac
 
     let account_id = resolve_account_id(&db, account_uuid)?;
 
-    let account = db
-        .get_account(account_id)
-        .map_err(|e| format!("Failed to get account: {e}"))?
-        .ok_or("Account not found")?;
-
-    let ufvk = account
-        .ufvk()
-        .ok_or("Account does not have a UFVK")?;
-
-    let transparent = ufvk
+    let current_ua = db
+        .get_last_generated_address_matching(account_id, UnifiedAddressRequest::AllAvailableKeys)
+        .map_err(|e| format!("Failed to get current generated address: {e}"))?
+        .ok_or_else(|| "No tracked transparent address available".to_string())?;
+    let taddr = current_ua
         .transparent()
-        .ok_or("Account does not have a transparent receiver")?;
-    let tivk = transparent
-        .derive_external_ivk()
-        .map_err(|e| format!("Failed to derive transparent IVK: {e}"))?;
-    let (taddr, _) = tivk.default_address();
+        .ok_or_else(|| "Current generated address does not include a transparent receiver".to_string())?;
 
     Ok(encode_transparent_address(
         &network.b58_pubkey_address_prefix(),
         &network.b58_script_address_prefix(),
-        &taddr,
+        taddr,
     ))
 }
 
