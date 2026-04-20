@@ -26,5 +26,24 @@ Future<void> main() async {
   if (isDesktopLayoutPlatform) {
     await showDesktopWindow();
   }
-  runApp(const DesktopWindowTitlebarSafeArea(child: WidgetbookApp()));
+  runApp(
+    DesktopWindowTitlebarSafeArea(
+      child: GestureDetector(
+        onTap: _unfocusPrimaryLeaf,
+        behavior: HitTestBehavior.translucent,
+        child: WidgetbookApp(),
+      ),
+    ),
+  );
+}
+
+void _unfocusPrimaryLeaf() {
+  // Leaf-only: skip when the primary focus is a `FocusScopeNode` rather than
+  // a concrete `FocusNode`. Unfocusing the scope itself strips the scope's
+  // "most-recently-focused child" memory, which leaves the next Tab with no
+  // deterministic starting point.
+  final primary = FocusManager.instance.primaryFocus;
+  if (primary != null && primary is! FocusScopeNode) {
+    primary.unfocus();
+  }
 }
