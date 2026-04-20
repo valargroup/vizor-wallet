@@ -2,6 +2,7 @@
 // widgetbook is a dev-only dependency; this entry point is not part of the
 // production app bundle.
 
+import 'package:desktop_window_bootstrap/desktop_window_bootstrap.dart';
 import 'package:flutter/widgets.dart';
 
 import 'src/core/layout/app_layout.dart';
@@ -25,5 +26,5 @@ Future<void> main() async {
   if (isDesktopLayoutPlatform) {
     await showDesktopWindow();
   }
-  runApp(const WidgetbookApp());
+  runApp(const DesktopWindowTitlebarSafeArea(child: WidgetbookApp()));
 }
