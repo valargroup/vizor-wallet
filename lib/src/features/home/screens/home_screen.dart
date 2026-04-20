@@ -440,9 +440,11 @@ class _HomeBalanceCard extends StatelessWidget {
     final displayedBalance = isBalanceVisible
         ? '$balanceText zec'
         : '•••••• zec';
-    final patternColor = AppTheme.of(context) == AppThemeData.dark
-        ? colors.text.secondary.withValues(alpha: 0.24)
-        : colors.text.primary.withValues(alpha: 0.12);
+    final isDark = AppTheme.of(context) == AppThemeData.dark;
+    const patternWidth = 896.0;
+    const patternHeight = 1007.0;
+    const patternLeft = -700.0;
+    const patternTop = -405.0;
 
     return SizedBox(
       height: 196,
@@ -460,20 +462,61 @@ class _HomeBalanceCard extends StatelessWidget {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: ColorFiltered(
-                          colorFilter: ColorFilter.mode(
-                            patternColor,
-                            BlendMode.srcIn,
-                          ),
-                          child: Image.asset(
-                            'assets/illustrations/home_balance_card_pattern.png',
-                            fit: BoxFit.cover,
-                            width: 604,
-                            height: 196,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: isDark
+                                ? [
+                                    colors.background.base.withValues(
+                                      alpha: 0.90,
+                                    ),
+                                    colors.background.base.withValues(
+                                      alpha: 0.82,
+                                    ),
+                                    colors.background.base.withValues(
+                                      alpha: 0.48,
+                                    ),
+                                    colors.background.base.withValues(
+                                      alpha: 0.00,
+                                    ),
+                                  ]
+                                : [
+                                    colors.background.base.withValues(
+                                      alpha: 0.98,
+                                    ),
+                                    colors.background.base.withValues(
+                                      alpha: 0.95,
+                                    ),
+                                    colors.background.base.withValues(
+                                      alpha: 0.70,
+                                    ),
+                                    colors.background.base.withValues(
+                                      alpha: 0.00,
+                                    ),
+                                  ],
+                            stops: const [0.0, 0.28, 0.56, 0.86],
                           ),
                         ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: patternLeft,
+                            top: patternTop,
+                            width: patternWidth,
+                            height: patternHeight,
+                            child: Image.asset(
+                              isDark
+                                  ? 'assets/illustrations/home_balance_card_pattern_dark.png'
+                                  : 'assets/illustrations/home_balance_card_pattern_light.png',
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Positioned.fill(
