@@ -24,6 +24,10 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function parseArgs(argv) {
   const out = { scale: 1, format: 'png', absoluteBounds: false };
   for (let i = 2; i < argv.length; i++) {
@@ -57,7 +61,7 @@ function printHelp() {
   );
 }
 
-function httpGet(url, headers = {}) {
+function httpGet(url, headers = {}, retries = 4) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, { headers }, (res) => {
       // `/v1/images` returns 200 with a JSON body; the signed S3 URL
@@ -65,7 +69,20 @@ function httpGet(url, headers = {}) {
       // reasonably expect is on CDN fetches — follow once.
       if (res.statusCode === 301 || res.statusCode === 302) {
         res.resume();
-        return resolve(httpGet(res.headers.location, headers));
+        return resolve(httpGet(res.headers.location, headers, retries));
+      }
+      if (res.statusCode === 429) {
+        res.resume();
+        if (retries <= 0) {
+          return reject(new Error(`HTTP 429 for ${url}`));
+        }
+        const retryAfter = Number(res.headers['retry-after']);
+        const delayMs = Number.isFinite(retryAfter)
+            ? retryAfter * 1000
+            : (5 - retries) * 1000;
+        return resolve(
+          sleep(delayMs).then(() => httpGet(url, headers, retries - 1)),
+        );
       }
       if (res.statusCode !== 200) {
         res.resume();

@@ -9,32 +9,56 @@ import '../theme/app_theme.dart';
 /// re-export only touches this file; call sites reference
 /// `AppIcons.book` instead of a string literal.
 ///
-/// Names are the Figma Icons page node names, normalized to snake_case
-/// and de-typoed (`cehvron-*` → `chevron_*`, `zcashh` → `zcash`). The
-/// Figma side still has the typos; raise the rename there so the
-/// two stay in sync.
+/// Names follow the curated export set under `assets/icons/`: mostly the
+/// Figma Icons page node names normalized to snake_case, with a few
+/// compatibility-preserving aliases where older app code already shipped
+/// stable names (`import_wallet`, `shield_keyhole`, `arrow_upward`, etc.).
 abstract final class AppIcons {
   static const addNew = 'add_new';
+  static const arrowBack = 'arrow_back';
+  static const arrowBottomLeft = 'arrow_bottom_left';
+  static const arrowDown = 'arrow_down';
+  static const arrowDownCircle = 'arrow_down_circle';
   static const arrowDownward = 'arrow_downward';
   static const arrowForwardIos = 'arrow_forward_ios';
+  static const arrowTopRight = 'arrow_top_right';
   static const arrowUpward = 'arrow_upward';
   static const block = 'block';
   static const book = 'book';
+  static const check = 'check';
   static const chevronBackward = 'chevron_backward';
   static const chevronForward = 'chevron_forward';
+  static const collapsed = 'collapsed';
+  static const cog = 'cog';
   static const copy = 'copy';
+  static const cross = 'cross';
   static const crystalBall = 'crystal_ball';
   static const eye = 'eye';
+  static const eyeClosed = 'eye_closed';
+  static const expand = 'expand';
   static const help = 'help';
+  static const history = 'history';
   static const importWallet = 'import_wallet';
   static const key = 'key';
   static const link = 'link';
+  static const loader = 'loader';
+  static const lock = 'lock';
+  static const logOut = 'log_out';
+  static const plane = 'plane';
+  static const qr = 'qr';
+  static const renew = 'renew';
+  static const scroll = 'scroll';
   static const shieldKeyhole = 'shield_keyhole';
+  static const shieldKeyholeOutline = 'shield_keyhole_outline';
   static const skip = 'skip';
+  static const skull = 'skull';
   static const time = 'time';
+  static const unlock = 'unlock';
+  static const users = 'users';
   static const wallet = 'wallet';
   static const warning = 'warning';
   static const zcash = 'zcash';
+  static const zcashCurrency = 'zcash_currency';
 }
 
 /// Renders a Figma-exported icon from `assets/icons/<name>.svg`.
@@ -84,9 +108,7 @@ class AppIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final resolved =
-        color ??
-        IconTheme.of(context).color ??
-        context.colors.icon.regular;
+        color ?? IconTheme.of(context).color ?? context.colors.icon.regular;
     return SvgPicture.asset(
       'assets/icons/$name.svg',
       width: size,
