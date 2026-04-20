@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../main.dart' show log;
 import 'providers/account_models.dart';
+import 'rust/api/sync.dart' as rust_sync;
 import 'rust/api/wallet.dart' as rust_wallet;
 
 const _accountsKey = 'zcash_accounts';
@@ -21,19 +22,58 @@ class AppBootstrapState {
   const AppBootstrapState({
     required this.initialLocation,
     required this.initialAccountState,
+    required this.initialSyncSnapshot,
     required this.network,
   });
 
   final String initialLocation;
   final AccountState initialAccountState;
+  final AppSyncSnapshot initialSyncSnapshot;
   final String network;
 
   bool get hasWallet => initialAccountState.hasAccounts;
 
-  static const empty = AppBootstrapState(
+  static final empty = AppBootstrapState(
     initialLocation: '/welcome',
     initialAccountState: AccountState(),
+    initialSyncSnapshot: AppSyncSnapshot.empty,
     network: 'main',
+  );
+}
+
+class AppSyncSnapshot {
+  const AppSyncSnapshot({
+    required this.scannedHeight,
+    required this.chainTipHeight,
+    required this.percentage,
+    required this.transparentBalance,
+    required this.saplingBalance,
+    required this.orchardBalance,
+    required this.spendableBalance,
+    required this.totalBalance,
+    required this.recentTransactions,
+  });
+
+  final int scannedHeight;
+  final int chainTipHeight;
+  final double percentage;
+  final BigInt transparentBalance;
+  final BigInt saplingBalance;
+  final BigInt orchardBalance;
+  final BigInt spendableBalance;
+  final BigInt totalBalance;
+  final List<rust_sync.TransactionInfo> recentTransactions;
+
+  static final empty = AppSyncSnapshot(
+    scannedHeight: 0,
+    chainTipHeight: 0,
+    percentage: 0,
+    transparentBalance: BigInt.zero,
+    saplingBalance: BigInt.zero,
+    orchardBalance: BigInt.zero,
+    spendableBalance: BigInt.zero,
+    totalBalance: BigInt.zero,
+    recentTransactions: [],
   );
 }
 
@@ -82,6 +122,17 @@ Future<AppBootstrapState> loadAppBootstrap() async {
         ? null
         : rustAddressesByUuid[activeAccountUuid];
     final hasWallet = accounts.isNotEmpty;
+    var initialSyncSnapshot = AppSyncSnapshot.empty;
+
+    if (hasWallet &&
+        activeAccountUuid != null &&
+        rust_wallet.walletExists(dbPath: dbPath)) {
+      initialSyncSnapshot = await _loadInitialSyncSnapshot(
+        dbPath: dbPath,
+        network: network,
+        accountUuid: activeAccountUuid,
+      );
+    }
 
     log(
       'bootstrap: hasWallet=$hasWallet, initialLocation=${hasWallet ? '/home' : '/welcome'}',
@@ -94,6 +145,7 @@ Future<AppBootstrapState> loadAppBootstrap() async {
         activeAccountUuid: activeAccountUuid,
         activeAddress: activeAddress,
       ),
+      initialSyncSnapshot: initialSyncSnapshot,
       network: network,
     );
   } catch (e) {
@@ -129,4 +181,53 @@ String? _resolveActiveUuid(
 Future<String> _getDbPath() async {
   final dir = await getApplicationDocumentsDirectory();
   return '${dir.path}${Platform.pathSeparator}zcash_wallet.db';
+}
+
+Future<AppSyncSnapshot> _loadInitialSyncSnapshot({
+  required String dbPath,
+  required String network,
+  required String accountUuid,
+}) async {
+  try {
+    final syncStatus = await rust_sync.getSyncStatus(
+      dbPath: dbPath,
+      network: network,
+    );
+    final balance = await rust_sync.getBalance(
+      dbPath: dbPath,
+      network: network,
+      accountUuid: accountUuid,
+    );
+    final recentTransactions = await rust_sync.getTransactionHistory(
+      dbPath: dbPath,
+      network: network,
+      limit: 10,
+      accountUuid: accountUuid,
+    );
+    final scannedHeight = syncStatus.scannedHeight.toInt();
+    final chainTipHeight = syncStatus.chainTipHeight.toInt();
+    final percentage = chainTipHeight == 0
+        ? 0.0
+        : (scannedHeight / chainTipHeight).clamp(0.0, 1.0);
+
+    log(
+      'bootstrap: loaded initial sync snapshot '
+      '(scanned=$scannedHeight, tip=$chainTipHeight, txs=${recentTransactions.length})',
+    );
+
+    return AppSyncSnapshot(
+      scannedHeight: scannedHeight,
+      chainTipHeight: chainTipHeight,
+      percentage: percentage,
+      transparentBalance: balance.transparent,
+      saplingBalance: balance.sapling,
+      orchardBalance: balance.orchard,
+      spendableBalance: balance.spendable,
+      totalBalance: balance.total,
+      recentTransactions: recentTransactions,
+    );
+  } catch (e) {
+    log('bootstrap: failed to load initial sync snapshot: $e');
+    return AppSyncSnapshot.empty;
+  }
 }

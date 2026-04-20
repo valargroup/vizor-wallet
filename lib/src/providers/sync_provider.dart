@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io' show Platform;
 
 import '../../main.dart' show log;
+import '../app_bootstrap.dart';
 import '../core/config/network_config.dart';
 import '../rust/api/sync.dart' as rust_sync;
 import '../rust/api/wallet.dart' as rust_wallet;
@@ -113,6 +114,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
   @override
   Future<SyncState> build() async {
+    final bootstrap = ref.watch(appBootstrapProvider);
     _bgDelegate = BackgroundSyncDelegate.create();
     _bgDelegate.setupListeners(
       onStopRequested: () => stopSync(),
@@ -176,7 +178,21 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       });
     }
 
-    return SyncState();
+    final initial = bootstrap.initialSyncSnapshot;
+    return SyncState(
+      isSyncing: false,
+      isBackgroundMode: false,
+      percentage: initial.percentage,
+      scannedHeight: initial.scannedHeight,
+      chainTipHeight: initial.chainTipHeight,
+      transparentBalance: initial.transparentBalance,
+      saplingBalance: initial.saplingBalance,
+      orchardBalance: initial.orchardBalance,
+      spendableBalance: initial.spendableBalance,
+      totalBalance: initial.totalBalance,
+      recentTransactions: initial.recentTransactions,
+      phase: '',
+    );
   }
 
   // ======================== Sync Control ========================
