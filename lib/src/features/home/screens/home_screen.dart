@@ -1,11 +1,14 @@
-import 'dart:io' show Platform, exit;
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' show CircularProgressIndicator, Theme;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
+import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_layout.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_icon.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/wallet_provider.dart';
@@ -20,45 +23,26 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _canBackgroundSync = false;
-  int _currentNavIndex = 0;
+  bool _isBalanceVisible = true;
 
   @override
   void initState() {
     super.initState();
     _checkBackgroundSyncAvailability();
-  }
-
-  Future<void> _resetWallet(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reset Wallet'),
-        content: const Text('Delete all wallet data (DB + keychain)? This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reset', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    // 1. Stop sync and wait for Rust to finish
-    ref.read(syncProvider.notifier).stopSync();
-    var waited = 0;
-    while (rust_sync.isSyncRunning() && waited < 5000) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      waited += 100;
-    }
-    // 2. Delete DB + keychain + reset state
-    await ref.read(accountProvider.notifier).resetWallet();
-    // 3. Exit app — next launch starts fresh
-    exit(0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(appLayoutProvider.notifier).setMode(AppLayoutMode.large);
+    });
   }
 
   Future<void> _checkBackgroundSyncAvailability() async {
     final available = await SyncNotifier.isBackgroundSyncAvailable();
     log('[zcash] BackgroundSync available: $available');
-    if (mounted) setState(() => _canBackgroundSync = available);
+    if (mounted) {
+      setState(() {
+        _canBackgroundSync = available;
+      });
+    }
   }
 
   String _formatZec(BigInt zatoshi) {
@@ -66,624 +50,195 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final whole = zatoshi ~/ BigInt.from(100000000);
     final frac = (zatoshi % BigInt.from(100000000)).toString().padLeft(8, '0');
     if (whole == BigInt.zero && int.parse(frac) < 1000000) {
-      return '0.$frac'; // < 0.01: show full 8 digits
+      return '0.$frac';
     }
-    return '$whole.${frac.substring(0, 2)}'; // >= 0.01: show 2 decimals
+    return '$whole.${frac.substring(0, 2)}';
+  }
+
+  String _formatSignedZec(BigInt zatoshi) {
+    final isPositive = zatoshi >= BigInt.zero;
+    final abs = zatoshi.abs();
+    final whole = abs ~/ BigInt.from(100000000);
+    final frac = (abs % BigInt.from(100000000)).toString().padLeft(8, '0');
+    final digits = whole == BigInt.zero && int.parse(frac) < 1000000
+        ? frac
+        : frac.substring(0, 2);
+    final sign = isPositive ? '+' : '-';
+    return '$sign$whole.$digits ZEC';
+  }
+
+  void _toggleBalanceVisibility() {
+    setState(() {
+      _isBalanceVisible = !_isBalanceVisible;
+    });
+  }
+
+  String _groupLabelForTx(rust_sync.TransactionInfo tx) {
+    if (tx.minedHeight == BigInt.zero && !tx.expiredUnmined) {
+      return 'Today';
+    }
+
+    final date = DateTime.fromMillisecondsSinceEpoch(
+      tx.blockTime.toInt() * 1000,
+    );
+    final now = DateTime.now();
+    final isToday =
+        date.year == now.year && date.month == now.month && date.day == now.day;
+    if (isToday) return 'Today';
+    return '${_monthName(date.month)}, ${date.day}';
   }
 
   @override
   Widget build(BuildContext context) {
     final walletAsync = ref.watch(walletProvider);
-    final syncState = ref.watch(syncProvider);
+    final syncAsync = ref.watch(syncProvider);
+    final accountAsync = ref.watch(accountProvider);
+    final matchedLocation = GoRouterState.of(context).matchedLocation;
+    final accountName = accountAsync.value?.activeAccount?.name ?? 'Username';
+    final sync = syncAsync.value ?? SyncState();
 
-    return Scaffold(
-      body: walletAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Error: $err')),
-        data: (wallet) => _buildBody(
-          context,
-          wallet,
-          syncState.value ?? SyncState(),
-        ),
+    return AppDesktopShell(
+      sidebar: _HomeSidebar(
+        accountName: accountName,
+        matchedLocation: matchedLocation,
       ),
-      bottomNavigationBar: _buildBottomNav(context),
-    );
-  }
-
-  Widget _buildBody(BuildContext context, WalletState wallet, SyncState sync) {
-    return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: _buildTopBar(context)),
-          SliverToBoxAdapter(child: _buildHeroBalance(context, sync)),
-          SliverToBoxAdapter(child: _buildActionButtons(context)),
-          SliverToBoxAdapter(child: _buildActivityHeader(context)),
-          if (sync.error != null)
-            SliverToBoxAdapter(child: _buildSyncError(context, sync)),
-          if (sync.isSyncing && sync.error == null)
-            SliverToBoxAdapter(child: _buildSyncItem(context, sync)),
-          if (_canBackgroundSync && sync.isSyncing && !sync.isBackgroundMode && sync.error == null)
-            SliverToBoxAdapter(child: _buildBackgroundSyncButton(context)),
-          if (sync.isBackgroundMode && sync.error == null)
-            SliverToBoxAdapter(child: _buildStopBackgroundSyncButton(context)),
-          SliverToBoxAdapter(child: _buildActivityPlaceholder(context, sync)),
-          // Recent transactions
-          if (sync.recentTransactions.isNotEmpty)
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildTransactionItem(context, sync.recentTransactions[index]),
-                childCount: sync.recentTransactions.length,
-              ),
-            ),
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBar(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final accountState = ref.watch(accountProvider).value;
-    final accountName = accountState?.activeAccount?.name ?? 'Zcash';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Flexible(
-            child: GestureDetector(
-              onTap: () => context.push('/accounts'),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.shield, color: colors.onSurface.withValues(alpha: 0.8), size: 22),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      accountName,
-                      overflow: TextOverflow.ellipsis,
-                      style: text.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.keyboard_arrow_down, color: colors.onSurfaceVariant, size: 20),
-                ],
-              ),
-            ),
-          ),
-          Row(
-            children: [
-              if (kDebugMode && Platform.isMacOS)
-                IconButton(
-                  icon: Icon(Icons.delete_forever, color: colors.error),
-                  onPressed: () => _resetWallet(context),
-                ),
-              if (isDesktopLayoutPlatform) _buildLayoutToggle(context),
-              IconButton(
-                icon: Icon(Icons.settings, color: colors.onSurface),
-                onPressed: () => context.push('/settings'),
-              ),
-              IconButton(
-                icon: Icon(Icons.qr_code_scanner, color: colors.onSurface),
-                onPressed: () {},
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLayoutToggle(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final mode = ref.watch(appLayoutProvider).mode;
-    final isLarge = mode == AppLayoutMode.large;
-    return IconButton(
-      tooltip: isLarge ? 'Switch to compact layout' : 'Switch to tall layout',
-      icon: Icon(
-        isLarge ? Icons.unfold_less : Icons.unfold_more,
-        color: colors.onSurface,
-      ),
-      onPressed: () => ref.read(appLayoutProvider.notifier).toggle(),
-    );
-  }
-
-  Widget _buildHeroBalance(BuildContext context, SyncState sync) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          // Shielded Balance badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: colors.tertiary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.verified_user, size: 14, color: colors.tertiary),
-                const SizedBox(width: 6),
-                Text(
-                  'SHIELDED BALANCE',
-                  style: text.labelSmall?.copyWith(color: colors.tertiary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Balance
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  _formatZec(sync.totalBalance),
-                  style: text.displayLarge,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'ZEC',
-                  style: text.displayMedium?.copyWith(color: colors.secondary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 48),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          Expanded(
-            child: _ActionButton(
-              icon: Icons.north_east,
-              label: 'SEND',
-              filled: true,
-              onTap: () => context.push('/send'),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _ActionButton(
-              icon: Icons.south_west,
-              label: 'RECEIVE',
-              filled: false,
-              onTap: () => context.push('/receive'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSyncError(BuildContext context, SyncState sync) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-      child: GestureDetector(
-        onTap: () => ref.read(syncProvider.notifier).startSync(),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: colors.error.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Icon(Icons.error_outline, color: colors.error, size: 24),
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Sync Error', style: text.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Tap to retry',
-                    style: text.labelSmall?.copyWith(color: colors.outline),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBackgroundSyncButton(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      child: GestureDetector(
-        onTap: () => ref.read(syncProvider.notifier).enableBackgroundSync(),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: colors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.cloud_sync, size: 16, color: colors.secondary),
-              const SizedBox(width: 8),
-              Text(
-                'SYNC IN BACKGROUND',
-                style: text.labelSmall?.copyWith(color: colors.secondary),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStopBackgroundSyncButton(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      child: GestureDetector(
-        onTap: () => ref.read(syncProvider.notifier).disableBackgroundSync(),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: colors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.sync_disabled, size: 16, color: colors.secondary),
-              const SizedBox(width: 8),
-              Text(
-                'STOP BACKGROUND SYNC',
-                style: text.labelSmall?.copyWith(color: colors.secondary),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActivityHeader(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 40, 24, 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('Recent Activity', style: text.titleLarge),
-          GestureDetector(
-            onTap: () => context.push('/history'),
+      pane: AppDesktopPane(
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        child: walletAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
             child: Text(
-              'VIEW ALL',
-              style: text.labelLarge?.copyWith(color: colors.secondary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSyncItem(BuildContext context, SyncState sync) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final pct = (sync.percentage * 100).toStringAsFixed(0);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerLow,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Icon(Icons.sync, color: colors.secondary, size: 24),
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Syncing...', style: text.titleMedium),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$pct%',
-                      style: text.labelSmall?.copyWith(color: colors.outline),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                FractionallySizedBox(
-                  widthFactor: 0.66,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: sync.percentage.clamp(0.0, 1.0),
-                      minHeight: 4,
-                      backgroundColor: colors.surfaceContainerHigh,
-                      valueColor: AlwaysStoppedAnimation(colors.secondary),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActivityPlaceholder(BuildContext context, SyncState sync) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-
-    if (!sync.isSyncing) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: colors.tertiary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Icon(Icons.check_circle, color: colors.tertiary, size: 24),
+              'Error: $err',
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.colors.text.warning,
               ),
             ),
-            const SizedBox(width: 20),
-            Text('Wallet Synchronized', style: text.titleMedium),
-          ],
+          ),
+          data: (_) => _HomePane(
+            sync: sync,
+            canBackgroundSync: _canBackgroundSync,
+            isBalanceVisible: _isBalanceVisible,
+            balanceText: _formatZec(sync.totalBalance),
+            formatSignedZec: _formatSignedZec,
+            groupLabelForTx: _groupLabelForTx,
+            onToggleBalanceVisibility: _toggleBalanceVisibility,
+            onSyncInBackground: () =>
+                ref.read(syncProvider.notifier).enableBackgroundSync(),
+            onStopBackgroundSync: () =>
+                ref.read(syncProvider.notifier).disableBackgroundSync(),
+            onRetrySync: () => ref.read(syncProvider.notifier).startSync(),
+          ),
         ),
-      );
-    }
-
-    return const SizedBox.shrink();
-  }
-
-  Widget _buildTransactionItem(BuildContext context, rust_sync.TransactionInfo tx) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final isIncoming = tx.accountBalanceDelta >= 0;
-    final isPending = tx.minedHeight == BigInt.zero && !tx.expiredUnmined;
-    final isExpired = tx.expiredUnmined;
-    final zec = tx.accountBalanceDelta.abs() / 100000000;
-    final sign = isIncoming ? '+' : '-';
-    final amount = '$sign${zec.toStringAsFixed(zec < 0.01 ? 8 : 3)} ZEC';
-
-    // Status-dependent styling
-    final IconData icon;
-    final Color iconColor;
-    final Color iconBgColor;
-    final String label;
-    final String dateStr;
-    final String statusLabel;
-    final Color amountColor;
-
-    if (isExpired) {
-      icon = Icons.cancel_outlined;
-      iconColor = colors.error;
-      iconBgColor = colors.error.withValues(alpha: 0.1);
-      label = isIncoming ? 'Receive Expired' : 'Send Expired';
-      dateStr = 'Transaction expired';
-      statusLabel = 'EXPIRED';
-      amountColor = colors.outline;
-    } else if (isPending) {
-      icon = Icons.schedule;
-      iconColor = colors.secondary;
-      iconBgColor = colors.secondary.withValues(alpha: 0.1);
-      label = isIncoming ? 'Receiving...' : 'Sending...';
-      dateStr = 'Waiting for confirmation';
-      statusLabel = 'PENDING';
-      amountColor = colors.outline;
-    } else {
-      icon = isIncoming ? Icons.check_circle : Icons.arrow_outward;
-      iconColor = isIncoming ? colors.tertiary : colors.secondary;
-      iconBgColor = colors.surfaceContainerLow;
-      label = isIncoming ? 'Received' : 'Sent';
-      final date = DateTime.fromMillisecondsSinceEpoch(tx.blockTime.toInt() * 1000);
-      dateStr = '${_monthName(date.month)} ${date.day}, ${date.year} \u2022 '
-          '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-      statusLabel = isIncoming ? 'SHIELDED' : 'EXTERNAL';
-      amountColor = isIncoming ? colors.tertiary : colors.onSurface;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              shape: BoxShape.circle,
-            ),
-            child: isPending
-                ? Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: iconColor,
-                    ),
-                  )
-                : Center(child: Icon(icon, color: iconColor, size: 24)),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: text.titleMedium?.copyWith(
-                    color: isExpired ? colors.outline : null,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  dateStr,
-                  style: text.bodySmall?.copyWith(color: colors.outline),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                amount,
-                style: text.titleMedium?.copyWith(
-                  color: amountColor,
-                  decoration: isExpired ? TextDecoration.lineThrough : null,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                statusLabel,
-                style: text.labelSmall?.copyWith(
-                  color: isExpired ? colors.error : colors.outline,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
 
   static String _monthName(int month) {
-    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return months[month];
-  }
-
-  Widget _buildBottomNav(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surface.withValues(alpha: 0.9),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _BottomNavItem(
-                icon: Icons.account_balance_wallet,
-                label: 'WALLET',
-                isActive: _currentNavIndex == 0,
-                onTap: () => setState(() => _currentNavIndex = 0),
-              ),
-              _BottomNavItem(
-                icon: Icons.history,
-                label: 'HISTORY',
-                isActive: _currentNavIndex == 1,
-                onTap: () {
-                  setState(() => _currentNavIndex = 1);
-                  context.push('/history');
-                },
-              ),
-              _BottomNavItem(
-                icon: Icons.settings,
-                label: 'SETTINGS',
-                isActive: _currentNavIndex == 2,
-                onTap: () => setState(() => _currentNavIndex = 2),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool filled;
-  final VoidCallback onTap;
-
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.filled,
-    required this.onTap,
+class _HomeSidebar extends StatelessWidget {
+  const _HomeSidebar({
+    required this.accountName,
+    required this.matchedLocation,
   });
+
+  final String accountName;
+  final String matchedLocation;
+
+  bool _matches(String routePath) =>
+      matchedLocation == routePath || matchedLocation.startsWith('$routePath/');
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final bg = filled ? colors.primary : colors.surfaceContainerHigh;
-    final fg = filled ? colors.onPrimary : colors.onSurface;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
+    return AppDesktopSidebarSurface(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xs),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(icon, size: 20, color: fg),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: text.labelMedium?.copyWith(color: fg),
+            AppSidebarUserButton(
+              label: accountName,
+              onTap: () => context.push('/accounts'),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.xs),
+              child: Column(
+                children: [
+                  AppSidebarItem(
+                    label: 'Wallet',
+                    iconName: AppIcons.wallet,
+                    active: _matches('/home'),
+                    onTap: _matches('/home') ? null : () => context.go('/home'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  AppSidebarItem(
+                    label: 'Send',
+                    iconName: AppIcons.plane,
+                    active: _matches('/send'),
+                    onTap: () => context.push('/send'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  AppSidebarItem(
+                    label: 'Receive',
+                    iconName: AppIcons.arrowDownCircle,
+                    active: _matches('/receive'),
+                    onTap: () => context.push('/receive'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  const AppSidebarItem(
+                    label: 'Address Book',
+                    iconName: AppIcons.users,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  AppSidebarItem(
+                    label: 'Activity',
+                    iconName: AppIcons.history,
+                    active: _matches('/history'),
+                    onTap: () => context.push('/history'),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.xs),
+              child: Column(
+                children: [
+                  AppSidebarItem(
+                    label: 'Settings',
+                    iconName: AppIcons.cog,
+                    active: _matches('/settings'),
+                    onTap: () => context.push('/settings'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  const AppSidebarItem(
+                    label: 'About Vizor',
+                    iconName: AppIcons.crystalBall,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  const AppSidebarItem(
+                    label: 'Sign Out',
+                    iconName: AppIcons.logOut,
+                  ),
+                ],
               ),
             ),
           ],
@@ -693,44 +248,659 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _BottomNavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _BottomNavItem({
-    required this.icon,
-    required this.label,
-    required this.isActive,
-    required this.onTap,
+class _HomePane extends StatelessWidget {
+  const _HomePane({
+    required this.sync,
+    required this.canBackgroundSync,
+    required this.isBalanceVisible,
+    required this.balanceText,
+    required this.formatSignedZec,
+    required this.groupLabelForTx,
+    required this.onToggleBalanceVisibility,
+    required this.onSyncInBackground,
+    required this.onStopBackgroundSync,
+    required this.onRetrySync,
   });
+
+  final SyncState sync;
+  final bool canBackgroundSync;
+  final bool isBalanceVisible;
+  final String balanceText;
+  final String Function(BigInt zatoshi) formatSignedZec;
+  final String Function(rust_sync.TransactionInfo tx) groupLabelForTx;
+  final VoidCallback onToggleBalanceVisibility;
+  final VoidCallback onSyncInBackground;
+  final VoidCallback onStopBackgroundSync;
+  final VoidCallback onRetrySync;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final fg = isActive ? colors.onSurface : colors.outline;
+    final notice = _noticeData();
+    final groups = _activityGroups(context);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? colors.surfaceContainerHigh : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _HomeBalanceCard(
+            balanceText: balanceText,
+            isBalanceVisible: isBalanceVisible,
+            onToggleBalanceVisibility: onToggleBalanceVisibility,
+          ),
+          if (notice != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            _HomeNoticeCard(data: notice),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          _HomeActivitySection(groups: groups),
+        ],
+      ),
+    );
+  }
+
+  _HomeNoticeData? _noticeData() {
+    if (sync.error != null) {
+      return _HomeNoticeData(
+        iconName: AppIcons.warning,
+        message: 'Sync error',
+        actionLabel: 'Retry',
+        onTap: onRetrySync,
+      );
+    }
+    if (sync.isBackgroundMode) {
+      return _HomeNoticeData(
+        iconName: AppIcons.renew,
+        message: 'Background sync is running.',
+        actionLabel: 'Stop sync',
+        onTap: onStopBackgroundSync,
+      );
+    }
+    if (canBackgroundSync && sync.isSyncing) {
+      return _HomeNoticeData(
+        iconName: AppIcons.loader,
+        message: 'Continue syncing in the background.',
+        actionLabel: 'Sync in background',
+        onTap: onSyncInBackground,
+      );
+    }
+    return null;
+  }
+
+  List<_HomeActivityGroupData> _activityGroups(BuildContext context) {
+    final grouped = <String, List<_HomeActivityRowData>>{};
+    final todayRows = <_HomeActivityRowData>[];
+    final colors = context.colors;
+    final successColor = Theme.of(context).colorScheme.tertiary;
+
+    if (sync.error != null) {
+      todayRows.add(
+        _HomeActivityRowData(
+          title: 'Sync Error',
+          leadingIconName: AppIcons.warning,
+          leadingBackgroundColor: colors.background.base,
+          leadingIconColor: colors.icon.warning,
+          amountText: 'Retry',
+          amountColor: colors.text.warning,
+          onTap: onRetrySync,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      );
+    } else if (sync.isSyncing) {
+      final pct = (sync.percentage * 100).toStringAsFixed(0);
+      todayRows.add(
+        _HomeActivityRowData(
+          title: sync.isBackgroundMode ? 'Background Syncing...' : 'Syncing...',
+          leadingIconName: AppIcons.renew,
+          leadingBackgroundColor: colors.background.base,
+          leadingIconColor: colors.icon.accent,
+          subtitle: sync.phase.isEmpty
+              ? null
+              : '${sync.phase[0].toUpperCase()}${sync.phase.substring(1)}',
+          amountText: '$pct%',
+          amountColor: colors.text.secondary,
+        ),
+      );
+    } else {
+      todayRows.add(
+        _HomeActivityRowData(
+          title: 'Wallet Synced',
+          leadingIconName: AppIcons.check,
+          leadingBackgroundColor: successColor.withValues(alpha: 0.16),
+          leadingIconColor: successColor,
+        ),
+      );
+    }
+
+    for (final tx in sync.recentTransactions.take(6)) {
+      final groupLabel = groupLabelForTx(tx);
+      final rows = grouped.putIfAbsent(groupLabel, () => []);
+      final isIncoming = tx.accountBalanceDelta >= 0;
+      final isPending = tx.minedHeight == BigInt.zero && !tx.expiredUnmined;
+      final isExpired = tx.expiredUnmined;
+      rows.add(
+        _HomeActivityRowData(
+          title: isExpired
+              ? (isIncoming ? 'Receive Expired' : 'Send Expired')
+              : isPending
+              ? (isIncoming ? 'Receiving...' : 'Sending...')
+              : isIncoming
+              ? 'Received'
+              : 'Sent',
+          subtitle: isPending ? 'Pending' : 'Shielded',
+          subtitleIconName: isPending ? null : AppIcons.shieldKeyholeOutline,
+          leadingIconName: isIncoming
+              ? AppIcons.arrowDownCircle
+              : AppIcons.plane,
+          leadingBackgroundColor: colors.background.base,
+          leadingIconColor: isIncoming
+              ? colors.icon.accent
+              : colors.icon.brandPurple,
+          subIconName: isPending ? AppIcons.loader : null,
+          subIconBackgroundColor: isPending
+              ? colors.background.overlay.withValues(alpha: 0.5)
+              : colors.background.brandCyanStrong,
+          amountText: formatSignedZec(BigInt.from(tx.accountBalanceDelta)),
+          amountColor: isExpired
+              ? colors.text.muted
+              : isIncoming
+              ? colors.text.accent
+              : colors.text.brandPurple,
+        ),
+      );
+    }
+
+    final results = <_HomeActivityGroupData>[];
+    final mergedToday = [
+      ...todayRows,
+      ...(grouped.remove('Today') ?? const <_HomeActivityRowData>[]),
+    ];
+    if (mergedToday.isNotEmpty) {
+      results.add(_HomeActivityGroupData(label: 'Today', rows: mergedToday));
+    }
+    grouped.forEach((label, rows) {
+      results.add(_HomeActivityGroupData(label: label, rows: rows));
+    });
+    return results;
+  }
+}
+
+class _HomeBalanceCard extends StatelessWidget {
+  const _HomeBalanceCard({
+    required this.balanceText,
+    required this.isBalanceVisible,
+    required this.onToggleBalanceVisibility,
+  });
+
+  final String balanceText;
+  final bool isBalanceVisible;
+  final VoidCallback onToggleBalanceVisibility;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final displayedBalance = isBalanceVisible
+        ? '$balanceText zec'
+        : '•••••• zec';
+    final patternColor = AppTheme.of(context) == AppThemeData.dark
+        ? colors.text.secondary.withValues(alpha: 0.24)
+        : colors.text.primary.withValues(alpha: 0.12);
+
+    return SizedBox(
+      height: 196,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadii.medium),
+        child: Stack(
           children: [
-            Icon(icon, size: 24, color: fg),
-            const SizedBox(height: 4),
-            Text(label, style: text.labelLarge?.copyWith(
-              fontWeight: FontWeight.w500,
-              color: fg,
-            )),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: colors.background.base),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: ColorFiltered(
+                          colorFilter: ColorFilter.mode(
+                            patternColor,
+                            BlendMode.srcIn,
+                          ),
+                          child: Image.asset(
+                            'assets/illustrations/home_balance_card_pattern.png',
+                            fit: BoxFit.cover,
+                            width: 604,
+                            height: 196,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Image.asset(
+                          'assets/illustrations/home_balance_card_bg.png',
+                          fit: BoxFit.cover,
+                          width: 604,
+                          height: 196,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.xxs),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AppIcon(
+                                AppIcons.shieldKeyhole,
+                                size: 16,
+                                color: colors.icon.brandPurple,
+                              ),
+                              const SizedBox(width: AppSpacing.xxs),
+                              Text(
+                                'Shielded Balance',
+                                style: AppTypography.labelLarge.copyWith(
+                                  color: colors.text.accent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        _IconPillButton(
+                          iconName: isBalanceVisible
+                              ? AppIcons.eye
+                              : AppIcons.eyeClosed,
+                          onPressed: onToggleBalanceVisibility,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      displayedBalance,
+                      style: AppTypography.displayMedium.copyWith(
+                        color: colors.text.accent,
+                      ),
+                    ),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              return AppButton(
+                                onPressed: () => context.push('/send'),
+                                variant: AppButtonVariant.primary,
+                                minWidth: constraints.maxWidth,
+                                leading: const AppIcon(AppIcons.plane),
+                                child: const Text('Send'),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              return AppButton(
+                                onPressed: () => context.push('/receive'),
+                                variant: AppButtonVariant.secondary,
+                                minWidth: constraints.maxWidth,
+                                leading: const AppIcon(
+                                  AppIcons.arrowDownCircle,
+                                ),
+                                child: const Text('Receive'),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _IconPillButton extends StatelessWidget {
+  const _IconPillButton({required this.iconName, required this.onPressed});
+
+  final String iconName;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onPressed,
+      child: Container(
+        width: 24,
+        height: 24,
+        padding: const EdgeInsets.all(AppSpacing.xxs),
+        decoration: BoxDecoration(
+          color: colors.button.secondary.bg,
+          borderRadius: BorderRadius.circular(AppRadii.full),
+        ),
+        child: AppIcon(
+          iconName,
+          size: 16,
+          color: colors.button.secondary.label,
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeNoticeData {
+  const _HomeNoticeData({
+    required this.iconName,
+    required this.message,
+    required this.actionLabel,
+    required this.onTap,
+  });
+
+  final String iconName;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onTap;
+}
+
+class _HomeNoticeCard extends StatelessWidget {
+  const _HomeNoticeCard({required this.data});
+
+  final _HomeNoticeData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: colors.background.base,
+        borderRadius: BorderRadius.circular(AppRadii.small),
+      ),
+      child: Row(
+        children: [
+          AppIcon(data.iconName, size: 16, color: colors.icon.warning),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              data.message,
+              style: AppTypography.labelLarge.copyWith(
+                color: colors.text.accent,
+              ),
+            ),
+          ),
+          AppButton(
+            onPressed: data.onTap,
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.small,
+            trailing: const AppIcon(AppIcons.chevronForward),
+            child: Text(data.actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeActivitySection extends StatelessWidget {
+  const _HomeActivitySection({required this.groups});
+
+  final List<_HomeActivityGroupData> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.push('/history'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Recent Activity',
+                  style: AppTypography.headlineSmall.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.xxs),
+                AppIcon(
+                  AppIcons.chevronForward,
+                  size: 16,
+                  color: colors.icon.accent,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s),
+        for (var i = 0; i < groups.length; i++) ...[
+          _HomeActivityGroup(group: groups[i]),
+          if (i != groups.length - 1) const SizedBox(height: AppSpacing.s),
+        ],
+      ],
+    );
+  }
+}
+
+class _HomeActivityGroupData {
+  const _HomeActivityGroupData({required this.label, required this.rows});
+
+  final String label;
+  final List<_HomeActivityRowData> rows;
+}
+
+class _HomeActivityGroup extends StatelessWidget {
+  const _HomeActivityGroup({required this.group});
+
+  final _HomeActivityGroupData group;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          child: Text(
+            group.label,
+            style: AppTypography.labelMedium.copyWith(
+              color: colors.text.secondary,
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        for (var i = 0; i < group.rows.length; i++) ...[
+          _HomeActivityRow(row: group.rows[i]),
+          if (i != group.rows.length - 1) const SizedBox(height: AppSpacing.xs),
+        ],
+      ],
+    );
+  }
+}
+
+class _HomeActivityRowData {
+  const _HomeActivityRowData({
+    required this.title,
+    required this.leadingIconName,
+    required this.leadingBackgroundColor,
+    required this.leadingIconColor,
+    this.subtitle,
+    this.subtitleIconName,
+    this.subIconName,
+    this.subIconBackgroundColor,
+    this.amountText,
+    this.amountColor,
+    this.onTap,
+  });
+
+  final String title;
+  final String leadingIconName;
+  final Color leadingBackgroundColor;
+  final Color leadingIconColor;
+  final String? subtitle;
+  final String? subtitleIconName;
+  final String? subIconName;
+  final Color? subIconBackgroundColor;
+  final String? amountText;
+  final Color? amountColor;
+  final VoidCallback? onTap;
+}
+
+class _HomeActivityRow extends StatelessWidget {
+  const _HomeActivityRow({required this.row});
+
+  final _HomeActivityRowData row;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final content = Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadii.small),
+      ),
+      child: Row(
+        children: [
+          _ActivityAvatar(row: row),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  row.title,
+                  style: AppTypography.labelLarge.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+                if (row.subtitle != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        row.subtitle!,
+                        style: AppTypography.labelMedium.copyWith(
+                          color: row.subtitleIconName == null
+                              ? colors.text.secondary
+                              : colors.text.brandPurple,
+                        ),
+                      ),
+                      if (row.subtitleIconName != null) ...[
+                        const SizedBox(width: AppSpacing.xxs),
+                        AppIcon(
+                          row.subtitleIconName!,
+                          size: 16,
+                          color: colors.icon.brandPurple,
+                        ),
+                      ],
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          if (row.amountText != null)
+            Text(
+              row.amountText!,
+              style: AppTypography.labelLarge.copyWith(
+                color: row.amountColor ?? colors.text.accent,
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (row.onTap == null) return content;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: row.onTap,
+      child: content,
+    );
+  }
+}
+
+class _ActivityAvatar extends StatelessWidget {
+  const _ActivityAvatar({required this.row});
+
+  final _HomeActivityRowData row;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: row.leadingBackgroundColor,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: AppIcon(
+                  row.leadingIconName,
+                  size: 16,
+                  color: row.leadingIconColor,
+                ),
+              ),
+            ),
+          ),
+          if (row.subIconName != null && row.subIconBackgroundColor != null)
+            Positioned(
+              right: -4,
+              bottom: -2,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: row.subIconBackgroundColor,
+                  borderRadius: BorderRadius.circular(AppRadii.small),
+                ),
+                child: Center(
+                  child: AppIcon(
+                    row.subIconName!,
+                    size: 12,
+                    color: context.colors.icon.accent,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

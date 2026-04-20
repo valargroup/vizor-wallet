@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart' show Colors, Scaffold;
 import 'package:flutter/widgets.dart';
 
+import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/motion/onboarding_motion.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_icon.dart';
@@ -71,29 +71,12 @@ class OnboardingSplitViewShell extends StatelessWidget {
       end: Offset.zero,
     ).animate(entrance);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xs),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SlideTransition(
-                position: sidebarOffset,
-                child: SizedBox(
-                  width: 240,
-                  child: _Sidebar(activeStep: activeStep),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: FadeTransition(opacity: entrance, child: child),
-              ),
-            ],
-          ),
-        ),
+    return AppDesktopShell(
+      sidebar: SlideTransition(
+        position: sidebarOffset,
+        child: _Sidebar(activeStep: activeStep),
       ),
+      pane: FadeTransition(opacity: entrance, child: child),
     );
   }
 }
@@ -105,16 +88,7 @@ class OnboardingTrailingPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.background.ground,
-        borderRadius: BorderRadius.circular(AppRadii.small),
-      ),
-      clipBehavior: Clip.antiAlias,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: child,
-    );
+    return AppDesktopPane(child: child);
   }
 }
 
@@ -125,8 +99,7 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadii.small),
+    return AppDesktopSidebarSurface(
       child: Stack(
         children: [
           Positioned.fill(
@@ -191,45 +164,14 @@ class _SidebarNav extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < _steps.length; i++) ...[
-            _NavItem(step: _steps[i], active: _steps[i] == activeStep),
+            AppSidebarItem(
+              label: _steps[i].label,
+              iconName: _steps[i].iconName,
+              active: _steps[i] == activeStep,
+            ),
             if (i != _steps.length - 1) const SizedBox(height: AppSpacing.xxs),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({required this.step, required this.active});
-
-  final OnboardingStep step;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Opacity(
-      opacity: active ? 1.0 : 0.5,
-      child: Padding(
-        padding: const EdgeInsets.only(
-          left: AppSpacing.xs,
-          top: AppSpacing.xxs,
-          bottom: AppSpacing.xxs,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                step.label,
-                style: AppTypography.labelLarge.copyWith(
-                  color: colors.text.accent,
-                ),
-              ),
-            ),
-            AppIcon(step.iconName, size: 20, color: colors.icon.accent),
-          ],
-        ),
       ),
     );
   }
