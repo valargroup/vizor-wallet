@@ -851,237 +851,278 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: constraints.maxHeight,
-                          ),
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: AppSpacing.sm,
-                              ),
-                              child: SizedBox(
-                                width: 352,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _SendInputField(
-                                      label: 'Send to',
-                                      tone: addressTone,
-                                      focusNode: _addressFocusNode,
-                                      controller: _addressController,
-                                      hintText: 'zCash Address',
-                                      leading: AppIcon(
-                                        AppIcons.users,
-                                        size: 20,
-                                        color:
-                                            _addressController.text
-                                                .trim()
-                                                .isNotEmpty
-                                            ? colors.icon.accent
-                                            : colors.icon.regular,
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Center(
+                              child: SingleChildScrollView(
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minHeight: constraints.maxHeight,
+                                  ),
+                                  child: Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: AppSpacing.sm,
                                       ),
-                                      trailingLabel: _SendTrailingLabel(
-                                        label: 'Contacts',
-                                        icon: AppIcon(
-                                          AppIcons.chevronForward,
-                                          size: 16,
-                                          color: colors.text.secondary,
-                                        ),
-                                      ),
-                                      messageText: addressMessage,
-                                      messageIcon: addressMessageIcon,
-                                      onChanged: (_) {
-                                        _validateAddress();
-                                        _validateAmount();
-                                      },
-                                      keyboardType: TextInputType.text,
-                                      trailing:
-                                          _addressFocusNode.hasFocus &&
-                                              _addressController.text
-                                                  .trim()
-                                                  .isNotEmpty
-                                          ? _ClearFieldButton(
-                                              onTap: () {
-                                                _addressController.clear();
-                                                setState(() {
-                                                  _addressType = '';
-                                                  _error = null;
-                                                });
+                                      child: SizedBox(
+                                        width: 352,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            _SendInputField(
+                                              label: 'Send to',
+                                              tone: addressTone,
+                                              focusNode: _addressFocusNode,
+                                              controller: _addressController,
+                                              hintText: 'zCash Address',
+                                              leading: AppIcon(
+                                                AppIcons.users,
+                                                size: 20,
+                                                color:
+                                                    _addressController.text
+                                                        .trim()
+                                                        .isNotEmpty
+                                                    ? colors.icon.accent
+                                                    : colors.icon.regular,
+                                              ),
+                                              trailingLabel: _SendTrailingLabel(
+                                                label: 'Contacts',
+                                                icon: AppIcon(
+                                                  AppIcons.chevronForward,
+                                                  size: 16,
+                                                  color: colors.text.secondary,
+                                                ),
+                                              ),
+                                              messageText: addressMessage,
+                                              messageIcon: addressMessageIcon,
+                                              onChanged: (_) {
+                                                _validateAddress();
                                                 _validateAmount();
                                               },
-                                            )
-                                          : null,
-                                    ),
-                                    const SizedBox(height: AppSpacing.xs),
-                                    _SendInputField(
-                                      label: 'Amount',
-                                      tone: _showAmountError
-                                          ? _SendFieldTone.destructive
-                                          : _SendFieldTone.neutral,
-                                      focusNode: _amountFocusNode,
-                                      controller: _amountController,
-                                      hintText: '0.00',
-                                      leading: AppIcon(
-                                        AppIcons.zcash,
-                                        size: 20,
-                                        color:
-                                            _amountController.text
-                                                .trim()
-                                                .isNotEmpty
-                                            ? colors.icon.accent
-                                            : colors.icon.regular,
-                                      ),
-                                      trailingLabel: Text(
-                                        'Max: ${_formatSpendableLabel(spendable)} ZEC',
-                                        style: AppTypography.labelMedium
-                                            .copyWith(
-                                              color: colors.text.secondary,
+                                              keyboardType: TextInputType.text,
+                                              trailing:
+                                                  _addressFocusNode.hasFocus &&
+                                                      _addressController.text
+                                                          .trim()
+                                                          .isNotEmpty
+                                                  ? _ClearFieldButton(
+                                                      onTap: () {
+                                                        _addressController
+                                                            .clear();
+                                                        setState(() {
+                                                          _addressType = '';
+                                                          _error = null;
+                                                        });
+                                                        _validateAmount();
+                                                      },
+                                                    )
+                                                  : null,
                                             ),
-                                      ),
-                                      messageText: _showAmountError
-                                          ? _amountError
-                                          : null,
-                                      messageIcon: _showAmountError
-                                          ? AppIcon(
-                                              AppIcons.warning,
-                                              size: 16,
-                                              color: colors.text.warning,
-                                            )
-                                          : null,
-                                      keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                            decimal: true,
-                                          ),
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter.allow(
-                                          RegExp(r'[\d.]'),
-                                        ),
-                                        _ZecAmountFormatter(),
-                                      ],
-                                      onChanged: (_) => _validateAmount(),
-                                      trailing:
-                                          _amountFocusNode.hasFocus &&
-                                              _amountController.text
-                                                  .trim()
-                                                  .isNotEmpty
-                                          ? _ClearFieldButton(
-                                              onTap: () {
-                                                _amountController.clear();
-                                                setState(() {
-                                                  _amountError = '';
-                                                  _error = null;
-                                                });
-                                              },
-                                            )
-                                          : null,
-                                    ),
-                                    const SizedBox(height: AppSpacing.sm),
-                                    if (!_messageExpanded &&
-                                        _memoController.text.isEmpty) ...[
-                                      AppDecorativeDivider(
-                                        width: 256,
-                                        middleWidth: 53.553,
-                                        middleHeight: 14,
-                                      ),
-                                      const SizedBox(height: AppSpacing.sm),
-                                      _SendAddMessageCard(
-                                        enabled: _isShieldedAddress,
-                                        onTap: _isShieldedAddress
-                                            ? () {
-                                                setState(() {
-                                                  _messageExpanded = true;
-                                                });
-                                                _memoFocusNode.requestFocus();
-                                              }
-                                            : null,
-                                      ),
-                                    ] else ...[
-                                      _SendInputField(
-                                        label: 'Message',
-                                        tone: _memoError != null
-                                            ? _SendFieldTone.destructive
-                                            : _SendFieldTone.neutral,
-                                        focusNode: _memoFocusNode,
-                                        controller: _memoController,
-                                        hintText: 'Add a message',
-                                        leading: AppIcon(
-                                          AppIcons.scroll,
-                                          size: 20,
-                                          color: colors.icon.regular,
-                                        ),
-                                        trailingLabel: Text(
-                                          '$_memoLength/512',
-                                          style: AppTypography.labelMedium
-                                              .copyWith(
-                                                color: colors.text.secondary,
+                                            const SizedBox(
+                                              height: AppSpacing.xs,
+                                            ),
+                                            _SendInputField(
+                                              label: 'Amount',
+                                              tone: _showAmountError
+                                                  ? _SendFieldTone.destructive
+                                                  : _SendFieldTone.neutral,
+                                              focusNode: _amountFocusNode,
+                                              controller: _amountController,
+                                              hintText: '0.00',
+                                              leading: AppIcon(
+                                                AppIcons.zcash,
+                                                size: 20,
+                                                color:
+                                                    _amountController.text
+                                                        .trim()
+                                                        .isNotEmpty
+                                                    ? colors.icon.accent
+                                                    : colors.icon.regular,
                                               ),
-                                        ),
-                                        messageText: _memoError,
-                                        messageIcon: _memoError != null
-                                            ? AppIcon(
-                                                AppIcons.warning,
-                                                size: 16,
-                                                color: colors.text.warning,
-                                              )
-                                            : null,
-                                        minLines: 6,
-                                        maxLines: 6,
-                                        scrollController: _memoScrollController,
-                                        onChanged: (_) => setState(() {
-                                          _error = null;
-                                        }),
-                                        trailing:
-                                            _memoController.text
-                                                .trim()
-                                                .isNotEmpty
-                                            ? _ClearFieldButton(
-                                                onTap: () {
-                                                  _memoController.clear();
-                                                  setState(() {
-                                                    _messageExpanded = false;
-                                                    _error = null;
-                                                  });
-                                                },
-                                              )
-                                            : null,
-                                      ),
-                                    ],
-                                    if (_error != null) ...[
-                                      const SizedBox(height: AppSpacing.xs),
-                                      _SendGlobalError(message: _error!),
-                                    ],
-                                    const SizedBox(height: AppSpacing.sm),
-                                    SizedBox(
-                                      width: 256,
-                                      child: AppButton(
-                                        onPressed: _canReview ? _send : null,
-                                        variant: AppButtonVariant.primary,
-                                        minWidth: 256,
-                                        trailing: _isSending
-                                            ? null
-                                            : const AppIcon(
-                                                AppIcons.chevronForward,
-                                              ),
-                                        child: _isSending
-                                            ? const SizedBox(
-                                                width: 18,
-                                                height: 18,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 2,
+                                              trailingLabel: Text(
+                                                'Max: ${_formatSpendableLabel(spendable)} ZEC',
+                                                style: AppTypography.labelMedium
+                                                    .copyWith(
+                                                      color:
+                                                          colors.text.secondary,
                                                     ),
-                                              )
-                                            : const Text('Review'),
+                                              ),
+                                              messageText: _showAmountError
+                                                  ? _amountError
+                                                  : null,
+                                              messageIcon: _showAmountError
+                                                  ? AppIcon(
+                                                      AppIcons.warning,
+                                                      size: 16,
+                                                      color:
+                                                          colors.text.warning,
+                                                    )
+                                                  : null,
+                                              keyboardType:
+                                                  const TextInputType.numberWithOptions(
+                                                    decimal: true,
+                                                  ),
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter.allow(
+                                                  RegExp(r'[\d.]'),
+                                                ),
+                                                _ZecAmountFormatter(),
+                                              ],
+                                              onChanged: (_) =>
+                                                  _validateAmount(),
+                                              trailing:
+                                                  _amountFocusNode.hasFocus &&
+                                                      _amountController.text
+                                                          .trim()
+                                                          .isNotEmpty
+                                                  ? _ClearFieldButton(
+                                                      onTap: () {
+                                                        _amountController
+                                                            .clear();
+                                                        setState(() {
+                                                          _amountError = '';
+                                                          _error = null;
+                                                        });
+                                                      },
+                                                    )
+                                                  : null,
+                                            ),
+                                            const SizedBox(
+                                              height: AppSpacing.sm,
+                                            ),
+                                            if (!_messageExpanded &&
+                                                _memoController
+                                                    .text
+                                                    .isEmpty) ...[
+                                              AppDecorativeDivider(
+                                                width: 256,
+                                                middleWidth: 53.553,
+                                                middleHeight: 14,
+                                              ),
+                                              const SizedBox(
+                                                height: AppSpacing.sm,
+                                              ),
+                                              _SendAddMessageCard(
+                                                enabled: _isShieldedAddress,
+                                                onTap: _isShieldedAddress
+                                                    ? () {
+                                                        setState(() {
+                                                          _messageExpanded =
+                                                              true;
+                                                        });
+                                                        _memoFocusNode
+                                                            .requestFocus();
+                                                      }
+                                                    : null,
+                                              ),
+                                            ] else ...[
+                                              _SendInputField(
+                                                label: 'Message',
+                                                tone: _memoError != null
+                                                    ? _SendFieldTone.destructive
+                                                    : _SendFieldTone.neutral,
+                                                focusNode: _memoFocusNode,
+                                                controller: _memoController,
+                                                hintText: 'Add a message',
+                                                leading: AppIcon(
+                                                  AppIcons.scroll,
+                                                  size: 20,
+                                                  color: colors.icon.regular,
+                                                ),
+                                                trailingLabel: Text(
+                                                  '$_memoLength/512',
+                                                  style: AppTypography
+                                                      .labelMedium
+                                                      .copyWith(
+                                                        color: colors
+                                                            .text
+                                                            .secondary,
+                                                      ),
+                                                ),
+                                                messageText: _memoError,
+                                                messageIcon: _memoError != null
+                                                    ? AppIcon(
+                                                        AppIcons.warning,
+                                                        size: 16,
+                                                        color:
+                                                            colors.text.warning,
+                                                      )
+                                                    : null,
+                                                minLines: 6,
+                                                maxLines: 6,
+                                                scrollController:
+                                                    _memoScrollController,
+                                                onChanged: (_) => setState(() {
+                                                  _error = null;
+                                                }),
+                                                trailing:
+                                                    _memoController.text
+                                                        .trim()
+                                                        .isNotEmpty
+                                                    ? _ClearFieldButton(
+                                                        onTap: () {
+                                                          _memoController
+                                                              .clear();
+                                                          setState(() {
+                                                            _messageExpanded =
+                                                                false;
+                                                            _error = null;
+                                                          });
+                                                        },
+                                                      )
+                                                    : null,
+                                              ),
+                                            ],
+                                            if (_error != null) ...[
+                                              const SizedBox(
+                                                height: AppSpacing.xs,
+                                              ),
+                                              _SendGlobalError(
+                                                message: _error!,
+                                              ),
+                                            ],
+                                            const SizedBox(
+                                              height: AppSpacing.sm,
+                                            ),
+                                            const SizedBox(height: 40),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: AppSpacing.s,
+                            child: Center(
+                              child: SizedBox(
+                                width: 256,
+                                child: AppButton(
+                                  onPressed: _canReview ? _send : null,
+                                  variant: AppButtonVariant.primary,
+                                  minWidth: 256,
+                                  trailing: _isSending
+                                      ? null
+                                      : const AppIcon(AppIcons.chevronForward),
+                                  child: _isSending
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text('Review'),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),
