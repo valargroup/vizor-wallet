@@ -11,6 +11,7 @@ class AppTextField extends StatefulWidget {
     super.key,
     required this.label,
     this.rightLabel,
+    this.rightSlot,
     this.controller,
     this.focusNode,
     this.initialValue,
@@ -28,6 +29,9 @@ class AppTextField extends StatefulWidget {
     this.keyboardType,
     this.textInputAction,
     this.inputFormatters,
+    this.scrollController,
+    this.textStyle,
+    this.hintStyle,
     this.minLines = 1,
     this.maxLines = 1,
     this.enabled = true,
@@ -36,10 +40,15 @@ class AppTextField extends StatefulWidget {
   }) : assert(
          controller == null || initialValue == null,
          'Provide either controller or initialValue, not both.',
+       ),
+       assert(
+         rightLabel == null || rightSlot == null,
+         'Provide either rightLabel or rightSlot, not both.',
        );
 
   final String label;
   final String? rightLabel;
+  final Widget? rightSlot;
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final String? initialValue;
@@ -57,6 +66,9 @@ class AppTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final List<TextInputFormatter>? inputFormatters;
+  final ScrollController? scrollController;
+  final TextStyle? textStyle;
+  final TextStyle? hintStyle;
   final int minLines;
   final int maxLines;
   final bool enabled;
@@ -74,6 +86,7 @@ class _AppTextFieldState extends State<AppTextField> {
   TextEditingController? _attachedController;
   FocusNode? _attachedFocusNode;
   bool _hovered = false;
+  Offset? _pendingShellTapGlobalPosition;
 
   TextEditingController get _controller =>
       widget.controller ?? _internalController;
@@ -137,16 +150,16 @@ class _AppTextFieldState extends State<AppTextField> {
     widget.onClear?.call();
   }
 
-  bool _pointerIsInsideTextFieldRegion(PointerDownEvent event) {
+  bool _positionIsInsideTextFieldRegion(Offset globalPosition) {
     final context = _textFieldRegionKey.currentContext;
     final renderObject = context?.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.attached) return false;
-    final localPosition = renderObject.globalToLocal(event.position);
+    final localPosition = renderObject.globalToLocal(globalPosition);
     return (Offset.zero & renderObject.size).contains(localPosition);
   }
 
   TextSelection _selectionForShellPointer(
-    PointerDownEvent event,
+    Offset globalPosition,
     TextStyle valueStyle,
     StrutStyle textStrutStyle,
   ) {
@@ -160,7 +173,7 @@ class _AppTextFieldState extends State<AppTextField> {
       return TextSelection.collapsed(offset: _controller.text.length);
     }
 
-    final localPosition = renderObject.globalToLocal(event.position);
+    final localPosition = renderObject.globalToLocal(globalPosition);
     final clampedPosition = Offset(
       localPosition.dx.clamp(0.0, renderObject.size.width),
       localPosition.dy.clamp(0.0, renderObject.size.height),
@@ -178,15 +191,17 @@ class _AppTextFieldState extends State<AppTextField> {
     return TextSelection.collapsed(offset: position.offset);
   }
 
-  void _requestFocusFromShell(
-    PointerDownEvent event,
-    TextStyle valueStyle,
-    StrutStyle textStrutStyle,
-  ) {
-    if (!widget.enabled || widget.readOnly) return;
-    if (_pointerIsInsideTextFieldRegion(event)) return;
+  void _handleShellTapDown(TapDownDetails details) {
+    _pendingShellTapGlobalPosition = details.globalPosition;
+  }
+
+  void _requestFocusFromShell(TextStyle valueStyle, StrutStyle textStrutStyle) {
+    final globalPosition = _pendingShellTapGlobalPosition;
+    _pendingShellTapGlobalPosition = null;
+    if (!widget.enabled || widget.readOnly || globalPosition == null) return;
+    if (_positionIsInsideTextFieldRegion(globalPosition)) return;
     final selection = _selectionForShellPointer(
-      event,
+      globalPosition,
       valueStyle,
       textStrutStyle,
     );
@@ -205,11 +220,17 @@ class _AppTextFieldState extends State<AppTextField> {
     final titleStyle = AppTypography.labelMedium.copyWith(
       color: colors.text.secondary,
     );
-    final hintStyle = AppTypography.labelLarge.copyWith(
+    final hintStyle =
+        widget.hintStyle ??
+        AppTypography.labelLarge.copyWith(color: colors.text.muted);
+    final valueStyle =
+        widget.textStyle ??
+        AppTypography.labelLarge.copyWith(color: colors.text.accent);
+    final defaultHintStyle = AppTypography.labelLarge.copyWith(
       color: colors.text.muted,
     );
-    final valueStyle = AppTypography.labelLarge.copyWith(
-      color: colors.text.accent,
+    final resolvedHintStyle = hintStyle.copyWith(
+      color: hintStyle.color ?? defaultHintStyle.color,
     );
     final iconColor = _hasText || _isFocused
         ? colors.icon.accent
@@ -284,6 +305,7 @@ class _AppTextFieldState extends State<AppTextField> {
       maxLines: _multiline ? null : 1,
       minLines: _multiline ? null : 1,
       expands: _multiline,
+      scrollController: widget.scrollController,
       textAlignVertical: _multiline
           ? TextAlignVertical.top
           : TextAlignVertical.center,
@@ -293,9 +315,26 @@ class _AppTextFieldState extends State<AppTextField> {
       selectAllOnFocus: false,
       decoration: InputDecoration.collapsed(
         hintText: widget.hintText,
-        hintStyle: hintStyle,
+        hintStyle: resolvedHintStyle,
       ),
     );
+    final fieldInput = _multiline && widget.scrollController != null
+        ? ScrollbarTheme(
+            data: ScrollbarThemeData(
+              thumbColor: WidgetStatePropertyAll(
+                colors.background.overlay.withValues(alpha: 0.5),
+              ),
+              radius: const Radius.circular(AppRadii.full),
+              thickness: const WidgetStatePropertyAll(6),
+              thumbVisibility: const WidgetStatePropertyAll(true),
+              trackVisibility: const WidgetStatePropertyAll(false),
+            ),
+            child: Scrollbar(
+              controller: widget.scrollController,
+              child: textField,
+            ),
+          )
+        : textField;
 
     final shell = SizedBox(
       height: shellHeight,
@@ -305,10 +344,10 @@ class _AppTextFieldState extends State<AppTextField> {
             : SystemMouseCursors.basic,
         onEnter: (_) => _setHovered(true),
         onExit: (_) => _setHovered(false),
-        child: Listener(
+        child: GestureDetector(
           behavior: HitTestBehavior.translucent,
-          onPointerDown: (event) =>
-              _requestFocusFromShell(event, valueStyle, textStrutStyle),
+          onTapDown: _handleShellTapDown,
+          onTap: () => _requestFocusFromShell(valueStyle, textStrutStyle),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -413,7 +452,7 @@ class _AppTextFieldState extends State<AppTextField> {
                                   0,
                                   AppSpacing.s,
                                 ),
-                                child: textField,
+                                child: fieldInput,
                               ),
                             ),
                             if (trailingWidget != null)
@@ -451,7 +490,7 @@ class _AppTextFieldState extends State<AppTextField> {
                                 child: Padding(
                                   key: _textFieldRegionKey,
                                   padding: const EdgeInsets.only(bottom: 6),
-                                  child: textField,
+                                  child: fieldInput,
                                 ),
                               ),
                               if (trailingWidget != null) ...[
@@ -483,7 +522,8 @@ class _AppTextFieldState extends State<AppTextField> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(child: Text(widget.label, style: titleStyle)),
-                if (widget.rightLabel != null)
+                if (widget.rightSlot != null) widget.rightSlot!,
+                if (widget.rightSlot == null && widget.rightLabel != null)
                   Text(widget.rightLabel!, style: titleStyle),
               ],
             ),
