@@ -14,6 +14,8 @@ zcash_primitives = "0.26.4"
 zcash_address = "0.10.1"
 zcash_keys = { version = "0.12.0", features = ["orchard"] }
 zcash_protocol = "0.7.2"
+transparent = { package = "zcash_transparent", version = "0.6.3" }
+zcash_script = "0.4.3"
 zcash_client_backend = { version = "0.21.2", features = [
     "orchard",
     "transparent-inputs",

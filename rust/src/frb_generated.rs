@@ -2563,6 +2563,7 @@ impl SseDecode for crate::api::sync::TransactionInfo {
         let mut var_accountBalanceDelta = <i64>::sse_decode(deserializer);
         let mut var_fee = <u64>::sse_decode(deserializer);
         let mut var_blockTime = <u64>::sse_decode(deserializer);
+        let mut var_isTransparent = <bool>::sse_decode(deserializer);
         return crate::api::sync::TransactionInfo {
             txid_hex: var_txidHex,
             mined_height: var_minedHeight,
@@ -2570,6 +2571,7 @@ impl SseDecode for crate::api::sync::TransactionInfo {
             account_balance_delta: var_accountBalanceDelta,
             fee: var_fee,
             block_time: var_blockTime,
+            is_transparent: var_isTransparent,
         };
     }
 }
@@ -3143,6 +3145,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::sync::TransactionInfo {
             self.account_balance_delta.into_into_dart().into_dart(),
             self.fee.into_into_dart().into_dart(),
             self.block_time.into_into_dart().into_dart(),
+            self.is_transparent.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3591,6 +3594,7 @@ impl SseEncode for crate::api::sync::TransactionInfo {
         <i64>::sse_encode(self.account_balance_delta, serializer);
         <u64>::sse_encode(self.fee, serializer);
         <u64>::sse_encode(self.block_time, serializer);
+        <bool>::sse_encode(self.is_transparent, serializer);
     }
 }
 

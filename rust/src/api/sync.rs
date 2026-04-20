@@ -587,6 +587,7 @@ pub struct TransactionInfo {
     pub account_balance_delta: i64,
     pub fee: u64,
     pub block_time: u64,
+    pub is_transparent: bool,
 }
 
 pub fn get_transaction_history(db_path: String, network: String, limit: Option<u32>, account_uuid: String) -> Result<Vec<TransactionInfo>, String> {
@@ -596,6 +597,7 @@ pub fn get_transaction_history(db_path: String, network: String, limit: Option<u
         Ok(txs.into_iter().map(|t| TransactionInfo {
             txid_hex: t.txid_hex, mined_height: t.mined_height, expired_unmined: t.expired_unmined,
             account_balance_delta: t.account_balance_delta, fee: t.fee, block_time: t.block_time,
+            is_transparent: t.is_transparent,
         }).collect())
     })
 }

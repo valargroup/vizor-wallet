@@ -418,6 +418,10 @@ class _HomePaneState extends State<_HomePane> {
       final isIncoming = tx.accountBalanceDelta >= 0;
       final isPending = tx.minedHeight == BigInt.zero && !tx.expiredUnmined;
       final isExpired = tx.expiredUnmined;
+      final subtitle = tx.isTransparent ? 'Transparent' : 'Shielded';
+      final subtitleIconName = tx.isTransparent
+          ? null
+          : AppIcons.shieldKeyholeOutline;
       rows.add(
         _HomeActivityRowData(
           title: isExpired
@@ -427,8 +431,8 @@ class _HomePaneState extends State<_HomePane> {
               : isIncoming
               ? 'Received'
               : 'Sent',
-          subtitle: isPending ? 'Pending' : 'Shielded',
-          subtitleIconName: isPending ? null : AppIcons.shieldKeyholeOutline,
+          subtitle: subtitle,
+          subtitleIconName: subtitleIconName,
           leadingIconName: isIncoming
               ? AppIcons.arrowDownCircle
               : AppIcons.plane,

@@ -8,13 +8,28 @@ use zcash_client_backend::{
         chain::{self, error::Error as ChainError, scan_cached_blocks},
         scanning::ScanPriority,
     },
-    proto::service::{BlockId, ChainSpec},
+    proto::service::{self, BlockId, ChainSpec},
 };
 use zcash_client_sqlite::{WalletDb, error::SqliteClientError, util::SystemClock};
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
+use tonic::transport::Channel;
 
 use crate::wallet::network::WalletNetwork;
+
+use {
+    ::transparent::{
+        address::Script,
+        bundle::{OutPoint, TxOut},
+    },
+    zcash_client_backend::{
+        proto::service::compact_tx_streamer_client::CompactTxStreamerClient,
+        wallet::WalletTransparentOutput,
+    },
+    zcash_keys::encoding::AddressCodec as _,
+    zcash_protocol::value::Zatoshis,
+    zcash_script::script,
+};
 
 mod block_source;
 mod enhance;
@@ -76,6 +91,80 @@ fn elapsed() -> String {
 }
 
 type WalletDatabase = WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>;
+
+async fn refresh_utxos(
+    client: &mut CompactTxStreamerClient<Channel>,
+    db: &mut WalletDatabase,
+    network: WalletNetwork,
+) -> Result<(), SyncError> {
+    for account_id in db
+        .get_account_ids()
+        .map_err(|e| SyncError::db(format!("get_account_ids: {e}")))?
+    {
+        let start_height = db
+            .utxo_query_height(account_id)
+            .map_err(|e| SyncError::db(format!("utxo_query_height: {e}")))?;
+        let addresses: Vec<String> = db
+            .get_transparent_receivers(account_id, true, true)
+            .map_err(|e| SyncError::db(format!("get_transparent_receivers: {e}")))?
+            .into_keys()
+            .map(|addr| addr.encode(&network))
+            .collect();
+
+        if addresses.is_empty() {
+            continue;
+        }
+
+        log::info!(
+            "[{}] sync: refreshing transparent UTXOs from height {} ({} addresses)",
+            elapsed(),
+            u32::from(start_height),
+            addresses.len(),
+        );
+
+        let mut stream = client
+            .get_address_utxos_stream(service::GetAddressUtxosArg {
+                addresses,
+                start_height: u32::from(start_height) as u64,
+                max_entries: 0,
+            })
+            .await
+            .map_err(|e| SyncError::net(format!("get_address_utxos_stream: {e}")))?
+            .into_inner();
+
+        while let Some(reply) = stream
+            .message()
+            .await
+            .map_err(|e| SyncError::net(format!("get_address_utxos_stream message: {e}")))?
+        {
+            let txid: [u8; 32] = reply
+                .txid
+                .try_into()
+                .map_err(|_| SyncError::parse("transparent UTXO txid was not 32 bytes"))?;
+            let index = u32::try_from(reply.index)
+                .map_err(|_| SyncError::parse(format!("invalid transparent UTXO index: {}", reply.index)))?;
+            let height = u32::try_from(reply.height)
+                .map_err(|_| SyncError::parse(format!("invalid transparent UTXO height: {}", reply.height)))?;
+            let value = Zatoshis::from_nonnegative_i64(reply.value_zat).map_err(|_| {
+                SyncError::parse(format!("invalid transparent UTXO value: {}", reply.value_zat))
+            })?;
+
+            let output = WalletTransparentOutput::from_parts(
+                OutPoint::new(txid, index),
+                TxOut::new(value, Script(script::Code(reply.script))),
+                Some(BlockHeight::from_u32(height)),
+            )
+            .ok_or_else(|| {
+                SyncError::parse("transparent UTXO script did not decode to a wallet address")
+            })?;
+
+            db.put_received_transparent_utxo(&output)
+                .map_err(|e| SyncError::db(format!("put_received_transparent_utxo: {e}")))?;
+        }
+    }
+
+    Ok(())
+}
 
 // ==================== Main sync ====================
 
@@ -189,6 +278,8 @@ async fn run_sync_impl(
 
     db.update_chain_tip(tip_height)
         .map_err(|e| SyncError::db(format!("update_chain_tip: {e}")))?;
+
+    refresh_utxos(&mut client, &mut db, network).await?;
 
     // 2.5. Resubmit any unmined, unexpired wallet txs now that we
     // know the current tip. Matches the first of the three

@@ -209,6 +209,7 @@ pub(crate) struct TransactionInfo {
     pub account_balance_delta: i64,
     pub fee: u64,
     pub block_time: u64,
+    pub is_transparent: bool,
 }
 
 pub fn get_transaction_history(
@@ -228,19 +229,33 @@ pub fn get_transaction_history(
     .map_err(|e| format!("Failed to open DB: {e}"))?;
     let sql = match limit {
         Some(_) => {
-            "SELECT txid, mined_height, expired_unmined, account_balance_delta, \
-             COALESCE(fee_paid, 0), COALESCE(block_time, 0) \
-             FROM v_transactions \
-             WHERE account_uuid = ?1 \
-             ORDER BY COALESCE(mined_height, 999999999) DESC, tx_index DESC \
+            "SELECT vt.txid, vt.mined_height, vt.expired_unmined, vt.account_balance_delta, \
+             COALESCE(vt.fee_paid, 0), COALESCE(vt.block_time, 0), \
+             EXISTS( \
+                 SELECT 1 \
+                 FROM v_tx_outputs txo \
+                 WHERE txo.txid = vt.txid \
+                   AND txo.output_pool = 0 \
+                   AND (txo.from_account_uuid = vt.account_uuid OR txo.to_account_uuid = vt.account_uuid) \
+             ) AS is_transparent \
+             FROM v_transactions vt \
+             WHERE vt.account_uuid = ?1 \
+             ORDER BY COALESCE(vt.mined_height, 999999999) DESC, vt.tx_index DESC \
              LIMIT ?2"
         }
         None => {
-            "SELECT txid, mined_height, expired_unmined, account_balance_delta, \
-             COALESCE(fee_paid, 0), COALESCE(block_time, 0) \
-             FROM v_transactions \
-             WHERE account_uuid = ?1 \
-             ORDER BY COALESCE(mined_height, 999999999) DESC, tx_index DESC"
+            "SELECT vt.txid, vt.mined_height, vt.expired_unmined, vt.account_balance_delta, \
+             COALESCE(vt.fee_paid, 0), COALESCE(vt.block_time, 0), \
+             EXISTS( \
+                 SELECT 1 \
+                 FROM v_tx_outputs txo \
+                 WHERE txo.txid = vt.txid \
+                   AND txo.output_pool = 0 \
+                   AND (txo.from_account_uuid = vt.account_uuid OR txo.to_account_uuid = vt.account_uuid) \
+             ) AS is_transparent \
+             FROM v_transactions vt \
+             WHERE vt.account_uuid = ?1 \
+             ORDER BY COALESCE(vt.mined_height, 999999999) DESC, vt.tx_index DESC"
         }
     };
     let mut stmt = conn.prepare(sql).map_err(|e| format!("SQL error: {e}"))?;
@@ -252,6 +267,7 @@ pub fn get_transaction_history(
         let balance_delta: i64 = row.get(3)?;
         let fee: u64 = row.get::<_, i64>(4)?.unsigned_abs();
         let block_time: u64 = row.get::<_, i64>(5)?.unsigned_abs();
+        let is_transparent: bool = row.get(6)?;
         Ok(TransactionInfo {
             txid_hex: hex::encode(&txid_blob),
             mined_height: mined_height.unwrap_or(0) as u64,
@@ -259,6 +275,7 @@ pub fn get_transaction_history(
             account_balance_delta: balance_delta,
             fee,
             block_time,
+            is_transparent,
         })
     };
 
