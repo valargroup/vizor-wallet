@@ -1,6 +1,4 @@
-import 'dart:io' show Platform, exit;
-
-import 'package:flutter/foundation.dart';
+import 'dart:io' show exit;
 import 'package:flutter/material.dart'
     show
         AlertDialog,
@@ -14,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
+import '../../../core/layout/app_main_sidebar.dart';
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_theme.dart';
@@ -144,7 +143,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final sync = syncAsync.value ?? SyncState();
 
     return AppDesktopShell(
-      sidebar: _HomeSidebar(
+      sidebar: AppMainSidebar(
         accountName: accountName,
         matchedLocation: matchedLocation,
         onResetWallet: () => _resetWallet(context),
@@ -199,141 +198,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       'Dec',
     ];
     return months[month];
-  }
-}
-
-class _HomeSidebar extends StatelessWidget {
-  const _HomeSidebar({
-    required this.accountName,
-    required this.matchedLocation,
-    required this.onResetWallet,
-  });
-
-  final String accountName;
-  final String matchedLocation;
-  final VoidCallback onResetWallet;
-
-  bool _matches(String routePath) =>
-      matchedLocation == routePath || matchedLocation.startsWith('$routePath/');
-
-  @override
-  Widget build(BuildContext context) {
-    return AppDesktopSidebarSurface(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xs),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: AppSidebarUserButton(
-                    label: accountName,
-                    onTap: () => context.push('/accounts'),
-                  ),
-                ),
-                if (kDebugMode && Platform.isMacOS) ...[
-                  const SizedBox(width: AppSpacing.xs),
-                  _DebugResetButton(onPressed: onResetWallet),
-                ],
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.xs),
-              child: Column(
-                children: [
-                  AppSidebarItem(
-                    label: 'Wallet',
-                    iconName: AppIcons.wallet,
-                    active: _matches('/home'),
-                    onTap: _matches('/home') ? null : () => context.go('/home'),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppSidebarItem(
-                    label: 'Send',
-                    iconName: AppIcons.plane,
-                    active: _matches('/send'),
-                    onTap: () => context.push('/send'),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppSidebarItem(
-                    label: 'Receive',
-                    iconName: AppIcons.arrowDownCircle,
-                    active: _matches('/receive'),
-                    onTap: () => context.push('/receive'),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  const AppSidebarItem(
-                    label: 'Address Book',
-                    iconName: AppIcons.users,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppSidebarItem(
-                    label: 'Activity',
-                    iconName: AppIcons.history,
-                    active: _matches('/history'),
-                    onTap: () => context.push('/history'),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.xs),
-              child: Column(
-                children: [
-                  AppSidebarItem(
-                    label: 'Settings',
-                    iconName: AppIcons.cog,
-                    active: _matches('/settings'),
-                    onTap: () => context.push('/settings'),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  const AppSidebarItem(
-                    label: 'About Vizor',
-                    iconName: AppIcons.crystalBall,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  const AppSidebarItem(
-                    label: 'Sign Out',
-                    iconName: AppIcons.logOut,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DebugResetButton extends StatelessWidget {
-  const _DebugResetButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: Container(
-          width: 40,
-          height: 40,
-          padding: const EdgeInsets.all(AppSpacing.xs),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadii.small),
-            color: colors.background.overlay.withValues(alpha: 0.12),
-          ),
-          child: AppIcon(AppIcons.block, size: 20, color: colors.text.warning),
-        ),
-      ),
-    );
   }
 }
 
