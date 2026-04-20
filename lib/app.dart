@@ -22,6 +22,7 @@ import 'src/features/accounts/screens/accounts_screen.dart';
 import 'src/features/keystone/screens/import_keystone_screen.dart';
 import 'src/features/send/screens/send_review_screen.dart';
 import 'src/features/send/screens/send_screen.dart';
+import 'src/features/send/screens/send_status_screen.dart';
 import 'src/features/settings/screens/settings_screen.dart';
 import 'src/providers/theme_mode_provider.dart';
 import 'src/providers/wallet_provider.dart';
@@ -152,6 +153,14 @@ final _routerProvider = Provider<GoRouter>((ref) {
           final args = state.extra;
           if (args is! SendReviewArgs) return const SendScreen();
           return SendReviewScreen(args: args);
+        },
+      ),
+      GoRoute(
+        path: '/send/status',
+        builder: (_, state) {
+          final args = state.extra;
+          if (args is! SendReviewArgs) return const SendScreen();
+          return SendStatusScreen(args: args);
         },
       ),
       GoRoute(path: '/receive', builder: (_, _) => const ReceiveScreen()),
