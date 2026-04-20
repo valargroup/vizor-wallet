@@ -150,27 +150,18 @@ class _CardsRow extends StatelessWidget {
 class _ShieldedAddressCard extends StatelessWidget {
   const _ShieldedAddressCard();
 
-  String _patternAsset(BuildContext context) {
+  String _previewAsset(BuildContext context) {
     final isDark = AppTheme.of(context) == AppThemeData.dark;
     return isDark
-        ? 'assets/illustrations/onboarding_address_types_card_pattern_dark.png'
-        : 'assets/illustrations/onboarding_address_types_card_pattern_light.png';
+        ? 'assets/illustrations/address_types_shielded_preview_dark.png'
+        : 'assets/illustrations/address_types_shielded_preview_light.png';
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isDark = AppTheme.of(context) == AppThemeData.dark;
-    final addressColor = isDark ? colors.text.inverse : colors.text.primary;
-    final badgeBg = isDark ? colors.background.base : colors.background.ground;
-    final badgeText = isDark ? colors.text.accent : colors.text.inverse;
     return _AddressTypeCard(
-      top: _ShieldedPreview(
-        patternAsset: _patternAsset(context),
-        badgeBackgroundColor: badgeBg,
-        badgeTextColor: badgeText,
-        valueColor: addressColor,
-      ),
+      top: _PreviewImage(asset: _previewAsset(context)),
       title: 'Shielded Address',
       description: Text.rich(
         TextSpan(
@@ -205,15 +196,18 @@ class _ShieldedAddressCard extends StatelessWidget {
 class _TransparentAddressCard extends StatelessWidget {
   const _TransparentAddressCard();
 
+  String _previewAsset(BuildContext context) {
+    final isDark = AppTheme.of(context) == AppThemeData.dark;
+    return isDark
+        ? 'assets/illustrations/address_types_transparent_preview_dark.png'
+        : 'assets/illustrations/address_types_transparent_preview_light.png';
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     return _AddressTypeCard(
-      top: _TransparentPreview(
-        badgeBackgroundColor: colors.background.overlay.withValues(alpha: 0.5),
-        badgeTextColor: colors.text.accent,
-        valueColor: colors.text.secondary,
-      ),
+      top: _PreviewImage(asset: _previewAsset(context)),
       title: 'Transparent Address',
       description: Text(
         "Address starts with t, similar to Bitcoin, your address' balance and "
@@ -270,18 +264,10 @@ class _AddressTypeCard extends StatelessWidget {
   }
 }
 
-class _ShieldedPreview extends StatelessWidget {
-  const _ShieldedPreview({
-    required this.patternAsset,
-    required this.badgeBackgroundColor,
-    required this.badgeTextColor,
-    required this.valueColor,
-  });
+class _PreviewImage extends StatelessWidget {
+  const _PreviewImage({required this.asset});
 
-  final String patternAsset;
-  final Color badgeBackgroundColor;
-  final Color badgeTextColor;
-  final Color valueColor;
+  final String asset;
 
   @override
   Widget build(BuildContext context) {
@@ -291,121 +277,11 @@ class _ShieldedPreview extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.small),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset(patternAsset, fit: BoxFit.cover),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.xs),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 38),
-                _AddressBadgeRow(
-                  badge: 'u1',
-                  badgeWidth: 21,
-                  badgeBackgroundColor: badgeBackgroundColor,
-                  badgeTextColor: badgeTextColor,
-                  valueColor: valueColor,
-                ),
-              ],
-            ),
-          ),
-        ],
+      child: Image.asset(
+        asset,
+        fit: BoxFit.cover,
+        alignment: Alignment.bottomLeft,
       ),
-    );
-  }
-}
-
-class _TransparentPreview extends StatelessWidget {
-  const _TransparentPreview({
-    required this.badgeBackgroundColor,
-    required this.badgeTextColor,
-    required this.valueColor,
-  });
-
-  final Color badgeBackgroundColor;
-  final Color badgeTextColor;
-  final Color valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      height: 96,
-      decoration: BoxDecoration(
-        color: colors.background.base,
-        borderRadius: BorderRadius.circular(AppRadii.small),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Align(
-            alignment: Alignment.topRight,
-            child: AppIcon(
-              AppIcons.eye,
-              size: AppIconSize.large,
-              color: colors.icon.disabled,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _AddressBadgeRow(
-            badge: 't',
-            badgeWidth: 21,
-            badgeBackgroundColor: badgeBackgroundColor,
-            badgeTextColor: badgeTextColor,
-            valueColor: valueColor,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AddressBadgeRow extends StatelessWidget {
-  const _AddressBadgeRow({
-    required this.badge,
-    required this.badgeWidth,
-    this.badgeBackgroundColor,
-    this.badgeTextColor,
-    this.valueColor,
-  });
-
-  final String badge;
-  final double badgeWidth;
-  final Color? badgeBackgroundColor;
-  final Color? badgeTextColor;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Row(
-      children: [
-        Container(
-          width: badgeWidth,
-          height: 21,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: badgeBackgroundColor ?? colors.background.base,
-            borderRadius: BorderRadius.circular(AppSpacing.xxs),
-          ),
-          child: Text(
-            badge,
-            style: AppTypography.codeMedium.copyWith(
-              color: badgeTextColor ?? colors.text.accent,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.xxs),
-        Text(
-          'vtr241aaf13 ... jFJxxTmd3FwF',
-          style: AppTypography.codeMedium.copyWith(
-            color: valueColor ?? colors.text.primary,
-          ),
-        ),
-      ],
     );
   }
 }
