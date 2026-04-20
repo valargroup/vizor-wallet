@@ -38,7 +38,7 @@ class _Sizing {
   final TextStyle labelStyle;
 }
 
-// Medium (default) button — the large CTA. Uses `labelMedium` (12px).
+// Medium (default) button — the large CTA. Uses `labelLarge` (14px).
 const _mediumSizing = _Sizing(
   height: 40,
   padding: EdgeInsets.symmetric(
@@ -47,21 +47,16 @@ const _mediumSizing = _Sizing(
   ),
   gap: AppSpacing.xxs,
   iconSize: AppIconSize.medium,
-  labelStyle: AppTypography.labelMedium,
+  labelStyle: AppTypography.labelLarge,
 );
 
-// Small (compact) button — inline/dense actions. Uses `labelLarge` (14px).
-// Counter-intuitive naming: Figma's Small button is *physically shorter*
-// but carries the *larger* label size for readability inside the tight
-// 24dp height. label-L's 18dp line-box technically overshoots the
-// 16dp inner area by 2dp, but the overflow is leading / invisible
-// empty space above and below the glyphs, so no clip is necessary.
+// Small (compact) button — inline/dense actions. Uses `labelMedium` (12px).
 const _smallSizing = _Sizing(
   height: 24,
   padding: EdgeInsets.all(AppSpacing.xxs),
   gap: AppSpacing.xxs,
   iconSize: AppIconSize.medium,
-  labelStyle: AppTypography.labelLarge,
+  labelStyle: AppTypography.labelMedium,
 );
 
 class _VariantPalette {
@@ -113,7 +108,7 @@ _VariantPalette _paletteFor(AppButtonVariant variant, AppColors c) {
   }
 }
 
-/// A pill-shaped button with four style variants and two size variants.
+/// A pill-shaped button with three style variants and two size variants.
 ///
 /// Width and height are intrinsic — the button wraps the leading icon +
 /// label + trailing icon and centers them both axes. Only the pill radius
@@ -121,12 +116,10 @@ _VariantPalette _paletteFor(AppButtonVariant variant, AppColors c) {
 ///
 /// States handled:
 /// * default / hover / pressed — ambient fill swaps via [_Sizing] + palette
-/// * focused — 2dp ring painted outside the pill using the per-variant
-///   focus-ring color (brand purple for primary, neutral for the rest)
-/// * disabled — `onPressed == null` dims the whole widget to 50% and
-///   removes pointer/focus interaction. TODO(theme): Figma does not define
-///   a disabled token; replace the opacity hack once the design spec adds
-///   one.
+/// * focused — ring painted outside the pill using the per-variant
+///   focus-ring color (2dp on medium, 1.5dp on small)
+/// * disabled — `onPressed == null` switches to the explicit disabled
+///   palette from Figma and removes pointer/focus interaction
 class AppButton extends StatefulWidget {
   const AppButton({
     super.key,
@@ -199,26 +192,18 @@ class _AppButtonState extends State<AppButton> {
         : _smallSizing;
     final isGhost = widget.variant == AppButtonVariant.ghost;
 
-    // Fill priority: pressed > hover > default. Disabled skips all of this
-    // (we dim the whole widget via Opacity instead).
+    final disabled = colors.button.disabled;
+
+    // Fill priority: disabled > pressed > hover > default.
     final Color currentBg = !_enabled
-        ? palette.bg
+        ? disabled.bg
         : _pressed
         ? palette.bgPressed
         : _hovered
         ? palette.bgHover
         : palette.bg;
 
-    // Figma quirk: Primary + Medium swaps label to text/inverse whenever
-    // the button is in a hover/focus state. Small does NOT swap and other
-    // variants do not swap either. Faithfully reproduced here; flagged for
-    // design review in case this was an editor oversight.
-    final bool swapLabel =
-        widget.variant == AppButtonVariant.primary &&
-        widget.size == AppButtonSize.medium &&
-        _enabled &&
-        (_hovered || _focused);
-    final Color labelColor = swapLabel ? colors.text.inverse : palette.label;
+    final Color labelColor = _enabled ? palette.label : disabled.label;
 
     final rowChildren = <Widget>[];
     if (widget.leading != null) {
@@ -308,7 +293,10 @@ class _AppButtonState extends State<AppButton> {
               child: DecoratedBox(
                 decoration: ShapeDecoration(
                   shape: StadiumBorder(
-                    side: BorderSide(color: palette.focusRing, width: 1),
+                    side: BorderSide(
+                      color: palette.focusRing,
+                      width: widget.size == AppButtonSize.medium ? 2 : 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -336,16 +324,13 @@ class _AppButtonState extends State<AppButton> {
       ),
     );
 
-    return Opacity(
-      opacity: _enabled ? 1.0 : 0.5,
-      child: Focus(
-        focusNode: widget.focusNode,
-        autofocus: widget.autofocus,
-        canRequestFocus: _enabled,
-        onFocusChange: _handleFocusChange,
-        onKeyEvent: _handleKeyEvent,
-        child: pointer,
-      ),
+    return Focus(
+      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
+      canRequestFocus: _enabled,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: pointer,
     );
   }
 

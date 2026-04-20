@@ -16,18 +16,21 @@ class AppButtonColors {
     required this.primary,
     required this.secondary,
     required this.ghost,
+    required this.disabled,
     required this.destructive,
   });
 
   final AppPrimaryButtonColors primary;
   final AppSecondaryButtonColors secondary;
   final AppGhostButtonColors ghost;
+  final AppDisabledButtonColors disabled;
   final AppDestructiveButtonColors destructive;
 
   static const dark = AppButtonColors(
     primary: AppPrimaryButtonColors.dark,
     secondary: AppSecondaryButtonColors.dark,
     ghost: AppGhostButtonColors.dark,
+    disabled: AppDisabledButtonColors.dark,
     destructive: AppDestructiveButtonColors.dark,
   );
 
@@ -35,6 +38,7 @@ class AppButtonColors {
     primary: AppPrimaryButtonColors.light,
     secondary: AppSecondaryButtonColors.light,
     ghost: AppGhostButtonColors.light,
+    disabled: AppDisabledButtonColors.light,
     destructive: AppDestructiveButtonColors.light,
   );
 }
@@ -52,9 +56,7 @@ class AppPrimaryButtonColors {
   final Color bgPressed;
   final Color label;
 
-  // Primary button is the brand accent — uses the purple ladder in both
-  // modes. Different step numbers per mode because the designer picked visual
-  // anchors manually (they don't fall on a strict mirror pair).
+  // The Figma button tokens intentionally use different purple steps per mode.
   static const dark = AppPrimaryButtonColors(
     bg: PurplePrimitives.p500Dark,
     bgHover: PurplePrimitives.p400Dark,
@@ -63,10 +65,10 @@ class AppPrimaryButtonColors {
   );
 
   static const light = AppPrimaryButtonColors(
-    bg: PurplePrimitives.p150Light,
-    bgHover: PurplePrimitives.p300Light,
-    bgPressed: PurplePrimitives.p400Light,
-    label: PurplePrimitives.p900Light,
+    bg: PurplePrimitives.p300Light,
+    bgHover: PurplePrimitives.p400Light,
+    bgPressed: PurplePrimitives.p500Light,
+    label: PurplePrimitives.p0Light,
   );
 }
 
@@ -117,7 +119,7 @@ class AppGhostButtonColors {
     bg: Primitives.p0Dark,
     bgHover: Primitives.p100Dark,
     border: Primitives.p300Dark,
-    label: Primitives.p800Dark,
+    label: Primitives.p700Dark,
   );
 
   static const light = AppGhostButtonColors(
@@ -128,6 +130,23 @@ class AppGhostButtonColors {
     // Figma ghost variant, which sits one step lighter than the primary
     // text tone so the button reads as secondary at rest.
     label: Primitives.p800Light,
+  );
+}
+
+class AppDisabledButtonColors {
+  const AppDisabledButtonColors({required this.bg, required this.label});
+
+  final Color bg;
+  final Color label;
+
+  static const dark = AppDisabledButtonColors(
+    bg: Primitives.p100Dark,
+    label: Primitives.p400Dark,
+  );
+
+  static const light = AppDisabledButtonColors(
+    bg: Primitives.p150Light,
+    label: Primitives.p500Light,
   );
 }
 

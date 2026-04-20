@@ -79,41 +79,41 @@ abstract final class Primitives {
 /// step N in both modes while yielding mode-appropriate values. Used by the
 /// primary button fill, brand text/icon tokens, and the brand focus ring.
 abstract final class PurplePrimitives {
-  static const p0Dark = Color(0xFF1C0A1D);
-  static const p0Light = Color(0xFFFDE4FD);
+  static const p0Dark = Color(0xFF0A0614);
+  static const p0Light = Color(0xFFF7F4FE);
 
-  static const p50Dark = Color(0xFF270E28);
-  static const p50Light = Color(0xFFFAB9F8);
+  static const p50Dark = Color(0xFF110A1F);
+  static const p50Light = Color(0xFFECE5FB);
 
-  static const p100Dark = Color(0xFF3A1337);
-  static const p100Light = Color(0xFFF494F3);
+  static const p100Dark = Color(0xFF1A1030);
+  static const p100Light = Color(0xFFDACCF8);
 
-  static const p150Dark = Color(0xFF50194F);
-  static const p150Light = Color(0xFFEE70EF);
+  static const p150Dark = Color(0xFF251743);
+  static const p150Light = Color(0xFFC5ADF4);
 
-  static const p200Dark = Color(0xFF691F65);
-  static const p200Light = Color(0xFFE74BEB);
+  static const p200Dark = Color(0xFF341F60);
+  static const p200Light = Color(0xFFAF8EF0);
 
-  static const p300Dark = Color(0xFF982495);
-  static const p300Light = Color(0xFFC832C5);
+  static const p300Dark = Color(0xFF5530A8);
+  static const p300Light = Color(0xFF9366EB);
 
-  static const p400Dark = Color(0xFFC832C5);
-  static const p400Light = Color(0xFF982495);
+  static const p400Dark = Color(0xFF8F61EA);
+  static const p400Light = Color(0xFF5530A8);
 
-  static const p500Dark = Color(0xFFE74BEB);
-  static const p500Light = Color(0xFF691F65);
+  static const p500Dark = Color(0xFFAF8EF0);
+  static const p500Light = Color(0xFF341F60);
 
-  static const p600Dark = Color(0xFFEE70EF);
-  static const p600Light = Color(0xFF50194F);
+  static const p600Dark = Color(0xFFC5ADF4);
+  static const p600Light = Color(0xFF251743);
 
-  static const p700Dark = Color(0xFFF494F3);
-  static const p700Light = Color(0xFF3A1337);
+  static const p700Dark = Color(0xFFDACCF8);
+  static const p700Light = Color(0xFF1A1030);
 
-  static const p800Dark = Color(0xFFFAB9F8);
-  static const p800Light = Color(0xFF270E28);
+  static const p800Dark = Color(0xFFECE5FB);
+  static const p800Light = Color(0xFF110A1F);
 
-  static const p900Dark = Color(0xFFFDE4FD);
-  static const p900Light = Color(0xFF1C0A1D);
+  static const p900Dark = Color(0xFFF7F4FE);
+  static const p900Light = Color(0xFF0A0614);
 }
 
 /// Brand cyan primitive ladder (12 steps).

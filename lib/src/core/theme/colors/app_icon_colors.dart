@@ -45,7 +45,7 @@ class AppIconColors {
     onPrimary: Primitives.p0Dark,
     // Matches `text.warning` — same orange across modes.
     warning: YellowPrimitives.p400Dark,
-    brandPurple: PurplePrimitives.p500Dark,
+    brandPurple: PurplePrimitives.p400Dark,
     brandCyan: CyanPrimitives.p500Dark,
   );
 
@@ -57,7 +57,7 @@ class AppIconColors {
     inverse: Primitives.p0Light,
     onPrimary: Primitives.p0Light,
     warning: YellowPrimitives.p300Light,
-    brandPurple: PurplePrimitives.p200Light,
+    brandPurple: PurplePrimitives.p300Light,
     brandCyan: CyanPrimitives.p150Light,
   );
 }

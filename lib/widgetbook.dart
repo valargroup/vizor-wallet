@@ -22,5 +22,8 @@ import 'widgetbook/widgetbook_app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDesktopWindow();
+  if (isDesktopLayoutPlatform) {
+    await showDesktopWindow();
+  }
   runApp(const WidgetbookApp());
 }
