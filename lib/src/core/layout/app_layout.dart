@@ -44,9 +44,9 @@ enum AppLayoutMode {
   Size get minimumSize {
     switch (this) {
       case AppLayoutMode.large:
-        return const Size(600, 400);
+        return const Size(900, 600);
       case AppLayoutMode.small:
-        return const Size(364, 745);
+        return const Size(416, 851);
     }
   }
 }
@@ -63,8 +63,7 @@ bool get isDesktopLayoutPlatform {
 /// configured aspect ratios. Above it the window is "landscape enough"
 /// to imply [AppLayoutMode.large]; below it it's "portrait enough" to
 /// imply [AppLayoutMode.small].
-const double _largeRatioThreshold =
-    (900.0 / 600.0 + (50.0 * 1.3) / 133.0) / 2;
+const double _largeRatioThreshold = (900.0 / 600.0 + (50.0 * 1.3) / 133.0) / 2;
 
 /// Initialize the OS window for desktop at startup.
 ///
@@ -176,10 +175,10 @@ class AppLayoutNotifier extends Notifier<AppLayoutState> with WindowListener {
   }
 
   Future<void> toggle() => setMode(
-        state.mode == AppLayoutMode.large
-            ? AppLayoutMode.small
-            : AppLayoutMode.large,
-      );
+    state.mode == AppLayoutMode.large
+        ? AppLayoutMode.small
+        : AppLayoutMode.large,
+  );
 
   @override
   void onWindowResize() => _reconcileLayoutWithWindow();
@@ -213,5 +212,6 @@ class AppLayoutNotifier extends Notifier<AppLayoutState> with WindowListener {
   }
 }
 
-final appLayoutProvider =
-    NotifierProvider<AppLayoutNotifier, AppLayoutState>(AppLayoutNotifier.new);
+final appLayoutProvider = NotifierProvider<AppLayoutNotifier, AppLayoutState>(
+  AppLayoutNotifier.new,
+);
