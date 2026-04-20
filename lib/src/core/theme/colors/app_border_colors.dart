@@ -8,29 +8,37 @@ import '../primitives.dart';
 /// * [regular] — Input fields, cards, chips. (Named `regular` instead of
 ///   `default` because `default` is a reserved word in Dart.)
 /// * [strong] — Selected states, active tabs.
+/// * [utilityDestructive] — Validation / destructive emphasis.
 /// * [brandCyanSubtle] / [brandCyanStrong] — Brand-accent borders for
 ///   cyan-tinted surfaces (info panels, selection on cyan brand pages).
+/// * [brandPurpleStrong] — Brand-purple border for affirmative feedback.
 class AppBorderColors {
   const AppBorderColors({
     required this.subtle,
     required this.regular,
     required this.strong,
+    required this.utilityDestructive,
     required this.brandCyanSubtle,
     required this.brandCyanStrong,
+    required this.brandPurpleStrong,
   });
 
   final Color subtle;
   final Color regular;
   final Color strong;
+  final Color utilityDestructive;
   final Color brandCyanSubtle;
   final Color brandCyanStrong;
+  final Color brandPurpleStrong;
 
   static const dark = AppBorderColors(
     subtle: Primitives.p200Dark,
     regular: Primitives.p300Dark,
     strong: Primitives.p400Dark,
+    utilityDestructive: YellowPrimitives.p400Dark,
     brandCyanSubtle: CyanPrimitives.p100Dark,
     brandCyanStrong: CyanPrimitives.p300Dark,
+    brandPurpleStrong: PurplePrimitives.p400Dark,
   );
 
   // Light-mode borders sit one step lighter than the symmetric position
@@ -40,7 +48,9 @@ class AppBorderColors {
     subtle: Primitives.p150Light,
     regular: Primitives.p200Light,
     strong: Primitives.p300Light,
+    utilityDestructive: YellowPrimitives.p300Light,
     brandCyanSubtle: CyanPrimitives.p50Light,
     brandCyanStrong: CyanPrimitives.p150Light,
+    brandPurpleStrong: PurplePrimitives.p150Light,
   );
 }

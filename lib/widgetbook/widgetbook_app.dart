@@ -11,6 +11,7 @@ import 'button_use_cases.dart';
 import 'color_use_cases.dart';
 import 'icon_use_cases.dart';
 import 'screen_use_cases.dart';
+import 'text_field_use_cases.dart';
 import 'token_use_cases.dart';
 import 'typography_use_cases.dart';
 
@@ -141,6 +142,19 @@ class WidgetbookApp extends StatelessWidget {
                 WidgetbookUseCase(
                   name: 'Ghost / Small',
                   builder: buildButtonGhostSmallUseCase,
+                ),
+              ],
+            ),
+            WidgetbookComponent(
+              name: 'Text Field',
+              useCases: [
+                WidgetbookUseCase(
+                  name: 'Gallery',
+                  builder: buildTextFieldGalleryUseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Interactive',
+                  builder: buildTextFieldInteractiveUseCase,
                 ),
               ],
             ),

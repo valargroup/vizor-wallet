@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
+import '../../../core/widgets/app_text_field.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import '../../../providers/account_provider.dart';
 
@@ -30,9 +31,12 @@ class _ImportWalletScreenState extends ConsumerState<ImportWalletScreen> {
     final text = _mnemonicController.text.trim();
     final words = text.split(RegExp(r'\s+'));
     final wordCountOk = words.length == 24;
-    final mnemonicValid =
-        wordCountOk ? rust_wallet.validateMnemonic(mnemonic: text) : false;
-    log('ImportScreen._isValid: wordCount=${words.length}, wordCountOk=$wordCountOk, mnemonicValid=$mnemonicValid');
+    final mnemonicValid = wordCountOk
+        ? rust_wallet.validateMnemonic(mnemonic: text)
+        : false;
+    log(
+      'ImportScreen._isValid: wordCount=${words.length}, wordCountOk=$wordCountOk, mnemonicValid=$mnemonicValid',
+    );
     return wordCountOk && mnemonicValid;
   }
 
@@ -45,11 +49,16 @@ class _ImportWalletScreenState extends ConsumerState<ImportWalletScreen> {
 
     try {
       final birthdayText = _birthdayController.text.trim();
-      final birthdayHeight =
-          birthdayText.isNotEmpty ? int.tryParse(birthdayText) : null;
-      log('ImportScreen._import: calling importWallet, birthdayHeight=$birthdayHeight');
+      final birthdayHeight = birthdayText.isNotEmpty
+          ? int.tryParse(birthdayText)
+          : null;
+      log(
+        'ImportScreen._import: calling importWallet, birthdayHeight=$birthdayHeight',
+      );
 
-      await ref.read(accountProvider.notifier).importAccount(
+      await ref
+          .read(accountProvider.notifier)
+          .importAccount(
             mnemonic: _mnemonicController.text.trim(),
             birthdayHeight: birthdayHeight,
           );
@@ -85,30 +94,30 @@ class _ImportWalletScreenState extends ConsumerState<ImportWalletScreen> {
               Text(
                 'Enter the 24 words separated by spaces.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 24),
-              TextField(
+              AppTextField(
+                label: 'Recovery Phrase',
                 controller: _mnemonicController,
+                hintText: 'word1 word2 word3 ...',
+                minLines: 4,
                 maxLines: 4,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'word1 word2 word3 ...',
-                  labelText: 'Recovery Phrase',
-                ),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
-              TextField(
+              AppTextField(
+                label: 'Birthday Height (optional)',
                 controller: _birthdayController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'e.g. 419200',
-                  labelText: 'Birthday Height (optional)',
-                  helperText:
-                      'Block height when wallet was created. Speeds up sync.',
+                hintText: 'e.g. 419200',
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Block height when wallet was created. Speeds up sync.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               if (_error != null) ...[

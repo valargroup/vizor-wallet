@@ -34,7 +34,7 @@ class AppStateColors {
   final Color focusRingBrand;
 
   static const dark = AppStateColors(
-    hover: Primitives.p100Dark,
+    hover: Color(0x594D5252),
     pressed: Primitives.p150Dark,
     focus: Primitives.p200Dark,
     selected: Primitives.p150Dark,
@@ -44,7 +44,7 @@ class AppStateColors {
   );
 
   static const light = AppStateColors(
-    hover: Primitives.p100Light,
+    hover: Color(0x33B8B8B8),
     pressed: Primitives.p150Light,
     focus: Primitives.p200Light,
     selected: Primitives.p150Light,

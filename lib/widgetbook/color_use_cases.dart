@@ -446,6 +446,12 @@ Widget buildBorderUseCase(BuildContext context) {
         light: l.border.strong,
       ),
       TokenSwatch(
+        name: 'border/utility/destructive',
+        description: 'Validation and destructive emphasis',
+        dark: d.border.utilityDestructive,
+        light: l.border.utilityDestructive,
+      ),
+      TokenSwatch(
         name: 'border/brand-cyan-subtle',
         description: 'Brand-cyan border for subtle info surfaces',
         dark: d.border.brandCyanSubtle,
@@ -456,6 +462,12 @@ Widget buildBorderUseCase(BuildContext context) {
         description: 'Brand-cyan border for emphasis',
         dark: d.border.brandCyanStrong,
         light: l.border.brandCyanStrong,
+      ),
+      TokenSwatch(
+        name: 'border/brand-purple-strong',
+        description: 'Brand-purple border for affirmative feedback',
+        dark: d.border.brandPurpleStrong,
+        light: l.border.brandPurpleStrong,
       ),
     ],
   );
@@ -763,7 +775,8 @@ Widget buildFadeUseCase(BuildContext context) {
     swatches: [
       TokenSwatch(
         name: 'fade/illustration',
-        description: 'Scrim for bottom-anchored art — dark=50% over p0, light=transparent',
+        description:
+            'Scrim for bottom-anchored art — dark=50% over p0, light=transparent',
         dark: d.fade.illustration,
         light: l.fade.illustration,
       ),
