@@ -523,7 +523,9 @@ class _HomeBalanceCard extends StatelessWidget {
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: Image.asset(
-                          'assets/illustrations/home_balance_card_bg.png',
+                          isDark
+                              ? 'assets/illustrations/home_balance_card_bg_dark.png'
+                              : 'assets/illustrations/home_balance_card_bg_light.png',
                           fit: BoxFit.cover,
                           width: 604,
                           height: 196,
