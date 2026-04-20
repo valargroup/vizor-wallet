@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
 import 'onboarding_split_view.dart';
 
@@ -21,64 +22,110 @@ class _Content extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [_Title(), _BottomContent()],
-    );
-  }
-}
-
-class _Title extends StatelessWidget {
-  const _Title();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Zcash Address Types',
-          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text.rich(
-          TextSpan(
-            style: AppTypography.bodyMedium.copyWith(color: colors.text.accent),
-            children: [
-              const TextSpan(text: 'Zcash has two addresses types.\nOne for '),
-              TextSpan(
-                text: 'Privacy',
-                style: AppTypography.bodyMediumStrong.copyWith(
-                  color: colors.text.accent,
-                ),
-              ),
-              const TextSpan(text: ', one for '),
-              TextSpan(
-                text: 'Transparency',
-                style: AppTypography.bodyMediumStrong.copyWith(
-                  color: colors.text.accent,
-                ),
-              ),
-            ],
-          ),
+        _BackRow(),
+        Expanded(
+          child: Center(child: SizedBox(width: 588, child: _HeroLayout())),
         ),
       ],
     );
   }
 }
 
-class _BottomContent extends StatelessWidget {
-  const _BottomContent();
+class _BackRow extends StatelessWidget {
+  const _BackRow();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        _CardsRow(),
-        SizedBox(height: AppSpacing.base),
+    final colors = context.colors;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => context.go(OnboardingStep.intro.routePath),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppIcon(
+                AppIcons.chevronBackward,
+                size: AppIconSize.medium,
+                color: colors.text.accent,
+              ),
+              const SizedBox(width: AppSpacing.xxs),
+              Text(
+                'Back',
+                style: AppTypography.labelLarge.copyWith(
+                  color: colors.text.accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroLayout extends StatelessWidget {
+  const _HeroLayout();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        Expanded(child: Center(child: _HeroBlock())),
         _ActionRow(),
+        SizedBox(height: AppSpacing.s),
+      ],
+    );
+  }
+}
+
+class _HeroBlock extends StatelessWidget {
+  const _HeroBlock();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final bodyStyle = AppTypography.bodyMedium.copyWith(
+      color: colors.text.accent,
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Zcash Address Types',
+          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.s),
+        Text.rich(
+          TextSpan(
+            style: bodyStyle,
+            children: [
+              const TextSpan(text: 'Zcash has two addresses types.\nOne for '),
+              TextSpan(
+                text: 'Privacy',
+                style: bodyStyle.copyWith(
+                  color: colors.text.brandPurple,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const TextSpan(text: ', one for '),
+              TextSpan(
+                text: 'Transparency',
+                style: bodyStyle.copyWith(fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.s),
+        const AppDecorativeDivider(),
+        const SizedBox(height: AppSpacing.s),
+        const _CardsRow(),
       ],
     );
   }
@@ -89,12 +136,12 @@ class _CardsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return const Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        _ShieldedAddressCard(),
+      children: [
+        Expanded(child: _ShieldedAddressCard()),
         SizedBox(width: AppSpacing.s),
-        _TransparentAddressCard(),
+        Expanded(child: _TransparentAddressCard()),
       ],
     );
   }
@@ -103,69 +150,53 @@ class _CardsRow extends StatelessWidget {
 class _ShieldedAddressCard extends StatelessWidget {
   const _ShieldedAddressCard();
 
+  String _patternAsset(BuildContext context) {
+    final isDark = AppTheme.of(context) == AppThemeData.dark;
+    return isDark
+        ? 'assets/illustrations/onboarding_address_types_card_pattern_dark.png'
+        : 'assets/illustrations/onboarding_address_types_card_pattern_light.png';
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return _CardFrame(
-      backgroundColor: colors.background.brandCyanSubtle,
-      borderColor: colors.border.brandCyanSubtle,
-      icon: AppIcon(
-        AppIcons.shieldKeyhole,
-        size: 32,
-        color: colors.icon.brandCyan,
+    final isDark = AppTheme.of(context) == AppThemeData.dark;
+    final addressColor = isDark ? colors.text.inverse : colors.text.primary;
+    final badgeBg = isDark ? colors.background.base : colors.background.ground;
+    final badgeText = isDark ? colors.text.accent : colors.text.inverse;
+    return _AddressTypeCard(
+      top: _ShieldedPreview(
+        patternAsset: _patternAsset(context),
+        badgeBackgroundColor: badgeBg,
+        badgeTextColor: badgeText,
+        valueColor: addressColor,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Shielded Address',
-            style: AppTypography.headlineSmall.copyWith(
-              color: colors.text.accent,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          _AddressExample(
-            badge: 'u1',
-            badgeWidth: 24,
-            badgeTextColor: colors.text.inverse,
-            badgeBackgroundColor: colors.background.brandCyanStrong,
-            borderColor: colors.border.brandCyanStrong,
-            valueColor: colors.text.primary,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          SizedBox(
-            width: 256,
-            child: Text.rich(
-              TextSpan(
-                style: AppTypography.bodyMedium.copyWith(
-                  color: colors.text.primary,
-                ),
-                children: [
-                  const TextSpan(text: 'Address starts with '),
-                  TextSpan(
-                    text: 'u1',
-                    style: AppTypography.bodyMediumStrong.copyWith(
-                      color: colors.text.brandCyan,
-                    ),
-                  ),
-                  const TextSpan(text: ' (or '),
-                  TextSpan(
-                    text: 'zs',
-                    style: AppTypography.bodyMediumStrong.copyWith(
-                      color: colors.text.brandCyan,
-                    ),
-                  ),
-                  const TextSpan(text: ' for legacy).\n'),
-                  const TextSpan(
-                    text:
-                        'Only you can see your account balance and transaction '
-                        'history.',
-                  ),
-                ],
+      title: 'Shielded Address',
+      description: Text.rich(
+        TextSpan(
+          style: AppTypography.bodyMedium.copyWith(color: colors.text.primary),
+          children: [
+            const TextSpan(text: 'Address starts with '),
+            TextSpan(
+              text: 'u1',
+              style: AppTypography.bodyMediumStrong.copyWith(
+                color: colors.text.brandPurple,
               ),
             ),
-          ),
-        ],
+            const TextSpan(text: ' (or '),
+            TextSpan(
+              text: 'zs',
+              style: AppTypography.bodyMediumStrong.copyWith(
+                color: colors.text.brandPurple,
+              ),
+            ),
+            const TextSpan(text: ' for legacy).\n'),
+            const TextSpan(
+              text:
+                  'Only you can see your account balance and transaction history.',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -177,126 +208,204 @@ class _TransparentAddressCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return _CardFrame(
-      backgroundColor: colors.background.base,
-      icon: AppIcon(AppIcons.eye, size: 32, color: colors.icon.disabled),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Transparent Address',
-            style: AppTypography.headlineSmall.copyWith(
-              color: colors.text.accent,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          _AddressExample(
-            badge: 't',
-            badgeWidth: 16,
-            badgeTextColor: colors.text.primary,
-            badgeBackgroundColor: colors.background.overlay,
-            borderColor: colors.border.strong,
-            valueColor: colors.text.primary,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          SizedBox(
-            width: 256,
-            child: Text(
-              "Address starts with t, similar to Bitcoin, your address's "
-              'balance and transaction history are publicly visible.',
-              style: AppTypography.bodyMedium.copyWith(
-                color: colors.text.primary,
-              ),
-            ),
-          ),
-        ],
+    return _AddressTypeCard(
+      top: _TransparentPreview(
+        badgeBackgroundColor: colors.background.overlay.withValues(alpha: 0.5),
+        badgeTextColor: colors.text.accent,
+        valueColor: colors.text.secondary,
+      ),
+      title: 'Transparent Address',
+      description: Text(
+        "Address starts with t, similar to Bitcoin, your address' balance and "
+        'transaction history are publicly visible.',
+        style: AppTypography.bodyMedium.copyWith(color: colors.text.primary),
       ),
     );
   }
 }
 
-class _CardFrame extends StatelessWidget {
-  const _CardFrame({
-    required this.backgroundColor,
-    required this.icon,
-    required this.child,
-    this.borderColor,
+class _AddressTypeCard extends StatelessWidget {
+  const _AddressTypeCard({
+    required this.top,
+    required this.title,
+    required this.description,
   });
 
-  final Color backgroundColor;
-  final Color? borderColor;
-  final Widget icon;
-  final Widget child;
+  final Widget top;
+  final String title;
+  final Widget description;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 288,
-      height: 228,
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(AppRadii.medium),
-        border: borderColor == null ? null : Border.all(color: borderColor!),
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xxs,
+        vertical: AppSpacing.xs,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(mainAxisAlignment: MainAxisAlignment.end, children: [icon]),
-          child,
+          top,
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppTypography.bodyMediumStrong.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xxs),
+                SizedBox(width: 256, child: description),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _AddressExample extends StatelessWidget {
-  const _AddressExample({
-    required this.badge,
-    required this.badgeWidth,
-    required this.badgeTextColor,
+class _ShieldedPreview extends StatelessWidget {
+  const _ShieldedPreview({
+    required this.patternAsset,
     required this.badgeBackgroundColor,
-    required this.borderColor,
+    required this.badgeTextColor,
     required this.valueColor,
   });
 
-  final String badge;
-  final double badgeWidth;
-  final Color badgeTextColor;
+  final String patternAsset;
   final Color badgeBackgroundColor;
-  final Color borderColor;
+  final Color badgeTextColor;
   final Color valueColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 256,
+      height: 96,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(AppRadii.small),
       ),
-      child: Row(
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          Container(
-            width: badgeWidth,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: badgeBackgroundColor,
-              borderRadius: BorderRadius.circular(4),
+          Image.asset(patternAsset, fit: BoxFit.cover),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 38),
+                _AddressBadgeRow(
+                  badge: 'u1',
+                  badgeWidth: 21,
+                  badgeBackgroundColor: badgeBackgroundColor,
+                  badgeTextColor: badgeTextColor,
+                  valueColor: valueColor,
+                ),
+              ],
             ),
-            child: Text(
-              badge,
-              style: AppTypography.codeMedium.copyWith(color: badgeTextColor),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.xxs),
-          Text(
-            'vtr241af13x9...XTjFJxxTm3FwF',
-            style: AppTypography.codeMedium.copyWith(color: valueColor),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TransparentPreview extends StatelessWidget {
+  const _TransparentPreview({
+    required this.badgeBackgroundColor,
+    required this.badgeTextColor,
+    required this.valueColor,
+  });
+
+  final Color badgeBackgroundColor;
+  final Color badgeTextColor;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      height: 96,
+      decoration: BoxDecoration(
+        color: colors.background.base,
+        borderRadius: BorderRadius.circular(AppRadii.small),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: AppIcon(
+              AppIcons.eye,
+              size: AppIconSize.large,
+              color: colors.icon.disabled,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _AddressBadgeRow(
+            badge: 't',
+            badgeWidth: 21,
+            badgeBackgroundColor: badgeBackgroundColor,
+            badgeTextColor: badgeTextColor,
+            valueColor: valueColor,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddressBadgeRow extends StatelessWidget {
+  const _AddressBadgeRow({
+    required this.badge,
+    required this.badgeWidth,
+    this.badgeBackgroundColor,
+    this.badgeTextColor,
+    this.valueColor,
+  });
+
+  final String badge;
+  final double badgeWidth;
+  final Color? badgeBackgroundColor;
+  final Color? badgeTextColor;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Row(
+      children: [
+        Container(
+          width: badgeWidth,
+          height: 21,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: badgeBackgroundColor ?? colors.background.base,
+            borderRadius: BorderRadius.circular(AppSpacing.xxs),
+          ),
+          child: Text(
+            badge,
+            style: AppTypography.codeMedium.copyWith(
+              color: badgeTextColor ?? colors.text.accent,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.xxs),
+        Text(
+          'vtr241aaf13 ... jFJxxTmd3FwF',
+          style: AppTypography.codeMedium.copyWith(
+            color: valueColor ?? colors.text.primary,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -304,12 +413,14 @@ class _AddressExample extends StatelessWidget {
 class _ActionRow extends StatelessWidget {
   const _ActionRow();
 
+  static const double _buttonWidth = 256;
+
   @override
   Widget build(BuildContext context) {
     return AppButton(
       onPressed: () => context.go(OnboardingStep.thingsToKnow.routePath),
       variant: AppButtonVariant.primary,
-      minWidth: 196,
+      minWidth: _buttonWidth,
       trailing: const AppIcon(AppIcons.chevronForward),
       child: const Text('Continue'),
     );
