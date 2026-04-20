@@ -3,6 +3,7 @@ import 'package:flutter/material.dart'
     show
         AlertDialog,
         CircularProgressIndicator,
+        Scrollbar,
         TextButton,
         TextStyle,
         Theme,
@@ -201,7 +202,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-class _HomePane extends StatelessWidget {
+class _HomePane extends StatefulWidget {
   const _HomePane({
     required this.sync,
     required this.canBackgroundSync,
@@ -227,35 +228,108 @@ class _HomePane extends StatelessWidget {
   final VoidCallback onRetrySync;
 
   @override
+  State<_HomePane> createState() => _HomePaneState();
+}
+
+class _HomePaneState extends State<_HomePane> {
+  final ScrollController _scrollController = ScrollController();
+  bool _isHovered = false;
+  bool _canScroll = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateCanScroll();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomePane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateCanScroll();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _updateCanScroll() {
+    if (!_scrollController.hasClients) return;
+    final canScroll = _scrollController.position.maxScrollExtent > 0;
+    if (canScroll == _canScroll) return;
+    setState(() {
+      _canScroll = canScroll;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final notice = _noticeData();
     final groups = _activityGroups(context);
+    final showHoverScrollbar = isDesktopLayoutPlatform;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        return SingleChildScrollView(
-          primary: true,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.sm),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: AppSpacing.sm),
-                  _HomeBalanceCard(
-                    balanceText: balanceText,
-                    isBalanceVisible: isBalanceVisible,
-                    onToggleBalanceVisibility: onToggleBalanceVisibility,
+        return NotificationListener<ScrollMetricsNotification>(
+          onNotification: (_) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _updateCanScroll();
+            });
+            return false;
+          },
+          child: MouseRegion(
+            onEnter: (_) {
+              if (!_isHovered) {
+                setState(() {
+                  _isHovered = true;
+                });
+              }
+            },
+            onExit: (_) {
+              if (_isHovered) {
+                setState(() {
+                  _isHovered = false;
+                });
+              }
+            },
+            child: Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: showHoverScrollbar && _isHovered && _canScroll,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: AppSpacing.sm),
+                        _HomeBalanceCard(
+                          balanceText: widget.balanceText,
+                          isBalanceVisible: widget.isBalanceVisible,
+                          onToggleBalanceVisibility:
+                              widget.onToggleBalanceVisibility,
+                        ),
+                        if (notice != null) ...[
+                          const SizedBox(height: AppSpacing.xs),
+                          _HomeNoticeCard(data: notice),
+                        ],
+                        const SizedBox(height: AppSpacing.sm),
+                        _HomeActivitySection(groups: groups),
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
+                    ),
                   ),
-                  if (notice != null) ...[
-                    const SizedBox(height: AppSpacing.xs),
-                    _HomeNoticeCard(data: notice),
-                  ],
-                  const SizedBox(height: AppSpacing.sm),
-                  _HomeActivitySection(groups: groups),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
+                ),
               ),
             ),
           ),
@@ -265,28 +339,28 @@ class _HomePane extends StatelessWidget {
   }
 
   _HomeNoticeData? _noticeData() {
-    if (sync.error != null) {
+    if (widget.sync.error != null) {
       return _HomeNoticeData(
         iconName: AppIcons.warning,
         message: 'Sync error',
         actionLabel: 'Retry',
-        onTap: onRetrySync,
+        onTap: widget.onRetrySync,
       );
     }
-    if (sync.isBackgroundMode) {
+    if (widget.sync.isBackgroundMode) {
       return _HomeNoticeData(
         iconName: AppIcons.renew,
         message: 'Background sync is running.',
         actionLabel: 'Stop sync',
-        onTap: onStopBackgroundSync,
+        onTap: widget.onStopBackgroundSync,
       );
     }
-    if (canBackgroundSync && sync.isSyncing) {
+    if (widget.canBackgroundSync && widget.sync.isSyncing) {
       return _HomeNoticeData(
         iconName: AppIcons.loader,
         message: 'Continue syncing in the background.',
         actionLabel: 'Sync in background',
-        onTap: onSyncInBackground,
+        onTap: widget.onSyncInBackground,
       );
     }
     return null;
@@ -298,7 +372,7 @@ class _HomePane extends StatelessWidget {
     final colors = context.colors;
     final successColor = Theme.of(context).colorScheme.tertiary;
 
-    if (sync.error != null) {
+    if (widget.sync.error != null) {
       todayRows.add(
         _HomeActivityRowData(
           title: 'Sync Error',
@@ -307,20 +381,22 @@ class _HomePane extends StatelessWidget {
           leadingIconColor: colors.icon.warning,
           amountText: 'Retry',
           amountColor: colors.text.warning,
-          onTap: onRetrySync,
+          onTap: widget.onRetrySync,
         ),
       );
-    } else if (sync.isSyncing) {
-      final pct = (sync.percentage * 100).toStringAsFixed(0);
+    } else if (widget.sync.isSyncing) {
+      final pct = (widget.sync.percentage * 100).toStringAsFixed(0);
       todayRows.add(
         _HomeActivityRowData(
-          title: sync.isBackgroundMode ? 'Background Syncing...' : 'Syncing...',
+          title: widget.sync.isBackgroundMode
+              ? 'Background Syncing...'
+              : 'Syncing...',
           leadingIconName: AppIcons.renew,
           leadingBackgroundColor: colors.background.base,
           leadingIconColor: colors.icon.accent,
-          subtitle: sync.phase.isEmpty
+          subtitle: widget.sync.phase.isEmpty
               ? null
-              : '${sync.phase[0].toUpperCase()}${sync.phase.substring(1)}',
+              : '${widget.sync.phase[0].toUpperCase()}${widget.sync.phase.substring(1)}',
           amountText: '$pct%',
           amountColor: colors.text.secondary,
         ),
@@ -336,8 +412,8 @@ class _HomePane extends StatelessWidget {
       );
     }
 
-    for (final tx in sync.recentTransactions.take(6)) {
-      final groupLabel = groupLabelForTx(tx);
+    for (final tx in widget.sync.recentTransactions.take(6)) {
+      final groupLabel = widget.groupLabelForTx(tx);
       final rows = grouped.putIfAbsent(groupLabel, () => []);
       final isIncoming = tx.accountBalanceDelta >= 0;
       final isPending = tx.minedHeight == BigInt.zero && !tx.expiredUnmined;
@@ -364,7 +440,9 @@ class _HomePane extends StatelessWidget {
           subIconBackgroundColor: isPending
               ? colors.background.overlay.withValues(alpha: 0.5)
               : colors.background.brandCyanStrong,
-          amountText: formatSignedZec(BigInt.from(tx.accountBalanceDelta)),
+          amountText: widget.formatSignedZec(
+            BigInt.from(tx.accountBalanceDelta),
+          ),
           amountColor: isExpired
               ? colors.text.muted
               : isIncoming
