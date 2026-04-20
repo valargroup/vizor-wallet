@@ -70,6 +70,7 @@ class AppTextField extends StatefulWidget {
 class _AppTextFieldState extends State<AppTextField> {
   late final TextEditingController _internalController;
   late final FocusNode _internalFocusNode;
+  final GlobalKey _textFieldRegionKey = GlobalKey();
   TextEditingController? _attachedController;
   FocusNode? _attachedFocusNode;
   bool _hovered = false;
@@ -134,6 +135,25 @@ class _AppTextFieldState extends State<AppTextField> {
     _controller.clear();
     widget.onChanged?.call('');
     widget.onClear?.call();
+  }
+
+  bool _pointerIsInsideTextFieldRegion(PointerDownEvent event) {
+    final context = _textFieldRegionKey.currentContext;
+    final renderObject = context?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) return false;
+    final localPosition = renderObject.globalToLocal(event.position);
+    return (Offset.zero & renderObject.size).contains(localPosition);
+  }
+
+  void _requestFocusFromShell(PointerDownEvent event) {
+    if (!widget.enabled || widget.readOnly || _focusNode.hasFocus) return;
+    if (_pointerIsInsideTextFieldRegion(event)) return;
+    _focusNode.requestFocus();
+    final endOffset = _controller.text.length;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_focusNode.hasFocus) return;
+      _controller.selection = TextSelection.collapsed(offset: endOffset);
+    });
   }
 
   @override
@@ -227,6 +247,7 @@ class _AppTextFieldState extends State<AppTextField> {
       style: valueStyle,
       strutStyle: textStrutStyle,
       cursorColor: colors.text.accent,
+      selectAllOnFocus: false,
       decoration: InputDecoration.collapsed(
         hintText: widget.hintText,
         hintStyle: hintStyle,
@@ -241,160 +262,169 @@ class _AppTextFieldState extends State<AppTextField> {
             : SystemMouseCursors.basic,
         onEnter: (_) => _setHovered(true),
         onExit: (_) => _setHovered(false),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned.fill(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  if (_isFocused)
-                    Positioned(
-                      left: -focusRingWidth,
-                      top: -focusRingWidth,
-                      right: -focusRingWidth,
-                      bottom: -focusRingWidth,
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(
-                              shellRadius + focusRingWidth,
-                            ),
-                            border: Border.all(
-                              color: focusRingColor,
-                              width: focusRingStrokeWidth,
-                              strokeAlign: BorderSide.strokeAlignInside,
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _requestFocusFromShell,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (_isFocused)
+                      Positioned(
+                        left: -focusRingWidth,
+                        top: -focusRingWidth,
+                        right: -focusRingWidth,
+                        bottom: -focusRingWidth,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(
+                                shellRadius + focusRingWidth,
+                              ),
+                              border: Border.all(
+                                color: focusRingColor,
+                                width: focusRingStrokeWidth,
+                                strokeAlign: BorderSide.strokeAlignInside,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: colors.surface.input,
-                        borderRadius: BorderRadius.circular(shellRadius),
-                        border: Border.all(
-                          color: borderColor,
-                          width: 1.5,
-                          strokeAlign: BorderSide.strokeAlignInside,
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: colors.surface.input,
+                          borderRadius: BorderRadius.circular(shellRadius),
+                          border: Border.all(
+                            color: borderColor,
+                            width: 1.5,
+                            strokeAlign: BorderSide.strokeAlignInside,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            // Keep this hover layer in the tree at all times and only vary opacity.
-            // Inserting/removing a same-typed Stack sibling around the desktop
-            // TextField caused the EditableText subtree to be replaced during
-            // hover/focus transitions, which made focus visuals appear while text
-            // input/caret handling broke. Apply the same rule to any future
-            // conditional overlay siblings in this Stack.
-            Positioned.fill(
-              child: Opacity(
-                opacity: _hovered && !_isFocused && isNeutralTone ? 1 : 0,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colors.state.hover,
-                    borderRadius: BorderRadius.circular(shellRadius),
+              // Keep this hover layer in the tree at all times and only vary opacity.
+              // Inserting/removing a same-typed Stack sibling around the desktop
+              // TextField caused the EditableText subtree to be replaced during
+              // hover/focus transitions, which made focus visuals appear while text
+              // input/caret handling broke. Apply the same rule to any future
+              // conditional overlay siblings in this Stack.
+              Positioned.fill(
+                child: Opacity(
+                  opacity: _hovered && !_isFocused && isNeutralTone ? 1 : 0,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: colors.state.hover,
+                      borderRadius: BorderRadius.circular(shellRadius),
+                    ),
                   ),
                 ),
               ),
-            ),
-            Positioned.fill(
-              child: IconTheme.merge(
-                data: IconThemeData(color: iconColor, size: AppIconSize.large),
-                child: _multiline
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (widget.leading != null)
-                            SizedBox(
-                              width: 28,
-                              height: 48,
-                              child: Padding(
-                                padding: const EdgeInsets.only(
-                                  left: AppSpacing.xs,
-                                ),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: IconTheme.merge(
-                                    data: IconThemeData(
-                                      color: iconColor,
-                                      size: 20,
-                                    ),
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: widget.leading,
+              Positioned.fill(
+                child: IconTheme.merge(
+                  data: IconThemeData(
+                    color: iconColor,
+                    size: AppIconSize.large,
+                  ),
+                  child: _multiline
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (widget.leading != null)
+                              SizedBox(
+                                width: 28,
+                                height: 48,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: AppSpacing.xs,
+                                  ),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: IconTheme.merge(
+                                      data: IconThemeData(
+                                        color: iconColor,
+                                        size: 20,
+                                      ),
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: widget.leading,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
                           Expanded(
                             child: Padding(
+                              key: _textFieldRegionKey,
                               padding: const EdgeInsets.fromLTRB(
                                 AppSpacing.s,
                                 AppSpacing.s + 6,
-                                0,
-                                AppSpacing.s,
-                              ),
-                              child: textField,
-                            ),
-                          ),
-                          if (trailingWidget != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                AppSpacing.xs,
-                                AppSpacing.s,
-                                AppSpacing.sm,
-                                0,
-                              ),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: trailingWidget,
-                              ),
-                            ),
-                        ],
-                      )
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (widget.leading != null)
-                              SizedBox(
-                                width: AppIconSize.large,
-                                height: AppIconSize.large,
-                                child: widget.leading,
-                              ),
-                            if (widget.leading != null)
-                              const SizedBox(width: AppSpacing.xs),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 6),
+                                  0,
+                                  AppSpacing.s,
+                                ),
                                 child: textField,
                               ),
                             ),
-                            if (trailingWidget != null) ...[
-                              const SizedBox(width: AppSpacing.xs),
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: trailingWidget,
+                            if (trailingWidget != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  AppSpacing.xs,
+                                  AppSpacing.s,
+                                  AppSpacing.sm,
+                                  0,
+                                ),
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: trailingWidget,
+                                ),
                               ),
-                            ],
                           ],
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if (widget.leading != null)
+                                SizedBox(
+                                  width: AppIconSize.large,
+                                  height: AppIconSize.large,
+                                  child: widget.leading,
+                                ),
+                              if (widget.leading != null)
+                                const SizedBox(width: AppSpacing.xs),
+                            Expanded(
+                              child: Padding(
+                                key: _textFieldRegionKey,
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: textField,
+                              ),
+                              ),
+                              if (trailingWidget != null) ...[
+                                const SizedBox(width: AppSpacing.xs),
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: trailingWidget,
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                      ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
