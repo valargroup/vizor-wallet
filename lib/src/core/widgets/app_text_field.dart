@@ -285,8 +285,15 @@ class _AppTextFieldState extends State<AppTextField> {
                 ],
               ),
             ),
-            if (_hovered && !_isFocused && isNeutralTone)
-              Positioned.fill(
+            // Keep this hover layer in the tree at all times and only vary opacity.
+            // Inserting/removing a same-typed Stack sibling around the desktop
+            // TextField caused the EditableText subtree to be replaced during
+            // hover/focus transitions, which made focus visuals appear while text
+            // input/caret handling broke. Apply the same rule to any future
+            // conditional overlay siblings in this Stack.
+            Positioned.fill(
+              child: Opacity(
+                opacity: _hovered && !_isFocused && isNeutralTone ? 1 : 0,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: colors.state.hover,
@@ -294,6 +301,7 @@ class _AppTextFieldState extends State<AppTextField> {
                   ),
                 ),
               ),
+            ),
             Positioned.fill(
               child: IconTheme.merge(
                 data: IconThemeData(color: iconColor, size: AppIconSize.large),
