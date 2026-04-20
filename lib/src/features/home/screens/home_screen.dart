@@ -441,10 +441,6 @@ class _HomeBalanceCard extends StatelessWidget {
         ? '$balanceText zec'
         : '•••••• zec';
     final isDark = AppTheme.of(context) == AppThemeData.dark;
-    const patternWidth = 896.0;
-    const patternHeight = 1007.0;
-    const patternLeft = -700.0;
-    const patternTop = -405.0;
 
     return SizedBox(
       height: 196,
@@ -502,24 +498,6 @@ class _HomeBalanceCard extends StatelessWidget {
                       ),
                     ),
                     Positioned.fill(
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            left: patternLeft,
-                            top: patternTop,
-                            width: patternWidth,
-                            height: patternHeight,
-                            child: Image.asset(
-                              isDark
-                                  ? 'assets/illustrations/home_balance_card_pattern_dark.png'
-                                  : 'assets/illustrations/home_balance_card_pattern_light.png',
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Positioned.fill(
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: Image.asset(
@@ -554,10 +532,9 @@ class _HomeBalanceCard extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              AppIcon(
-                                AppIcons.shieldKeyhole,
-                                size: 16,
-                                color: colors.icon.brandPurple,
+                              _HomeBalanceShieldIcon(
+                                isDark: isDark,
+                                iconColor: colors.icon.brandPurple,
                               ),
                               const SizedBox(width: AppSpacing.xxs),
                               Text(
@@ -625,6 +602,51 @@ class _HomeBalanceCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HomeBalanceShieldIcon extends StatelessWidget {
+  const _HomeBalanceShieldIcon({required this.isDark, required this.iconColor});
+
+  final bool isDark;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    const patternWidth = 896.0;
+    const patternHeight = 1007.0;
+
+    return SizedBox(
+      width: 16,
+      height: 16,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          IgnorePointer(
+            child: OverflowBox(
+              minWidth: 0,
+              minHeight: 0,
+              maxWidth: patternWidth,
+              maxHeight: patternHeight,
+              alignment: Alignment.center,
+              child: Opacity(
+                opacity: 0.15,
+                child: Image.asset(
+                  isDark
+                      ? 'assets/illustrations/home_balance_card_pattern_dark.png'
+                      : 'assets/illustrations/home_balance_card_pattern_light.png',
+                  width: patternWidth,
+                  height: patternHeight,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+          AppIcon(AppIcons.shieldKeyhole, size: 16, color: iconColor),
+        ],
       ),
     );
   }
