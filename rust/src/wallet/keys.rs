@@ -8,10 +8,14 @@ use zcash_client_backend::data_api::{
     Zip32Derivation, chain::ChainState,
 };
 use zcash_client_sqlite::{AccountUuid, WalletDb, util::SystemClock, wallet::init::init_wallet_db};
-use zcash_keys::keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedSpendingKey};
+use zcash_keys::{
+    encoding::encode_transparent_address,
+    keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedSpendingKey},
+};
 use zcash_primitives::block::BlockHash;
 use zip32::fingerprint::SeedFingerprint;
-use zcash_protocol::consensus::{BlockHeight, NetworkUpgrade, Parameters};
+use zcash_protocol::consensus::{BlockHeight, NetworkConstants, NetworkUpgrade, Parameters};
+use zcash_primitives::legacy::keys::IncomingViewingKey as _;
 
 use crate::wallet::network::WalletNetwork;
 
@@ -360,18 +364,19 @@ pub fn get_transparent_address_from_db(db_path: &str, network: WalletNetwork, ac
         .ufvk()
         .ok_or("Account does not have a UFVK")?;
 
-    let transparent_req = UnifiedAddressRequest::custom(
-        ReceiverRequirement::Omit,    // Orchard
-        ReceiverRequirement::Omit,    // Sapling
-        ReceiverRequirement::Require, // Transparent
-    )
-    .map_err(|_| "Failed to create transparent address request")?;
+    let transparent = ufvk
+        .transparent()
+        .ok_or("Account does not have a transparent receiver")?;
+    let tivk = transparent
+        .derive_external_ivk()
+        .map_err(|e| format!("Failed to derive transparent IVK: {e}"))?;
+    let (taddr, _) = tivk.default_address();
 
-    let (ua, _di) = ufvk
-        .default_address(transparent_req)
-        .map_err(|e| format!("Failed to derive transparent address: {e}"))?;
-
-    Ok(ua.encode(&network))
+    Ok(encode_transparent_address(
+        &network.b58_pubkey_address_prefix(),
+        &network.b58_script_address_prefix(),
+        &taddr,
+    ))
 }
 
 /// Validate that a wallet database exists and has at least one account.
