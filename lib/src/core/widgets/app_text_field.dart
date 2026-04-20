@@ -145,14 +145,57 @@ class _AppTextFieldState extends State<AppTextField> {
     return (Offset.zero & renderObject.size).contains(localPosition);
   }
 
-  void _requestFocusFromShell(PointerDownEvent event) {
-    if (!widget.enabled || widget.readOnly || _focusNode.hasFocus) return;
+  TextSelection _selectionForShellPointer(
+    PointerDownEvent event,
+    TextStyle valueStyle,
+    StrutStyle textStrutStyle,
+  ) {
+    if (_controller.text.isEmpty) {
+      return const TextSelection.collapsed(offset: 0);
+    }
+
+    final regionContext = _textFieldRegionKey.currentContext;
+    final renderObject = regionContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return TextSelection.collapsed(offset: _controller.text.length);
+    }
+
+    final localPosition = renderObject.globalToLocal(event.position);
+    final clampedPosition = Offset(
+      localPosition.dx.clamp(0.0, renderObject.size.width),
+      localPosition.dy.clamp(0.0, renderObject.size.height),
+    );
+
+    final textPainter = TextPainter(
+      text: TextSpan(text: _controller.text, style: valueStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      strutStyle: textStrutStyle,
+      maxLines: _multiline ? null : 1,
+    )..layout(maxWidth: renderObject.size.width);
+
+    final position = textPainter.getPositionForOffset(clampedPosition);
+    return TextSelection.collapsed(offset: position.offset);
+  }
+
+  void _requestFocusFromShell(
+    PointerDownEvent event,
+    TextStyle valueStyle,
+    StrutStyle textStrutStyle,
+  ) {
+    if (!widget.enabled || widget.readOnly) return;
     if (_pointerIsInsideTextFieldRegion(event)) return;
-    _focusNode.requestFocus();
-    final endOffset = _controller.text.length;
+    final selection = _selectionForShellPointer(
+      event,
+      valueStyle,
+      textStrutStyle,
+    );
+    if (!_focusNode.hasFocus) {
+      _focusNode.requestFocus();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_focusNode.hasFocus) return;
-      _controller.selection = TextSelection.collapsed(offset: endOffset);
+      _controller.selection = selection;
     });
   }
 
@@ -264,7 +307,8 @@ class _AppTextFieldState extends State<AppTextField> {
         onExit: (_) => _setHovered(false),
         child: Listener(
           behavior: HitTestBehavior.translucent,
-          onPointerDown: _requestFocusFromShell,
+          onPointerDown: (event) =>
+              _requestFocusFromShell(event, valueStyle, textStrutStyle),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -360,12 +404,12 @@ class _AppTextFieldState extends State<AppTextField> {
                                   ),
                                 ),
                               ),
-                          Expanded(
-                            child: Padding(
-                              key: _textFieldRegionKey,
-                              padding: const EdgeInsets.fromLTRB(
-                                AppSpacing.s,
-                                AppSpacing.s + 6,
+                            Expanded(
+                              child: Padding(
+                                key: _textFieldRegionKey,
+                                padding: const EdgeInsets.fromLTRB(
+                                  AppSpacing.s,
+                                  AppSpacing.s + 6,
                                   0,
                                   AppSpacing.s,
                                 ),
@@ -403,12 +447,12 @@ class _AppTextFieldState extends State<AppTextField> {
                                 ),
                               if (widget.leading != null)
                                 const SizedBox(width: AppSpacing.xs),
-                            Expanded(
-                              child: Padding(
-                                key: _textFieldRegionKey,
-                                padding: const EdgeInsets.only(bottom: 6),
-                                child: textField,
-                              ),
+                              Expanded(
+                                child: Padding(
+                                  key: _textFieldRegionKey,
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: textField,
+                                ),
                               ),
                               if (trailingWidget != null) ...[
                                 const SizedBox(width: AppSpacing.xs),
