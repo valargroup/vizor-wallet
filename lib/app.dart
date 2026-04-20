@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:desktop_window_bootstrap/desktop_window_bootstrap.dart';
 
 import 'main.dart' show log;
+import 'src/app_bootstrap.dart';
 import 'src/core/motion/onboarding_motion.dart';
 import 'src/core/theme/app_theme.dart';
 import 'src/core/theme/legacy_material_theme.dart';
@@ -28,6 +29,7 @@ import 'src/providers/theme_mode_provider.dart';
 import 'src/providers/wallet_provider.dart';
 
 final _routerProvider = Provider<GoRouter>((ref) {
+  final bootstrap = ref.watch(appBootstrapProvider);
   final refresh = ValueNotifier<int>(0);
   ref.onDispose(refresh.dispose);
   ref.listen(walletProvider, (_, _) {
@@ -36,7 +38,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
   log('router: initialized');
 
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: bootstrap.initialLocation,
     refreshListenable: refresh,
     redirect: (context, state) {
       final walletAsync = ref.read(walletProvider);
@@ -45,7 +47,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
       if (walletAsync.hasError) return null;
 
       final wallet = walletAsync.value;
-      final hasWallet = wallet?.hasWallet ?? false;
+      final hasWallet = wallet?.hasWallet ?? bootstrap.hasWallet;
       final isOnboarding =
           state.matchedLocation == '/welcome' ||
           state.matchedLocation.startsWith('/onboarding/') ||
@@ -67,7 +69,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
           final walletAsync = ref.read(walletProvider);
           if (walletAsync.hasError) return '/home'; // home shows error state
           final wallet = walletAsync.value;
-          final hasWallet = wallet?.hasWallet ?? false;
+          final hasWallet = wallet?.hasWallet ?? bootstrap.hasWallet;
           return hasWallet ? '/home' : '/welcome';
         },
       ),

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../main.dart' show log;
+import '../app_bootstrap.dart';
 import 'account_provider.dart';
 
 class WalletState {
@@ -19,7 +22,8 @@ class WalletState {
 
 class WalletNotifier extends AsyncNotifier<WalletState> {
   @override
-  Future<WalletState> build() async {
+  FutureOr<WalletState> build() {
+    final bootstrap = ref.watch(appBootstrapProvider);
     final accountState = ref.watch(accountProvider);
 
     return accountState.when(
@@ -31,7 +35,11 @@ class WalletNotifier extends AsyncNotifier<WalletState> {
           activeAccountUuid: state.activeAccountUuid,
         );
       },
-      loading: () => const WalletState(),
+      loading: () => WalletState(
+        hasWallet: bootstrap.hasWallet,
+        unifiedAddress: bootstrap.initialAccountState.activeAddress,
+        activeAccountUuid: bootstrap.initialAccountState.activeAccountUuid,
+      ),
       error: (e, st) {
         log('WalletNotifier: error from accountProvider: $e');
         Error.throwWithStackTrace(e, st);
@@ -40,5 +48,6 @@ class WalletNotifier extends AsyncNotifier<WalletState> {
   }
 }
 
-final walletProvider =
-    AsyncNotifierProvider<WalletNotifier, WalletState>(WalletNotifier.new);
+final walletProvider = AsyncNotifierProvider<WalletNotifier, WalletState>(
+  WalletNotifier.new,
+);

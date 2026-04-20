@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:desktop_window_bootstrap/desktop_window_bootstrap.dart';
 
 import 'app.dart';
+import 'src/app_bootstrap.dart';
 import 'src/core/layout/app_layout.dart';
 import 'src/rust/frb_generated.dart';
 
@@ -23,6 +24,12 @@ Future<void> main() async {
     await DesktopWindowBootstrap.initialize();
     await showDesktopWindow();
   }
+  final bootstrap = await loadAppBootstrap();
   log('main: launching app');
-  runApp(const ProviderScope(child: ZcashWalletApp()));
+  runApp(
+    ProviderScope(
+      overrides: [appBootstrapProvider.overrideWithValue(bootstrap)],
+      child: const ZcashWalletApp(),
+    ),
+  );
 }
