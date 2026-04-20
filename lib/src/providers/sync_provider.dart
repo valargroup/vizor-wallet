@@ -21,12 +21,15 @@ class SyncState {
   final BigInt transparentBalance;
   final BigInt saplingBalance;
   final BigInt orchardBalance;
+
   /// Sum of spendable balances across all pools. Use for "available to send".
   final BigInt spendableBalance;
+
   /// Sum of spendable + pending across all pools. Use for "total holdings".
   final BigInt totalBalance;
   final String? error;
   final List<rust_sync.TransactionInfo> recentTransactions;
+
   /// Current sync phase: `"download"`, `"scan"`, `"enhance"`, or
   /// empty. Widgets can use this to show e.g. "Downloading..."
   /// instead of a bare percentage.
@@ -49,11 +52,11 @@ class SyncState {
     this.error,
     this.recentTransactions = const [],
     this.phase = '',
-  })  : transparentBalance = transparentBalance ?? BigInt.zero,
-        saplingBalance = saplingBalance ?? BigInt.zero,
-        orchardBalance = orchardBalance ?? BigInt.zero,
-        spendableBalance = spendableBalance ?? BigInt.zero,
-        totalBalance = totalBalance ?? BigInt.zero;
+  }) : transparentBalance = transparentBalance ?? BigInt.zero,
+       saplingBalance = saplingBalance ?? BigInt.zero,
+       orchardBalance = orchardBalance ?? BigInt.zero,
+       spendableBalance = spendableBalance ?? BigInt.zero,
+       totalBalance = totalBalance ?? BigInt.zero;
 
   SyncState copyWith({
     bool? isSyncing,
@@ -68,6 +71,7 @@ class SyncState {
     BigInt? totalBalance,
     String? error,
     List<rust_sync.TransactionInfo>? recentTransactions,
+    String? phase,
   }) {
     return SyncState(
       isSyncing: isSyncing ?? this.isSyncing,
@@ -82,6 +86,7 @@ class SyncState {
       totalBalance: totalBalance ?? this.totalBalance,
       error: error ?? this.error,
       recentTransactions: recentTransactions ?? this.recentTransactions,
+      phase: phase ?? this.phase,
     );
   }
 }
@@ -186,97 +191,121 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     _isSyncing = true;
     _lastLoggedHeight = 0;
     final gen = ++_syncGen;
-    state = AsyncData(SyncState(isSyncing: true));
-
-    _getDbPath().then((dbPath) {
-      if (gen != _syncGen) return; // stopSync was called, abort
-      final network = ZcashNetwork.mainnet;
-      log('Sync: starting foreground sync');
-      // Fire up the mempool observer alongside the scan loop.
-      // It has its own Rust cancel flag (MEMPOOL_CANCEL) and runs
-      // on a separate tokio runtime, so it can accept events while
-      // the scan loop is still catching up on old blocks.
-      _startMempoolObserver(dbPath, network);
-      final stream = rust_sync.startFullSync(
-        dbPath: dbPath,
-        lightwalletdUrl: network.lightwalletdUrl,
-        network: network.name,
-        mode: 1,
-      );
-      _syncSub = stream.listen(
-        (event) => _onSyncProgress(SyncProgressEvent(
-          scannedHeight: event.scannedHeight.toInt(),
-          chainTipHeight: event.chainTipHeight.toInt(),
-          percentage: event.percentage,
-          isSyncing: event.isSyncing,
-          isComplete: event.isComplete,
-          hasNewTx: event.hasNewTx,
-          phase: event.phase,
-        )),
-        onDone: () {
-          log('Sync: stream ended');
-          _syncSub = null;
-          // Normal completion (isComplete=true) is handled inside
-          // _onSyncProgress, which clears _isSyncing and starts
-          // polling. But the stream can also end WITHOUT an
-          // isComplete event — specifically when Rust exits because
-          // DESIRED_SYNC_MODE changed (foreground→background
-          // handoff via enableBackgroundSync). In that case
-          // _isSyncing is still true and the mempool observer is
-          // still running, both of which block future startSync()
-          // calls. Clean up unconditionally here; if isComplete
-          // already ran, these are no-ops.
-          if (_isSyncing) {
-            log('Sync: stream ended without isComplete, cleaning up');
-            _isSyncing = false;
-            _stopMempoolObserver();
-          }
-        },
-        onError: (e) {
-          if (gen != _syncGen) return;
-          log('Sync: stream error: $e');
-          _isSyncing = false;
-          // Sync died mid-stream: tear the mempool observer down
-          // at the same time so a failed sync session can't leak
-          // a lightwalletd stream that keeps firing
-          // `_refreshBalance()` callbacks with no owning sync.
-          _stopMempoolObserver();
-          final prev = state.value;
-          state = AsyncData(SyncState(
-            error: e.toString(),
-            transparentBalance: prev?.transparentBalance,
-            saplingBalance: prev?.saplingBalance,
-            orchardBalance: prev?.orchardBalance,
-            spendableBalance: prev?.spendableBalance,
-            totalBalance: prev?.totalBalance,
-            recentTransactions: prev?.recentTransactions ?? const [],
-          ));
-          _startPolling();
-        },
-      );
-    }).catchError((e, st) {
-      if (gen != _syncGen) return;
-      log('SyncNotifier: ERROR: $e\n$st');
-      _isSyncing = false;
-      // Sync setup threw before the stream was ever attached.
-      // We may have already started the mempool observer
-      // (happens on the main success path just before
-      // `startFullSync`), so always call
-      // `_stopMempoolObserver()` here; it is idempotent when
-      // nothing is running.
-      _stopMempoolObserver();
-      final prev = state.value;
-      state = AsyncData(SyncState(
-        error: e.toString(),
+    final prev = state.value;
+    state = AsyncData(
+      SyncState(
+        isSyncing: true,
+        isBackgroundMode: false,
+        percentage: 0.0,
+        scannedHeight: prev?.scannedHeight ?? 0,
+        chainTipHeight: prev?.chainTipHeight ?? 0,
         transparentBalance: prev?.transparentBalance,
         saplingBalance: prev?.saplingBalance,
         orchardBalance: prev?.orchardBalance,
         spendableBalance: prev?.spendableBalance,
         totalBalance: prev?.totalBalance,
         recentTransactions: prev?.recentTransactions ?? const [],
-      ));
-      _startPolling();
-    });
+        phase: '',
+      ),
+    );
+
+    _getDbPath()
+        .then((dbPath) {
+          if (gen != _syncGen) return; // stopSync was called, abort
+          final network = ZcashNetwork.mainnet;
+          log('Sync: starting foreground sync');
+          // Fire up the mempool observer alongside the scan loop.
+          // It has its own Rust cancel flag (MEMPOOL_CANCEL) and runs
+          // on a separate tokio runtime, so it can accept events while
+          // the scan loop is still catching up on old blocks.
+          _startMempoolObserver(dbPath, network);
+          final stream = rust_sync.startFullSync(
+            dbPath: dbPath,
+            lightwalletdUrl: network.lightwalletdUrl,
+            network: network.name,
+            mode: 1,
+          );
+          _syncSub = stream.listen(
+            (event) => _onSyncProgress(
+              SyncProgressEvent(
+                scannedHeight: event.scannedHeight.toInt(),
+                chainTipHeight: event.chainTipHeight.toInt(),
+                percentage: event.percentage,
+                isSyncing: event.isSyncing,
+                isComplete: event.isComplete,
+                hasNewTx: event.hasNewTx,
+                phase: event.phase,
+              ),
+            ),
+            onDone: () {
+              log('Sync: stream ended');
+              _syncSub = null;
+              // Normal completion (isComplete=true) is handled inside
+              // _onSyncProgress, which clears _isSyncing and starts
+              // polling. But the stream can also end WITHOUT an
+              // isComplete event — specifically when Rust exits because
+              // DESIRED_SYNC_MODE changed (foreground→background
+              // handoff via enableBackgroundSync). In that case
+              // _isSyncing is still true and the mempool observer is
+              // still running, both of which block future startSync()
+              // calls. Clean up unconditionally here; if isComplete
+              // already ran, these are no-ops.
+              if (_isSyncing) {
+                log('Sync: stream ended without isComplete, cleaning up');
+                _isSyncing = false;
+                _stopMempoolObserver();
+              }
+            },
+            onError: (e) {
+              if (gen != _syncGen) return;
+              log('Sync: stream error: $e');
+              _isSyncing = false;
+              // Sync died mid-stream: tear the mempool observer down
+              // at the same time so a failed sync session can't leak
+              // a lightwalletd stream that keeps firing
+              // `_refreshBalance()` callbacks with no owning sync.
+              _stopMempoolObserver();
+              final prev = state.value;
+              state = AsyncData(
+                SyncState(
+                  error: e.toString(),
+                  transparentBalance: prev?.transparentBalance,
+                  saplingBalance: prev?.saplingBalance,
+                  orchardBalance: prev?.orchardBalance,
+                  spendableBalance: prev?.spendableBalance,
+                  totalBalance: prev?.totalBalance,
+                  recentTransactions: prev?.recentTransactions ?? const [],
+                ),
+              );
+              _startPolling();
+            },
+          );
+        })
+        .catchError((e, st) {
+          if (gen != _syncGen) return;
+          log('SyncNotifier: ERROR: $e\n$st');
+          _isSyncing = false;
+          // Sync setup threw before the stream was ever attached.
+          // We may have already started the mempool observer
+          // (happens on the main success path just before
+          // `startFullSync`), so always call
+          // `_stopMempoolObserver()` here; it is idempotent when
+          // nothing is running.
+          _stopMempoolObserver();
+          final prev = state.value;
+          state = AsyncData(
+            SyncState(
+              error: e.toString(),
+              transparentBalance: prev?.transparentBalance,
+              saplingBalance: prev?.saplingBalance,
+              orchardBalance: prev?.orchardBalance,
+              spendableBalance: prev?.spendableBalance,
+              totalBalance: prev?.totalBalance,
+              recentTransactions: prev?.recentTransactions ?? const [],
+            ),
+          );
+          _startPolling();
+        });
   }
 
   void stopSync() {
@@ -297,19 +326,21 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       _bgDelegate.disable();
     }
     final prev = state.value;
-    state = AsyncData(SyncState(
-      isSyncing: false,
-      isBackgroundMode: false,
-      percentage: prev?.percentage ?? 0.0,
-      scannedHeight: prev?.scannedHeight ?? 0,
-      chainTipHeight: prev?.chainTipHeight ?? 0,
-      transparentBalance: prev?.transparentBalance,
-      saplingBalance: prev?.saplingBalance,
-      orchardBalance: prev?.orchardBalance,
-      spendableBalance: prev?.spendableBalance,
-      totalBalance: prev?.totalBalance,
-      recentTransactions: prev?.recentTransactions ?? const [],
-    ));
+    state = AsyncData(
+      SyncState(
+        isSyncing: false,
+        isBackgroundMode: false,
+        percentage: prev?.percentage ?? 0.0,
+        scannedHeight: prev?.scannedHeight ?? 0,
+        chainTipHeight: prev?.chainTipHeight ?? 0,
+        transparentBalance: prev?.transparentBalance,
+        saplingBalance: prev?.saplingBalance,
+        orchardBalance: prev?.orchardBalance,
+        spendableBalance: prev?.spendableBalance,
+        totalBalance: prev?.totalBalance,
+        recentTransactions: prev?.recentTransactions ?? const [],
+      ),
+    );
   }
 
   Future<void> enableBackgroundSync() async {
@@ -359,20 +390,25 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     // 100ms cancel slice should take anywhere near that long,
     // but a network stall mid-broadcast can extend it.
     var waited = 0;
-    while ((rust_sync.isSyncRunning() || rust_sync.isMempoolObserverRunning())
-        && waited < 5000) {
+    while ((rust_sync.isSyncRunning() ||
+            rust_sync.isMempoolObserverRunning()) &&
+        waited < 5000) {
       await Future.delayed(const Duration(milliseconds: 100));
       waited += 100;
     }
     if (rust_sync.isSyncRunning()) {
-      log('SyncNotifier: restartSync timed out waiting for Rust sync '
-          'loop to stop after 5s; starting anyway (the startSync '
-          'guard will log if the old run is still around)');
+      log(
+        'SyncNotifier: restartSync timed out waiting for Rust sync '
+        'loop to stop after 5s; starting anyway (the startSync '
+        'guard will log if the old run is still around)',
+      );
     }
     if (rust_sync.isMempoolObserverRunning()) {
-      log('SyncNotifier: restartSync timed out waiting for mempool '
-          'observer to stop after 5s; the new observer start will '
-          'skip and the new session runs without streaming');
+      log(
+        'SyncNotifier: restartSync timed out waiting for mempool '
+        'observer to stop after 5s; the new observer start will '
+        'skip and the new session runs without streaming',
+      );
     }
     startSync();
     _startPolling();
@@ -392,16 +428,13 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   void _startPolling() {
     _pollTimer?.cancel();
     if (!_isInForeground || _bgDelegate.shouldSuppressPolling) return;
-    _pollTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) async {
-        try {
-          await _checkAndSync();
-        } catch (e) {
-          log('AutoSync: polling error: $e');
-        }
-      },
-    );
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      try {
+        await _checkAndSync();
+      } catch (e) {
+        log('AutoSync: polling error: $e');
+      }
+    });
   }
 
   void _stopPolling() {
@@ -411,7 +444,12 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
   Future<void> _checkAndSync() async {
     final hasAccounts = ref.read(accountProvider).value?.hasAccounts ?? false;
-    if (_isSyncing || _bgDelegate.shouldSuppressPolling || !_isInForeground || !hasAccounts) return;
+    if (_isSyncing ||
+        _bgDelegate.shouldSuppressPolling ||
+        !_isInForeground ||
+        !hasAccounts) {
+      return;
+    }
     _stopPolling();
     try {
       final tip = await rust_wallet.getLatestBlockHeight(
@@ -420,7 +458,9 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       final lastSynced = state.value?.chainTipHeight ?? 0;
       final syncComplete = (state.value?.percentage ?? 0) >= 1.0;
       if (!syncComplete || tip.toInt() > lastSynced) {
-        log('AutoSync: needs sync (tip=$tip, last=$lastSynced, complete=$syncComplete)');
+        log(
+          'AutoSync: needs sync (tip=$tip, last=$lastSynced, complete=$syncComplete)',
+        );
         startSync();
       }
     } catch (e) {
@@ -507,7 +547,9 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
   Future<void> _onSyncProgress(SyncProgressEvent event) async {
     if (event.scannedHeight != _lastLoggedHeight) {
-      log('Sync: ${(event.percentage * 100).toStringAsFixed(1)}% (${event.scannedHeight}/${event.chainTipHeight})');
+      log(
+        'Sync: ${(event.percentage * 100).toStringAsFixed(1)}% (${event.scannedHeight}/${event.chainTipHeight})',
+      );
       _lastLoggedHeight = event.scannedHeight;
     }
 
@@ -515,15 +557,23 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     final dbPath = await _getDbPath();
     final network = ZcashNetwork.mainnet.name;
     final accountUuid = _getActiveAccountUuid();
-    if (accountUuid == null) { log('SyncNotifier: no active account, skipping refresh'); return; }
+    if (accountUuid == null) {
+      log('SyncNotifier: no active account, skipping refresh');
+      return;
+    }
 
     // Only fetch balance/history when there are new transactions or sync is complete.
     // Skipping intermediate batches avoids opening a new DB connection per batch.
     BigInt? transparent, sapling, orchard, spendable, total;
-    var recentTxs = prev?.recentTransactions ?? const <rust_sync.TransactionInfo>[];
+    var recentTxs =
+        prev?.recentTransactions ?? const <rust_sync.TransactionInfo>[];
     if (event.hasNewTx || event.isComplete) {
       try {
-        final balance = await rust_sync.getBalance(dbPath: dbPath, network: network, accountUuid: accountUuid);
+        final balance = await rust_sync.getBalance(
+          dbPath: dbPath,
+          network: network,
+          accountUuid: accountUuid,
+        );
         transparent = balance.transparent;
         sapling = balance.sapling;
         orchard = balance.orchard;
@@ -533,7 +583,12 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         log('SyncNotifier: balance fetch failed: $e');
       }
       try {
-        recentTxs = await rust_sync.getTransactionHistory(dbPath: dbPath, network: network, limit: 10, accountUuid: accountUuid);
+        recentTxs = await rust_sync.getTransactionHistory(
+          dbPath: dbPath,
+          network: network,
+          limit: 10,
+          accountUuid: accountUuid,
+        );
       } catch (e) {
         log('SyncNotifier: tx history fetch failed: $e');
       }
@@ -542,20 +597,22 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     // Update delegate BEFORE state so isActive reflects completion
     _bgDelegate.onProgress(event);
 
-    state = AsyncData(SyncState(
-      isSyncing: event.isSyncing && !event.isComplete,
-      isBackgroundMode: event.isBackground || _bgDelegate.isActive,
-      percentage: event.percentage,
-      scannedHeight: event.scannedHeight,
-      chainTipHeight: event.chainTipHeight,
-      transparentBalance: transparent ?? prev?.transparentBalance,
-      saplingBalance: sapling ?? prev?.saplingBalance,
-      orchardBalance: orchard ?? prev?.orchardBalance,
-      spendableBalance: spendable ?? prev?.spendableBalance,
-      totalBalance: total ?? prev?.totalBalance,
-      recentTransactions: recentTxs,
-      phase: event.phase,
-    ));
+    state = AsyncData(
+      SyncState(
+        isSyncing: event.isSyncing && !event.isComplete,
+        isBackgroundMode: event.isBackground || _bgDelegate.isActive,
+        percentage: event.percentage,
+        scannedHeight: event.scannedHeight,
+        chainTipHeight: event.chainTipHeight,
+        transparentBalance: transparent ?? prev?.transparentBalance,
+        saplingBalance: sapling ?? prev?.saplingBalance,
+        orchardBalance: orchard ?? prev?.orchardBalance,
+        spendableBalance: spendable ?? prev?.spendableBalance,
+        totalBalance: total ?? prev?.totalBalance,
+        recentTransactions: recentTxs,
+        phase: event.phase,
+      ),
+    );
 
     // Handle sync completion here (not in onDone) to avoid race with async state update.
     if (event.isComplete) {
@@ -575,11 +632,18 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     final dbPath = await _getDbPath();
     final network = ZcashNetwork.mainnet.name;
     final accountUuid = _getActiveAccountUuid();
-    if (accountUuid == null) { log('SyncNotifier: no active account, skipping refresh'); return; }
+    if (accountUuid == null) {
+      log('SyncNotifier: no active account, skipping refresh');
+      return;
+    }
 
     BigInt? transparent, sapling, orchard, spendable, total;
     try {
-      final balance = await rust_sync.getBalance(dbPath: dbPath, network: network, accountUuid: accountUuid);
+      final balance = await rust_sync.getBalance(
+        dbPath: dbPath,
+        network: network,
+        accountUuid: accountUuid,
+      );
       transparent = balance.transparent;
       sapling = balance.sapling;
       orchard = balance.orchard;
@@ -589,26 +653,34 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       log('SyncNotifier: balance refresh failed: $e');
     }
 
-    var recentTxs = prev?.recentTransactions ?? const <rust_sync.TransactionInfo>[];
+    var recentTxs =
+        prev?.recentTransactions ?? const <rust_sync.TransactionInfo>[];
     try {
-      recentTxs = await rust_sync.getTransactionHistory(dbPath: dbPath, network: network, limit: 10, accountUuid: accountUuid);
+      recentTxs = await rust_sync.getTransactionHistory(
+        dbPath: dbPath,
+        network: network,
+        limit: 10,
+        accountUuid: accountUuid,
+      );
     } catch (e) {
       log('SyncNotifier: tx history refresh failed: $e');
     }
 
-    state = AsyncData(SyncState(
-      isSyncing: prev?.isSyncing ?? false,
-      isBackgroundMode: _bgDelegate.isActive,
-      percentage: prev?.percentage ?? 0.0,
-      scannedHeight: prev?.scannedHeight ?? 0,
-      chainTipHeight: prev?.chainTipHeight ?? 0,
-      transparentBalance: transparent ?? prev?.transparentBalance,
-      saplingBalance: sapling ?? prev?.saplingBalance,
-      orchardBalance: orchard ?? prev?.orchardBalance,
-      spendableBalance: spendable ?? prev?.spendableBalance,
-      totalBalance: total ?? prev?.totalBalance,
-      recentTransactions: recentTxs,
-    ));
+    state = AsyncData(
+      SyncState(
+        isSyncing: prev?.isSyncing ?? false,
+        isBackgroundMode: _bgDelegate.isActive,
+        percentage: prev?.percentage ?? 0.0,
+        scannedHeight: prev?.scannedHeight ?? 0,
+        chainTipHeight: prev?.chainTipHeight ?? 0,
+        transparentBalance: transparent ?? prev?.transparentBalance,
+        saplingBalance: sapling ?? prev?.saplingBalance,
+        orchardBalance: orchard ?? prev?.orchardBalance,
+        spendableBalance: spendable ?? prev?.spendableBalance,
+        totalBalance: total ?? prev?.totalBalance,
+        recentTransactions: recentTxs,
+      ),
+    );
   }
 
   String? _getActiveAccountUuid() {
@@ -623,5 +695,6 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   }
 }
 
-final syncProvider =
-    AsyncNotifierProvider<SyncNotifier, SyncState>(SyncNotifier.new);
+final syncProvider = AsyncNotifierProvider<SyncNotifier, SyncState>(
+  SyncNotifier.new,
+);
