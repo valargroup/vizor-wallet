@@ -14,6 +14,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
+import '../../../core/widgets/app_text_field.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/wallet_provider.dart';
@@ -406,9 +407,9 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     final colors = context.colors;
 
     final addressTone = switch (_addressType) {
-      'unified' || 'sapling' => _SendFieldTone.brandPurple,
-      'invalid' || 'error' => _SendFieldTone.destructive,
-      _ => _SendFieldTone.neutral,
+      'unified' || 'sapling' => AppTextFieldTone.brandPurple,
+      'invalid' || 'error' => AppTextFieldTone.destructive,
+      _ => AppTextFieldTone.neutral,
     };
     final addressMessage = switch (_addressType) {
       'unified' || 'sapling' => 'Shielded Address',
@@ -483,7 +484,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            _SendInputField(
+                                            AppTextField(
                                               label: 'Send to',
                                               tone: addressTone,
                                               focusNode: _addressFocusNode,
@@ -499,7 +500,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                                                     ? colors.icon.accent
                                                     : colors.icon.regular,
                                               ),
-                                              trailingLabel: _SendTrailingLabel(
+                                              rightSlot: _SendTrailingLabel(
                                                 label: 'Contacts',
                                                 icon: AppIcon(
                                                   AppIcons.chevronForward,
@@ -514,32 +515,23 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                                                 _validateAmount();
                                               },
                                               keyboardType: TextInputType.text,
-                                              trailing:
-                                                  _addressFocusNode.hasFocus &&
-                                                      _addressController.text
-                                                          .trim()
-                                                          .isNotEmpty
-                                                  ? _ClearFieldButton(
-                                                      onTap: () {
-                                                        _addressController
-                                                            .clear();
-                                                        setState(() {
-                                                          _addressType = '';
-                                                          _error = null;
-                                                        });
-                                                        _validateAmount();
-                                                      },
-                                                    )
-                                                  : null,
+                                              showClearButton: true,
+                                              onClear: () {
+                                                setState(() {
+                                                  _addressType = '';
+                                                  _error = null;
+                                                });
+                                                _validateAmount();
+                                              },
                                             ),
                                             const SizedBox(
                                               height: AppSpacing.xs,
                                             ),
-                                            _SendInputField(
+                                            AppTextField(
                                               label: 'Amount',
                                               tone: _showAmountError
-                                                  ? _SendFieldTone.destructive
-                                                  : _SendFieldTone.neutral,
+                                                  ? AppTextFieldTone.destructive
+                                                  : AppTextFieldTone.neutral,
                                               focusNode: _amountFocusNode,
                                               controller: _amountController,
                                               hintText: '0.00',
@@ -553,7 +545,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                                                     ? colors.icon.accent
                                                     : colors.icon.regular,
                                               ),
-                                              trailingLabel: Text(
+                                              rightSlot: Text(
                                                 'Max: ${_formatSpendableLabel(spendable)} ZEC',
                                                 style: AppTypography.labelMedium
                                                     .copyWith(
@@ -584,22 +576,13 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                                               ],
                                               onChanged: (_) =>
                                                   _validateAmount(),
-                                              trailing:
-                                                  _amountFocusNode.hasFocus &&
-                                                      _amountController.text
-                                                          .trim()
-                                                          .isNotEmpty
-                                                  ? _ClearFieldButton(
-                                                      onTap: () {
-                                                        _amountController
-                                                            .clear();
-                                                        setState(() {
-                                                          _amountError = '';
-                                                          _error = null;
-                                                        });
-                                                      },
-                                                    )
-                                                  : null,
+                                              showClearButton: true,
+                                              onClear: () {
+                                                setState(() {
+                                                  _amountError = '';
+                                                  _error = null;
+                                                });
+                                              },
                                             ),
                                             const SizedBox(
                                               height: AppSpacing.sm,
@@ -630,11 +613,12 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                                                     : null,
                                               ),
                                             ] else ...[
-                                              _SendInputField(
+                                              AppTextField(
                                                 label: 'Message',
                                                 tone: _memoError != null
-                                                    ? _SendFieldTone.destructive
-                                                    : _SendFieldTone.neutral,
+                                                    ? AppTextFieldTone
+                                                          .destructive
+                                                    : AppTextFieldTone.neutral,
                                                 focusNode: _memoFocusNode,
                                                 controller: _memoController,
                                                 hintText: 'Add a message',
@@ -643,7 +627,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                                                   size: 20,
                                                   color: colors.icon.regular,
                                                 ),
-                                                trailingLabel: Text(
+                                                rightSlot: Text(
                                                   '$_memoLength/512',
                                                   style: AppTypography
                                                       .labelMedium
@@ -666,25 +650,21 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                                                 maxLines: 6,
                                                 scrollController:
                                                     _memoScrollController,
+                                                textStyle: AppTypography
+                                                    .bodyMedium
+                                                    .copyWith(
+                                                      color: colors.text.accent,
+                                                    ),
                                                 onChanged: (_) => setState(() {
                                                   _error = null;
                                                 }),
-                                                trailing:
-                                                    _memoController.text
-                                                        .trim()
-                                                        .isNotEmpty
-                                                    ? _ClearFieldButton(
-                                                        onTap: () {
-                                                          _memoController
-                                                              .clear();
-                                                          setState(() {
-                                                            _messageExpanded =
-                                                                false;
-                                                            _error = null;
-                                                          });
-                                                        },
-                                                      )
-                                                    : null,
+                                                showClearButton: true,
+                                                onClear: () {
+                                                  setState(() {
+                                                    _messageExpanded = false;
+                                                    _error = null;
+                                                  });
+                                                },
                                               ),
                                             ],
                                             if (_error != null) ...[
@@ -749,8 +729,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   }
 }
 
-enum _SendFieldTone { neutral, destructive, brandPurple }
-
 class _SendBackRow extends StatelessWidget {
   const _SendBackRow({required this.onTap});
 
@@ -808,285 +786,6 @@ class _SendTrailingLabel extends StatelessWidget {
           ),
         ),
         if (icon != null) ...[const SizedBox(width: AppSpacing.xxs), icon!],
-      ],
-    );
-  }
-}
-
-class _ClearFieldButton extends StatelessWidget {
-  const _ClearFieldButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: Center(
-            child: AppIcon(AppIcons.cross, size: 20, color: colors.icon.accent),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SendInputField extends StatelessWidget {
-  const _SendInputField({
-    required this.label,
-    required this.tone,
-    required this.controller,
-    required this.focusNode,
-    required this.onChanged,
-    this.hintText,
-    this.leading,
-    this.trailing,
-    this.trailingLabel,
-    this.messageText,
-    this.messageIcon,
-    this.keyboardType,
-    this.inputFormatters,
-    this.minLines = 1,
-    this.maxLines = 1,
-    this.scrollController,
-  });
-
-  final String label;
-  final _SendFieldTone tone;
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final ValueChanged<String> onChanged;
-  final String? hintText;
-  final Widget? leading;
-  final Widget? trailing;
-  final Widget? trailingLabel;
-  final String? messageText;
-  final Widget? messageIcon;
-  final TextInputType? keyboardType;
-  final List<TextInputFormatter>? inputFormatters;
-  final int minLines;
-  final int maxLines;
-  final ScrollController? scrollController;
-
-  bool get _isMultiline => maxLines > 1 || minLines > 1;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final borderColor = switch (tone) {
-      _SendFieldTone.neutral when focusNode.hasFocus => colors.border.strong,
-      _SendFieldTone.neutral => colors.border.subtle,
-      _SendFieldTone.destructive => colors.border.utilityDestructive,
-      _SendFieldTone.brandPurple => colors.border.brandPurpleStrong,
-    };
-    final focusRingColor = switch (tone) {
-      _SendFieldTone.neutral => colors.state.focusRing,
-      _SendFieldTone.destructive => colors.border.utilityDestructive,
-      _SendFieldTone.brandPurple => colors.border.brandPurpleStrong,
-    };
-    final messageColor = switch (tone) {
-      _SendFieldTone.neutral => colors.text.secondary,
-      _SendFieldTone.destructive => colors.text.warning,
-      _SendFieldTone.brandPurple => colors.text.brandPurple,
-    };
-    final shellHeight = _isMultiline ? 148.0 : 46.0;
-
-    final input = TextField(
-      controller: controller,
-      focusNode: focusNode,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      onChanged: onChanged,
-      maxLines: _isMultiline ? null : 1,
-      minLines: _isMultiline ? null : 1,
-      expands: _isMultiline,
-      scrollController: scrollController,
-      textAlignVertical: _isMultiline
-          ? TextAlignVertical.top
-          : TextAlignVertical.center,
-      style: _isMultiline
-          ? AppTypography.bodyMedium.copyWith(color: colors.text.accent)
-          : AppTypography.labelLarge.copyWith(color: colors.text.accent),
-      cursorColor: colors.text.accent,
-      decoration: InputDecoration.collapsed(
-        hintText: hintText,
-        hintStyle: AppTypography.labelLarge.copyWith(color: colors.text.muted),
-      ),
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: AppTypography.labelMedium.copyWith(
-                  color: colors.text.secondary,
-                ),
-              ),
-            ),
-            if (trailingLabel != null) ...[trailingLabel!],
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xxs),
-        SizedBox(
-          height: shellHeight,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colors.background.base,
-                    borderRadius: BorderRadius.circular(AppRadii.small),
-                    border: Border.all(color: borderColor, width: 1.5),
-                  ),
-                ),
-              ),
-              if (focusNode.hasFocus)
-                Positioned(
-                  left: -2.5,
-                  right: -2.5,
-                  top: -2.5,
-                  bottom: -2.5,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(AppRadii.small),
-                        border: Border.all(color: focusRingColor, width: 2),
-                      ),
-                    ),
-                  ),
-                ),
-              Positioned.fill(
-                child: Row(
-                  crossAxisAlignment: _isMultiline
-                      ? CrossAxisAlignment.start
-                      : CrossAxisAlignment.center,
-                  children: [
-                    if (leading != null && !_isMultiline)
-                      SizedBox(
-                        width: 32,
-                        height: shellHeight,
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: leading,
-                          ),
-                        ),
-                      ),
-                    if (leading != null && _isMultiline)
-                      Padding(
-                        padding: const EdgeInsets.only(left: AppSpacing.xs),
-                        child: SizedBox(
-                          width: 20,
-                          height: 48,
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: leading,
-                            ),
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      child: Padding(
-                        padding: _isMultiline
-                            ? const EdgeInsets.fromLTRB(
-                                AppSpacing.sm,
-                                AppSpacing.sm,
-                                AppSpacing.sm,
-                                AppSpacing.sm,
-                              )
-                            : const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.sm,
-                              ),
-                        child: _isMultiline
-                            ? ScrollbarTheme(
-                                data: ScrollbarThemeData(
-                                  thumbColor: WidgetStatePropertyAll(
-                                    colors.background.overlay.withValues(
-                                      alpha: 0.5,
-                                    ),
-                                  ),
-                                  radius: const Radius.circular(AppRadii.full),
-                                  thickness: const WidgetStatePropertyAll(6),
-                                  thumbVisibility: const WidgetStatePropertyAll(
-                                    true,
-                                  ),
-                                  trackVisibility: const WidgetStatePropertyAll(
-                                    false,
-                                  ),
-                                ),
-                                child: Scrollbar(
-                                  controller: scrollController,
-                                  child: input,
-                                ),
-                              )
-                            : input,
-                      ),
-                    ),
-                    if (!_isMultiline)
-                      SizedBox(
-                        width: 40,
-                        height: shellHeight,
-                        child: Center(child: trailing),
-                      ),
-                    if (_isMultiline)
-                      SizedBox(
-                        width: 40,
-                        height: shellHeight,
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: Padding(
-                            padding: const EdgeInsets.only(
-                              top: 14,
-                              left: 10,
-                              right: 10,
-                            ),
-                            child: trailing,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xxs),
-        SizedBox(
-          height: 16,
-          child: messageText == null
-              ? const SizedBox.shrink()
-              : Row(
-                  children: [
-                    if (messageIcon != null) ...[
-                      messageIcon!,
-                      const SizedBox(width: AppSpacing.xxs),
-                    ],
-                    Text(
-                      messageText!,
-                      style: AppTypography.labelMedium.copyWith(
-                        color: messageColor,
-                      ),
-                    ),
-                  ],
-                ),
-        ),
       ],
     );
   }
