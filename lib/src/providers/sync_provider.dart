@@ -138,6 +138,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     );
 
     ref.onDispose(() {
+      rust_sync.cancelFullSync();
       _syncSub?.cancel();
       _mempoolSub?.cancel();
       // Cancel the Rust-side observer too; cancelling the Dart
@@ -171,9 +172,8 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     // Initial check: if accounts already exist at build time
     final accountState = ref.read(accountProvider).value;
     if (accountState != null && accountState.hasAccounts) {
-      Future.microtask(() {
-        startSync();
-        _startPolling();
+      Future(() {
+        unawaited(_startInitialSync());
       });
     }
 
@@ -195,6 +195,46 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   }
 
   // ======================== Sync Control ========================
+
+  Future<void> _startInitialSync() async {
+    final staleSyncRunning = _syncSub == null && rust_sync.isSyncRunning();
+    final staleMempoolRunning =
+        _mempoolSub == null && rust_sync.isMempoolObserverRunning();
+
+    if (staleSyncRunning || staleMempoolRunning) {
+      if (staleSyncRunning) {
+        log('Sync: cancelling stale Rust sync before startup');
+        rust_sync.cancelFullSync();
+      }
+      if (staleMempoolRunning) {
+        log('Mempool: stopping stale observer before startup');
+        rust_sync.stopMempoolObserver();
+      }
+
+      var waited = 0;
+      while (
+          (rust_sync.isSyncRunning() || rust_sync.isMempoolObserverRunning()) &&
+          waited < 30000) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        waited += 100;
+      }
+      if (rust_sync.isSyncRunning()) {
+        log(
+          'Sync: timed out waiting for stale Rust sync to stop after 30s; '
+          'startup sync will rely on running-guard recovery',
+        );
+      }
+      if (rust_sync.isMempoolObserverRunning()) {
+        log(
+          'Mempool: timed out waiting for stale observer to stop after 30s; '
+          'startup observer will rely on running-guard recovery',
+        );
+      }
+    }
+
+    startSync();
+    _startPolling();
+  }
 
   /// Fire-and-forget: sets up FRB stream and returns immediately.
   /// Stream events update state via _onSyncProgress. Completion handled by _onSyncDone.
