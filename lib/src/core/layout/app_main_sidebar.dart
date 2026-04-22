@@ -221,7 +221,7 @@ class _SidebarAccountSelectorButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final backgroundColor = colors.surface.card;
+    final backgroundColor = colors.surface.input;
     final textColor = colors.text.accent;
     final iconColor = colors.icon.accent;
 
