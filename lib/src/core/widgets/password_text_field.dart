@@ -15,6 +15,7 @@ class PasswordTextField extends StatefulWidget {
     this.onSubmitted,
     this.autofocus = false,
     this.enabled = true,
+    this.showVisibilityToggle = true,
   });
 
   final String label;
@@ -26,6 +27,7 @@ class PasswordTextField extends StatefulWidget {
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
   final bool enabled;
+  final bool showVisibilityToggle;
 
   @override
   State<PasswordTextField> createState() => _PasswordTextFieldState();
@@ -49,14 +51,16 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
       messageText: widget.messageText,
       tone: widget.tone,
       leading: const AppIcon(AppIcons.lock),
-      trailing: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _toggleVisibility,
-        child: AppIcon(
-          _obscureText ? AppIcons.eyeClosed : AppIcons.eye,
-          size: 20,
-        ),
-      ),
+      trailing: widget.showVisibilityToggle
+          ? GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _toggleVisibility,
+              child: AppIcon(
+                _obscureText ? AppIcons.eyeClosed : AppIcons.eye,
+                size: 20,
+              ),
+            )
+          : null,
       onChanged: widget.onChanged,
       onSubmitted: widget.onSubmitted,
       keyboardType: TextInputType.visiblePassword,
