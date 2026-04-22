@@ -15,6 +15,7 @@ import 'src/features/onboarding/create/intro_zcash_screen.dart';
 import 'src/features/onboarding/create/onboarding_split_view.dart';
 import 'src/features/onboarding/create/secret_passphrase_screen.dart';
 import 'src/features/onboarding/create/things_to_know_screen.dart';
+import 'src/features/onboarding/import/import_draft_provider.dart';
 import 'src/features/onboarding/import/import_secret_passphrase_screen.dart';
 import 'src/features/onboarding/import/import_wallet_birthday_screen.dart';
 import 'src/features/onboarding/shared/set_password_screen.dart';
@@ -210,17 +211,25 @@ final _routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/import/set-password',
-        pageBuilder: (context, state) => CustomTransitionPage<void>(
-          key: state.pageKey,
-          transitionDuration: kOnboardingForwardDuration,
-          reverseTransitionDuration: kOnboardingReverseDuration,
-          child: SetPasswordScreen(
-            args: state.extra is SetPasswordScreenArgs
-                ? state.extra as SetPasswordScreenArgs
-                : null,
-          ),
-          transitionsBuilder: _onboardingFadeTransition,
-        ),
+        pageBuilder: (context, state) {
+          final args = state.extra is SetPasswordScreenArgs
+              ? state.extra as SetPasswordScreenArgs
+              : null;
+          final draft = ref.read(importDraftProvider);
+          final child = args != null
+              ? SetPasswordScreen(args: args)
+              : draft.hasMnemonic
+              ? const ImportWalletBirthdayScreen()
+              : const ImportSecretPassphraseScreen();
+
+          return CustomTransitionPage<void>(
+            key: state.pageKey,
+            transitionDuration: kOnboardingForwardDuration,
+            reverseTransitionDuration: kOnboardingReverseDuration,
+            child: child,
+            transitionsBuilder: _onboardingFadeTransition,
+          );
+        },
       ),
       GoRoute(path: '/unlock', builder: (_, _) => const UnlockScreen()),
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),

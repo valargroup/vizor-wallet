@@ -44,4 +44,9 @@ enum ZcashNetwork {
 
   String get lightwalletdUrl =>
       'https://$lightwalletdHost:$lightwalletdPort';
+
+  int get saplingActivationHeight => switch (this) {
+        mainnet => 419200,
+        testnet => 280000,
+      };
 }

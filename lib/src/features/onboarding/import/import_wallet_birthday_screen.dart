@@ -298,12 +298,14 @@ class _ImportWalletBirthdayScreenState
   }
 
   int? get _validatedManualHeight {
-    final metadata = _metadata;
-    if (metadata == null) return null;
     final value = int.tryParse(_manualHeightController.text.trim());
     if (value == null) return null;
-    if (value < metadata.saplingActivationHeight ||
-        value > metadata.tipHeight) {
+    final minimumHeight = _network.saplingActivationHeight;
+    if (value < minimumHeight) {
+      return null;
+    }
+    final maximumHeight = _metadata?.tipHeight;
+    if (maximumHeight != null && value > maximumHeight) {
       return null;
     }
     return value;
@@ -312,14 +314,16 @@ class _ImportWalletBirthdayScreenState
   String? get _manualHeightError {
     final text = _manualHeightController.text.trim();
     if (text.isEmpty) return null;
-    if (_metadataError != null) return _metadataError;
-    if (_isLoadingMetadata || _metadata == null) return null;
     final parsed = int.tryParse(text);
     if (parsed == null) return 'Doesn’t seem like a legit block height';
-    if (parsed < _metadata!.saplingActivationHeight ||
-        parsed > _metadata!.tipHeight) {
+    if (parsed < _network.saplingActivationHeight) {
       return 'Doesn’t seem like a legit block height';
     }
+    final maximumHeight = _metadata?.tipHeight;
+    if (maximumHeight != null && parsed > maximumHeight) {
+      return 'Doesn’t seem like a legit block height';
+    }
+    if (_metadataError != null) return _metadataError;
     return null;
   }
 
