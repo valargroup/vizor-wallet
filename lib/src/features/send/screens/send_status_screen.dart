@@ -332,9 +332,10 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
         }
       }
 
-      final isHardware = ref
-          .read(accountProvider.notifier)
-          .isActiveAccountHardware;
+      final accountNotifier = ref.read(accountProvider.notifier);
+      final isHardware = accountNotifier.isHardwareAccount(
+        widget.args.proposalAccountUuid,
+      );
 
       late final String txid;
       if (isHardware) {
@@ -386,14 +387,14 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
           outputParamsPath: widget.args.needsSaplingParams ? outputPath : null,
         );
       } else {
-        final mnemonic = await ref
-            .read(accountProvider.notifier)
-            .getActiveMnemonic();
+        final mnemonic = await accountNotifier.getMnemonicForAccount(
+          widget.args.proposalAccountUuid,
+        );
         if (mnemonic == null) {
           if (await _abortIfUnmounted()) return;
           setState(() {
             _phase = _SendStatusPhase.failed;
-            _error = 'Mnemonic not found for the active account.';
+            _error = 'Mnemonic not found for the proposal account.';
           });
           return;
         }

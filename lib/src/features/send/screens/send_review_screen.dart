@@ -17,6 +17,7 @@ import '../../../rust/api/sync.dart' as rust_sync;
 class SendReviewArgs {
   const SendReviewArgs({
     required this.proposalId,
+    required this.proposalAccountUuid,
     required this.address,
     required this.addressType,
     required this.amountZatoshi,
@@ -26,6 +27,7 @@ class SendReviewArgs {
   });
 
   final BigInt proposalId;
+  final String proposalAccountUuid;
   final String address;
   final String addressType;
   final BigInt amountZatoshi;

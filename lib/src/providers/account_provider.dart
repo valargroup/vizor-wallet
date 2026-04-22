@@ -384,10 +384,24 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     return active?.isHardware ?? false;
   }
 
+  /// Check if a specific account is a hardware wallet account.
+  bool isHardwareAccount(String uuid) {
+    final accounts = state.value?.accounts ?? const <AccountInfo>[];
+    for (final account in accounts) {
+      if (account.uuid == uuid) return account.isHardware;
+    }
+    return false;
+  }
+
   /// Get the mnemonic for the active account.
   Future<String?> getActiveMnemonic() async {
     final uuid = state.value?.activeAccountUuid;
     if (uuid == null) return null;
+    return _storage.readString('zcash_account_mnemonic_$uuid');
+  }
+
+  /// Get the mnemonic for a specific account.
+  Future<String?> getMnemonicForAccount(String uuid) async {
     return _storage.readString('zcash_account_mnemonic_$uuid');
   }
 

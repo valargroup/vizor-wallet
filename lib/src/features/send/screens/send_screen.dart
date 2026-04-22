@@ -410,6 +410,7 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
         '/send/review',
         extra: SendReviewArgs(
           proposalId: proposal.proposalId,
+          proposalAccountUuid: accountUuid,
           address: address,
           addressType: _addressType,
           amountZatoshi: BigInt.from(amountZatoshi),
