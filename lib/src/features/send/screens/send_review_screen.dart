@@ -12,7 +12,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
-import '../../../providers/account_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 
 class SendReviewArgs {
@@ -153,16 +152,10 @@ class _SendReviewScreenState extends ConsumerState<SendReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accountAsync = ref.watch(accountProvider);
-    final accountName = accountAsync.value?.activeAccount?.name ?? 'Username';
-    final matchedLocation = GoRouterState.of(context).matchedLocation;
     final colors = context.colors;
 
     return AppDesktopShell(
-      sidebar: AppMainSidebar(
-        accountName: accountName,
-        matchedLocation: matchedLocation,
-      ),
+      sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(

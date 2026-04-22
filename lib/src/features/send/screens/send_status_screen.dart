@@ -455,9 +455,6 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accountAsync = ref.watch(accountProvider);
-    final accountName = accountAsync.value?.activeAccount?.name ?? 'Username';
-    final matchedLocation = GoRouterState.of(context).matchedLocation;
     final addressLines = _splitAddress();
 
     return PopScope<void>(
@@ -468,10 +465,7 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
         }
       },
       child: AppDesktopShell(
-        sidebar: AppMainSidebar(
-          accountName: accountName,
-          matchedLocation: matchedLocation,
-        ),
+        sidebar: const AppMainSidebar(),
         pane: AppDesktopPane(
           padding: EdgeInsets.zero,
           child: Stack(

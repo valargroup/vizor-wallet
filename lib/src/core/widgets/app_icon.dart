@@ -26,6 +26,7 @@ abstract final class AppIcons {
   static const block = 'block';
   static const book = 'book';
   static const check = 'check';
+  static const checkCircle = 'check_circle';
   static const chevronBackward = 'chevron_backward';
   static const chevronForward = 'chevron_forward';
   static const collapsed = 'collapsed';

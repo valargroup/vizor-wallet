@@ -393,9 +393,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
   @override
   Widget build(BuildContext context) {
     final walletAsync = ref.watch(walletProvider);
-    final accountAsync = ref.watch(accountProvider);
-    final matchedLocation = GoRouterState.of(context).matchedLocation;
-    final accountName = accountAsync.value?.activeAccount?.name ?? 'Username';
     final spendable = _getSpendableBalance();
     final colors = context.colors;
 
@@ -437,10 +434,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     };
 
     return AppDesktopShell(
-      sidebar: AppMainSidebar(
-        accountName: accountName,
-        matchedLocation: matchedLocation,
-      ),
+      sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: SizedBox.expand(

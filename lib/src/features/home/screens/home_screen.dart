@@ -14,7 +14,6 @@ import '../../../core/layout/app_layout.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
-import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/wallet_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
@@ -97,16 +96,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final walletAsync = ref.watch(walletProvider);
     final syncAsync = ref.watch(syncProvider);
-    final accountAsync = ref.watch(accountProvider);
-    final matchedLocation = GoRouterState.of(context).matchedLocation;
-    final accountName = accountAsync.value?.activeAccount?.name ?? 'Username';
     final sync = syncAsync.value ?? SyncState();
 
     return AppDesktopShell(
-      sidebar: AppMainSidebar(
-        accountName: accountName,
-        matchedLocation: matchedLocation,
-      ),
+      sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
         padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 0, 0, 0),
         child: SizedBox.expand(
