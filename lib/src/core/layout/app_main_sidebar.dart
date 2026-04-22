@@ -1,6 +1,3 @@
-import 'dart:io' show Platform;
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,12 +10,10 @@ class AppMainSidebar extends StatelessWidget {
     super.key,
     required this.accountName,
     required this.matchedLocation,
-    this.onResetWallet,
   });
 
   final String accountName;
   final String matchedLocation;
-  final VoidCallback? onResetWallet;
 
   bool _matches(String routePath) =>
       matchedLocation == routePath || matchedLocation.startsWith('$routePath/');
@@ -39,12 +34,6 @@ class AppMainSidebar extends StatelessWidget {
                     onTap: () => context.push('/accounts'),
                   ),
                 ),
-                if (onResetWallet != null &&
-                    kDebugMode &&
-                    Platform.isMacOS) ...[
-                  const SizedBox(width: AppSpacing.xs),
-                  _DebugResetButton(onPressed: onResetWallet!),
-                ],
               ],
             ),
             const SizedBox(height: AppSpacing.xs),
@@ -118,34 +107,6 @@ class AppMainSidebar extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DebugResetButton extends StatelessWidget {
-  const _DebugResetButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: Container(
-          width: 40,
-          height: 40,
-          padding: const EdgeInsets.all(AppSpacing.xs),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadii.small),
-            color: colors.background.overlay.withValues(alpha: 0.12),
-          ),
-          child: AppIcon(AppIcons.block, size: 20, color: colors.text.warning),
         ),
       ),
     );

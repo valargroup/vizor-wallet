@@ -1,13 +1,8 @@
-import 'dart:io' show exit;
 import 'package:flutter/material.dart'
     show
-        AlertDialog,
         CircularProgressIndicator,
         Scrollbar,
-        TextButton,
-        TextStyle,
-        Theme,
-        showDialog;
+        Theme;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -83,42 +78,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  Future<void> _resetWallet(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reset Wallet'),
-        content: const Text(
-          'Delete all wallet data (DB + keychain)? This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Reset',
-              style: TextStyle(color: Color(0xFFFF3B30)),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    ref.read(syncProvider.notifier).stopSync();
-    var waited = 0;
-    while (rust_sync.isSyncRunning() && waited < 5000) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      waited += 100;
-    }
-
-    await ref.read(accountProvider.notifier).resetWallet();
-    exit(0);
-  }
-
   String _groupLabelForTx(rust_sync.TransactionInfo tx) {
     if (tx.minedHeight == BigInt.zero && !tx.expiredUnmined) {
       return 'Today';
@@ -147,7 +106,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       sidebar: AppMainSidebar(
         accountName: accountName,
         matchedLocation: matchedLocation,
-        onResetWallet: () => _resetWallet(context),
       ),
       pane: AppDesktopPane(
         padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 0, 0, 0),

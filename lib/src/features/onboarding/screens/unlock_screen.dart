@@ -1,4 +1,14 @@
-import 'package:flutter/material.dart' show Colors, Scaffold;
+import 'dart:io' show Platform, exit;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'
+    show
+        AlertDialog,
+        Colors,
+        Scaffold,
+        TextButton,
+        TextStyle,
+        showDialog;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,7 +21,10 @@ import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/password_text_field.dart';
+import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
+import '../../../providers/sync_provider.dart';
+import '../../../rust/api/sync.dart' as rust_sync;
 
 class UnlockScreen extends ConsumerStatefulWidget {
   const UnlockScreen({super.key});
@@ -53,6 +66,42 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     }
 
     context.go('/home');
+  }
+
+  Future<void> _resetWallet(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Wallet'),
+        content: const Text(
+          'Delete all wallet data (DB + keychain)? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Reset',
+              style: TextStyle(color: Color(0xFFFF3B30)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    ref.read(syncProvider.notifier).stopSync();
+    var waited = 0;
+    while (rust_sync.isSyncRunning() && waited < 5000) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      waited += 100;
+    }
+
+    await ref.read(accountProvider.notifier).resetWallet();
+    exit(0);
   }
 
   @override
@@ -126,6 +175,25 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                       trailing: const AppIcon(AppIcons.chevronForward),
                       child: Text(_isSubmitting ? 'Unlocking...' : 'Unlock'),
                     ),
+                    if (kDebugMode && Platform.isMacOS) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _resetWallet(context),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.xs,
+                            vertical: AppSpacing.xxs,
+                          ),
+                          child: Text(
+                            'Reset State',
+                            style: AppTypography.labelLarge.copyWith(
+                              color: colors.text.warning,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
