@@ -9,9 +9,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
-import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
+import 'import_draft_provider.dart';
 import 'import_split_view.dart';
 
 class ImportSecretPassphraseScreen extends ConsumerStatefulWidget {
@@ -153,10 +153,7 @@ class _ImportSecretPassphraseScreenState
     });
 
     try {
-      // Temporary until the dedicated birthday-height step lands.
-      await ref
-          .read(accountProvider.notifier)
-          .importAccount(mnemonic: _mnemonic);
+      ref.read(importDraftProvider.notifier).start(mnemonic: _mnemonic);
     } catch (e, st) {
       log('ImportSecretPassphraseScreen._submit: ERROR: $e\n$st');
       if (!mounted) return;
@@ -168,7 +165,7 @@ class _ImportSecretPassphraseScreenState
     }
 
     if (!mounted) return;
-    context.go('/home');
+    context.go('/import/birthday');
   }
 
   void _handleBack() {

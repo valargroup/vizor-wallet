@@ -68,7 +68,7 @@ class _SecretPassphraseScreenState
     if (!security.isPasswordConfigured) {
       context.go(
         OnboardingStep.setPassword.routePath,
-        extra: SetPasswordScreenArgs(mnemonic: mnemonic),
+        extra: SetPasswordScreenArgs.create(mnemonic: mnemonic),
       );
       return;
     }
