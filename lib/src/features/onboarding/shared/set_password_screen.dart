@@ -12,7 +12,7 @@ import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/password_text_field.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
-import 'onboarding_split_view.dart';
+import '../create/onboarding_split_view.dart';
 
 class SetPasswordScreenArgs {
   const SetPasswordScreenArgs({required this.mnemonic});

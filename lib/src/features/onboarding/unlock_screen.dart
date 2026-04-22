@@ -13,19 +13,19 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../main.dart' show log;
-import '../../../core/layout/app_desktop_shell.dart';
-import '../../../core/security/password_policy.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/app_button.dart';
-import '../../../core/widgets/app_decorative_divider.dart';
-import '../../../core/widgets/app_icon.dart';
-import '../../../core/widgets/app_text_field.dart';
-import '../../../core/widgets/password_text_field.dart';
-import '../../../providers/account_provider.dart';
-import '../../../providers/app_security_provider.dart';
-import '../../../providers/sync_provider.dart';
-import '../../../rust/api/sync.dart' as rust_sync;
+import '../../../main.dart' show log;
+import '../../core/layout/app_desktop_shell.dart';
+import '../../core/security/password_policy.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_button.dart';
+import '../../core/widgets/app_decorative_divider.dart';
+import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/app_text_field.dart';
+import '../../core/widgets/password_text_field.dart';
+import '../../providers/account_provider.dart';
+import '../../providers/app_security_provider.dart';
+import '../../providers/sync_provider.dart';
+import '../../rust/api/sync.dart' as rust_sync;
 
 class UnlockScreen extends ConsumerStatefulWidget {
   const UnlockScreen({super.key});

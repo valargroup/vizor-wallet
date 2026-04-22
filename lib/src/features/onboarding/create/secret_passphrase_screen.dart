@@ -16,7 +16,7 @@ import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import 'onboarding_split_view.dart';
-import 'set_password_screen.dart';
+import '../shared/set_password_screen.dart';
 
 class SecretPassphraseScreen extends ConsumerStatefulWidget {
   const SecretPassphraseScreen({super.key});
