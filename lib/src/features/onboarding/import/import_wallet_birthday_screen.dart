@@ -146,6 +146,7 @@ class _ImportWalletBirthdayScreenState
   }
 
   void _handleTabSelected(ImportBirthdayTab tab) {
+    final draft = ref.read(importDraftProvider);
     if (tab == ImportBirthdayTab.blockHeight) {
       _estimateSeq++;
       if (_isEstimating) {
@@ -155,6 +156,12 @@ class _ImportWalletBirthdayScreenState
       }
     }
     ref.read(importDraftProvider.notifier).setTab(tab);
+    if (tab == ImportBirthdayTab.date &&
+        draft.selectedDate != null &&
+        draft.estimatedBirthdayHeight == null &&
+        !_isEstimating) {
+      _estimateSelectedDate(draft.selectedDate!);
+    }
   }
 
   Future<void> _pickDate() async {
