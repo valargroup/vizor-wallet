@@ -242,7 +242,9 @@ class _SidebarAccountSelectorButton extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
           height: 40,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
           decoration: BoxDecoration(
