@@ -80,6 +80,7 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
     final accountName = activeAccount?.name ?? 'Username';
 
     return AppDesktopSidebarSurface(
+      clipBehavior: Clip.none,
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xs),
         child: TapRegion(

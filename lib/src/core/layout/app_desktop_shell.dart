@@ -41,11 +41,13 @@ class AppDesktopSidebarSurface extends StatelessWidget {
   const AppDesktopSidebarSurface({
     required this.child,
     this.backgroundColor,
+    this.clipBehavior = Clip.antiAlias,
     super.key,
   });
 
   final Widget child;
   final Color? backgroundColor;
+  final Clip clipBehavior;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +56,7 @@ class AppDesktopSidebarSurface extends StatelessWidget {
         color: backgroundColor ?? Colors.transparent,
         borderRadius: BorderRadius.circular(AppRadii.small),
       ),
-      clipBehavior: Clip.antiAlias,
+      clipBehavior: clipBehavior,
       child: child,
     );
   }
