@@ -56,11 +56,13 @@ class ImportDraftNotifier extends Notifier<ImportDraftState> {
   }
 
   void setSelectedDate(DateTime? date, {int? estimatedBirthdayHeight}) {
+    final shouldClearEstimate =
+        date == null || estimatedBirthdayHeight == null;
     state = state.copyWith(
       selectedDate: date,
       estimatedBirthdayHeight: estimatedBirthdayHeight,
       clearSelectedDate: date == null,
-      clearEstimatedBirthdayHeight: date == null,
+      clearEstimatedBirthdayHeight: shouldClearEstimate,
     );
   }
 
