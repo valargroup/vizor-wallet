@@ -14,8 +14,10 @@ import 'src/features/onboarding/screens/create_wallet_screen.dart';
 import 'src/features/onboarding/screens/import_wallet_screen.dart';
 import 'src/features/onboarding/screens/intro_zcash_screen.dart';
 import 'src/features/onboarding/screens/onboarding_split_view.dart';
+import 'src/features/onboarding/screens/set_password_screen.dart';
 import 'src/features/onboarding/screens/secret_passphrase_screen.dart';
 import 'src/features/onboarding/screens/things_to_know_screen.dart';
+import 'src/features/onboarding/screens/unlock_screen.dart';
 import 'src/features/onboarding/welcome.dart';
 import 'src/features/history/screens/history_screen.dart';
 import 'src/features/receive/screens/receive_screen.dart';
@@ -26,6 +28,7 @@ import 'src/features/send/screens/send_screen.dart';
 import 'src/features/send/screens/send_status_screen.dart';
 import 'src/features/settings/screens/settings_screen.dart';
 import 'src/providers/theme_mode_provider.dart';
+import 'src/providers/app_security_provider.dart';
 import 'src/providers/wallet_provider.dart';
 
 final _routerProvider = Provider<GoRouter>((ref) {
@@ -35,6 +38,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
   ref.listen(walletProvider, (_, _) {
     refresh.value++;
   });
+  ref.listen(appSecurityProvider, (_, _) {
+    refresh.value++;
+  });
   log('router: initialized');
 
   return GoRouter(
@@ -42,24 +48,36 @@ final _routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final walletAsync = ref.read(walletProvider);
+      final security = ref.read(appSecurityProvider);
 
       // Don't redirect on error — let the error screen show instead of onboarding
       if (walletAsync.hasError) return null;
 
       final wallet = walletAsync.value;
       final hasWallet = wallet?.hasWallet ?? bootstrap.hasWallet;
+      final isPasswordConfigured =
+          security.isPasswordConfigured || bootstrap.isPasswordConfigured;
+      final isUnlocked = security.isUnlocked || bootstrap.isUnlocked;
+      final requiresUnlock = hasWallet && isPasswordConfigured && !isUnlocked;
       final isOnboarding =
           state.matchedLocation == '/welcome' ||
           state.matchedLocation.startsWith('/onboarding/') ||
           state.matchedLocation == '/create' ||
           state.matchedLocation == '/import';
+      final isUnlock = state.matchedLocation == '/unlock';
 
       log(
-        'router redirect: location=${state.matchedLocation}, hasWallet=$hasWallet, isOnboarding=$isOnboarding',
+        'router redirect: location=${state.matchedLocation}, hasWallet=$hasWallet, '
+        'requiresUnlock=$requiresUnlock, isOnboarding=$isOnboarding',
       );
 
+      if (!hasWallet && isUnlock) return '/welcome';
       if (!hasWallet && !isOnboarding) return '/welcome';
-      if (hasWallet && state.matchedLocation == '/welcome') return '/home';
+      if (requiresUnlock && !isUnlock) return '/unlock';
+      if (!requiresUnlock && isUnlock) return hasWallet ? '/home' : '/welcome';
+      if (hasWallet && state.matchedLocation == '/welcome') {
+        return requiresUnlock ? '/unlock' : '/home';
+      }
       return null;
     },
     routes: [
@@ -67,10 +85,16 @@ final _routerProvider = Provider<GoRouter>((ref) {
         path: '/',
         redirect: (_, _) {
           final walletAsync = ref.read(walletProvider);
+          final security = ref.read(appSecurityProvider);
           if (walletAsync.hasError) return '/home'; // home shows error state
           final wallet = walletAsync.value;
           final hasWallet = wallet?.hasWallet ?? bootstrap.hasWallet;
-          return hasWallet ? '/home' : '/welcome';
+          final isPasswordConfigured =
+              security.isPasswordConfigured || bootstrap.isPasswordConfigured;
+          final isUnlocked = security.isUnlocked || bootstrap.isUnlocked;
+          if (!hasWallet) return '/welcome';
+          if (isPasswordConfigured && !isUnlocked) return '/unlock';
+          return '/home';
         },
       ),
       // Onboarding-route transitions. Desktop acrylic visibly stutters
@@ -98,6 +122,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
           reverseTransitionDuration: kOnboardingReverseDuration,
           child: OnboardingSplitViewShell(
             activeStep: onboardingStepFromLocation(state.matchedLocation),
+            showPasswordStep: !ref
+                .read(appSecurityProvider)
+                .isPasswordConfigured,
             child: child,
           ),
           transitionsBuilder: (_, _, _, child) => child,
@@ -143,10 +170,25 @@ final _routerProvider = Provider<GoRouter>((ref) {
               transitionsBuilder: _onboardingFadeTransition,
             ),
           ),
+          GoRoute(
+            path: '/onboarding/set-password',
+            pageBuilder: (context, state) => CustomTransitionPage<void>(
+              key: state.pageKey,
+              transitionDuration: kOnboardingForwardDuration,
+              reverseTransitionDuration: kOnboardingReverseDuration,
+              child: SetPasswordScreen(
+                args: state.extra is SetPasswordScreenArgs
+                    ? state.extra as SetPasswordScreenArgs
+                    : null,
+              ),
+              transitionsBuilder: _onboardingFadeTransition,
+            ),
+          ),
         ],
       ),
       GoRoute(path: '/create', builder: (_, _) => const CreateWalletScreen()),
       GoRoute(path: '/import', builder: (_, _) => const ImportWalletScreen()),
+      GoRoute(path: '/unlock', builder: (_, _) => const UnlockScreen()),
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
       GoRoute(path: '/send', builder: (_, _) => const SendScreen()),
       GoRoute(

@@ -11,6 +11,7 @@ import '../core/storage/app_secure_store.dart';
 import '../core/storage/wallet_paths.dart';
 import '../rust/api/wallet.dart' as rust_wallet;
 import 'account_models.dart';
+import 'app_security_provider.dart';
 
 export 'account_models.dart';
 
@@ -306,6 +307,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     final dbPath = await _getDbPath();
     _deleteExistingDb(dbPath);
     await _storage.deleteAll();
+    ref.read(appSecurityProvider.notifier).reset();
     state = const AsyncData(AccountState());
     log('resetWallet: all data cleared');
   }

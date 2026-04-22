@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const kWalletDbNameKey = 'zcash_wallet_db_name';
 const _secureStoreSaltKey = 'zcash_secure_store_salt';
+const _passwordVerifierKey = 'zcash_password_verifier';
+const _passwordVerifierSaltKey = 'zcash_password_verifier_salt';
 const _secureStorePassword = 'zcash-wallet-dev-password';
 const _secureStoreService = 'com.zcash.zcashWallet.secure_store';
 
@@ -35,6 +37,8 @@ class AppSecureStore {
 
   static SecretKey? _cachedSecretKey;
   static String? _sessionPassword;
+
+  bool get hasSessionPassword => _sessionPassword != null;
 
   Future<String> ensureWalletDbName() async {
     final existing = await readPlain(kWalletDbNameKey);
@@ -105,14 +109,50 @@ class AppSecureStore {
     return _storage.write(key: key, value: value);
   }
 
+  Future<bool> isPasswordConfigured() async {
+    final verifier = await readPlain(_passwordVerifierKey);
+    final salt = await readPlain(_passwordVerifierSaltKey);
+    return verifier != null &&
+        verifier.isNotEmpty &&
+        salt != null &&
+        salt.isNotEmpty;
+  }
+
+  Future<void> configurePassword(String password) async {
+    final salt = _randomBytes(16);
+    final verifier = await _derivePasswordVerifier(password, salt);
+    await writePlain(_passwordVerifierSaltKey, base64Encode(salt));
+    await writePlain(_passwordVerifierKey, verifier);
+    _sessionPassword = password;
+  }
+
+  Future<bool> verifyPassword(String password) async {
+    final encodedSalt = await readPlain(_passwordVerifierSaltKey);
+    final storedVerifier = await readPlain(_passwordVerifierKey);
+    if (encodedSalt == null ||
+        encodedSalt.isEmpty ||
+        storedVerifier == null ||
+        storedVerifier.isEmpty) {
+      return false;
+    }
+
+    final derived = await _derivePasswordVerifier(
+      password,
+      base64Decode(encodedSalt),
+    );
+    final isMatch = derived == storedVerifier;
+    if (isMatch) {
+      _sessionPassword = password;
+    }
+    return isMatch;
+  }
+
   void setSessionPassword(String password) {
     _sessionPassword = password;
-    _cachedSecretKey = null;
   }
 
   void clearSessionPassword() {
     _sessionPassword = null;
-    _cachedSecretKey = null;
   }
 
   Future<SecretKey> _getSecretKey() async {
@@ -120,13 +160,23 @@ class AppSecureStore {
     if (cached != null) return cached;
 
     final salt = await _getOrCreateSalt();
-    final password = _sessionPassword ?? _secureStorePassword;
     final key = await _kdf.deriveKeyFromPassword(
-      password: password,
+      password: _secureStorePassword,
       nonce: salt,
     );
     _cachedSecretKey = key;
     return key;
+  }
+
+  Future<String> _derivePasswordVerifier(
+    String password,
+    List<int> salt,
+  ) async {
+    final key = await _kdf.deriveKeyFromPassword(
+      password: password,
+      nonce: salt,
+    );
+    return base64Encode(await key.extractBytes());
   }
 
   Future<List<int>> _getOrCreateSalt() async {

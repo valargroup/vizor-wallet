@@ -38,6 +38,9 @@ class AppTextField extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.autofocus = false,
+    this.obscureText = false,
+    this.enableSuggestions = true,
+    this.autocorrect = true,
   }) : assert(
          controller == null || initialValue == null,
          'Provide either controller or initialValue, not both.',
@@ -76,6 +79,9 @@ class AppTextField extends StatefulWidget {
   final bool enabled;
   final bool readOnly;
   final bool autofocus;
+  final bool obscureText;
+  final bool enableSuggestions;
+  final bool autocorrect;
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
@@ -298,6 +304,9 @@ class _AppTextFieldState extends State<AppTextField> {
       enabled: widget.enabled,
       readOnly: widget.readOnly,
       autofocus: widget.autofocus,
+      obscureText: widget.obscureText,
+      enableSuggestions: widget.enableSuggestions,
+      autocorrect: widget.autocorrect,
       keyboardType: widget.keyboardType,
       textInputAction: widget.textInputAction,
       inputFormatters: widget.inputFormatters,

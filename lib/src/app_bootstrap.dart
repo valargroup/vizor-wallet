@@ -23,20 +23,27 @@ class AppBootstrapState {
     required this.initialAccountState,
     required this.initialSyncSnapshot,
     required this.network,
+    required this.isPasswordConfigured,
+    required this.isUnlocked,
   });
 
   final String initialLocation;
   final AccountState initialAccountState;
   final AppSyncSnapshot initialSyncSnapshot;
   final String network;
+  final bool isPasswordConfigured;
+  final bool isUnlocked;
 
   bool get hasWallet => initialAccountState.hasAccounts;
+  bool get requiresUnlock => hasWallet && isPasswordConfigured && !isUnlocked;
 
   static final empty = AppBootstrapState(
     initialLocation: '/welcome',
     initialAccountState: AccountState(),
     initialSyncSnapshot: AppSyncSnapshot.empty,
     network: 'main',
+    isPasswordConfigured: false,
+    isUnlocked: false,
   );
 }
 
@@ -83,6 +90,8 @@ Future<AppBootstrapState> loadAppBootstrap() async {
     log('bootstrap: loading startup snapshot');
     await storage.ensureWalletDbName();
     final network = await storage.readString(_networkKey) ?? 'main';
+    final isPasswordConfigured = await storage.isPasswordConfigured();
+    final isUnlocked = storage.hasSessionPassword;
     final dbPath = await _getDbPath();
     final storedAccounts = await _readStoredAccounts(storage);
     final storedActiveUuid = await storage.readString(_activeAccountKey);
@@ -134,12 +143,19 @@ Future<AppBootstrapState> loadAppBootstrap() async {
       );
     }
 
+    final initialLocation = !hasWallet
+        ? '/welcome'
+        : isPasswordConfigured && !isUnlocked
+        ? '/unlock'
+        : '/home';
+
     log(
-      'bootstrap: hasWallet=$hasWallet, initialLocation=${hasWallet ? '/home' : '/welcome'}',
+      'bootstrap: hasWallet=$hasWallet, passwordConfigured=$isPasswordConfigured, '
+      'unlocked=$isUnlocked, initialLocation=$initialLocation',
     );
 
     return AppBootstrapState(
-      initialLocation: hasWallet ? '/home' : '/welcome',
+      initialLocation: initialLocation,
       initialAccountState: AccountState(
         accounts: accounts,
         activeAccountUuid: activeAccountUuid,
@@ -147,6 +163,8 @@ Future<AppBootstrapState> loadAppBootstrap() async {
       ),
       initialSyncSnapshot: initialSyncSnapshot,
       network: network,
+      isPasswordConfigured: isPasswordConfigured,
+      isUnlocked: isUnlocked,
     );
   } catch (e) {
     log('bootstrap: failed, falling back to welcome: $e');

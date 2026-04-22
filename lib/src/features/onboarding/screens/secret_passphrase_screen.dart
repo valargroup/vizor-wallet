@@ -13,8 +13,10 @@ import '../../../core/widgets/app_chip.dart';
 import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../providers/account_provider.dart';
+import '../../../providers/app_security_provider.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import 'onboarding_split_view.dart';
+import 'set_password_screen.dart';
 
 class SecretPassphraseScreen extends ConsumerStatefulWidget {
   const SecretPassphraseScreen({super.key});
@@ -61,6 +63,15 @@ class _SecretPassphraseScreenState
     }
     final mnemonic = _mnemonic;
     if (mnemonic == null) return;
+    final security = ref.read(appSecurityProvider);
+
+    if (!security.isPasswordConfigured) {
+      context.go(
+        OnboardingStep.setPassword.routePath,
+        extra: SetPasswordScreenArgs(mnemonic: mnemonic),
+      );
+      return;
+    }
 
     setState(() {
       _isCreating = true;
@@ -91,6 +102,7 @@ class _SecretPassphraseScreenState
 
   @override
   Widget build(BuildContext context) {
+    final security = ref.watch(appSecurityProvider);
     return OnboardingTrailingPane(
       child: Column(
         children: [
@@ -104,6 +116,7 @@ class _SecretPassphraseScreenState
                   isPreparing: _isPreparing,
                   isCreating: _isCreating,
                   revealed: _revealed,
+                  needsPasswordStep: !security.isPasswordConfigured,
                   prepareError: _prepareError,
                   submitError: _submitError,
                   onPrimaryPressed: _handlePrimaryAction,
@@ -160,6 +173,7 @@ class _HeroLayout extends StatelessWidget {
     required this.isPreparing,
     required this.isCreating,
     required this.revealed,
+    required this.needsPasswordStep,
     required this.prepareError,
     required this.submitError,
     required this.onPrimaryPressed,
@@ -170,6 +184,7 @@ class _HeroLayout extends StatelessWidget {
   final bool isPreparing;
   final bool isCreating;
   final bool revealed;
+  final bool needsPasswordStep;
   final String? prepareError;
   final String? submitError;
   final Future<void> Function() onPrimaryPressed;
@@ -194,6 +209,7 @@ class _HeroLayout extends StatelessWidget {
           isPreparing: isPreparing,
           isCreating: isCreating,
           revealed: revealed,
+          needsPasswordStep: needsPasswordStep,
           submitError: submitError,
           onPrimaryPressed: onPrimaryPressed,
         ),
@@ -255,6 +271,7 @@ class _BottomActions extends StatelessWidget {
     required this.isPreparing,
     required this.isCreating,
     required this.revealed,
+    required this.needsPasswordStep,
     required this.submitError,
     required this.onPrimaryPressed,
   });
@@ -262,6 +279,7 @@ class _BottomActions extends StatelessWidget {
   final bool isPreparing;
   final bool isCreating;
   final bool revealed;
+  final bool needsPasswordStep;
   final String? submitError;
   final Future<void> Function() onPrimaryPressed;
 
@@ -280,7 +298,9 @@ class _BottomActions extends StatelessWidget {
             isCreating
                 ? 'Creating wallet...'
                 : revealed
-                ? 'I’m ready to use Vizor'
+                ? needsPasswordStep
+                      ? 'Continue to Set Password'
+                      : 'I’m ready to use Vizor'
                 : 'Reveal the Phrase',
           ),
         ),

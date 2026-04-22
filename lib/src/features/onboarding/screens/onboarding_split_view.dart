@@ -5,7 +5,13 @@ import '../../../core/motion/onboarding_motion.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_icon.dart';
 
-enum OnboardingStep { intro, addressTypes, thingsToKnow, secretPassphrase }
+enum OnboardingStep {
+  intro,
+  addressTypes,
+  thingsToKnow,
+  secretPassphrase,
+  setPassword,
+}
 
 extension OnboardingStepX on OnboardingStep {
   String get label => switch (this) {
@@ -13,6 +19,7 @@ extension OnboardingStepX on OnboardingStep {
     OnboardingStep.addressTypes => 'Address types',
     OnboardingStep.thingsToKnow => 'Things to know',
     OnboardingStep.secretPassphrase => 'Secret Passphrase',
+    OnboardingStep.setPassword => 'Set Password',
   };
 
   String get iconName => switch (this) {
@@ -20,6 +27,7 @@ extension OnboardingStepX on OnboardingStep {
     OnboardingStep.addressTypes => AppIcons.shieldKeyhole,
     OnboardingStep.thingsToKnow => AppIcons.crystalBall,
     OnboardingStep.secretPassphrase => AppIcons.key,
+    OnboardingStep.setPassword => AppIcons.lock,
   };
 
   String get routePath => switch (this) {
@@ -27,10 +35,14 @@ extension OnboardingStepX on OnboardingStep {
     OnboardingStep.addressTypes => '/onboarding/address-types',
     OnboardingStep.thingsToKnow => '/onboarding/things-to-know',
     OnboardingStep.secretPassphrase => '/onboarding/secret-passphrase',
+    OnboardingStep.setPassword => '/onboarding/set-password',
   };
 }
 
 OnboardingStep onboardingStepFromLocation(String location) {
+  if (location.startsWith(OnboardingStep.setPassword.routePath)) {
+    return OnboardingStep.setPassword;
+  }
   if (location.startsWith(OnboardingStep.secretPassphrase.routePath)) {
     return OnboardingStep.secretPassphrase;
   }
@@ -49,11 +61,13 @@ OnboardingStep onboardingStepFromLocation(String location) {
 class OnboardingSplitViewShell extends StatelessWidget {
   const OnboardingSplitViewShell({
     required this.activeStep,
+    required this.showPasswordStep,
     required this.child,
     super.key,
   });
 
   final OnboardingStep activeStep;
+  final bool showPasswordStep;
   final Widget child;
 
   @override
@@ -74,7 +88,10 @@ class OnboardingSplitViewShell extends StatelessWidget {
     return AppDesktopShell(
       sidebar: SlideTransition(
         position: sidebarOffset,
-        child: _Sidebar(activeStep: activeStep),
+        child: _Sidebar(
+          activeStep: activeStep,
+          showPasswordStep: showPasswordStep,
+        ),
       ),
       pane: FadeTransition(opacity: entrance, child: child),
     );
@@ -93,9 +110,10 @@ class OnboardingTrailingPane extends StatelessWidget {
 }
 
 class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.activeStep});
+  const _Sidebar({required this.activeStep, required this.showPasswordStep});
 
   final OnboardingStep activeStep;
+  final bool showPasswordStep;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +147,10 @@ class _Sidebar extends StatelessWidget {
                 transitionBuilder: _fadeTransition,
                 child: KeyedSubtree(
                   key: ValueKey(activeStep),
-                  child: _SidebarNav(activeStep: activeStep),
+                  child: _SidebarNav(
+                    activeStep: activeStep,
+                    showPasswordStep: showPasswordStep,
+                  ),
                 ),
               ),
             ),
@@ -145,15 +166,17 @@ class _Sidebar extends StatelessWidget {
 }
 
 class _SidebarNav extends StatelessWidget {
-  const _SidebarNav({required this.activeStep});
+  const _SidebarNav({required this.activeStep, required this.showPasswordStep});
 
   final OnboardingStep activeStep;
+  final bool showPasswordStep;
 
-  static const _steps = [
+  List<OnboardingStep> get _steps => [
     OnboardingStep.intro,
     OnboardingStep.addressTypes,
     OnboardingStep.thingsToKnow,
     OnboardingStep.secretPassphrase,
+    if (showPasswordStep) OnboardingStep.setPassword,
   ];
 
   @override
@@ -190,6 +213,10 @@ class _SidebarIllustration extends StatelessWidget {
     final isDark = AppTheme.of(context) == AppThemeData.dark;
     final asset = switch (step) {
       OnboardingStep.secretPassphrase =>
+        isDark
+            ? 'assets/illustrations/onboarding_secret_passphrase_sidebar_dark.png'
+            : 'assets/illustrations/onboarding_secret_passphrase_sidebar_light.png',
+      OnboardingStep.setPassword =>
         isDark
             ? 'assets/illustrations/onboarding_secret_passphrase_sidebar_dark.png'
             : 'assets/illustrations/onboarding_secret_passphrase_sidebar_light.png',
