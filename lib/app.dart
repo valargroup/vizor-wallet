@@ -15,7 +15,7 @@ import 'src/features/onboarding/create/intro_zcash_screen.dart';
 import 'src/features/onboarding/create/onboarding_split_view.dart';
 import 'src/features/onboarding/create/secret_passphrase_screen.dart';
 import 'src/features/onboarding/create/things_to_know_screen.dart';
-import 'src/features/onboarding/screens/import_wallet_screen.dart';
+import 'src/features/onboarding/import/import_secret_passphrase_screen.dart';
 import 'src/features/onboarding/shared/set_password_screen.dart';
 import 'src/features/onboarding/unlock_screen.dart';
 import 'src/features/onboarding/welcome.dart';
@@ -187,7 +187,16 @@ final _routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(path: '/create', builder: (_, _) => const CreateWalletScreen()),
-      GoRoute(path: '/import', builder: (_, _) => const ImportWalletScreen()),
+      GoRoute(
+        path: '/import',
+        pageBuilder: (context, state) => CustomTransitionPage<void>(
+          key: state.pageKey,
+          transitionDuration: kOnboardingForwardDuration,
+          reverseTransitionDuration: kOnboardingReverseDuration,
+          child: const ImportSecretPassphraseScreen(),
+          transitionsBuilder: _onboardingFadeTransition,
+        ),
+      ),
       GoRoute(path: '/unlock', builder: (_, _) => const UnlockScreen()),
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
       GoRoute(path: '/send', builder: (_, _) => const SendScreen()),
