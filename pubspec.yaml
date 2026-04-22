@@ -54,6 +54,7 @@ dependencies:
       url: https://github.com/chainapsis/desktop_window_bootstrap.git
       ref: c0e1f77025b2458b731d9413a00c4bb033648335
   crypto: ^3.0.7
+  cryptography: ^2.7.0
   flutter_foreground_task: ^9.2.1
   window_manager: ^0.5.1
   # Renders the Figma-exported icon SVGs under `assets/icons/`.

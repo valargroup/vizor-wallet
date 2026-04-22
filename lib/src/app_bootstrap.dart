@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../main.dart' show log;
+import 'core/storage/app_secure_store.dart';
 import 'core/storage/wallet_paths.dart';
 import 'providers/account_models.dart';
 import 'rust/api/sync.dart' as rust_sync;
@@ -77,14 +77,15 @@ class AppSyncSnapshot {
 }
 
 Future<AppBootstrapState> loadAppBootstrap() async {
-  const storage = FlutterSecureStorage();
+  final storage = AppSecureStore.instance;
 
   try {
     log('bootstrap: loading startup snapshot');
-    final network = await storage.read(key: _networkKey) ?? 'main';
+    await storage.ensureWalletDbName();
+    final network = await storage.readString(_networkKey) ?? 'main';
     final dbPath = await _getDbPath();
     final storedAccounts = await _readStoredAccounts(storage);
-    final storedActiveUuid = await storage.read(key: _activeAccountKey);
+    final storedActiveUuid = await storage.readString(_activeAccountKey);
 
     var rustAccounts = <AccountInfo>[];
     final rustAddressesByUuid = <String, String>{};
@@ -98,8 +99,8 @@ Future<AppBootstrapState> loadAppBootstrap() async {
           listed.indexed.map((entry) async {
             final (index, account) = entry;
             rustAddressesByUuid[account.uuid] = account.unifiedAddress;
-            final mnemonic = await storage.read(
-              key: 'zcash_account_mnemonic_${account.uuid}',
+            final mnemonic = await storage.readString(
+              'zcash_account_mnemonic_${account.uuid}',
             );
             return AccountInfo(
               uuid: account.uuid,
@@ -153,10 +154,8 @@ Future<AppBootstrapState> loadAppBootstrap() async {
   }
 }
 
-Future<List<AccountInfo>> _readStoredAccounts(
-  FlutterSecureStorage storage,
-) async {
-  final accountsJson = await storage.read(key: _accountsKey);
+Future<List<AccountInfo>> _readStoredAccounts(AppSecureStore storage) async {
+  final accountsJson = await storage.readString(_accountsKey);
   if (accountsJson == null || accountsJson.isEmpty) return const [];
 
   final List<dynamic> decoded = jsonDecode(accountsJson);

@@ -173,21 +173,6 @@ class TxTrackManager {
     }
 
     private func walletDbPath() throws -> String {
-        let supportDir = try walletSupportDirectory()
-        return supportDir.appendingPathComponent("zcash_wallet.db").path
-    }
-
-    private func walletSupportDirectory() throws -> URL {
-        let supportDir = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        try FileManager.default.createDirectory(
-            at: supportDir,
-            withIntermediateDirectories: true
-        )
-        return supportDir
+        try resolveWalletDbPath()
     }
 }

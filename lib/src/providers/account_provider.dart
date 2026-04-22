@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../main.dart' show log;
 import '../app_bootstrap.dart';
 import '../core/config/network_config.dart';
+import '../core/storage/app_secure_store.dart';
 import '../core/storage/wallet_paths.dart';
 import '../rust/api/wallet.dart' as rust_wallet;
 import 'account_models.dart';
@@ -19,7 +19,7 @@ const _activeAccountKey = 'zcash_active_account';
 const _networkKey = 'zcash_wallet_network';
 
 class AccountNotifier extends AsyncNotifier<AccountState> {
-  static const _storage = FlutterSecureStorage();
+  static final _storage = AppSecureStore.instance;
 
   @override
   FutureOr<AccountState> build() {
@@ -64,7 +64,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         mnemonic = result.mnemonic;
         accountUuid = result.accountUuid;
         unifiedAddress = result.unifiedAddress;
-        await _storage.write(key: _networkKey, value: network);
+        await _storage.writeString(_networkKey, network);
       } else {
         // Additional account — generate mnemonic + add to existing DB
         mnemonic = rust_wallet.generateMnemonic();
@@ -80,9 +80,9 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       }
 
       // Store mnemonic per-account
-      await _storage.write(
-        key: 'zcash_account_mnemonic_$accountUuid',
-        value: mnemonic,
+      await _storage.writeString(
+        'zcash_account_mnemonic_$accountUuid',
+        mnemonic,
       );
 
       // Update account list
@@ -93,7 +93,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       );
       final updatedAccounts = [...accounts, newAccount];
       await _saveAccounts(updatedAccounts);
-      await _storage.write(key: _activeAccountKey, value: accountUuid);
+      await _storage.writeString(_activeAccountKey, accountUuid);
 
       state = AsyncData(
         AccountState(
@@ -149,7 +149,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         );
         accountUuid = result.accountUuid;
         unifiedAddress = result.unifiedAddress;
-        await _storage.write(key: _networkKey, value: network);
+        await _storage.writeString(_networkKey, network);
       } else {
         final result = await rust_wallet.addAccount(
           dbPath: dbPath,
@@ -162,9 +162,9 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         unifiedAddress = result.unifiedAddress;
       }
 
-      await _storage.write(
-        key: 'zcash_account_mnemonic_$accountUuid',
-        value: mnemonic,
+      await _storage.writeString(
+        'zcash_account_mnemonic_$accountUuid',
+        mnemonic,
       );
 
       final newAccount = AccountInfo(
@@ -174,7 +174,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       );
       final updatedAccounts = [...accounts, newAccount];
       await _saveAccounts(updatedAccounts);
-      await _storage.write(key: _activeAccountKey, value: accountUuid);
+      await _storage.writeString(_activeAccountKey, accountUuid);
 
       state = AsyncData(
         AccountState(
@@ -220,7 +220,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         );
         accountUuid = result.accountUuid;
         unifiedAddress = result.unifiedAddress;
-        await _storage.write(key: _networkKey, value: network);
+        await _storage.writeString(_networkKey, network);
       } else {
         // Additional account
         final result = await rust_wallet.addAccount(
@@ -236,9 +236,9 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         unifiedAddress = result.unifiedAddress;
       }
 
-      await _storage.write(
-        key: 'zcash_account_mnemonic_$accountUuid',
-        value: mnemonic,
+      await _storage.writeString(
+        'zcash_account_mnemonic_$accountUuid',
+        mnemonic,
       );
 
       final newAccount = AccountInfo(
@@ -248,7 +248,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       );
       final updatedAccounts = [...accounts, newAccount];
       await _saveAccounts(updatedAccounts);
-      await _storage.write(key: _activeAccountKey, value: accountUuid);
+      await _storage.writeString(_activeAccountKey, accountUuid);
 
       state = AsyncData(
         AccountState(
@@ -267,7 +267,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
   /// Switch active account.
   Future<void> switchAccount(String uuid) async {
-    await _storage.write(key: _activeAccountKey, value: uuid);
+    await _storage.writeString(_activeAccountKey, uuid);
 
     String? address;
     try {
@@ -360,7 +360,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       );
       final updated = [...prev.accounts, newAccount];
       await _saveAccounts(updated);
-      await _storage.write(key: _activeAccountKey, value: accountUuid);
+      await _storage.writeString(_activeAccountKey, accountUuid);
 
       state = AsyncData(
         AccountState(
@@ -386,14 +386,14 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   Future<String?> getActiveMnemonic() async {
     final uuid = state.value?.activeAccountUuid;
     if (uuid == null) return null;
-    return _storage.read(key: 'zcash_account_mnemonic_$uuid');
+    return _storage.readString('zcash_account_mnemonic_$uuid');
   }
 
   // ======================== Helpers ========================
 
   Future<void> _saveAccounts(List<AccountInfo> accounts) async {
     final json = jsonEncode(accounts.map((a) => a.toJson()).toList());
-    await _storage.write(key: _accountsKey, value: json);
+    await _storage.writeString(_accountsKey, json);
   }
 
   Future<String> _getDbPath() async {
@@ -401,7 +401,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   }
 
   Future<String> _getNetwork() async {
-    return await _storage.read(key: _networkKey) ?? 'main';
+    return await _storage.readString(_networkKey) ?? 'main';
   }
 
   Future<void> _deleteExistingDb(String dbPath) async {
