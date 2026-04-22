@@ -23,7 +23,6 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
   static const double _dropdownFooterHeight = 50;
   static const double _accountRowHeight = 40;
   static const double _maxListViewportHeight = 164;
-  static const int _scrollbarThreshold = 4;
 
   final ScrollController _accountsScrollController = ScrollController();
   bool _isDropdownOpen = false;
@@ -200,7 +199,6 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                         footerHeight: _dropdownFooterHeight,
                         rowHeight: _accountRowHeight,
                         maxListViewportHeight: _maxListViewportHeight,
-                        showScrollbar: accounts.length > _scrollbarThreshold,
                         onSelectAccount: _handleAccountSelected,
                       ),
                     ],
@@ -284,7 +282,6 @@ class _SidebarAccountDropdown extends StatelessWidget {
     required this.footerHeight,
     required this.rowHeight,
     required this.maxListViewportHeight,
-    required this.showScrollbar,
     required this.onSelectAccount,
   });
 
@@ -295,7 +292,6 @@ class _SidebarAccountDropdown extends StatelessWidget {
   final double footerHeight;
   final double rowHeight;
   final double maxListViewportHeight;
-  final bool showScrollbar;
   final Future<void> Function(String uuid) onSelectAccount;
 
   @override
@@ -356,17 +352,8 @@ class _SidebarAccountDropdown extends StatelessWidget {
           SizedBox(
             height: listViewportHeight,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
-              child: showScrollbar
-                  ? RawScrollbar(
-                      controller: scrollController,
-                      thumbVisibility: true,
-                      thickness: 8,
-                      radius: const Radius.circular(AppRadii.full),
-                      thumbColor: colors.border.regular,
-                      child: list,
-                    )
-                  : list,
+              padding: const EdgeInsets.only(left: AppSpacing.xxs),
+              child: list,
             ),
           ),
           SizedBox(
@@ -408,7 +395,10 @@ class _SidebarAccountRow extends StatelessWidget {
       child: Opacity(
         opacity: isActive ? 0.5 : 1,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          padding: const EdgeInsets.only(
+            left: AppSpacing.xs,
+            right: AppSpacing.s,
+          ),
           child: Row(
             children: [
               const _SidebarAccountAvatar(),
