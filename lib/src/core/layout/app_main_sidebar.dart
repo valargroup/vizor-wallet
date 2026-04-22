@@ -369,12 +369,12 @@ class _SidebarAccountRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final labelColor = colors.text.accent;
+    final labelColor = isActive ? colors.text.secondary : colors.text.accent;
     final trailing = isActive
         ? AppIcon(
             AppIcons.checkCircle,
             size: 20,
-            color: colors.icon.accent,
+            color: colors.icon.regular,
           )
         : AppIcon(
             AppIcons.chevronForward,
