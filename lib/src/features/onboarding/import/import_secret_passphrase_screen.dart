@@ -40,6 +40,7 @@ class _ImportSecretPassphraseScreenState
     super.initState();
     _controllers = List.generate(_wordCount, (_) => TextEditingController());
     _focusNodes = List.generate(_wordCount, (_) => FocusNode());
+    _restoreDraftMnemonic();
   }
 
   @override
@@ -65,6 +66,26 @@ class _ImportSecretPassphraseScreenState
       _hasAllWords && rust_wallet.validateMnemonic(mnemonic: _mnemonic);
 
   bool get _canSubmit => !_isSubmitting && _isMnemonicValid;
+
+  void _restoreDraftMnemonic() {
+    final mnemonic = ref.read(importDraftProvider).mnemonic;
+    if (mnemonic == null || mnemonic.trim().isEmpty) return;
+
+    final words = mnemonic
+        .trim()
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .take(_wordCount)
+        .toList();
+
+    _isApplyingProgrammaticChange = true;
+    for (var index = 0; index < _controllers.length; index++) {
+      final text = index < words.length ? words[index] : '';
+      _setControllerText(index, text);
+    }
+    _isApplyingProgrammaticChange = false;
+  }
 
   String? get _errorText {
     if (_submitError != null) return _submitError;
