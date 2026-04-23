@@ -441,12 +441,14 @@ class _SidebarCreateWalletRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
-      builder: (context, constraints) => AppButton(
-        onPressed: onTap,
-        variant: AppButtonVariant.ghost,
-        minWidth: constraints.maxWidth,
-        leading: const AppIcon(AppIcons.addNew),
-        child: const Text('Create New Wallet'),
+      builder: (context, constraints) => Center(
+        child: AppButton(
+          onPressed: onTap,
+          variant: AppButtonVariant.ghost,
+          minWidth: constraints.maxWidth,
+          leading: const AppIcon(AppIcons.addNew),
+          child: const Text('Create New Wallet'),
+        ),
       ),
     );
   }
