@@ -43,7 +43,7 @@ struct SyncWidgetLiveActivity: Widget {
             HStack {
                 Image(systemName: "shield.checkered")
                     .foregroundColor(.yellow)
-                Text("Zcash Sync")
+                Text("Vizor Sync")
                     .font(.headline)
                     .foregroundColor(.white)
                 Spacer()

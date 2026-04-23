@@ -71,7 +71,7 @@ Future<void> updateBackgroundSyncProgress({
   if (Platform.isAndroid) {
     final pct = (percentage * 100).toStringAsFixed(1);
     FlutterForegroundTask.updateService(
-      notificationTitle: 'Zcash Wallet — Syncing $pct%',
+      notificationTitle: 'Vizor — Syncing $pct%',
       notificationText: 'Block $scannedHeight / $chainTipHeight',
     );
   }
@@ -105,7 +105,7 @@ Future<void> _startAndroidForegroundService() async {
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'zcash_sync',
-      channelName: 'Zcash Sync',
+      channelName: 'Vizor Sync',
       channelDescription: 'Blockchain synchronization progress',
       channelImportance: NotificationChannelImportance.LOW,
       priority: NotificationPriority.LOW,
@@ -124,7 +124,7 @@ Future<void> _startAndroidForegroundService() async {
   );
 
   final result = await FlutterForegroundTask.startService(
-    notificationTitle: 'Zcash Wallet',
+    notificationTitle: 'Vizor',
     notificationText: 'Syncing blockchain...',
     serviceId: 1001,
     callback: _foregroundTaskCallback,

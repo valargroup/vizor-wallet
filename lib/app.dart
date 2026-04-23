@@ -308,7 +308,7 @@ class ZcashWalletApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp.router(
-      title: 'Zcash Wallet',
+      title: 'Vizor',
       debugShowCheckedModeBanner: false,
       theme: buildLegacyLightTheme(),
       darkTheme: buildLegacyDarkTheme(),

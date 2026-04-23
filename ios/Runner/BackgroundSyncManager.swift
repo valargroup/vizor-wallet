@@ -176,7 +176,7 @@ class BackgroundSyncManager {
         print("[BGSync] startBackgroundSync: submitting BGContinuedProcessingTaskRequest")
         let request = BGContinuedProcessingTaskRequest(
             identifier: Self.taskIdentifier,
-            title: "Syncing Zcash Wallet",
+            title: "Syncing Vizor",
             subtitle: "Scanning blockchain blocks"
         )
 

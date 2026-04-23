@@ -80,7 +80,7 @@ Future<void> initializeDesktopWindow({
     size: initialMode.defaultSize,
     minimumSize: initialMode.minimumSize,
     center: true,
-    title: 'Zcash Wallet',
+    title: 'Vizor',
   );
 
   await windowManager.waitUntilReadyToShow(options, () async {
