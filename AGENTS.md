@@ -105,7 +105,9 @@ AccountProvider (account_provider.dart)
   │                              account list (see Hardware-first constraint)
   ├── switchAccount() — updates active, refreshes address
   ├── renameAccount() — AccountInfo.copyWith (preserves isHardware)
-  ├── getActiveMnemonic() — reads from secure storage (null for hardware accounts)
+  ├── clearSensitiveStateForLock() — preserves account list/active UUID, clears in-memory address
+  ├── restoreAfterUnlock() — rehydrates active account UA from Rust after unlock
+  ├── getActiveMnemonic() — reads from secure storage only while unlocked (null for hardware/locked)
   └── isActiveAccountHardware — routes send flow to PCZT pipeline when true
 
 WalletProvider (wallet_provider.dart)
@@ -116,15 +118,20 @@ WalletProvider (wallet_provider.dart)
 SyncProvider (sync_provider.dart)
   ├── Listens to AccountProvider (ref.listen, not watch) — auto-starts sync on account creation
   ├── startSync() is fire-and-forget with _syncGen generation counter
+  ├── startSync() no-ops while wallet is locked (`appSecurityProvider.requiresUnlock`)
+  ├── clearSensitiveStateForLock() — clears in-memory sync state, cancels Rust work, stops polling
+  ├── startSyncAnyway() — unlock recovery path for cancelled-but-still-unwinding Rust sync
   ├── Polls getLatestBlockHeight every 10s after sync completes
   ├── Re-syncs automatically when new blocks detected or previous sync incomplete
   ├── Duplicate sync guard: _isSyncing (Dart) + isSyncRunning() (Rust)
+  ├── `_sensitiveStateEpoch` discards late balance/progress updates after lock/sign-out
   ├── Passes activeAccountUuid to getBalance, getTransactionHistory
   ├── Sync itself is account-agnostic (covers all accounts)
   ├── Delegates background sync to BackgroundSyncDelegate (Android/iOS/NoOp)
   ├── Polling pauses on app background (onHide), resumes on foreground (onResume)
   ├── Background sync completion detected on resume via delegate.onResume()
-  └── refreshAfterSend() called after account switch for immediate update
+  ├── refreshAfterSend() called after account switch for immediate update
+  └── refreshAfterUnlock() refreshes balances/history before foreground sync recovery
 ```
 
 ### App Bootstrap
@@ -139,6 +146,9 @@ until sync callback arrives" flash.
   - Rust wallet DB via `list_accounts`
   - active-account DB data via `get_sync_status`, `get_balance`,
     `get_transaction_history(limit: 10)`
+- If the wallet is locked, bootstrap does **not** hydrate active address or
+  initial balance/history; it routes straight to `/unlock` and lets the unlock
+  flow repopulate that state.
 - Router uses `bootstrap.initialLocation` instead of always starting at `/`.
 - `AccountProvider` starts from `bootstrap.initialAccountState`.
 - `WalletProvider` falls back to bootstrap values while `accountProvider` is
@@ -182,6 +192,7 @@ rust/src/
 │   │                    # import_hardware_account (Keystone UFVK-only)
 │   ├── sync.rs         # FRB: start_full_sync(StreamSink, mode), cancel_full_sync(),
 │   │                    # set_sync_mode(), get_sync_mode(), is_sync_running(),
+│   │                    # is_sync_cancel_requested(),
 │   │                    # get_balance(account_uuid), get_transaction_history(account_uuid),
 │   │                    # propose_send(account_uuid), estimate_fee(account_uuid),
 │   │                    # execute_proposal, get_next_available_address(account_uuid),
@@ -274,6 +285,8 @@ Rust has a shared `DESIRED_SYNC_MODE` AtomicU8 (0=none, 1=foreground, 2=backgrou
 - Also checks after download and after scan (mid-batch) for faster response
 - `SYNC_RUNNING` AtomicBool prevents concurrent sync (shared between FRB and C FFI)
 - `SYNC_CANCEL` Arc<AtomicBool> unified — both `cancelFullSync()` (Dart) and `zcash_cancel_sync()` (Swift) set the same flag
+- FRB also exposes `is_sync_cancel_requested()` so Dart can tell "still running"
+  from "running but already cancelling"
 - C FFI checks `DESIRED_MODE == 2` before starting (does not force-set mode)
 
 ### Foreground ↔ Background Sync Transitions
@@ -286,12 +299,27 @@ Foreground → Background:
 1. Dart: `setSyncMode(2)` → Rust fg sync exits at next batch
 2. Dart: `bg_sync.startBackgroundSync()` → Swift BGTask submit
 3. Swift handler (`using: nil`): dispatches to `.utility` syncQueue
-4. Waits for `mode==2 && !is_running` (timeout 120s) → `zcash_run_full_sync()`
-5. On completion with mode still 2: resubmits BGTask to continue
+4. `runSync()` bails out immediately if `mode != 2`; otherwise it waits only for
+   any previous sync to finish, re-checking `mode == 2` while waiting
+5. `zcash_run_full_sync()`
+6. On completion with mode still 2: resubmits BGTask to continue
 
 Background → Foreground:
 1. Dart: `setSyncMode(1)` → Rust bg sync exits at next batch
-2. Dart: waits for `isSyncRunning()==false` (timeout 120s) → `startSync()`
+2. Dart: `stopBackgroundSync()` cancels queued iOS BGTask requests so a late task
+   launch cannot start one extra background sync after handoff
+3. Dart: waits for `isSyncRunning()==false` (timeout 120s) → `startSync()`
+
+Sign-out / Lock:
+1. Dart: `securityNotifier.lock()` clears the session password and routes to `/unlock`
+2. `AccountProvider.clearSensitiveStateForLock()` clears only in-memory address state
+3. `SyncProvider.clearSensitiveStateForLock()` clears balance/history/progress,
+   sends `setSyncMode(0)` + `cancelFullSync()`, then shuts background sync down
+4. iOS `shutdownForLock()` cancels queued BGTask requests instead of requesting
+   the normal foreground handoff (`mode=1`)
+5. Unlock recovery runs `restoreAfterUnlock()` + `refreshAfterUnlock()` +
+   `startSyncAnyway()` to recover from stale cancelled Rust work before
+   re-entering `/home`
 
 Expiration: `expirationHandler` cancels heartbeat + sets mode=0 + cancel → no resubmit → on app resume, detects mode=0 with backgroundMode=true → restarts foreground sync.
 
@@ -309,13 +337,19 @@ handleBackgroundTask()
     └── semaphore.wait()               ← handler thread waits, doesn't block syncQueue
 
 runSync():
-    → wait for mode==2 && !is_running (timeout 120s)
+    → if `mode != 2`, exit without work
+    → wait for any previous sync to finish (timeout 120s), aborting if mode changes away from 2
+    → re-check `mode == 2` after the wait loop before starting Rust
     → heartbeat timer on .global(qos: .utility) — nudges completedUnitCount +1 every 5s
     → zcash_run_full_sync() [C FFI, blocking, current_thread tokio]
     → C callback: sets completedUnitCount = percentage * 10000 (scan-queue based)
     → C callback → SyncProgressStreamHandler → EventChannel → Dart (if foreground)
     → EventChannel forwards: scannedHeight, chainTipHeight, percentage, isSyncing, isComplete, hasNewTx
     → on completion: if mode still 2, resubmit BGTask
+
+`stopBackgroundSync()` on iOS now calls `BGTaskScheduler.shared.cancel(taskRequestWithIdentifier:)`
+for the sync task identifier, so sign-out / foreground handoff cancels queued
+work instead of only clearing Dart-side bookkeeping.
 ```
 
 Key files:
@@ -474,6 +508,8 @@ Seed-relevance rule:
 - `build()` watches `accountProvider` via `ref.listen` (not `ref.watch` — avoids rebuild on switch/rename)
 - Account count increase triggers `startSync()` + `_startPolling()` (both first account and additional accounts)
 - `_checkAndSync()`: polls `getLatestBlockHeight` every 10s, re-syncs if tip > last synced height or previous sync incomplete (`percentage < 1.0`)
+- `_checkAndSync()`, `_refreshBalance()`, and `_onSyncProgress()` all bail out while
+  locked and discard late async completions via `_sensitiveStateEpoch`
 - Polling stops during `_checkAndSync` execution to prevent concurrent overlap, restarts after
 - Duplicate sync guard: `_isSyncing` (Dart-side bool) + `isSyncRunning()` (Rust AtomicBool)
 
@@ -485,6 +521,12 @@ Seed-relevance rule:
 
 **Sync control:**
 - `stopSync()`: increments `_syncGen` + `cancelFullSync()` + `_stopPolling()`. Polling does not restart until next `onResume`
+- `clearSensitiveStateForLock()`: increments `_syncGen`/`_sensitiveStateEpoch`,
+  clears in-memory sync state, sends `setSyncMode(0)` + `cancelFullSync()`,
+  tears down background sync, and waits briefly for stale Rust sync / mempool work to stop
+- `startSyncAnyway()`: unlock recovery path. If Rust is still running but already
+  cancelling, waits for teardown before starting foreground sync; if teardown
+  times out, it at least restores polling so a later retry can recover
 - `enableBackgroundSync()`: delegates to `BackgroundSyncDelegate`
 - `disableBackgroundSync()`: delegates to `BackgroundSyncDelegate`. `disable()` returns `bool` — iOS returns `true` (needs fg restart), Android returns `false`
 
