@@ -12,7 +12,7 @@ bundle exec fastlane mac release
 
 `release` lane 순서:
 
-1. Developer ID 인증서 import
+1. `match`로 Developer ID 인증서 + provisioning profile 설치
 2. `fvm flutter build macos --release`
 3. `.app` notarize + staple
 4. `.zip` / `.dmg` 생성
@@ -23,13 +23,14 @@ bundle exec fastlane mac release
 
 `release` lane은 아래 값이 없으면 해당 단계에서 바로 실패합니다.
 
-- `MACOS_CERTIFICATE_P12_BASE64`
-- `MACOS_CERTIFICATE_PASSWORD`
 - `MACOS_KEYCHAIN_PASSWORD`
+- `MATCH_GIT_URL`
+- `MATCH_GIT_BASIC_AUTHORIZATION`
+- `MATCH_PASSWORD`
 - `APP_STORE_CONNECT_API_KEY_JSON`
 - `GITHUB_TOKEN`
-- `GITHUB_REPOSITORY`
-- `GITHUB_SHA`
+- `RELEASE_REPOSITORY`
+- `RELEASE_COMMITISH`
 
 태그 기반 워크플로우가 아니면 아래도 필요합니다.
 
@@ -38,6 +39,9 @@ bundle exec fastlane mac release
 ## Optional environment variables
 
 - `MACOS_KEYCHAIN_NAME`
+- `MATCH_GIT_BRANCH`
+- `MATCH_READONLY`
+- `MATCH_GIT_PRIVATE_KEY`
 - `RELEASE_NAME`
 - `GITHUB_RELEASE_DRAFT`
 - `GITHUB_RELEASE_PRERELEASE`
@@ -45,5 +49,7 @@ bundle exec fastlane mac release
 ## Notes
 
 - `APP_STORE_CONNECT_API_KEY_JSON`은 fastlane `notarize` 액션이 읽을 수 있는 App Store Connect API key JSON 전체 문자열을 기대합니다.
-- 인증서 import와 keychain 설정은 fastlane이 처리하지만, `Developer ID Application` 인증서 자체는 GitHub Actions secret로 제공돼야 합니다.
+- `MATCH_GIT_BASIC_AUTHORIZATION`은 GitHub private repo 접근용 Basic auth Base64 문자열입니다. 예: `echo -n "github_user:pat" | base64`
+- CI는 `MATCH_READONLY=true`로 두고, `match` 저장소는 로컬에서 한 번 시드해 둔 상태를 전제로 합니다.
+- `MATCH_READONLY=false`로 돌리면 fastlane은 `match` write 모드로 동작합니다. 이때는 `APP_STORE_CONNECT_API_KEY_JSON`이 준비돼 있어야 하며, git commit identity는 deployment workflow가 설정합니다.
 - 산출물은 `/Users/junghwanyun/zcash-wallet/dist/macos` 아래에 생성됩니다.
