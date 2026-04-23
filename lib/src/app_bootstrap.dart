@@ -35,7 +35,7 @@ class AppBootstrapState {
   final bool isUnlocked;
 
   bool get hasWallet => initialAccountState.hasAccounts;
-  bool get requiresUnlock => hasWallet && isPasswordConfigured && !isUnlocked;
+  bool get requiresUnlock => hasWallet && !isUnlocked;
 
   static final empty = AppBootstrapState(
     initialLocation: '/welcome',
@@ -145,7 +145,7 @@ Future<AppBootstrapState> loadAppBootstrap() async {
 
     final initialLocation = !hasWallet
         ? '/welcome'
-        : isPasswordConfigured && !isUnlocked
+        : !isUnlocked
         ? '/unlock'
         : '/home';
 

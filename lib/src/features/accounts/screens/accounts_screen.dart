@@ -58,7 +58,9 @@ class AccountsScreen extends ConsumerWidget {
                   : null,
               onTap: () async {
                 if (!isActive) {
-                  await ref.read(accountProvider.notifier).switchAccount(account.uuid);
+                  await ref
+                      .read(accountProvider.notifier)
+                      .switchAccount(account.uuid);
                   await ref.read(syncProvider.notifier).refreshAfterSend();
                 }
                 if (context.mounted) context.pop();
@@ -84,7 +86,7 @@ class AccountsScreen extends ConsumerWidget {
               subtitle: const Text('Generate a new mnemonic'),
               onTap: () {
                 Navigator.pop(context);
-                context.push('/create');
+                context.push('/add-account');
               },
             ),
             ListTile(
@@ -111,7 +113,11 @@ class AccountsScreen extends ConsumerWidget {
     );
   }
 
-  void _showRenameDialog(BuildContext context, WidgetRef ref, AccountInfo account) {
+  void _showRenameDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AccountInfo account,
+  ) {
     final controller = TextEditingController(text: account.name);
     showDialog(
       context: context,
@@ -134,7 +140,9 @@ class AccountsScreen extends ConsumerWidget {
             onPressed: () async {
               final newName = controller.text.trim();
               if (newName.isNotEmpty) {
-                await ref.read(accountProvider.notifier).renameAccount(account.uuid, newName);
+                await ref
+                    .read(accountProvider.notifier)
+                    .renameAccount(account.uuid, newName);
               }
               if (context.mounted) Navigator.pop(context);
             },

@@ -64,6 +64,9 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
 
   Future<void> _handleSignOut() async {
     if (_isSigningOut) return;
+    final syncNotifier = ref.read(syncProvider.notifier);
+    final accountNotifier = ref.read(accountProvider.notifier);
+    final securityNotifier = ref.read(appSecurityProvider.notifier);
 
     setState(() {
       _isSigningOut = true;
@@ -71,11 +74,12 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
     });
 
     try {
-      await ref.read(syncProvider.notifier).clearSensitiveStateForLock();
-      ref.read(accountProvider.notifier).clearSensitiveStateForLock();
-      ref.read(appSecurityProvider.notifier).lock();
-      if (!mounted) return;
-      context.go('/unlock');
+      securityNotifier.lock();
+      accountNotifier.clearSensitiveStateForLock();
+      if (mounted) {
+        context.go('/unlock');
+      }
+      await syncNotifier.clearSensitiveStateForLock();
     } finally {
       if (mounted) {
         setState(() {

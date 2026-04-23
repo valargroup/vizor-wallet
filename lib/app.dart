@@ -10,7 +10,6 @@ import 'src/core/theme/app_theme.dart';
 import 'src/core/theme/legacy_material_theme.dart';
 import 'src/features/home/screens/home_screen.dart';
 import 'src/features/onboarding/create/address_types_screen.dart';
-import 'src/features/onboarding/create/create_wallet_screen.dart';
 import 'src/features/onboarding/create/intro_zcash_screen.dart';
 import 'src/features/onboarding/create/onboarding_split_view.dart';
 import 'src/features/onboarding/create/secret_passphrase_screen.dart';
@@ -57,15 +56,12 @@ final _routerProvider = Provider<GoRouter>((ref) {
 
       final wallet = walletAsync.value;
       final hasWallet = wallet?.hasWallet ?? bootstrap.hasWallet;
-      final isPasswordConfigured =
-          security.isPasswordConfigured || bootstrap.isPasswordConfigured;
       final isUnlocked = security.isUnlocked || bootstrap.isUnlocked;
-      final requiresUnlock = hasWallet && isPasswordConfigured && !isUnlocked;
+      final requiresUnlock = hasWallet && !isUnlocked;
       final isOnboarding =
           state.matchedLocation == '/welcome' ||
           state.matchedLocation == '/add-account' ||
           state.matchedLocation.startsWith('/onboarding/') ||
-          state.matchedLocation == '/create' ||
           state.matchedLocation.startsWith('/import');
       final isUnlock = state.matchedLocation == '/unlock';
 
@@ -76,7 +72,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
 
       if (!hasWallet && isUnlock) return '/welcome';
       if (!hasWallet && !isOnboarding) return '/welcome';
-      if (!hasWallet && state.matchedLocation == '/add-account') return '/welcome';
+      if (!hasWallet && state.matchedLocation == '/add-account') {
+        return '/welcome';
+      }
       if (requiresUnlock && !isUnlock) return '/unlock';
       if (!requiresUnlock && isUnlock) return hasWallet ? '/home' : '/welcome';
       if (hasWallet && state.matchedLocation == '/welcome') {
@@ -93,11 +91,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
           if (walletAsync.hasError) return '/home'; // home shows error state
           final wallet = walletAsync.value;
           final hasWallet = wallet?.hasWallet ?? bootstrap.hasWallet;
-          final isPasswordConfigured =
-              security.isPasswordConfigured || bootstrap.isPasswordConfigured;
           final isUnlocked = security.isUnlocked || bootstrap.isUnlocked;
           if (!hasWallet) return '/welcome';
-          if (isPasswordConfigured && !isUnlocked) return '/unlock';
+          if (!isUnlocked) return '/unlock';
           return '/home';
         },
       ),
@@ -200,7 +196,6 @@ final _routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      GoRoute(path: '/create', builder: (_, _) => const CreateWalletScreen()),
       GoRoute(
         path: '/import',
         pageBuilder: (context, state) => CustomTransitionPage<void>(

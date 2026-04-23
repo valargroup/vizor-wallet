@@ -16,9 +16,7 @@ import '../src/features/onboarding/welcome.dart';
 /// preview.
 Widget buildWelcomeLargeUseCase(BuildContext context) {
   return ProviderScope(
-    overrides: [
-      appLayoutProvider.overrideWith(_NoOpLayoutNotifier.new),
-    ],
+    overrides: [appLayoutProvider.overrideWith(_NoOpLayoutNotifier.new)],
     child: _WelcomeHarness(),
   );
 }
@@ -54,8 +52,9 @@ class _WelcomeHarnessState extends State<_WelcomeHarness> {
         // tapped. They render nothing meaningful — the point is just to
         // satisfy the router.
         GoRoute(
-          path: '/create',
-          builder: (_, _) => const _PreviewRoutePlaceholder(label: '/create'),
+          path: '/onboarding/intro',
+          builder: (_, _) =>
+              const _PreviewRoutePlaceholder(label: '/onboarding/intro'),
         ),
         GoRoute(
           path: '/import',
