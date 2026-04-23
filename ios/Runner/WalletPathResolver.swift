@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 private let walletDbNameKey = "zcash_wallet_db_name"
-private let secureStoreService = "com.zcash.zcashWallet.secure_store"
+private let secureStoreService = "com.keplr.vizor.secure_store"
 
 enum WalletPathResolverError: Error {
     case dbNameMissing

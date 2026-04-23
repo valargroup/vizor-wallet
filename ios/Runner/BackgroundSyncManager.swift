@@ -4,13 +4,13 @@ import BackgroundTasks
 @available(iOS 26.0, *)
 class BackgroundSyncManager {
     static let shared = BackgroundSyncManager()
-    static let taskIdentifier = "com.zcash.zcashWallet.sync"
+    static let taskIdentifier = "com.keplr.vizor.sync"
 
     private var taskProgress: Progress?
     private var heartbeat: DispatchSourceTimer?
 
     /// Sync work runs on this .utility queue so Rust inherits the QoS.
-    private let syncQueue = DispatchQueue(label: "com.zcash.sync", qos: .utility)
+    private let syncQueue = DispatchQueue(label: "com.keplr.vizor.sync", qos: .utility)
 
     private init() {}
 

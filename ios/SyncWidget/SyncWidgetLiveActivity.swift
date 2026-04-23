@@ -8,7 +8,7 @@ import SwiftUI
 import WidgetKit
 
 struct SyncWidgetLiveActivity: Widget {
-    let appGroupId = "group.com.zcash.zcashWallet"
+    let appGroupId = "group.com.keplr.vizor"
 
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: LiveActivitiesAppAttributes.self) { context in

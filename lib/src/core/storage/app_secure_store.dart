@@ -11,7 +11,7 @@ const _secureStoreSaltKey = 'zcash_secure_store_salt';
 const _passwordVerifierKey = 'zcash_password_verifier';
 const _passwordVerifierSaltKey = 'zcash_password_verifier_salt';
 const _secureStorePassword = 'zcash-wallet-dev-password';
-const _secureStoreService = 'com.zcash.zcashWallet.secure_store';
+const _secureStoreService = 'com.keplr.vizor.secure_store';
 
 class AppSecureStore {
   AppSecureStore._();

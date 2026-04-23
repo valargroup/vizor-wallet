@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.zcash.zcashWallet</string>
+		<string>group.com.keplr.vizor</string>
 	</array>
 </dict>
 </plist>

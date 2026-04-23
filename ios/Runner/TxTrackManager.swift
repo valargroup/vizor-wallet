@@ -6,9 +6,9 @@ import Foundation
 @available(iOS 26.0, *)
 class TxTrackManager {
     static let shared = TxTrackManager()
-    static let taskIdentifier = "com.zcash.zcashWallet.txtrack"
+    static let taskIdentifier = "com.keplr.vizor.txtrack"
 
-    private let trackQueue = DispatchQueue(label: "com.zcash.txtrack", qos: .utility)
+    private let trackQueue = DispatchQueue(label: "com.keplr.vizor.txtrack", qos: .utility)
     private let pollInterval: TimeInterval = 5.0
     private let resultDisplayDelay: TimeInterval = 5.0
     private let lightwalletdUrl = "https://zec.rocks:443"

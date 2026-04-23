@@ -1,4 +1,4 @@
-package com.zcash.zcash_wallet
+package com.keplr.vizor
 
 import io.flutter.embedding.android.FlutterActivity
 

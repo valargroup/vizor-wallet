@@ -15,7 +15,7 @@ class DynamicIslandManager {
 
     private(set) var displayMode: DisplayMode = .idle
     private var currentActivity: Activity<LiveActivitiesAppAttributes>?
-    private let defaults = UserDefaults(suiteName: "group.com.zcash.zcashWallet")
+    private let defaults = UserDefaults(suiteName: "group.com.keplr.vizor")
     private var activityId: UUID?
 
     // Cache last sync progress for restoration after TX tracking
@@ -90,7 +90,7 @@ class DynamicIslandManager {
         displayMode = .idle
         guard let activity = currentActivity else { return }
         let state = LiveActivitiesAppAttributes.ContentState(
-            appGroupId: "group.com.zcash.zcashWallet"
+            appGroupId: "group.com.keplr.vizor"
         )
         Task {
             await activity.end(.init(state: state, staleDate: nil), dismissalPolicy: .immediate)
@@ -107,7 +107,7 @@ class DynamicIslandManager {
         activityId = id
         let attributes = LiveActivitiesAppAttributes(id: id)
         let state = LiveActivitiesAppAttributes.ContentState(
-            appGroupId: "group.com.zcash.zcashWallet"
+            appGroupId: "group.com.keplr.vizor"
         )
         do {
             currentActivity = try Activity.request(
@@ -125,7 +125,7 @@ class DynamicIslandManager {
     private func refreshActivity() {
         guard let activity = currentActivity else { return }
         let state = LiveActivitiesAppAttributes.ContentState(
-            appGroupId: "group.com.zcash.zcashWallet"
+            appGroupId: "group.com.keplr.vizor"
         )
         Task {
             await activity.update(.init(state: state, staleDate: nil))
