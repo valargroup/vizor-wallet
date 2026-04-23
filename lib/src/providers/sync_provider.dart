@@ -388,9 +388,18 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
     final rustRunning = rust_sync.isSyncRunning();
     final cancelRequested = rust_sync.isSyncCancelRequested();
-    if (rustRunning && cancelRequested) {
+    final staleMempoolRunning =
+        _mempoolSub == null && rust_sync.isMempoolObserverRunning();
+    if (staleMempoolRunning) {
       log(
-        'Sync: cancelled Rust sync still running, waiting before foreground restart',
+        'Mempool: stale observer still running, stopping before foreground restart',
+      );
+      rust_sync.stopMempoolObserver();
+    }
+    if ((rustRunning && cancelRequested) || staleMempoolRunning) {
+      log(
+        'Sync: cancelled Rust tasks still running, waiting before foreground '
+        'restart',
       );
       final stopped = await _waitForRustTasksToStop(
         timeoutMs: 5000,
