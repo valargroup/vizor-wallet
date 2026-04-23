@@ -8,6 +8,7 @@ require "shellwords"
 require "tempfile"
 require "tmpdir"
 require "yaml"
+require "open3"
 require_relative "../patches/developer_id_application_certificate_type_patch"
 
 def shell_escape(value)
@@ -78,6 +79,10 @@ def signing_keychain_path
   File.expand_path(File.join("~/Library/Keychains", signing_keychain_name))
 end
 
+def match_certificate_password
+  ENV.fetch("MATCH_CERTIFICATE_PASSWORD")
+end
+
 def setup_signing_keychain
   keychain_password = ENV.fetch("MACOS_KEYCHAIN_PASSWORD")
   keychain_path = signing_keychain_path
@@ -121,12 +126,51 @@ def with_app_store_connect_api_key_path(required: true)
   end
 end
 
+def find_codesigning_identities(keychain_path)
+  stdout, _stderr, _status = Open3.capture3("security", "find-identity", "-v", "-p", "codesigning", keychain_path)
+  stdout
+end
+
+def ensure_developer_id_identity!(keychain_path)
+  identities = find_codesigning_identities(keychain_path)
+  return if identities.include?('Developer ID Application: Chainapsis Inc. (SZTB68DXM4)')
+
+  UI.user_error!("Developer ID Application identity is not available in #{keychain_path}")
+end
+
+def import_match_signing_assets!(output_dir, keychain)
+  cert_path = Dir[File.join(output_dir, "*.cer")].max
+  p12_path = Dir[File.join(output_dir, "*.p12")].max
+
+  UI.user_error!("match did not export a certificate into #{output_dir}") unless cert_path
+  UI.user_error!("match did not export a private key into #{output_dir}") unless p12_path
+
+  import_certificate(
+    certificate_path: cert_path,
+    keychain_path: keychain[:path],
+    keychain_password: keychain[:password],
+    log_output: false
+  )
+
+  import_certificate(
+    certificate_path: p12_path,
+    certificate_password: match_certificate_password,
+    certificate_format: "pkcs12",
+    keychain_path: keychain[:path],
+    keychain_password: keychain[:password],
+    log_output: false
+  )
+
+  ensure_developer_id_identity!(keychain[:path])
+end
+
 platform :mac do
   private_lane :validate_signing_environment do |options|
     readonly = options.fetch(:readonly, match_readonly?)
 
     ENV.fetch("MATCH_GIT_URL")
     ENV.fetch("MATCH_PASSWORD")
+    ENV.fetch("MATCH_CERTIFICATE_PASSWORD")
     ENV.fetch("MACOS_KEYCHAIN_PASSWORD")
 
     return if readonly
@@ -140,19 +184,24 @@ platform :mac do
     readonly = options.fetch(:readonly, match_readonly?)
     validate_signing_environment(readonly: readonly)
 
-    with_app_store_connect_api_key_path(required: !readonly) do |api_key_path|
-      match_options = {
-        type: "developer_id",
-        app_identifier: metadata[:bundle_id],
-        platform: "macos",
-        readonly: readonly,
-        git_branch: match_git_branch,
-        team_id: "SZTB68DXM4",
-        keychain_name: keychain[:name],
-        keychain_password: keychain[:password]
-      }
-      match_options[:api_key_path] = api_key_path if api_key_path
-      match(match_options)
+    Dir.mktmpdir("match-signing-assets") do |output_dir|
+      with_app_store_connect_api_key_path(required: !readonly) do |api_key_path|
+        match_options = {
+          type: "developer_id",
+          app_identifier: metadata[:bundle_id],
+          platform: "macos",
+          readonly: readonly,
+          git_branch: match_git_branch,
+          team_id: "SZTB68DXM4",
+          keychain_name: keychain[:name],
+          keychain_password: keychain[:password],
+          output_path: output_dir
+        }
+        match_options[:api_key_path] = api_key_path if api_key_path
+        match(match_options)
+      end
+
+      import_match_signing_assets!(output_dir, keychain)
     end
 
     profile_name = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING].fetch(metadata[:bundle_id])
