@@ -8,6 +8,7 @@ require "shellwords"
 require "tempfile"
 require "tmpdir"
 require "yaml"
+require_relative "../patches/developer_id_application_certificate_type_patch"
 
 def shell_escape(value)
   Shellwords.escape(value)
