@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1443458602;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1440350829;
 
 // Section: executor
 
@@ -1362,6 +1362,35 @@ fn wire__crate__api__sync__is_mempool_observer_running_impl(
             transform_result_sse::<_, ()>((move || {
                 let output_ok =
                     Result::<_, ()>::Ok(crate::api::sync::is_mempool_observer_running())?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__sync__is_sync_cancel_requested_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "is_sync_cancel_requested",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::sync::is_sync_cancel_requested())?;
                 Ok(output_ok)
             })())
         },
@@ -2800,34 +2829,34 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        38 => wire__crate__api__keystone__keystone_usb_sign_pczt_impl(
+        39 => wire__crate__api__keystone__keystone_usb_sign_pczt_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        39 => wire__crate__api__wallet__list_accounts_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__sync__propose_send_impl(port, ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__sync__put_subtree_roots_impl(port, ptr, rust_vec_len, data_len),
-        42 => {
+        40 => wire__crate__api__wallet__list_accounts_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__sync__propose_send_impl(port, ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__sync__put_subtree_roots_impl(port, ptr, rust_vec_len, data_len),
+        43 => {
             wire__crate__api__sync__redact_pczt_for_signer_impl(port, ptr, rust_vec_len, data_len)
         }
-        44 => wire__crate__api__sync__rewind_to_height_impl(port, ptr, rust_vec_len, data_len),
-        45 => {
+        45 => wire__crate__api__sync__rewind_to_height_impl(port, ptr, rust_vec_len, data_len),
+        46 => {
             wire__crate__api__sync__run_full_sync_blocking_impl(port, ptr, rust_vec_len, data_len)
         }
-        46 => wire__crate__api__sync__scan_blocks_impl(port, ptr, rust_vec_len, data_len),
-        48 => {
+        47 => wire__crate__api__sync__scan_blocks_impl(port, ptr, rust_vec_len, data_len),
+        49 => {
             wire__crate__api__sync__set_transaction_status_impl(port, ptr, rust_vec_len, data_len)
         }
-        49 => wire__crate__api__sync__start_full_sync_impl(port, ptr, rust_vec_len, data_len),
-        50 => {
+        50 => wire__crate__api__sync__start_full_sync_impl(port, ptr, rust_vec_len, data_len),
+        51 => {
             wire__crate__api__sync__start_mempool_observer_impl(port, ptr, rust_vec_len, data_len)
         }
-        52 => wire__crate__api__sync__suggest_scan_ranges_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__sync__update_chain_tip_impl(port, ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__sync__validate_address_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__sync__write_block_metadata_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__sync__suggest_scan_ranges_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__sync__update_chain_tip_impl(port, ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__sync__validate_address_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__sync__write_block_metadata_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2846,12 +2875,13 @@ fn pde_ffi_dispatcher_sync_impl(
         25 => wire__crate__api__sync__get_sync_mode_impl(ptr, rust_vec_len, data_len),
         31 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
         36 => wire__crate__api__sync__is_mempool_observer_running_impl(ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__sync__is_sync_running_impl(ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__keystone__reset_ur_session_impl(ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__sync__set_sync_mode_impl(ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__sync__stop_mempool_observer_impl(ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__wallet__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__wallet__wallet_exists_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__sync__is_sync_cancel_requested_impl(ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__sync__is_sync_running_impl(ptr, rust_vec_len, data_len),
+        44 => wire__crate__api__keystone__reset_ur_session_impl(ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__sync__set_sync_mode_impl(ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__sync__stop_mempool_observer_impl(ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__wallet__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__wallet__wallet_exists_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

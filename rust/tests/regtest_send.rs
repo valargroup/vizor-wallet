@@ -1,9 +1,8 @@
 mod common;
 
 use common::{
-    add_account_with_birthday, create_wallet, ensure_regtest_up, execute_send,
-    exclusive_regtest, fund_wallet, get_balance, get_transaction_history, mine_blocks,
-    sync_wallet,
+    add_account_with_birthday, create_wallet, ensure_regtest_up, exclusive_regtest, execute_send,
+    fund_wallet, get_balance, get_transaction_history, mine_blocks, sync_wallet,
 };
 
 #[test]
@@ -33,8 +32,7 @@ fn funded_wallet_can_send_to_second_wallet() {
         &sender_wallet.mnemonic,
         &receiver_wallet.unified_address,
         50_000_000,
-    )
-    ;
+    );
     assert!(!txid.is_empty(), "execute_proposal should return a txid");
 
     mine_blocks(10);
@@ -56,7 +54,9 @@ fn funded_wallet_can_send_to_second_wallet() {
 
     let receiver_history = get_transaction_history(&receiver_db, &receiver_wallet.account_uuid);
     assert!(
-        receiver_history.iter().any(|tx| tx.account_balance_delta > 0),
+        receiver_history
+            .iter()
+            .any(|tx| tx.account_balance_delta > 0),
         "receiver should record an inbound transaction"
     );
 }

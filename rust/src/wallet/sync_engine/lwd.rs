@@ -17,9 +17,7 @@
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 use zcash_client_backend::{
     data_api::{
-        chain::CommitmentTreeRoot,
-        wallet::ConfirmationsPolicy,
-        WalletCommitmentTrees, WalletRead,
+        chain::CommitmentTreeRoot, wallet::ConfirmationsPolicy, WalletCommitmentTrees, WalletRead,
     },
     proto::service::{
         self, compact_tx_streamer_client::CompactTxStreamerClient, BlockId, BlockRange, Empty,
@@ -87,7 +85,10 @@ pub(super) async fn download_subtree_roots(
             .get_wallet_summary(ConfirmationsPolicy::default())
             .map_err(|e| SyncError::db(format!("get_wallet_summary: {e}")))?;
         match summary {
-            Some(s) => (s.next_sapling_subtree_index(), s.next_orchard_subtree_index()),
+            Some(s) => (
+                s.next_sapling_subtree_index(),
+                s.next_orchard_subtree_index(),
+            ),
             None => (0, 0),
         }
     };

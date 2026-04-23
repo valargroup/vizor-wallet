@@ -2,18 +2,18 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use rand::rngs::OsRng;
+use tonic::transport::Channel;
 use zcash_client_backend::{
     data_api::{
-        WalletRead, WalletWrite,
         chain::{self, error::Error as ChainError, scan_cached_blocks},
         scanning::ScanPriority,
+        WalletRead, WalletWrite,
     },
     proto::service::{self, BlockId, ChainSpec},
 };
-use zcash_client_sqlite::{WalletDb, error::SqliteClientError, util::SystemClock};
+use zcash_client_sqlite::{error::SqliteClientError, util::SystemClock, WalletDb};
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
-use tonic::transport::Channel;
 
 use crate::wallet::network::WalletNetwork;
 
@@ -37,9 +37,9 @@ mod error;
 mod lwd;
 pub(crate) mod mempool;
 
+use enhance::run_enhancement;
 pub(crate) use error::SyncError;
 use error::{RecoveryStrategy, MAX_REWINDS_PER_RUN};
-use enhance::run_enhancement;
 pub(crate) use lwd::open_lwd_channel;
 use lwd::{download_blocks, download_subtree_roots};
 
@@ -85,7 +85,9 @@ const SAPLING_ACTIVATION_HEIGHT: u32 = 419200;
 static SYNC_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
 
 fn elapsed() -> String {
-    SYNC_START.lock().ok()
+    SYNC_START
+        .lock()
+        .ok()
         .and_then(|g| g.map(|t| format!("{:.1}s", t.elapsed().as_secs_f64())))
         .unwrap_or_default()
 }
@@ -141,12 +143,17 @@ async fn refresh_utxos(
                 .txid
                 .try_into()
                 .map_err(|_| SyncError::parse("transparent UTXO txid was not 32 bytes"))?;
-            let index = u32::try_from(reply.index)
-                .map_err(|_| SyncError::parse(format!("invalid transparent UTXO index: {}", reply.index)))?;
-            let height = u32::try_from(reply.height)
-                .map_err(|_| SyncError::parse(format!("invalid transparent UTXO height: {}", reply.height)))?;
+            let index = u32::try_from(reply.index).map_err(|_| {
+                SyncError::parse(format!("invalid transparent UTXO index: {}", reply.index))
+            })?;
+            let height = u32::try_from(reply.height).map_err(|_| {
+                SyncError::parse(format!("invalid transparent UTXO height: {}", reply.height))
+            })?;
             let value = Zatoshis::from_nonnegative_i64(reply.value_zat).map_err(|_| {
-                SyncError::parse(format!("invalid transparent UTXO value: {}", reply.value_zat))
+                SyncError::parse(format!(
+                    "invalid transparent UTXO value: {}",
+                    reply.value_zat
+                ))
             })?;
 
             let output = WalletTransparentOutput::from_parts(
@@ -187,17 +194,40 @@ pub async fn run_sync_inner(
     for attempt in 0..=MAX_RETRIES {
         if attempt > 0 {
             let delay_secs = 1u64 << attempt; // 2, 4, 8
-            log::warn!("[{}] sync: retry {}/{} in {}s (error: {})", elapsed(), attempt, MAX_RETRIES, delay_secs, last_err);
+            log::warn!(
+                "[{}] sync: retry {}/{} in {}s (error: {})",
+                elapsed(),
+                attempt,
+                MAX_RETRIES,
+                delay_secs,
+                last_err
+            );
             for _ in 0..delay_secs {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
-                    log::warn!("[{}] sync: cancelled/mode changed during retry wait (pending error: {})", elapsed(), last_err);
+                if cancel.load(Ordering::Relaxed)
+                    || desired_mode.load(Ordering::SeqCst) != running_mode
+                {
+                    log::warn!(
+                        "[{}] sync: cancelled/mode changed during retry wait (pending error: {})",
+                        elapsed(),
+                        last_err
+                    );
                     return Ok(());
                 }
             }
         }
 
-        match run_sync_impl(db_data_path, lightwalletd_url, network, cancel.clone(), running_mode, desired_mode, &progress_fn).await {
+        match run_sync_impl(
+            db_data_path,
+            lightwalletd_url,
+            network,
+            cancel.clone(),
+            running_mode,
+            desired_mode,
+            &progress_fn,
+        )
+        .await
+        {
             Ok(()) => return Ok(()),
             Err(sync_err) => {
                 // Inspect the typed error's recovery strategy before
@@ -252,8 +282,17 @@ async fn run_sync_impl(
     desired_mode: &AtomicU8,
     progress_fn: &(impl Fn(SyncProgressEvent) + Send + Sync),
 ) -> Result<(), SyncError> {
-    let base_batch_size = if running_mode == 2 { BATCH_SIZE_BACKGROUND } else { BATCH_SIZE_FOREGROUND };
-    log::info!("[{}] sync: starting (mode={}, base_batch={})", elapsed(), running_mode, base_batch_size);
+    let base_batch_size = if running_mode == 2 {
+        BATCH_SIZE_BACKGROUND
+    } else {
+        BATCH_SIZE_FOREGROUND
+    };
+    log::info!(
+        "[{}] sync: starting (mode={}, base_batch={})",
+        elapsed(),
+        running_mode,
+        base_batch_size
+    );
 
     // 1. Connect gRPC (plain TLS via tonic + webpki roots).
     let mut client = open_lwd_channel(lightwalletd_url).await?;
@@ -294,7 +333,10 @@ async fn run_sync_impl(
     refresh_utxos(&mut client, &mut db, network).await?;
 
     if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
-        log::info!("[{}] sync: exiting after transparent UTXO refresh", elapsed());
+        log::info!(
+            "[{}] sync: exiting after transparent UTXO refresh",
+            elapsed()
+        );
         return Ok(());
     }
 
@@ -337,9 +379,15 @@ async fn run_sync_impl(
         let ranges = db
             .suggest_scan_ranges()
             .map_err(|e| SyncError::db(format!("suggest_scan_ranges: {e}")))?;
-        ranges.iter()
-            .filter(|r| r.priority() != ScanPriority::Ignored && r.priority() != ScanPriority::Scanned)
-            .map(|r| u32::from(r.block_range().end).saturating_sub(u32::from(r.block_range().start)) as u64)
+        ranges
+            .iter()
+            .filter(|r| {
+                r.priority() != ScanPriority::Ignored && r.priority() != ScanPriority::Scanned
+            })
+            .map(|r| {
+                u32::from(r.block_range().end).saturating_sub(u32::from(r.block_range().start))
+                    as u64
+            })
             .sum()
     };
     let mut prev_remaining = initial_total;
@@ -389,10 +437,8 @@ async fn run_sync_impl(
     // `None` on the first iteration and whenever the previous batch
     // was the last in its range (so there's nothing to prefetch until
     // `suggest_scan_ranges` runs again).
-    type PrefetchResult = Result<
-        crate::wallet::sync_engine::block_source::MemoryBlockSource,
-        SyncError,
-    >;
+    type PrefetchResult =
+        Result<crate::wallet::sync_engine::block_source::MemoryBlockSource, SyncError>;
     /// Prefetched block download state. Implements `Drop` to
     /// abort the spawned tokio task when the loop exits for any
     /// reason (cancel, mode change, error, break, reorg
@@ -486,9 +532,15 @@ async fn run_sync_impl(
             verify_phase_announced = true;
         } else if !is_verify_phase && !main_phase_announced {
             if verify_phase_announced {
-                log::info!("[{}] sync: verify phase complete, entering main scan", elapsed());
+                log::info!(
+                    "[{}] sync: verify phase complete, entering main scan",
+                    elapsed()
+                );
             } else {
-                log::info!("[{}] sync: entering main scan phase (no verify work)", elapsed());
+                log::info!(
+                    "[{}] sync: entering main scan phase (no verify work)",
+                    elapsed()
+                );
             }
             main_phase_announced = true;
         }
@@ -518,7 +570,11 @@ async fn run_sync_impl(
             u32::from(start),
             u32::from(end) - 1,
             range.priority(),
-            if is_verify_phase { ", verify phase" } else { "" },
+            if is_verify_phase {
+                ", verify phase"
+            } else {
+                ""
+            },
             batch_size,
         );
 
@@ -541,10 +597,7 @@ async fn run_sync_impl(
                     }
                     _ => {
                         // Prefetch failed — download synchronously.
-                        log::warn!(
-                            "[{}] sync: prefetch failed, downloading fresh",
-                            elapsed(),
-                        );
+                        log::warn!("[{}] sync: prefetch failed, downloading fresh", elapsed(),);
                         download_blocks(&mut client, start, end - 1).await?
                     }
                 }
@@ -568,7 +621,10 @@ async fn run_sync_impl(
             chain::ChainState::empty(start - 1, BlockHash([0u8; 32]))
         } else {
             let ts = client
-                .get_tree_state(BlockId { height: u32::from(start - 1) as u64, hash: vec![] })
+                .get_tree_state(BlockId {
+                    height: u32::from(start - 1) as u64,
+                    hash: vec![],
+                })
                 .await
                 .map_err(|e| SyncError::net(format!("get_tree_state: {e}")))?
                 .into_inner();
@@ -855,20 +911,35 @@ async fn run_sync_impl(
         let post_ranges = db
             .suggest_scan_ranges()
             .map_err(|e| SyncError::db(format!("suggest_scan_ranges: {e}")))?;
-        let remaining: u64 = post_ranges.iter()
-            .filter(|r| r.priority() != ScanPriority::Ignored && r.priority() != ScanPriority::Scanned)
-            .map(|r| u32::from(r.block_range().end).saturating_sub(u32::from(r.block_range().start)) as u64)
+        let remaining: u64 = post_ranges
+            .iter()
+            .filter(|r| {
+                r.priority() != ScanPriority::Ignored && r.priority() != ScanPriority::Scanned
+            })
+            .map(|r| {
+                u32::from(r.block_range().end).saturating_sub(u32::from(r.block_range().start))
+                    as u64
+            })
             .sum();
         // Adjust initial_total if new ranges appeared (e.g. new account added mid-sync).
         // Use scanned + remaining as the true total, so progress never goes backward.
         let scanned_so_far = initial_total.saturating_sub(prev_remaining);
         let new_total = scanned_so_far + remaining;
         if new_total > initial_total {
-            log::info!("[{}] sync: new scan ranges detected, adjusted total {} -> {}", elapsed(), initial_total, new_total);
+            log::info!(
+                "[{}] sync: new scan ranges detected, adjusted total {} -> {}",
+                elapsed(),
+                initial_total,
+                new_total
+            );
             initial_total = new_total;
         }
         prev_remaining = remaining;
-        let pct = if initial_total > 0 { 1.0 - (remaining as f64 / initial_total as f64) } else { 1.0 };
+        let pct = if initial_total > 0 {
+            1.0 - (remaining as f64 / initial_total as f64)
+        } else {
+            1.0
+        };
         let progress = SyncProgressEvent {
             scanned_height: u32::from(end) as u64,
             chain_tip_height: current_tip_height,
@@ -878,7 +949,14 @@ async fn run_sync_impl(
             has_new_tx,
             phase: "scan".into(),
         };
-        log::info!("[{}] sync: {:.1}% (remaining={}/{}, scanned={})", elapsed(), pct * 100.0, remaining, initial_total, initial_total - remaining);
+        log::info!(
+            "[{}] sync: {:.1}% (remaining={}/{}, scanned={})",
+            elapsed(),
+            pct * 100.0,
+            remaining,
+            initial_total,
+            initial_total - remaining
+        );
         progress_fn(progress);
 
         // Prefetch: if the current range still has blocks beyond
@@ -965,7 +1043,6 @@ fn is_sqlite_lock_contention(err: &SqliteClientError) -> bool {
     }
 }
 
-
 // ==================== Tests ====================
 //
 // Error-taxonomy tests now live alongside their types in `error.rs`. The
@@ -1014,8 +1091,9 @@ mod tests {
         assert!(!is_sqlite_lock_contention(&ioerr));
 
         // A non-DbError wallet variant is trivially not lock contention.
-        let block_conflict =
-            SqliteClientError::BlockConflict(zcash_protocol::consensus::BlockHeight::from_u32(2_500_000));
+        let block_conflict = SqliteClientError::BlockConflict(
+            zcash_protocol::consensus::BlockHeight::from_u32(2_500_000),
+        );
         assert!(!is_sqlite_lock_contention(&block_conflict));
     }
 }

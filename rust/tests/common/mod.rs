@@ -2,11 +2,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
-use rust_lib_zcash_wallet::{
-    api::{sync as sync_api, wallet as wallet_api},
-};
-use uuid::Uuid;
+use rust_lib_zcash_wallet::api::{sync as sync_api, wallet as wallet_api};
 use tempfile::TempDir;
+use uuid::Uuid;
 
 pub const REGTEST_NETWORK: &str = "regtest";
 pub const LIGHTWALLETD_URL: &str = "http://127.0.0.1:9067";

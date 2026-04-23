@@ -42,7 +42,10 @@ pub extern "C" fn zcash_run_full_sync(
     network: *const c_char,
     progress_callback: SyncProgressCallback,
 ) -> i32 {
-    if SYNC_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    if SYNC_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         log::warn!("ffi: sync already running");
         return 3;
     }
@@ -50,7 +53,10 @@ pub extern "C" fn zcash_run_full_sync(
     // Don't force mode — Dart/Swift caller should have set it before calling.
     // If mode is 0 (stop requested), bail out immediately.
     if DESIRED_SYNC_MODE.load(Ordering::SeqCst) != 2 {
-        log::warn!("ffi: mode is not background ({}), aborting", DESIRED_SYNC_MODE.load(Ordering::SeqCst));
+        log::warn!(
+            "ffi: mode is not background ({}), aborting",
+            DESIRED_SYNC_MODE.load(Ordering::SeqCst)
+        );
         SYNC_RUNNING.store(false, Ordering::SeqCst);
         return 4;
     }
@@ -58,20 +64,32 @@ pub extern "C" fn zcash_run_full_sync(
     let result = std::panic::catch_unwind(|| {
         let db_path = match unsafe { c_str_to_str(db_path) } {
             Some(s) => s,
-            None => { log::error!("ffi: invalid or null db_path"); return 1; }
+            None => {
+                log::error!("ffi: invalid or null db_path");
+                return 1;
+            }
         };
         let lightwalletd_url = match unsafe { c_str_to_str(lightwalletd_url) } {
             Some(s) => s,
-            None => { log::error!("ffi: invalid or null lightwalletd_url"); return 1; }
+            None => {
+                log::error!("ffi: invalid or null lightwalletd_url");
+                return 1;
+            }
         };
         let network_str = match unsafe { c_str_to_str(network) } {
             Some(s) => s,
-            None => { log::error!("ffi: invalid or null network string"); return 1; }
+            None => {
+                log::error!("ffi: invalid or null network string");
+                return 1;
+            }
         };
 
         let network = match keys::parse_network(network_str) {
             Ok(n) => n,
-            Err(e) => { log::error!("ffi: parse_network failed: {e}"); return 1; }
+            Err(e) => {
+                log::error!("ffi: parse_network failed: {e}");
+                return 1;
+            }
         };
 
         let cancel = SYNC_CANCEL.clone();
@@ -80,9 +98,13 @@ pub extern "C" fn zcash_run_full_sync(
         // current_thread runtime — inherits .utility QoS from iOS dispatch queue
         let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
-            .build() {
+            .build()
+        {
             Ok(rt) => rt,
-            Err(e) => { log::error!("ffi: tokio runtime failed: {e}"); return 1; }
+            Err(e) => {
+                log::error!("ffi: tokio runtime failed: {e}");
+                return 1;
+            }
         };
 
         let result = rt.block_on(async {
@@ -109,7 +131,10 @@ pub extern "C" fn zcash_run_full_sync(
 
         match result {
             Ok(()) => 0,
-            Err(e) => { log::error!("ffi: sync failed: {e}"); 1 }
+            Err(e) => {
+                log::error!("ffi: sync failed: {e}");
+                1
+            }
         }
     });
 
@@ -118,9 +143,13 @@ pub extern "C" fn zcash_run_full_sync(
     match result {
         Ok(code) => code,
         Err(e) => {
-            let msg = if let Some(s) = e.downcast_ref::<&str>() { s.to_string() }
-                else if let Some(s) = e.downcast_ref::<String>() { s.clone() }
-                else { "Unknown".to_string() };
+            let msg = if let Some(s) = e.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = e.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "Unknown".to_string()
+            };
             log::error!("ffi: panic during sync: {msg}");
             2
         }
@@ -166,11 +195,17 @@ pub struct CPendingTx {
 pub extern "C" fn zcash_get_pending_tx_count(db_path: *const c_char) -> i32 {
     let db_path = match unsafe { c_str_to_str(db_path) } {
         Some(s) => s,
-        None => { log::error!("ffi: invalid or null db_path"); return -1; }
+        None => {
+            log::error!("ffi: invalid or null db_path");
+            return -1;
+        }
     };
     match crate::wallet::sync::get_pending_transactions(db_path) {
         Ok(txs) => txs.len() as i32,
-        Err(e) => { log::error!("ffi: get_pending_tx_count: {e}"); -1 }
+        Err(e) => {
+            log::error!("ffi: get_pending_tx_count: {e}");
+            -1
+        }
     }
 }
 
@@ -183,7 +218,10 @@ pub extern "C" fn zcash_get_pending_txs(
 ) -> i32 {
     let db_path = match unsafe { c_str_to_str(db_path) } {
         Some(s) => s,
-        None => { log::error!("ffi: invalid or null db_path"); return -1; }
+        None => {
+            log::error!("ffi: invalid or null db_path");
+            return -1;
+        }
     };
     if buf_len <= 0 {
         return 0;
@@ -195,7 +233,10 @@ pub extern "C" fn zcash_get_pending_txs(
 
     let txs = match crate::wallet::sync::get_pending_transactions(db_path) {
         Ok(t) => t,
-        Err(e) => { log::error!("ffi: get_pending_txs: {e}"); return -1; }
+        Err(e) => {
+            log::error!("ffi: get_pending_txs: {e}");
+            return -1;
+        }
     };
 
     let count = std::cmp::min(txs.len(), buf_len as usize);
@@ -222,15 +263,24 @@ pub extern "C" fn zcash_check_tx_status(
 ) -> i64 {
     let url = match unsafe { c_str_to_str(lightwalletd_url) } {
         Some(s) => s,
-        None => { log::error!("ffi: invalid or null lightwalletd_url"); return -1; }
+        None => {
+            log::error!("ffi: invalid or null lightwalletd_url");
+            return -1;
+        }
     };
     let hex_str = match unsafe { c_str_to_str(txid_hex) } {
         Some(s) => s,
-        None => { log::error!("ffi: invalid or null txid_hex"); return -1; }
+        None => {
+            log::error!("ffi: invalid or null txid_hex");
+            return -1;
+        }
     };
     let txid_bytes = match hex::decode(hex_str) {
         Ok(b) if b.len() == 32 => b,
-        _ => { log::error!("ffi: bad txid hex"); return -1; }
+        _ => {
+            log::error!("ffi: bad txid hex");
+            return -1;
+        }
     };
 
     let rt = match tokio::runtime::Builder::new_current_thread()
@@ -238,7 +288,10 @@ pub extern "C" fn zcash_check_tx_status(
         .build()
     {
         Ok(rt) => rt,
-        Err(e) => { log::error!("ffi: tokio runtime failed: {e}"); return -1; }
+        Err(e) => {
+            log::error!("ffi: tokio runtime failed: {e}");
+            return -1;
+        }
     };
 
     rt.block_on(crate::wallet::sync::check_tx_mined(url, &txid_bytes))

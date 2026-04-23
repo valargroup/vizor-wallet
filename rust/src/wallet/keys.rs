@@ -4,10 +4,10 @@ use bip0039::{Count, English, Mnemonic};
 use rand::rngs::OsRng;
 use secrecy::{ExposeSecret, SecretVec};
 use zcash_client_backend::data_api::{
-    Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite,
-    Zip32Derivation, chain::ChainState,
+    chain::ChainState, Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead,
+    WalletWrite, Zip32Derivation,
 };
-use zcash_client_sqlite::{AccountUuid, WalletDb, util::SystemClock, wallet::init::init_wallet_db};
+use zcash_client_sqlite::{util::SystemClock, wallet::init::init_wallet_db, AccountUuid, WalletDb};
 use zcash_keys::{
     encoding::encode_transparent_address,
     keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedSpendingKey},
@@ -27,8 +27,8 @@ pub fn generate_mnemonic() -> String {
 /// Convert a mnemonic phrase to a 64-byte seed wrapped in SecretVec.
 /// The seed is zeroized from memory when the SecretVec is dropped.
 pub fn mnemonic_to_seed(phrase: &str) -> Result<SecretVec<u8>, String> {
-    let mnemonic = Mnemonic::<English>::from_phrase(phrase)
-        .map_err(|e| format!("Invalid mnemonic: {e}"))?;
+    let mnemonic =
+        Mnemonic::<English>::from_phrase(phrase).map_err(|e| format!("Invalid mnemonic: {e}"))?;
     Ok(SecretVec::new(mnemonic.to_seed("").to_vec()))
 }
 
@@ -39,14 +39,10 @@ pub fn parse_network(network: &str) -> Result<WalletNetwork, String> {
 
 /// Initialize the wallet database schema. Idempotent — safe to call multiple times.
 /// Called without seed to avoid SeedNotRelevant errors when only Imported accounts exist.
-pub fn ensure_db_initialized(
-    db_path: &str,
-    network: WalletNetwork,
-) -> Result<(), String> {
+pub fn ensure_db_initialized(db_path: &str, network: WalletNetwork) -> Result<(), String> {
     let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
-    init_wallet_db(&mut db, None)
-        .map_err(|e| format!("Failed to init wallet DB: {e}"))?;
+    init_wallet_db(&mut db, None).map_err(|e| format!("Failed to init wallet DB: {e}"))?;
     Ok(())
 }
 
@@ -59,11 +55,8 @@ fn ensure_db_initialized_with_seed(
 ) -> Result<(), String> {
     let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
-    init_wallet_db(
-        &mut db,
-        Some(SecretVec::new(seed.expose_secret().to_vec())),
-    )
-    .map_err(|e| format!("Failed to init wallet DB: {e}"))?;
+    init_wallet_db(&mut db, Some(SecretVec::new(seed.expose_secret().to_vec())))
+        .map_err(|e| format!("Failed to init wallet DB: {e}"))?;
     Ok(())
 }
 
@@ -110,7 +103,9 @@ pub fn add_account(
 
     // Import as UFVK with Spending purpose + derivation info
     let derivation = Zip32Derivation::new(seed_fp, account_index);
-    let purpose = AccountPurpose::Spending { derivation: Some(derivation) };
+    let purpose = AccountPurpose::Spending {
+        derivation: Some(derivation),
+    };
 
     let account = db
         .import_account_ufvk(name, &ufvk, &birthday, purpose, None)
@@ -155,11 +150,13 @@ pub fn import_hardware_account(
     // this import would leave the DB in a state where future seed-requiring
     // migrations cannot be applied. See CLAUDE.md "Hardware-first wallet
     // constraint" for the full rationale.
-    let account_ids = db.get_account_ids()
+    let account_ids = db
+        .get_account_ids()
         .map_err(|e| format!("Failed to list accounts: {e}"))?;
     let mut has_derived = false;
     for id in &account_ids {
-        let acc = db.get_account(*id)
+        let acc = db
+            .get_account(*id)
             .map_err(|e| format!("Failed to load account: {e}"))?
             .ok_or_else(|| format!("Account not found: {}", id.expose_uuid()))?;
         if matches!(acc.source(), AccountSource::Derived { .. }) {
@@ -168,12 +165,11 @@ pub fn import_hardware_account(
         }
     }
     if !has_derived {
-        return Err(
-            "Hardware wallet accounts cannot be the first account. \
+        return Err("Hardware wallet accounts cannot be the first account. \
              Create or import a software wallet first, then add your Keystone \
              account. This is a librustzcash constraint: seed-requiring \
-             database migrations cannot be applied to an Imported-only wallet.".into()
-        );
+             database migrations cannot be applied to an Imported-only wallet."
+            .into());
     }
 
     let birthday = make_birthday(network, birthday_height);
@@ -183,14 +179,17 @@ pub fn import_hardware_account(
         .map_err(|e| format!("Failed to parse UFVK: {e}"))?;
 
     // Build seed fingerprint from bytes
-    let fp_bytes: [u8; 32] = seed_fingerprint_bytes.try_into()
+    let fp_bytes: [u8; 32] = seed_fingerprint_bytes
+        .try_into()
         .map_err(|_| "Seed fingerprint must be 32 bytes")?;
     let seed_fp = SeedFingerprint::from_bytes(fp_bytes);
-    let account_index = zip32::AccountId::try_from(zip32_index)
-        .map_err(|_| "Invalid zip32 account index")?;
+    let account_index =
+        zip32::AccountId::try_from(zip32_index).map_err(|_| "Invalid zip32 account index")?;
 
     let derivation = Zip32Derivation::new(seed_fp, account_index);
-    let purpose = AccountPurpose::Spending { derivation: Some(derivation) };
+    let purpose = AccountPurpose::Spending {
+        derivation: Some(derivation),
+    };
 
     let account = db
         .import_account_ufvk(name, &ufvk, &birthday, purpose, None)
@@ -205,7 +204,11 @@ pub fn import_hardware_account(
 
     let uuid_str = account_id.expose_uuid().to_string();
     let addr_str: String = ua.encode(&network);
-    log::info!("Imported hardware account: uuid={}, address={}", uuid_str, addr_str);
+    log::info!(
+        "Imported hardware account: uuid={}, address={}",
+        uuid_str,
+        addr_str
+    );
     Ok((uuid_str, addr_str))
 }
 
@@ -251,18 +254,21 @@ pub fn list_accounts(db_path: &str, network: WalletNetwork) -> Result<Vec<Accoun
     let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
 
-    let account_ids = db.get_account_ids()
+    let account_ids = db
+        .get_account_ids()
         .map_err(|e| format!("Failed to list accounts: {e}"))?;
 
     let mut accounts = Vec::new();
     for id in account_ids {
-        let account = db.get_account(id)
+        let account = db
+            .get_account(id)
             .map_err(|e| format!("Failed to get account: {e}"))?
             .ok_or_else(|| format!("Account not found: {}", id.expose_uuid()))?;
 
         let address = match account.ufvk() {
             Some(ufvk) => {
-                let (ua, _) = ufvk.default_address(shielded_address_request())
+                let (ua, _) = ufvk
+                    .default_address(shielded_address_request())
                     .map_err(|e| format!("Failed to derive address: {e}"))?;
                 ua.encode(&network)
             }
@@ -293,14 +299,22 @@ fn resolve_account_id(
     match account_uuid {
         Some(uuid_str) => parse_account_uuid(uuid_str),
         None => {
-            let ids = db.get_account_ids().map_err(|e| format!("Failed to list accounts: {e}"))?;
-            ids.into_iter().next().ok_or_else(|| "No accounts found in wallet".to_string())
+            let ids = db
+                .get_account_ids()
+                .map_err(|e| format!("Failed to list accounts: {e}"))?;
+            ids.into_iter()
+                .next()
+                .ok_or_else(|| "No accounts found in wallet".to_string())
         }
     }
 }
 
 /// Get the Unified Address from an existing wallet database.
-pub fn get_address_from_db(db_path: &str, network: WalletNetwork, account_uuid: Option<&str>) -> Result<String, String> {
+pub fn get_address_from_db(
+    db_path: &str,
+    network: WalletNetwork,
+    account_uuid: Option<&str>,
+) -> Result<String, String> {
     let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
 
@@ -311,9 +325,7 @@ pub fn get_address_from_db(db_path: &str, network: WalletNetwork, account_uuid: 
         .map_err(|e| format!("Failed to get account: {e}"))?
         .ok_or("Account not found")?;
 
-    let ufvk = account
-        .ufvk()
-        .ok_or("Account does not have a UFVK")?;
+    let ufvk = account.ufvk().ok_or("Account does not have a UFVK")?;
 
     // Try standard shielded request (Orchard + Sapling), fall back to Orchard-only
     // for hardware wallets that don't have Sapling keys.
@@ -348,7 +360,11 @@ fn orchard_address_request() -> UnifiedAddressRequest {
 }
 
 /// Get the transparent address from an existing wallet database.
-pub fn get_transparent_address_from_db(db_path: &str, network: WalletNetwork, account_uuid: Option<&str>) -> Result<String, String> {
+pub fn get_transparent_address_from_db(
+    db_path: &str,
+    network: WalletNetwork,
+    account_uuid: Option<&str>,
+) -> Result<String, String> {
     let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
 
@@ -358,9 +374,9 @@ pub fn get_transparent_address_from_db(db_path: &str, network: WalletNetwork, ac
         .get_last_generated_address_matching(account_id, UnifiedAddressRequest::AllAvailableKeys)
         .map_err(|e| format!("Failed to get current generated address: {e}"))?
         .ok_or_else(|| "No tracked transparent address available".to_string())?;
-    let taddr = current_ua
-        .transparent()
-        .ok_or_else(|| "Current generated address does not include a transparent receiver".to_string())?;
+    let taddr = current_ua.transparent().ok_or_else(|| {
+        "Current generated address does not include a transparent receiver".to_string()
+    })?;
 
     Ok(encode_transparent_address(
         &network.b58_pubkey_address_prefix(),
@@ -402,7 +418,10 @@ mod tests {
     fn test_parse_network() {
         assert!(matches!(parse_network("main"), Ok(WalletNetwork::Main)));
         assert!(matches!(parse_network("test"), Ok(WalletNetwork::Test)));
-        assert!(matches!(parse_network("regtest"), Ok(WalletNetwork::Regtest)));
+        assert!(matches!(
+            parse_network("regtest"),
+            Ok(WalletNetwork::Regtest)
+        ));
         assert!(parse_network("invalid").is_err());
     }
 
@@ -416,7 +435,8 @@ mod tests {
         let seed = mnemonic_to_seed(&phrase).unwrap();
 
         let (_uuid, address) =
-            init_db_and_create_account(db_path_str, WalletNetwork::Main, &seed, None, "test").unwrap();
+            init_db_and_create_account(db_path_str, WalletNetwork::Main, &seed, None, "test")
+                .unwrap();
 
         // Mainnet unified addresses start with "u1"
         assert!(
@@ -439,7 +459,8 @@ mod tests {
         let seed = mnemonic_to_seed(&phrase).unwrap();
 
         let (_, address) =
-            init_db_and_create_account(db_path_str, WalletNetwork::Test, &seed, None, "test").unwrap();
+            init_db_and_create_account(db_path_str, WalletNetwork::Test, &seed, None, "test")
+                .unwrap();
 
         assert!(
             address.starts_with("utest1"),
@@ -454,15 +475,25 @@ mod tests {
 
         let temp1 = tempfile::tempdir().unwrap();
         let db1 = temp1.path().join("wallet.db");
-        let (_, addr1) =
-            init_db_and_create_account(db1.to_str().unwrap(), WalletNetwork::Main, &seed, None, "test")
-                .unwrap();
+        let (_, addr1) = init_db_and_create_account(
+            db1.to_str().unwrap(),
+            WalletNetwork::Main,
+            &seed,
+            None,
+            "test",
+        )
+        .unwrap();
 
         let temp2 = tempfile::tempdir().unwrap();
         let db2 = temp2.path().join("wallet.db");
-        let (_, addr2) =
-            init_db_and_create_account(db2.to_str().unwrap(), WalletNetwork::Main, &seed, None, "test")
-                .unwrap();
+        let (_, addr2) = init_db_and_create_account(
+            db2.to_str().unwrap(),
+            WalletNetwork::Main,
+            &seed,
+            None,
+            "test",
+        )
+        .unwrap();
 
         assert_eq!(addr1, addr2, "Same seed should produce same address");
     }
@@ -479,13 +510,23 @@ mod tests {
         let seed = mnemonic_to_seed(&phrase).unwrap();
 
         let (_, address) =
-            init_db_and_create_account(db_path_str, WalletNetwork::Main, &seed, None, "test").unwrap();
+            init_db_and_create_account(db_path_str, WalletNetwork::Main, &seed, None, "test")
+                .unwrap();
 
         // Decode and verify receiver types
         let za = zcash_address::ZcashAddress::try_from_encoded(&address).unwrap();
         let debug = format!("{:?}", za);
-        assert!(debug.contains("Sapling"), "UA should contain Sapling receiver");
-        assert!(debug.contains("Orchard"), "UA should contain Orchard receiver");
-        assert!(!debug.contains("P2pkh"), "UA should NOT contain transparent receiver");
+        assert!(
+            debug.contains("Sapling"),
+            "UA should contain Sapling receiver"
+        );
+        assert!(
+            debug.contains("Orchard"),
+            "UA should contain Orchard receiver"
+        );
+        assert!(
+            !debug.contains("P2pkh"),
+            "UA should NOT contain transparent receiver"
+        );
     }
 }

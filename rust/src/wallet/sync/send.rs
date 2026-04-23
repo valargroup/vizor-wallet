@@ -37,33 +37,28 @@ use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
 use secrecy::{ExposeSecret, SecretVec};
+use zcash_client_backend::data_api::wallet::input_selection::GreedyInputSelector;
 use zcash_client_backend::{
     data_api::{
+        wallet::{self, create_proposed_transactions, propose_transfer, ConfirmationsPolicy},
         Account as _, InputSource, WalletRead,
-        wallet::{self, ConfirmationsPolicy, create_proposed_transactions, propose_transfer},
     },
-    fees::{
-        DustOutputPolicy, SplitPolicy, StandardFeeRule,
-        zip317::MultiOutputChangeStrategy,
-    },
+    fees::{zip317::MultiOutputChangeStrategy, DustOutputPolicy, SplitPolicy, StandardFeeRule},
     wallet::OvkPolicy,
     zip321::{Payment, TransactionRequest},
 };
-use zcash_client_backend::data_api::wallet::input_selection::GreedyInputSelector;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::{
-    ShieldedProtocol,
     memo::{Memo, MemoBytes},
     value::Zatoshis,
+    ShieldedProtocol,
 };
 
 use crate::wallet::keys::parse_account_uuid;
 use crate::wallet::network::WalletNetwork;
 
-use super::{
-    open_readonly_conn, open_wallet_db, StoredProposal, WalletDatabase, PROPOSAL_STORE,
-};
+use super::{open_readonly_conn, open_wallet_db, StoredProposal, WalletDatabase, PROPOSAL_STORE};
 
 /// Result of a successful [`propose_send`]. `proposal_id` is the
 /// handle the caller feeds back to [`execute_proposal`] or
@@ -132,7 +127,9 @@ pub fn propose_send(
         .sum();
 
     // Store proposal for later execution.
-    let mut store = PROPOSAL_STORE.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut store = PROPOSAL_STORE
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
     let id = store.next_id;
     store.next_id += 1;
     store.proposals.insert(
@@ -219,7 +216,9 @@ pub async fn execute_proposal(
     spend_params_path: Option<&str>,
     output_params_path: Option<&str>,
 ) -> Result<String, String> {
-    let mut store = PROPOSAL_STORE.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut store = PROPOSAL_STORE
+        .lock()
+        .map_err(|e| format!("Lock error: {e}"))?;
     let stored = store
         .proposals
         .remove(&proposal_id)
@@ -247,8 +246,7 @@ pub async fn execute_proposal(
 
         match (spend_params_path, output_params_path) {
             (Some(sp), Some(op)) if !sp.is_empty() && !op.is_empty() => {
-                let prover =
-                    LocalTxProver::new(std::path::Path::new(sp), std::path::Path::new(op));
+                let prover = LocalTxProver::new(std::path::Path::new(sp), std::path::Path::new(op));
                 create_proposed_transactions::<_, _, Infallible, _, Infallible, _>(
                     &mut db,
                     &network,
@@ -279,16 +277,15 @@ pub async fn execute_proposal(
     };
 
     // Connect to lightwalletd once for all broadcasts.
-    let mut client =
-        crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url)
-            .await
-            .map_err(|e| e.to_string())?;
+    let mut client = crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Broadcast each transaction.
     let txid_strings: Vec<String> = txids.iter().map(|id| format!("{id}")).collect();
 
-    let read_conn = open_readonly_conn(db_path)
-        .map_err(|e| format!("Failed to open DB for broadcast: {e}"))?;
+    let read_conn =
+        open_readonly_conn(db_path).map_err(|e| format!("Failed to open DB for broadcast: {e}"))?;
 
     let mut broadcast_ok: Vec<String> = Vec::new();
     for txid in &txids {
@@ -552,12 +549,12 @@ fn zip317_helper<DbT: InputSource>(
 // rather than producing a silently-invalid all-zero proof.
 
 use sapling_crypto::{
-    Diversifier, MerklePath, PaymentAddress, ProofGenerationKey, Rseed,
     bundle::GrothProofBytes,
     circuit,
     keys::EphemeralSecretKey,
     prover::{OutputProver, SpendProver},
     value::{NoteValue, ValueCommitTrapdoor},
+    Diversifier, MerklePath, PaymentAddress, ProofGenerationKey, Rseed,
 };
 
 const GROTH_PROOF_SIZE: usize = 192;

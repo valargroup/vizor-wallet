@@ -1,19 +1,18 @@
 use rand::rngs::OsRng;
 use zcash_client_backend::{
     data_api::{
-        WalletCommitmentTrees, WalletRead, WalletWrite,
         chain::{scan_cached_blocks, CommitmentTreeRoot},
         scanning::ScanPriority,
         wallet::ConfirmationsPolicy,
+        WalletCommitmentTrees, WalletRead, WalletWrite,
     },
     fees::StandardFeeRule,
     proto::service::TreeState,
 };
 use zcash_client_sqlite::{
-    AccountUuid, FsBlockDb,
-    WalletDb,
-    chain::{BlockMeta, init::init_blockmeta_db},
+    chain::{init::init_blockmeta_db, BlockMeta},
     util::SystemClock,
+    AccountUuid, FsBlockDb, WalletDb,
 };
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
@@ -41,26 +40,30 @@ pub use send::{estimate_fee, execute_proposal, propose_send};
 // Internal-only re-export for `sync_engine::run_sync_impl`'s
 // auto-resubmit pass. Not part of the `wallet::sync` public surface.
 pub(crate) use send::resubmit_pending_transactions;
+#[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
+pub(crate) use send::ProposalResult;
 pub use transactions::{
     check_tx_mined, decrypt_and_store_transaction, get_next_available_address,
     get_pending_transactions, get_transaction_data_requests, get_transaction_history,
     get_wallet_balance, set_transaction_status,
 };
-#[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
-pub(crate) use send::ProposalResult;
 #[allow(unused_imports)] // ditto
 pub(crate) use transactions::{PendingTxInfo, TransactionInfo, TxDataRequest, WalletBalance};
 
 pub(super) type WalletDatabase = WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>;
 const READ_DB_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
-pub(super) fn open_wallet_db(db_path: &str, network: WalletNetwork) -> Result<WalletDatabase, String> {
+pub(super) fn open_wallet_db(
+    db_path: &str,
+    network: WalletNetwork,
+) -> Result<WalletDatabase, String> {
     WalletDb::for_path(db_path, network, SystemClock, OsRng)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))
 }
 
 pub(crate) fn open_wallet_db_for_read(
-    db_path: &str, network: WalletNetwork,
+    db_path: &str,
+    network: WalletNetwork,
 ) -> Result<WalletDatabase, String> {
     let conn = rusqlite::Connection::open(db_path)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
@@ -72,13 +75,12 @@ pub(crate) fn open_wallet_db_for_read(
 }
 
 fn open_readonly_conn_with_timeout(
-    db_path: &str, timeout: Option<std::time::Duration>,
+    db_path: &str,
+    timeout: Option<std::time::Duration>,
 ) -> Result<rusqlite::Connection, String> {
-    let conn = rusqlite::Connection::open_with_flags(
-        db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|e| format!("Failed to open DB: {e}"))?;
+    let conn =
+        rusqlite::Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| format!("Failed to open DB: {e}"))?;
     if let Some(timeout) = timeout {
         conn.busy_timeout(timeout)
             .map_err(|e| format!("Failed to configure DB busy timeout: {e}"))?;
@@ -95,12 +97,10 @@ pub(crate) fn open_readonly_conn_fail_fast(db_path: &str) -> Result<rusqlite::Co
 }
 
 fn open_block_cache(cache_path: &str) -> Result<FsBlockDb, String> {
-    std::fs::create_dir_all(cache_path)
-        .map_err(|e| format!("Failed to create cache dir: {e}"))?;
+    std::fs::create_dir_all(cache_path).map_err(|e| format!("Failed to create cache dir: {e}"))?;
     let mut db_cache = FsBlockDb::for_path(cache_path)
         .map_err(|e| format!("Failed to open block cache: {e:?}"))?;
-    init_blockmeta_db(&mut db_cache)
-        .map_err(|e| format!("Failed to init block cache: {e}"))?;
+    init_blockmeta_db(&mut db_cache).map_err(|e| format!("Failed to init block cache: {e}"))?;
     Ok(db_cache)
 }
 
@@ -123,24 +123,42 @@ pub fn update_chain_tip(db_path: &str, network: WalletNetwork, height: u64) -> R
 }
 
 /// Get next subtree indices to know where to start downloading from.
-pub fn get_next_subtree_indices(db_path: &str, network: WalletNetwork) -> Result<(u64, u64), String> {
+pub fn get_next_subtree_indices(
+    db_path: &str,
+    network: WalletNetwork,
+) -> Result<(u64, u64), String> {
     let db = open_wallet_db_for_read(db_path, network)?;
-    let summary = db.get_wallet_summary(ConfirmationsPolicy::default()).map_err(|e| format!("{e}"))?;
+    let summary = db
+        .get_wallet_summary(ConfirmationsPolicy::default())
+        .map_err(|e| format!("{e}"))?;
     match summary {
-        Some(s) => Ok((s.next_sapling_subtree_index(), s.next_orchard_subtree_index())),
+        Some(s) => Ok((
+            s.next_sapling_subtree_index(),
+            s.next_orchard_subtree_index(),
+        )),
         None => Ok((0, 0)),
     }
 }
 
 pub fn put_sapling_subtree_roots(
-    db_path: &str, network: WalletNetwork, start_index: u64, roots: &[(u64, Vec<u8>)],
+    db_path: &str,
+    network: WalletNetwork,
+    start_index: u64,
+    roots: &[(u64, Vec<u8>)],
 ) -> Result<(), String> {
     let mut db = open_wallet_db(db_path, network)?;
-    let parsed: Vec<_> = roots.iter().map(|(h, bytes)| {
-        let arr: [u8; 32] = bytes[..32].try_into().map_err(|_| "bad hash len")?;
-        let node = Option::from(sapling_crypto::Node::from_bytes(arr)).ok_or("bad sapling hash")?;
-        Ok::<_, String>(CommitmentTreeRoot::from_parts(BlockHeight::from_u32(*h as u32), node))
-    }).collect::<Result<Vec<_>, _>>()?;
+    let parsed: Vec<_> = roots
+        .iter()
+        .map(|(h, bytes)| {
+            let arr: [u8; 32] = bytes[..32].try_into().map_err(|_| "bad hash len")?;
+            let node =
+                Option::from(sapling_crypto::Node::from_bytes(arr)).ok_or("bad sapling hash")?;
+            Ok::<_, String>(CommitmentTreeRoot::from_parts(
+                BlockHeight::from_u32(*h as u32),
+                node,
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     if !parsed.is_empty() {
         db.put_sapling_subtree_roots(start_index, parsed.as_slice())
             .map_err(|e| format!("{e}"))?;
@@ -149,14 +167,24 @@ pub fn put_sapling_subtree_roots(
 }
 
 pub fn put_orchard_subtree_roots(
-    db_path: &str, network: WalletNetwork, start_index: u64, roots: &[(u64, Vec<u8>)],
+    db_path: &str,
+    network: WalletNetwork,
+    start_index: u64,
+    roots: &[(u64, Vec<u8>)],
 ) -> Result<(), String> {
     let mut db = open_wallet_db(db_path, network)?;
-    let parsed: Vec<_> = roots.iter().map(|(h, bytes)| {
-        let arr: [u8; 32] = bytes[..32].try_into().map_err(|_| "bad hash len")?;
-        let node = Option::from(orchard::tree::MerkleHashOrchard::from_bytes(&arr)).ok_or("bad orchard hash")?;
-        Ok::<_, String>(CommitmentTreeRoot::from_parts(BlockHeight::from_u32(*h as u32), node))
-    }).collect::<Result<Vec<_>, _>>()?;
+    let parsed: Vec<_> = roots
+        .iter()
+        .map(|(h, bytes)| {
+            let arr: [u8; 32] = bytes[..32].try_into().map_err(|_| "bad hash len")?;
+            let node = Option::from(orchard::tree::MerkleHashOrchard::from_bytes(&arr))
+                .ok_or("bad orchard hash")?;
+            Ok::<_, String>(CommitmentTreeRoot::from_parts(
+                BlockHeight::from_u32(*h as u32),
+                node,
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     if !parsed.is_empty() {
         db.put_orchard_subtree_roots(start_index, parsed.as_slice())
             .map_err(|e| format!("{e}"))?;
@@ -164,68 +192,129 @@ pub fn put_orchard_subtree_roots(
     Ok(())
 }
 
-pub(crate) struct ScanRangeInfo { pub start: u64, pub end: u64, pub priority: u8 }
+pub(crate) struct ScanRangeInfo {
+    pub start: u64,
+    pub end: u64,
+    pub priority: u8,
+}
 
-pub fn suggest_scan_ranges(db_path: &str, network: WalletNetwork) -> Result<Vec<ScanRangeInfo>, String> {
+pub fn suggest_scan_ranges(
+    db_path: &str,
+    network: WalletNetwork,
+) -> Result<Vec<ScanRangeInfo>, String> {
     let db = open_wallet_db_for_read(db_path, network)?;
     let ranges = db.suggest_scan_ranges().map_err(|e| format!("{e}"))?;
-    Ok(ranges.into_iter()
+    Ok(ranges
+        .into_iter()
         .filter(|r| r.priority() != ScanPriority::Ignored && r.priority() != ScanPriority::Scanned)
         .map(|r| ScanRangeInfo {
             start: u32::from(r.block_range().start) as u64,
             end: u32::from(r.block_range().end) as u64,
             priority: match r.priority() {
-                ScanPriority::Verify => 6, ScanPriority::ChainTip => 5,
-                ScanPriority::FoundNote => 4, ScanPriority::OpenAdjacent => 3,
-                ScanPriority::Historic => 2, ScanPriority::Scanned => 1,
+                ScanPriority::Verify => 6,
+                ScanPriority::ChainTip => 5,
+                ScanPriority::FoundNote => 4,
+                ScanPriority::OpenAdjacent => 3,
+                ScanPriority::Historic => 2,
+                ScanPriority::Scanned => 1,
                 ScanPriority::Ignored => 0,
             },
-        }).collect())
+        })
+        .collect())
 }
 
-pub fn write_block_metadata(cache_path: &str, blocks: &[(u64, Vec<u8>, u32, u32, u32)]) -> Result<(), String> {
+pub fn write_block_metadata(
+    cache_path: &str,
+    blocks: &[(u64, Vec<u8>, u32, u32, u32)],
+) -> Result<(), String> {
     let db_cache = open_block_cache(cache_path)?;
-    let metas: Vec<BlockMeta> = blocks.iter().map(|(h, hash, time, sc, oc)| {
-        let mut arr = [0u8; 32];
-        arr[..hash.len().min(32)].copy_from_slice(&hash[..hash.len().min(32)]);
-        BlockMeta { height: BlockHeight::from_u32(*h as u32), block_hash: BlockHash(arr), block_time: *time, sapling_outputs_count: *sc, orchard_actions_count: *oc }
-    }).collect();
-    db_cache.write_block_metadata(&metas).map_err(|e| format!("{e:?}"))
+    let metas: Vec<BlockMeta> = blocks
+        .iter()
+        .map(|(h, hash, time, sc, oc)| {
+            let mut arr = [0u8; 32];
+            arr[..hash.len().min(32)].copy_from_slice(&hash[..hash.len().min(32)]);
+            BlockMeta {
+                height: BlockHeight::from_u32(*h as u32),
+                block_hash: BlockHash(arr),
+                block_time: *time,
+                sapling_outputs_count: *sc,
+                orchard_actions_count: *oc,
+            }
+        })
+        .collect();
+    db_cache
+        .write_block_metadata(&metas)
+        .map_err(|e| format!("{e:?}"))
 }
 
 pub fn scan_blocks(
-    db_path: &str, cache_path: &str, network: WalletNetwork, from_height: u64,
-    ts_network: &str, ts_height: u64, ts_hash: &str, ts_time: u32, ts_sapling: &str, ts_orchard: &str,
+    db_path: &str,
+    cache_path: &str,
+    network: WalletNetwork,
+    from_height: u64,
+    ts_network: &str,
+    ts_height: u64,
+    ts_hash: &str,
+    ts_time: u32,
+    ts_sapling: &str,
+    ts_orchard: &str,
     limit: u64,
 ) -> Result<u64, String> {
     let db_cache = open_block_cache(cache_path)?;
     let mut db_data = open_wallet_db(db_path, network)?;
     let from_state = if ts_hash.is_empty() {
         zcash_client_backend::data_api::chain::ChainState::empty(
-            BlockHeight::from_u32((from_height - 1) as u32), BlockHash([0u8; 32]),
+            BlockHeight::from_u32((from_height - 1) as u32),
+            BlockHash([0u8; 32]),
         )
     } else {
-        TreeState { network: ts_network.into(), height: ts_height, hash: ts_hash.into(), time: ts_time, sapling_tree: ts_sapling.into(), orchard_tree: ts_orchard.into() }
-            .to_chain_state().map_err(|e| format!("{e}"))?
+        TreeState {
+            network: ts_network.into(),
+            height: ts_height,
+            hash: ts_hash.into(),
+            time: ts_time,
+            sapling_tree: ts_sapling.into(),
+            orchard_tree: ts_orchard.into(),
+        }
+        .to_chain_state()
+        .map_err(|e| format!("{e}"))?
     };
-    let result = scan_cached_blocks(&network, &db_cache, &mut db_data, BlockHeight::from_u32(from_height as u32), &from_state, limit as usize)
-        .map_err(|e| format!("{e}"))?;
+    let result = scan_cached_blocks(
+        &network,
+        &db_cache,
+        &mut db_data,
+        BlockHeight::from_u32(from_height as u32),
+        &from_state,
+        limit as usize,
+    )
+    .map_err(|e| format!("{e}"))?;
     Ok((u32::from(result.scanned_range().end) - u32::from(result.scanned_range().start)) as u64)
 }
 
 // ======================== Balance & Progress ========================
 
-pub(crate) struct SyncProgress { pub scanned_height: u64, pub chain_tip_height: u64, pub is_syncing: bool }
+pub(crate) struct SyncProgress {
+    pub scanned_height: u64,
+    pub chain_tip_height: u64,
+    pub is_syncing: bool,
+}
 
 pub fn get_sync_progress(db_path: &str, network: WalletNetwork) -> Result<SyncProgress, String> {
     let db = open_wallet_db_for_read(db_path, network)?;
-    match db.get_wallet_summary(ConfirmationsPolicy::default()).map_err(|e| format!("{e}"))? {
+    match db
+        .get_wallet_summary(ConfirmationsPolicy::default())
+        .map_err(|e| format!("{e}"))?
+    {
         Some(s) => Ok(SyncProgress {
             scanned_height: u32::from(s.fully_scanned_height()) as u64,
             chain_tip_height: u32::from(s.chain_tip_height()) as u64,
             is_syncing: s.fully_scanned_height() < s.chain_tip_height(),
         }),
-        None => Ok(SyncProgress { scanned_height: 0, chain_tip_height: 0, is_syncing: false }),
+        None => Ok(SyncProgress {
+            scanned_height: 0,
+            chain_tip_height: 0,
+            is_syncing: false,
+        }),
     }
 }
 
@@ -233,7 +322,9 @@ pub fn get_sync_progress(db_path: &str, network: WalletNetwork) -> Result<SyncPr
 
 pub fn rewind_to_height(db_path: &str, network: WalletNetwork, height: u64) -> Result<u64, String> {
     let mut db = open_wallet_db(db_path, network)?;
-    let result = db.truncate_to_height(BlockHeight::from_u32(height as u32)).map_err(|e| format!("{e}"))?;
+    let result = db
+        .truncate_to_height(BlockHeight::from_u32(height as u32))
+        .map_err(|e| format!("{e}"))?;
     Ok(u32::from(result) as u64)
 }
 
@@ -243,10 +334,15 @@ pub fn validate_address(address: &str) -> Result<String, String> {
     use zcash_address::ZcashAddress;
     let addr = ZcashAddress::try_from_encoded(address).map_err(|e| format!("Invalid: {e}"))?;
     let debug = format!("{:?}", addr);
-    if debug.contains("Unified") { Ok("unified".into()) }
-    else if debug.contains("Sapling") { Ok("sapling".into()) }
-    else if debug.contains("P2pkh") || debug.contains("P2sh") { Ok("transparent".into()) }
-    else { Ok("unknown".into()) }
+    if debug.contains("Unified") {
+        Ok("unified".into())
+    } else if debug.contains("Sapling") {
+        Ok("sapling".into())
+    } else if debug.contains("P2pkh") || debug.contains("P2sh") {
+        Ok("transparent".into())
+    } else {
+        Ok("unknown".into())
+    }
 }
 
 // ======================== Send ========================

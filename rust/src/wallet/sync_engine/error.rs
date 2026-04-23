@@ -262,7 +262,10 @@ mod tests {
         };
         let s = format!("{e}");
         assert!(s.contains("2500000"), "display should include height: {s}");
-        assert!(s.contains("prev_hash mismatch"), "display should include detail: {s}");
+        assert!(
+            s.contains("prev_hash mismatch"),
+            "display should include detail: {s}"
+        );
     }
 
     #[test]

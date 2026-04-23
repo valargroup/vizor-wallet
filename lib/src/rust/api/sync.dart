@@ -50,6 +50,10 @@ Future<void> runFullSyncBlocking({
 /// Cancel a running full sync.
 void cancelFullSync() => RustLib.instance.api.crateApiSyncCancelFullSync();
 
+/// Check whether a sync cancel has been requested.
+bool isSyncCancelRequested() =>
+    RustLib.instance.api.crateApiSyncIsSyncCancelRequested();
+
 /// Check if a sync is currently running.
 bool isSyncRunning() => RustLib.instance.api.crateApiSyncIsSyncRunning();
 

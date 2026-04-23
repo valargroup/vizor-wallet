@@ -135,10 +135,9 @@ pub(super) async fn run_enhancement(
                         Err(e) => {
                             log::warn!("sync: get_transaction failed for {txid_str}: {e}");
                             failed_txids.insert(txid_str);
-                            if let Err(e) = db.set_transaction_status(
-                                *txid,
-                                TransactionStatus::TxidNotRecognized,
-                            ) {
+                            if let Err(e) = db
+                                .set_transaction_status(*txid, TransactionStatus::TxidNotRecognized)
+                            {
                                 log::error!("sync: set_transaction_status failed: {e}");
                             }
                         }
@@ -191,9 +190,9 @@ pub(super) async fn run_enhancement(
                                                 );
                                             }
                                         }
-                                        Err(e) => log::warn!(
-                                            "sync: Transaction::read (addr) failed: {e}"
-                                        ),
+                                        Err(e) => {
+                                            log::warn!("sync: Transaction::read (addr) failed: {e}")
+                                        }
                                     }
                                 }
                             }

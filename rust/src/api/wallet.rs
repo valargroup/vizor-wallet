@@ -54,10 +54,9 @@ pub fn get_latest_block_height(lightwalletd_url: String) -> Result<u64, String> 
         rt.block_on(async {
             use zcash_client_backend::proto::service::ChainSpec;
 
-            let mut client =
-                crate::wallet::sync_engine::open_lwd_channel(&lightwalletd_url)
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let mut client = crate::wallet::sync_engine::open_lwd_channel(&lightwalletd_url)
+                .await
+                .map_err(|e| e.to_string())?;
             let tip = client
                 .get_latest_block(ChainSpec::default())
                 .await
@@ -71,14 +70,20 @@ pub fn get_latest_block_height(lightwalletd_url: String) -> Result<u64, String> 
 
 /// Create a new Zcash wallet with a fresh mnemonic.
 /// birthday_height should be the current chain tip (from get_latest_block_height).
-pub fn create_wallet(network: String, db_path: String, birthday_height: Option<u64>, account_name: Option<String>) -> Result<WalletCreationResult, String> {
+pub fn create_wallet(
+    network: String,
+    db_path: String,
+    birthday_height: Option<u64>,
+    account_name: Option<String>,
+) -> Result<WalletCreationResult, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
         let mnemonic = keys::generate_mnemonic();
         let seed = keys::mnemonic_to_seed(&mnemonic)?;
         let name = account_name.as_deref().unwrap_or("Account 1");
 
-        let (account_uuid, unified_address) = keys::init_db_and_create_account(&db_path, network, &seed, birthday_height, name)?;
+        let (account_uuid, unified_address) =
+            keys::init_db_and_create_account(&db_path, network, &seed, birthday_height, name)?;
 
         Ok(WalletCreationResult {
             mnemonic,
@@ -104,14 +109,20 @@ pub fn import_wallet(
         let (account_uuid, unified_address) =
             keys::init_db_and_create_account(&db_path, network, &seed, birthday_height, name)?;
 
-        Ok(WalletImportResult { unified_address, account_uuid })
+        Ok(WalletImportResult {
+            unified_address,
+            account_uuid,
+        })
     })
 }
 
 /// Add an additional account to an existing wallet database.
 pub fn add_account(
-    db_path: String, network: String, name: String,
-    mnemonic: String, birthday_height: Option<u64>,
+    db_path: String,
+    network: String,
+    name: String,
+    mnemonic: String,
+    birthday_height: Option<u64>,
 ) -> Result<AccountCreationResult, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
@@ -122,23 +133,38 @@ pub fn add_account(
         let (account_uuid, unified_address) =
             keys::add_account(&db_path, network, &name, &seed, birthday_height)?;
 
-        Ok(AccountCreationResult { account_uuid, unified_address })
+        Ok(AccountCreationResult {
+            account_uuid,
+            unified_address,
+        })
     })
 }
 
 /// Import a hardware wallet account using a UFVK (no mnemonic/seed needed).
 pub fn import_hardware_account(
-    db_path: String, network: String, name: String,
-    ufvk_string: String, seed_fingerprint: Vec<u8>, zip32_index: u32,
+    db_path: String,
+    network: String,
+    name: String,
+    ufvk_string: String,
+    seed_fingerprint: Vec<u8>,
+    zip32_index: u32,
     birthday_height: Option<u64>,
 ) -> Result<AccountCreationResult, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
         let (account_uuid, unified_address) = keys::import_hardware_account(
-            &db_path, network, &name, &ufvk_string,
-            &seed_fingerprint, zip32_index, birthday_height,
+            &db_path,
+            network,
+            &name,
+            &ufvk_string,
+            &seed_fingerprint,
+            zip32_index,
+            birthday_height,
         )?;
-        Ok(AccountCreationResult { account_uuid, unified_address })
+        Ok(AccountCreationResult {
+            account_uuid,
+            unified_address,
+        })
     })
 }
 
@@ -147,16 +173,23 @@ pub fn list_accounts(db_path: String, network: String) -> Result<Vec<AccountInfo
     catch(|| {
         let network = keys::parse_network(&network)?;
         let accounts = keys::list_accounts(&db_path, network)?;
-        Ok(accounts.into_iter().map(|a| AccountInfo {
-            uuid: a.uuid,
-            name: a.name,
-            unified_address: a.unified_address,
-        }).collect())
+        Ok(accounts
+            .into_iter()
+            .map(|a| AccountInfo {
+                uuid: a.uuid,
+                name: a.name,
+                unified_address: a.unified_address,
+            })
+            .collect())
     })
 }
 
 /// Get the Unified Address for a specific account (or first account if uuid is None).
-pub fn get_unified_address(db_path: String, network: String, account_uuid: Option<String>) -> Result<String, String> {
+pub fn get_unified_address(
+    db_path: String,
+    network: String,
+    account_uuid: Option<String>,
+) -> Result<String, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
         keys::get_address_from_db(&db_path, network, account_uuid.as_deref())
@@ -191,7 +224,11 @@ pub fn derive_seed(mnemonic: String) -> Result<Vec<u8>, String> {
 }
 
 /// Get the transparent address for a specific account (or first account if uuid is None).
-pub fn get_transparent_address(db_path: String, network: String, account_uuid: Option<String>) -> Result<String, String> {
+pub fn get_transparent_address(
+    db_path: String,
+    network: String,
+    account_uuid: Option<String>,
+) -> Result<String, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
         keys::get_transparent_address_from_db(&db_path, network, account_uuid.as_deref())

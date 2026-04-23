@@ -54,8 +54,11 @@ pub fn get_wallet_balance(
                 transparent: u64::from(b.unshielded_balance().spendable_value()),
                 sapling: u64::from(b.sapling_balance().spendable_value()),
                 orchard: u64::from(b.orchard_balance().spendable_value()),
-                transparent_pending: u64::from(b.unshielded_balance().change_pending_confirmation())
-                    + u64::from(b.unshielded_balance().value_pending_spendability()),
+                transparent_pending: u64::from(
+                    b.unshielded_balance().change_pending_confirmation(),
+                ) + u64::from(
+                    b.unshielded_balance().value_pending_spendability(),
+                ),
                 sapling_pending: u64::from(b.sapling_balance().change_pending_confirmation())
                     + u64::from(b.sapling_balance().value_pending_spendability()),
                 orchard_pending: u64::from(b.orchard_balance().change_pending_confirmation())
@@ -141,10 +144,8 @@ pub fn get_transaction_data_requests(
                 block_range_end: None,
             },
             TransactionDataRequest::TransactionsInvolvingAddress(req) => {
-                let addr = zcash_keys::encoding::encode_transparent_address_p(
-                    &network,
-                    &req.address(),
-                );
+                let addr =
+                    zcash_keys::encoding::encode_transparent_address_p(&network, &req.address());
                 TxDataRequest {
                     request_type: "address_txids".into(),
                     txid: None,
@@ -411,14 +412,13 @@ pub fn get_pending_transactions(db_path: &str) -> Result<Vec<PendingTxInfo>, Str
 pub async fn check_tx_mined(lightwalletd_url: &str, txid_bytes: &[u8]) -> i64 {
     use zcash_client_backend::proto::service::TxFilter;
 
-    let mut client =
-        match crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url).await {
-            Ok(pair) => pair,
-            Err(e) => {
-                log::warn!("txtrack: {e}");
-                return -1;
-            }
-        };
+    let mut client = match crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url).await {
+        Ok(pair) => pair,
+        Err(e) => {
+            log::warn!("txtrack: {e}");
+            return -1;
+        }
+    };
 
     let filter = TxFilter {
         block: None,
@@ -624,14 +624,7 @@ mod tests {
         let db = fresh_db();
         let txid = fake_txid(0x05);
         let raw = fake_raw();
-        insert_row(
-            &db,
-            &txid,
-            Some(&raw),
-            None,
-            Some(1_000_100),
-            -5_000,
-        );
+        insert_row(&db, &txid, Some(&raw), None, Some(1_000_100), -5_000);
         let got = get_resubmittable_txs(db.path().to_str().unwrap(), 1_000_000).unwrap();
         assert_eq!(got.len(), 1, "outbound pending tx must appear exactly once");
         assert_eq!(got[0].txid_bytes, txid.to_vec());

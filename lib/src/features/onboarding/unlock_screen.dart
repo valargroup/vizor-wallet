@@ -2,13 +2,7 @@ import 'dart:io' show Platform, exit;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'
-    show
-        AlertDialog,
-        Colors,
-        Scaffold,
-        TextButton,
-        TextStyle,
-        showDialog;
+    show AlertDialog, Colors, Scaffold, TextButton, TextStyle, showDialog;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -82,7 +76,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
 
     await ref.read(accountProvider.notifier).restoreAfterUnlock();
     await ref.read(syncProvider.notifier).refreshAfterUnlock();
-    ref.read(syncProvider.notifier).startSync();
+    await ref.read(syncProvider.notifier).startSyncAnyway();
     if (!mounted) return;
     context.go('/home');
   }

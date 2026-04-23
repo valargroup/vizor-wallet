@@ -1,6 +1,4 @@
-use zcash_protocol::{
-    consensus::{BlockHeight, Network, NetworkType, NetworkUpgrade, Parameters},
-};
+use zcash_protocol::consensus::{BlockHeight, Network, NetworkType, NetworkUpgrade, Parameters};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WalletNetwork {

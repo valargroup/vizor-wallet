@@ -35,7 +35,11 @@ fn import_wallet_with_historical_birthday_recovers_existing_funds() {
     );
 
     let accounts = list_accounts(&imported_db);
-    assert_eq!(accounts.len(), 1, "imported wallet should expose one account");
+    assert_eq!(
+        accounts.len(),
+        1,
+        "imported wallet should expose one account"
+    );
     assert_eq!(accounts[0].uuid, imported_wallet.account_uuid);
 
     let history = get_transaction_history(&imported_db, &imported_wallet.account_uuid);
@@ -145,11 +149,8 @@ fn same_mnemonic_imported_into_fresh_db_matches_original_ua_and_balance() {
     fund_wallet(&source_wallet.unified_address, "1.3");
     mine_blocks(12);
 
-    let (imported_dir, imported_wallet) = import_wallet_with_birthday(
-        &source_wallet.mnemonic,
-        "Deterministic Import",
-        Some(1),
-    );
+    let (imported_dir, imported_wallet) =
+        import_wallet_with_birthday(&source_wallet.mnemonic, "Deterministic Import", Some(1));
     let imported_db = imported_dir.path().join("zcash_wallet.db");
     sync_wallet(&imported_db);
 

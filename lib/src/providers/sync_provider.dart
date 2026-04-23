@@ -215,8 +215,8 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       }
 
       var waited = 0;
-      while (
-          (rust_sync.isSyncRunning() || rust_sync.isMempoolObserverRunning()) &&
+      while ((rust_sync.isSyncRunning() ||
+              rust_sync.isMempoolObserverRunning()) &&
           waited < 30000) {
         await Future.delayed(const Duration(milliseconds: 100));
         waited += 100;
@@ -374,6 +374,46 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         });
   }
 
+  /// Recovery path for cases like unlock-after-sign-out where a previous
+  /// sync has already been cancelled, but Rust is still unwinding.
+  Future<void> startSyncAnyway() async {
+    if (_requiresUnlock) {
+      log('Sync: locked, skipping forced foreground sync start');
+      return;
+    }
+    if (_syncSub != null || _isSyncing) {
+      log('Sync: foreground sync already attached, skipping forced start');
+      return;
+    }
+
+    final rustRunning = rust_sync.isSyncRunning();
+    final cancelRequested = rust_sync.isSyncCancelRequested();
+    if (rustRunning && cancelRequested) {
+      log(
+        'Sync: cancelled Rust sync still running, waiting before foreground restart',
+      );
+      final stopped = await _waitForRustTasksToStop(
+        timeoutMs: 5000,
+        onSyncTimeout:
+            'SyncNotifier: startSyncAnyway timed out waiting for cancelled '
+            'Rust sync to stop after 5s; keeping polling active for retry',
+        onMempoolTimeout:
+            'SyncNotifier: startSyncAnyway timed out waiting for mempool '
+            'observer to stop after 5s; keeping polling active for retry',
+      );
+      if (!stopped) {
+        _startPolling();
+        return;
+      }
+    } else if (rustRunning) {
+      log('Sync: already running, skipping forced foreground restart');
+      return;
+    }
+
+    startSync();
+    _startPolling();
+  }
+
   void stopSync() {
     ++_syncGen; // invalidate pending startSync callbacks
     rust_sync.cancelFullSync();
@@ -430,20 +470,14 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     rust_sync.setSyncMode(mode: 0);
     rust_sync.cancelFullSync();
 
-    var waited = 0;
-    while ((rust_sync.isSyncRunning() || rust_sync.isMempoolObserverRunning()) &&
-        waited < 5000) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      waited += 100;
-    }
-    if (rust_sync.isSyncRunning()) {
-      log('SyncNotifier: timed out waiting for Rust sync to stop during sign-out');
-    }
-    if (rust_sync.isMempoolObserverRunning()) {
-      log(
-        'SyncNotifier: timed out waiting for mempool observer to stop during sign-out',
-      );
-    }
+    await _waitForRustTasksToStop(
+      timeoutMs: 5000,
+      onSyncTimeout:
+          'SyncNotifier: timed out waiting for Rust sync to stop during sign-out',
+      onMempoolTimeout:
+          'SyncNotifier: timed out waiting for mempool observer to stop during '
+          'sign-out',
+    );
   }
 
   Future<void> enableBackgroundSync() async {
@@ -492,27 +526,17 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     // the sync loop's post-batch cancel check nor the observer's
     // 100ms cancel slice should take anywhere near that long,
     // but a network stall mid-broadcast can extend it.
-    var waited = 0;
-    while ((rust_sync.isSyncRunning() ||
-            rust_sync.isMempoolObserverRunning()) &&
-        waited < 5000) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      waited += 100;
-    }
-    if (rust_sync.isSyncRunning()) {
-      log(
-        'SyncNotifier: restartSync timed out waiting for Rust sync '
-        'loop to stop after 5s; starting anyway (the startSync '
-        'guard will log if the old run is still around)',
-      );
-    }
-    if (rust_sync.isMempoolObserverRunning()) {
-      log(
-        'SyncNotifier: restartSync timed out waiting for mempool '
-        'observer to stop after 5s; the new observer start will '
-        'skip and the new session runs without streaming',
-      );
-    }
+    await _waitForRustTasksToStop(
+      timeoutMs: 5000,
+      onSyncTimeout:
+          'SyncNotifier: restartSync timed out waiting for Rust sync loop to '
+          'stop after 5s; starting anyway (the startSync guard will log if '
+          'the old run is still around)',
+      onMempoolTimeout:
+          'SyncNotifier: restartSync timed out waiting for mempool observer to '
+          'stop after 5s; the new observer start will skip and the new '
+          'session runs without streaming',
+    );
     startSync();
     _startPolling();
   }
@@ -576,6 +600,30 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       log('AutoSync: tip check failed: $e');
     }
     _startPolling();
+  }
+
+  Future<bool> _waitForRustTasksToStop({
+    required int timeoutMs,
+    required String onSyncTimeout,
+    required String onMempoolTimeout,
+  }) async {
+    var waited = 0;
+    while ((rust_sync.isSyncRunning() ||
+            rust_sync.isMempoolObserverRunning()) &&
+        waited < timeoutMs) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      waited += 100;
+    }
+
+    final syncRunning = rust_sync.isSyncRunning();
+    final mempoolRunning = rust_sync.isMempoolObserverRunning();
+    if (syncRunning) {
+      log(onSyncTimeout);
+    }
+    if (mempoolRunning) {
+      log(onMempoolTimeout);
+    }
+    return !syncRunning && !mempoolRunning;
   }
 
   // ======================== Mempool Observer ========================
@@ -708,7 +756,9 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     }
 
     if (epoch != _sensitiveStateEpoch || _requiresUnlock) {
-      log('SyncNotifier: discarding sync progress update after lock transition');
+      log(
+        'SyncNotifier: discarding sync progress update after lock transition',
+      );
       return;
     }
 

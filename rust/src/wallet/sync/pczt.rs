@@ -238,10 +238,9 @@ pub async fn extract_and_broadcast_pczt(
     // the in-memory extractor and a second owned Pczt to the storage
     // function after broadcast.
     fn combine_pczts(proofs: &[u8], sigs: &[u8]) -> Result<pczt::Pczt, String> {
-        let p = pczt::Pczt::parse(proofs)
-            .map_err(|e| format!("Parse PCZT with proofs: {e:?}"))?;
-        let s = pczt::Pczt::parse(sigs)
-            .map_err(|e| format!("Parse PCZT with signatures: {e:?}"))?;
+        let p = pczt::Pczt::parse(proofs).map_err(|e| format!("Parse PCZT with proofs: {e:?}"))?;
+        let s =
+            pczt::Pczt::parse(sigs).map_err(|e| format!("Parse PCZT with signatures: {e:?}"))?;
         Combiner::new(vec![p, s])
             .combine()
             .map_err(|e| format!("Combine PCZTs: {e:?}"))
@@ -260,8 +259,7 @@ pub async fn extract_and_broadcast_pczt(
         sapling_crypto::circuit::OutputVerifyingKey,
     )> = match (spend_params_path, output_params_path) {
         (Some(sp), Some(op)) if !sp.is_empty() && !op.is_empty() => {
-            let prover =
-                LocalTxProver::new(std::path::Path::new(sp), std::path::Path::new(op));
+            let prover = LocalTxProver::new(std::path::Path::new(sp), std::path::Path::new(op));
             Some(prover.verifying_keys())
         }
         _ => None,
@@ -287,16 +285,16 @@ pub async fn extract_and_broadcast_pczt(
 
     let tx_bytes = {
         let mut buf = Vec::new();
-        tx.write(&mut buf).map_err(|e| format!("Serialize TX: {e}"))?;
+        tx.write(&mut buf)
+            .map_err(|e| format!("Serialize TX: {e}"))?;
         buf
     };
 
     // Step 2: broadcast. On any failure here, the DB is untouched,
     // so the wallet's view of spendable notes is unchanged.
-    let mut client =
-        crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url)
-            .await
-            .map_err(|e| e.to_string())?;
+    let mut client = crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let resp = client
         .send_transaction(zcash_client_backend::proto::service::RawTransaction {
@@ -350,16 +348,18 @@ pub async fn extract_and_broadcast_pczt(
             // proprietary fields is lost, but correctness is
             // preserved — the spent notes no longer appear
             // spendable.
-            decrypt_and_store_transaction(&network, &mut db, &tx, None).map_err(|fallback_err| {
-                format!(
-                    "Broadcast succeeded (txid={txid}) but both local \
+            decrypt_and_store_transaction(&network, &mut db, &tx, None).map_err(
+                |fallback_err| {
+                    format!(
+                        "Broadcast succeeded (txid={txid}) but both local \
                      storage paths failed. Primary: {primary_err}. \
                      Fallback: {fallback_err}. The transaction is on \
                      the network; check an explorer to confirm, and \
                      do not attempt to send again until the next \
                      sync reconciles your balance."
-                )
-            })?;
+                    )
+                },
+            )?;
         }
     }
 
