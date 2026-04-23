@@ -151,7 +151,9 @@ platform :mac do
     FileUtils.mkdir_p(metadata[:dist_dir])
 
     sh("cd #{shell_escape(workspace_root)} && fvm flutter pub get")
-    sh("cd #{shell_escape(workspace_root)} && fvm flutter build macos --release")
+    Bundler.with_unbundled_env do
+      sh("cd #{shell_escape(workspace_root)} && fvm flutter build macos --release --no-pub")
+    end
 
     UI.user_error!("Expected app bundle at #{metadata[:app_path]}") unless File.directory?(metadata[:app_path])
   end
