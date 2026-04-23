@@ -18,6 +18,12 @@ def workspace_root
   File.expand_path("../..", __dir__)
 end
 
+def release_version_from_tag(tag)
+  match = /\Arelease\/v(\d+\.\d+\.\d+)\z/.match(tag.to_s)
+  UI.user_error!("Unsupported release tag format: #{tag}") unless match
+  match[1]
+end
+
 def release_metadata
   pubspec = YAML.safe_load(File.read(File.join(workspace_root, "pubspec.yaml")))
   version_string = pubspec.fetch("version")
@@ -30,6 +36,7 @@ def release_metadata
     tag = ENV.fetch("GITHUB_REF_NAME")
   end
 
+  asset_version = release_version_from_tag(tag)
   app_name = "Vizor"
   dist_dir = File.join(workspace_root, "dist", "macos")
   app_path = File.join(workspace_root, "build", "macos", "Build", "Products", "Release", "#{app_name}.app")
@@ -43,8 +50,8 @@ def release_metadata
     release_name: ENV["RELEASE_NAME"] || tag,
     dist_dir: dist_dir,
     app_path: app_path,
-    zip_path: File.join(dist_dir, "#{app_name}-#{version}-macos.zip"),
-    dmg_path: File.join(dist_dir, "#{app_name}-#{version}-macos.dmg")
+    zip_path: File.join(dist_dir, "#{app_name}-#{asset_version}-macos.zip"),
+    dmg_path: File.join(dist_dir, "#{app_name}-#{asset_version}-macos.dmg")
   }
 end
 
