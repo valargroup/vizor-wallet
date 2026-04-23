@@ -94,6 +94,11 @@ class BackgroundSyncManager {
             Thread.sleep(forTimeInterval: 2.0)
         }
         print("[BGSync] wait complete after \(waitCount) iterations")
+        if zcash_get_sync_mode() != 2 {
+            print("[BGSync] runSync: background mode canceled after wait, exiting without work")
+            taskProgress = nil
+            return 0
+        }
 
         let dbPath: String
         do {
