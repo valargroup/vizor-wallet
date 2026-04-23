@@ -61,11 +61,13 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
       _errorText = null;
     });
 
-    final isValid = await ref
-        .read(appSecurityProvider.notifier)
-        .unlock(_passwordController.text);
-    if (!mounted) return;
+    final securityNotifier = ref.read(appSecurityProvider.notifier);
+    final accountNotifier = ref.read(accountProvider.notifier);
+    final syncNotifier = ref.read(syncProvider.notifier);
+
+    final isValid = await securityNotifier.unlock(_passwordController.text);
     if (!isValid) {
+      if (!mounted) return;
       log('UnlockScreen._submit: invalid password');
       setState(() {
         _isSubmitting = false;
@@ -74,9 +76,9 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
       return;
     }
 
-    await ref.read(accountProvider.notifier).restoreAfterUnlock();
-    await ref.read(syncProvider.notifier).refreshAfterUnlock();
-    await ref.read(syncProvider.notifier).startSyncAnyway();
+    await accountNotifier.restoreAfterUnlock();
+    await syncNotifier.refreshAfterUnlock();
+    await syncNotifier.startSyncAnyway();
     if (!mounted) return;
     context.go('/home');
   }
@@ -106,14 +108,17 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    ref.read(syncProvider.notifier).stopSync();
+    final syncNotifier = ref.read(syncProvider.notifier);
+    final accountNotifier = ref.read(accountProvider.notifier);
+
+    syncNotifier.stopSync();
     var waited = 0;
     while (rust_sync.isSyncRunning() && waited < 5000) {
       await Future.delayed(const Duration(milliseconds: 100));
       waited += 100;
     }
 
-    await ref.read(accountProvider.notifier).resetWallet();
+    await accountNotifier.resetWallet();
     exit(0);
   }
 
