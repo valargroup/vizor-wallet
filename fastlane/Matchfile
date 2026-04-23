@@ -18,6 +18,3 @@ readonly(ENV["MATCH_READONLY"].to_s.downcase == "true")
 
 git_basic_auth_value = env_or_default("MATCH_GIT_BASIC_AUTHORIZATION")
 git_basic_authorization(git_basic_auth_value) unless git_basic_auth_value.empty?
-
-git_private_key_value = env_or_default("MATCH_GIT_PRIVATE_KEY")
-git_private_key(git_private_key_value) unless git_private_key_value.nil?
