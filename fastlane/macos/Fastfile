@@ -75,19 +75,22 @@ end
 def setup_signing_keychain
   keychain_password = ENV.fetch("MACOS_KEYCHAIN_PASSWORD")
   keychain_path = signing_keychain_path
-  existing_keychains = sh("security list-keychains -d user").lines.map { |line| line.delete('"').strip }.reject(&:empty?)
-  all_keychains = ([keychain_path] + existing_keychains).uniq
 
   if File.exist?(keychain_path)
     UI.user_error!("Refusing to delete keychain directory #{keychain_path}") if File.directory?(keychain_path)
     sh("security delete-keychain #{shell_escape(keychain_path)}")
   end
 
-  sh("security create-keychain -p #{shell_escape(keychain_password)} #{shell_escape(keychain_path)}")
-  sh("security set-keychain-settings -lut 21600 #{shell_escape(keychain_path)}")
-  sh("security unlock-keychain -p #{shell_escape(keychain_password)} #{shell_escape(keychain_path)}")
-  sh("security list-keychains -d user -s #{all_keychains.map { |path| shell_escape(path) }.join(' ')}")
-  sh("security default-keychain -d user -s #{shell_escape(keychain_path)}")
+  create_keychain(
+    path: keychain_path,
+    password: keychain_password,
+    default_keychain: true,
+    unlock: true,
+    timeout: 21600,
+    lock_when_sleeps: true,
+    lock_after_timeout: true,
+    add_to_search_list: true
+  )
 
   {
     name: signing_keychain_name,
