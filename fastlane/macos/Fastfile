@@ -1,0 +1,188 @@
+fastlane_version "2.220.0"
+
+default_platform(:mac)
+
+require "base64"
+require "fileutils"
+require "json"
+require "shellwords"
+require "tempfile"
+require "tmpdir"
+require "yaml"
+
+def shell_escape(value)
+  Shellwords.escape(value)
+end
+
+def workspace_root
+  File.expand_path("../..", __dir__)
+end
+
+def release_metadata
+  pubspec = YAML.safe_load(File.read(File.join(workspace_root, "pubspec.yaml")))
+  version_string = pubspec.fetch("version")
+  version, build_number = version_string.split("+", 2)
+  tag = ENV["RELEASE_TAG"]
+
+  if tag.to_s.empty?
+    ref_type = ENV.fetch("GITHUB_REF_TYPE")
+    UI.user_error!("RELEASE_TAG is required when GITHUB_REF_TYPE is not 'tag'") unless ref_type == "tag"
+    tag = ENV.fetch("GITHUB_REF_NAME")
+  end
+
+  app_name = "Vizor"
+  dist_dir = File.join(workspace_root, "dist", "macos")
+  app_path = File.join(workspace_root, "build", "macos", "Build", "Products", "Release", "#{app_name}.app")
+
+  {
+    app_name: app_name,
+    bundle_id: "com.keplr.vizor",
+    version: version,
+    build_number: build_number,
+    tag: tag,
+    release_name: ENV["RELEASE_NAME"] || tag,
+    dist_dir: dist_dir,
+    app_path: app_path,
+    zip_path: File.join(dist_dir, "#{app_name}-#{version}-macos.zip"),
+    dmg_path: File.join(dist_dir, "#{app_name}-#{version}-macos.dmg")
+  }
+end
+
+def release_boolean_env(key)
+  ENV[key].to_s.downcase == "true"
+end
+
+def with_notarization_api_key_path
+  json = JSON.parse(ENV.fetch("APP_STORE_CONNECT_API_KEY_JSON"))
+
+  Tempfile.create(["app_store_connect_api_key", ".json"]) do |file|
+    file.write(JSON.pretty_generate(json))
+    file.flush
+    yield(file.path)
+  end
+end
+
+platform :mac do
+  private_lane :prepare_signing do
+    certificate_data = Base64.decode64(ENV.fetch("MACOS_CERTIFICATE_P12_BASE64"))
+    certificate_password = ENV.fetch("MACOS_CERTIFICATE_PASSWORD")
+    keychain_password = ENV.fetch("MACOS_KEYCHAIN_PASSWORD")
+    keychain_name = ENV["MACOS_KEYCHAIN_NAME"] || "fastlane-signing.keychain-db"
+    keychain_path = File.expand_path(File.join("~/Library/Keychains", keychain_name))
+
+    existing_keychains = sh("security list-keychains -d user").lines.map { |line| line.delete('"').strip }.reject(&:empty?)
+    all_keychains = ([keychain_path] + existing_keychains).uniq
+
+    Tempfile.create(["developer_id", ".p12"]) do |certificate_file|
+      certificate_file.binmode
+      certificate_file.write(certificate_data)
+      certificate_file.flush
+
+      if File.exist?(keychain_path)
+        sh("security delete-keychain #{shell_escape(keychain_path)}")
+      end
+
+      sh("security create-keychain -p #{shell_escape(keychain_password)} #{shell_escape(keychain_path)}")
+      sh("security set-keychain-settings -lut 21600 #{shell_escape(keychain_path)}")
+      sh("security unlock-keychain -p #{shell_escape(keychain_password)} #{shell_escape(keychain_path)}")
+      sh("security import #{shell_escape(certificate_file.path)} -k #{shell_escape(keychain_path)} -P #{shell_escape(certificate_password)} -A -T /usr/bin/codesign -T /usr/bin/security")
+      sh("security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k #{shell_escape(keychain_password)} #{shell_escape(keychain_path)}")
+      sh("security list-keychains -d user -s #{all_keychains.map { |path| shell_escape(path) }.join(' ')}")
+      sh("security default-keychain -d user -s #{shell_escape(keychain_path)}")
+    end
+  end
+
+  private_lane :notarize_app_bundle do
+    metadata = release_metadata
+    UI.user_error!("Missing app bundle at #{metadata[:app_path]}") unless File.directory?(metadata[:app_path])
+
+    with_notarization_api_key_path do |api_key_path|
+      notarize(
+        package: metadata[:app_path],
+        bundle_id: metadata[:bundle_id],
+        api_key_path: api_key_path,
+        use_notarytool: true,
+        print_log: true
+      )
+    end
+
+    sh("xcrun stapler staple #{shell_escape(metadata[:app_path])}")
+  end
+
+  private_lane :notarize_dmg do
+    metadata = release_metadata
+    UI.user_error!("Missing disk image at #{metadata[:dmg_path]}") unless File.exist?(metadata[:dmg_path])
+
+    with_notarization_api_key_path do |api_key_path|
+      notarize(
+        package: metadata[:dmg_path],
+        bundle_id: metadata[:bundle_id],
+        api_key_path: api_key_path,
+        use_notarytool: true,
+        print_log: true
+      )
+    end
+
+    sh("xcrun stapler staple #{shell_escape(metadata[:dmg_path])}")
+  end
+
+  private_lane :upload_github_release do
+    metadata = release_metadata
+
+    set_github_release(
+      repository_name: ENV.fetch("GITHUB_REPOSITORY"),
+      api_bearer: ENV.fetch("GITHUB_TOKEN"),
+      tag_name: metadata[:tag],
+      name: metadata[:release_name],
+      commitish: ENV.fetch("GITHUB_SHA"),
+      is_draft: release_boolean_env("GITHUB_RELEASE_DRAFT"),
+      is_prerelease: release_boolean_env("GITHUB_RELEASE_PRERELEASE"),
+      is_generate_release_notes: true,
+      upload_assets: [metadata[:zip_path], metadata[:dmg_path]]
+    )
+  end
+
+  desc "Build the macOS release app bundle"
+  lane :build do
+    metadata = release_metadata
+
+    FileUtils.mkdir_p(metadata[:dist_dir])
+
+    sh("cd #{shell_escape(workspace_root)} && fvm flutter pub get")
+    sh("cd #{shell_escape(workspace_root)} && fvm flutter build macos --release")
+
+    UI.user_error!("Expected app bundle at #{metadata[:app_path]}") unless File.directory?(metadata[:app_path])
+  end
+
+  desc "Package the macOS release build into ZIP and DMG"
+  lane :package do |options|
+    build unless options[:skip_build]
+
+    metadata = release_metadata
+    FileUtils.mkdir_p(metadata[:dist_dir])
+    FileUtils.rm_f([metadata[:zip_path], metadata[:dmg_path]])
+
+    UI.user_error!("Expected app bundle at #{metadata[:app_path]}") unless File.directory?(metadata[:app_path])
+
+    sh("ditto -c -k --sequesterRsrc --keepParent #{shell_escape(metadata[:app_path])} #{shell_escape(metadata[:zip_path])}")
+
+    Dir.mktmpdir("vizor-dmg") do |staging_dir|
+      staged_app_path = File.join(staging_dir, "#{metadata[:app_name]}.app")
+      applications_link = File.join(staging_dir, "Applications")
+
+      sh("ditto #{shell_escape(metadata[:app_path])} #{shell_escape(staged_app_path)}")
+      sh("ln -s /Applications #{shell_escape(applications_link)}")
+      sh("hdiutil create -volname #{shell_escape(metadata[:app_name])} -srcfolder #{shell_escape(staging_dir)} -ov -format UDZO #{shell_escape(metadata[:dmg_path])}")
+    end
+  end
+
+  desc "Build, notarize, package, and upload the macOS release"
+  lane :release do
+    prepare_signing
+    build
+    notarize_app_bundle
+    package(skip_build: true)
+    notarize_dmg
+    upload_github_release
+  end
+end

@@ -37,7 +37,9 @@ rust/build/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
+.bundle/
 /build/
+/dist/
 /coverage/
 .regtest/
 .regtest-logs/
@@ -52,3 +54,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# fastlane
+/fastlane/Preview.html
+/fastlane/report.xml
+/fastlane/test_output
+/fastlane/macos/Preview.html
+/fastlane/macos/report.xml
+/fastlane/macos/test_output
