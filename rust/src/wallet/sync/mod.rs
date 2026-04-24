@@ -1,4 +1,3 @@
-use rand::rngs::OsRng;
 use zcash_client_backend::{
     data_api::{
         chain::{scan_cached_blocks, CommitmentTreeRoot},
@@ -11,13 +10,18 @@ use zcash_client_backend::{
 };
 use zcash_client_sqlite::{
     chain::{init::init_blockmeta_db, BlockMeta},
-    util::SystemClock,
-    AccountUuid, FsBlockDb, WalletDb,
+    AccountUuid, FsBlockDb,
 };
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
 
-use crate::wallet::network::WalletNetwork;
+use crate::wallet::{
+    db::{
+        open_readonly_conn_with_timeout, open_wallet_db_with_timeout, WalletDatabase,
+        READ_DB_BUSY_TIMEOUT, WALLET_DB_BUSY_TIMEOUT,
+    },
+    network::WalletNetwork,
+};
 
 mod pczt;
 mod send;
@@ -50,42 +54,18 @@ pub use transactions::{
 #[allow(unused_imports)] // ditto
 pub(crate) use transactions::{PendingTxInfo, TransactionInfo, TxDataRequest, WalletBalance};
 
-pub(super) type WalletDatabase = WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>;
-const READ_DB_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
-
 pub(super) fn open_wallet_db(
     db_path: &str,
     network: WalletNetwork,
 ) -> Result<WalletDatabase, String> {
-    WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))
+    open_wallet_db_with_timeout(db_path, network, WALLET_DB_BUSY_TIMEOUT)
 }
 
 pub(crate) fn open_wallet_db_for_read(
     db_path: &str,
     network: WalletNetwork,
 ) -> Result<WalletDatabase, String> {
-    let conn = rusqlite::Connection::open(db_path)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
-    conn.busy_timeout(READ_DB_BUSY_TIMEOUT)
-        .map_err(|e| format!("Failed to configure wallet DB busy timeout: {e}"))?;
-    rusqlite::vtab::array::load_module(&conn)
-        .map_err(|e| format!("Failed to load SQLite array module: {e}"))?;
-    Ok(WalletDb::from_connection(conn, network, SystemClock, OsRng))
-}
-
-fn open_readonly_conn_with_timeout(
-    db_path: &str,
-    timeout: Option<std::time::Duration>,
-) -> Result<rusqlite::Connection, String> {
-    let conn =
-        rusqlite::Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|e| format!("Failed to open DB: {e}"))?;
-    if let Some(timeout) = timeout {
-        conn.busy_timeout(timeout)
-            .map_err(|e| format!("Failed to configure DB busy timeout: {e}"))?;
-    }
-    Ok(conn)
+    open_wallet_db_with_timeout(db_path, network, READ_DB_BUSY_TIMEOUT)
 }
 
 pub(crate) fn open_readonly_conn(db_path: &str) -> Result<rusqlite::Connection, String> {

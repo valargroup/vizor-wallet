@@ -1,7 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
-use rand::rngs::OsRng;
 use tonic::transport::Channel;
 use zcash_client_backend::{
     data_api::{
@@ -11,11 +10,14 @@ use zcash_client_backend::{
     },
     proto::service::{self, BlockId, ChainSpec},
 };
-use zcash_client_sqlite::{error::SqliteClientError, util::SystemClock, WalletDb};
+use zcash_client_sqlite::error::SqliteClientError;
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
 
-use crate::wallet::network::WalletNetwork;
+use crate::wallet::{
+    db::{open_wallet_db_with_timeout, WalletDatabase, SYNC_DB_BUSY_TIMEOUT},
+    network::WalletNetwork,
+};
 
 use {
     ::transparent::{
@@ -91,8 +93,6 @@ fn elapsed() -> String {
         .and_then(|g| g.map(|t| format!("{:.1}s", t.elapsed().as_secs_f64())))
         .unwrap_or_default()
 }
-
-type WalletDatabase = WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>;
 
 async fn refresh_utxos(
     client: &mut CompactTxStreamerClient<Channel>,
@@ -1015,7 +1015,7 @@ async fn run_sync_impl(
 // ==================== Helpers ====================
 
 fn open_db(path: &str, network: WalletNetwork) -> Result<WalletDatabase, SyncError> {
-    WalletDb::for_path(path, network, SystemClock, OsRng)
+    open_wallet_db_with_timeout(path, network, SYNC_DB_BUSY_TIMEOUT)
         .map_err(|e| SyncError::db(format!("DB open: {e}")))
 }
 
