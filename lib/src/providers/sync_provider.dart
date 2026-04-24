@@ -119,6 +119,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   StreamSubscription? _syncSub;
   AppLifecycleListener? _lifecycleListener;
   Timer? _pollTimer;
+  bool _pollCheckInFlight = false;
   int _sensitiveStateEpoch = 0;
   // Mempool observer subscription. Started in `startSync` and
   // cancelled in `stopSync`, so its lifetime matches the
@@ -478,7 +479,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   WalletMutationSyncPause _walletMutationSyncPauseSnapshot() {
     return WalletMutationSyncPause(
       hadActiveSync: _isSyncing || rust_sync.isSyncRunning(),
-      hadPolling: _pollTimer != null,
+      hadPolling: _pollTimer != null || _pollCheckInFlight,
       hadBackgroundSync: _bgDelegate.isActive,
       hadMempoolObserver: rust_sync.isMempoolObserverRunning(),
     );
@@ -496,10 +497,10 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       return pause;
     }
 
-    await onStoppingSync?.call();
-    log('SyncNotifier: pausing sync for wallet DB mutation');
     ++_syncGen;
     _stopPolling();
+    await onStoppingSync?.call();
+    log('SyncNotifier: pausing sync for wallet DB mutation');
     _isSyncing = false;
     rust_sync.setSyncMode(mode: 0);
     rust_sync.cancelFullSync();
@@ -678,15 +679,18 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   }
 
   Future<void> _checkAndSync() async {
+    final gen = _syncGen;
     final epoch = _sensitiveStateEpoch;
     final hasAccounts = ref.read(accountProvider).value?.hasAccounts ?? false;
-    if (_isSyncing ||
+    if (_pollCheckInFlight ||
+        _isSyncing ||
         _requiresUnlock ||
         _bgDelegate.shouldSuppressPolling ||
         !_isInForeground ||
         !hasAccounts) {
       return;
     }
+    _pollCheckInFlight = true;
     _stopPolling();
     try {
       final tip = await rust_wallet.getLatestBlockHeight(
@@ -694,7 +698,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       );
       final lastSynced = state.value?.chainTipHeight ?? 0;
       final syncComplete = (state.value?.percentage ?? 0) >= 1.0;
-      if (epoch != _sensitiveStateEpoch || _requiresUnlock) {
+      if (gen != _syncGen || epoch != _sensitiveStateEpoch || _requiresUnlock) {
         log('AutoSync: skipping restart after lock transition');
         return;
       }
@@ -706,6 +710,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       }
     } catch (e) {
       log('AutoSync: tip check failed: $e');
+    } finally {
+      _pollCheckInFlight = false;
+    }
+    if (gen != _syncGen || _requiresUnlock) {
+      return;
     }
     _startPolling();
   }
