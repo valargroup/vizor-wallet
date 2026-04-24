@@ -367,7 +367,9 @@ class _MnemonicWordCell extends StatefulWidget {
 }
 
 class _MnemonicWordCellState extends State<_MnemonicWordCell> {
+  final GlobalKey _textFieldRegionKey = GlobalKey();
   bool _hovered = false;
+  Offset? _pendingShellTapGlobalPosition;
 
   @override
   void initState() {
@@ -394,11 +396,76 @@ class _MnemonicWordCellState extends State<_MnemonicWordCell> {
     if (mounted) setState(() {});
   }
 
+  bool _positionIsInsideTextFieldRegion(Offset globalPosition) {
+    final context = _textFieldRegionKey.currentContext;
+    final renderObject = context?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) return false;
+    final localPosition = renderObject.globalToLocal(globalPosition);
+    return (Offset.zero & renderObject.size).contains(localPosition);
+  }
+
+  TextSelection _selectionForShellPointer(
+    Offset globalPosition,
+    TextStyle valueStyle,
+  ) {
+    final text = widget.controller.text;
+    if (text.isEmpty) return const TextSelection.collapsed(offset: 0);
+
+    final regionContext = _textFieldRegionKey.currentContext;
+    final renderObject = regionContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return TextSelection.collapsed(offset: text.length);
+    }
+
+    final localPosition = renderObject.globalToLocal(globalPosition);
+    final clampedPosition = Offset(
+      localPosition.dx.clamp(0.0, renderObject.size.width),
+      localPosition.dy.clamp(0.0, renderObject.size.height),
+    );
+
+    final textPainter = TextPainter(
+      text: TextSpan(text: text, style: valueStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout(maxWidth: renderObject.size.width);
+
+    final position = textPainter.getPositionForOffset(clampedPosition);
+    return TextSelection.collapsed(offset: position.offset);
+  }
+
+  void _handleShellTapDown(TapDownDetails details) {
+    _pendingShellTapGlobalPosition = details.globalPosition;
+  }
+
+  void _requestFocusFromShell(TextStyle valueStyle) {
+    final globalPosition = _pendingShellTapGlobalPosition;
+    _pendingShellTapGlobalPosition = null;
+    if (globalPosition == null) return;
+    if (_positionIsInsideTextFieldRegion(globalPosition)) return;
+
+    final selection = _selectionForShellPointer(globalPosition, valueStyle);
+    if (!widget.focusNode.hasFocus) {
+      widget.focusNode.requestFocus();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.focusNode.hasFocus) return;
+      final offset = selection.baseOffset.clamp(
+        0,
+        widget.controller.text.length,
+      );
+      widget.controller.selection = TextSelection.collapsed(offset: offset);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final isFocused = widget.focusNode.hasFocus;
     final hasText = widget.controller.text.trim().isNotEmpty;
+    final valueStyle = AppTypography.labelLarge.copyWith(
+      color: colors.text.accent,
+    );
     final borderColor = widget.destructive
         ? colors.border.utilityDestructive
         : isFocused
@@ -422,7 +489,8 @@ class _MnemonicWordCellState extends State<_MnemonicWordCell> {
         onExit: (_) => setState(() => _hovered = false),
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
-          onTap: widget.focusNode.requestFocus,
+          onTapDown: _handleShellTapDown,
+          onTap: () => _requestFocusFromShell(valueStyle),
           child: SizedBox(
             height: 36,
             child: Stack(
@@ -500,6 +568,7 @@ class _MnemonicWordCellState extends State<_MnemonicWordCell> {
                           ),
                           child: Center(
                             child: TextField(
+                              key: _textFieldRegionKey,
                               controller: widget.controller,
                               focusNode: widget.focusNode,
                               autofocus: widget.autofocus,
@@ -512,10 +581,9 @@ class _MnemonicWordCellState extends State<_MnemonicWordCell> {
                                   RegExp(r'[A-Za-z\s]'),
                                 ),
                               ],
-                              style: AppTypography.labelLarge.copyWith(
-                                color: colors.text.accent,
-                              ),
+                              style: valueStyle,
                               cursorColor: colors.text.accent,
+                              selectAllOnFocus: false,
                               decoration: InputDecoration.collapsed(
                                 hintText: 'Word',
                                 hintStyle: AppTypography.labelLarge.copyWith(
