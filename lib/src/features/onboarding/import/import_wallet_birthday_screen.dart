@@ -369,7 +369,7 @@ class _ImportWalletBirthdayScreenState
   Widget build(BuildContext context) {
     final draft = ref.watch(importDraftProvider);
     final security = ref.watch(appSecurityProvider);
-    if (!draft.hasMnemonic) {
+    if (!draft.hasMnemonic && !_isSubmitting) {
       _scheduleReturnToImport();
     }
 
