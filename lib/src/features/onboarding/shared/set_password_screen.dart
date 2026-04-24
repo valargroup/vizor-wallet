@@ -13,46 +13,13 @@ import '../../../core/widgets/password_text_field.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
 import '../create/onboarding_split_view.dart';
-import '../import/import_draft_provider.dart';
 import '../import/import_split_view.dart';
-
-enum SetPasswordFlow { create, importWallet }
-
-class SetPasswordScreenArgs {
-  const SetPasswordScreenArgs._({
-    required this.flow,
-    required this.mnemonic,
-    this.birthdayHeight,
-  });
-
-  const SetPasswordScreenArgs.create({required String mnemonic})
-    : this._(flow: SetPasswordFlow.create, mnemonic: mnemonic);
-
-  const SetPasswordScreenArgs.importWallet({
-    required String mnemonic,
-    required int birthdayHeight,
-  }) : this._(
-         flow: SetPasswordFlow.importWallet,
-         mnemonic: mnemonic,
-         birthdayHeight: birthdayHeight,
-       );
-
-  final SetPasswordFlow flow;
-  final String mnemonic;
-  final int? birthdayHeight;
-
-  bool get isImport => flow == SetPasswordFlow.importWallet;
-
-  String get backRoutePath => switch (flow) {
-    SetPasswordFlow.create => OnboardingStep.secretPassphrase.routePath,
-    SetPasswordFlow.importWallet => '/import/birthday',
-  };
-}
+import 'onboarding_flow_args.dart';
 
 class SetPasswordScreen extends ConsumerStatefulWidget {
   const SetPasswordScreen({super.key, required this.args});
 
-  final SetPasswordScreenArgs? args;
+  final SetPasswordScreenArgs args;
 
   @override
   ConsumerState<SetPasswordScreen> createState() => _SetPasswordScreenState();
@@ -63,17 +30,6 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
   final _confirmController = TextEditingController();
   bool _isSubmitting = false;
   String? _submitError;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.args == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.go(OnboardingStep.secretPassphrase.routePath);
-      });
-    }
-  }
 
   @override
   void dispose() {
@@ -89,10 +45,7 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
       _confirmController.text == _passwordController.text;
 
   bool get _canSubmit =>
-      !_isSubmitting &&
-      widget.args != null &&
-      _passwordPolicyError == null &&
-      _matches;
+      !_isSubmitting && _passwordPolicyError == null && _matches;
 
   String? get _passwordMessage => _passwordPolicyError;
 
@@ -106,10 +59,7 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
     final args = widget.args;
     final passwordPolicyError = _passwordPolicyError;
     final password = _passwordController.text;
-    if (_isSubmitting ||
-        args == null ||
-        passwordPolicyError != null ||
-        !_matches) {
+    if (_isSubmitting || passwordPolicyError != null || !_matches) {
       return;
     }
 
@@ -121,16 +71,14 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
     final router = GoRouter.of(context);
     final securityNotifier = ref.read(appSecurityProvider.notifier);
     final accountNotifier = ref.read(accountProvider.notifier);
-    final importDraftNotifier = ref.read(importDraftProvider.notifier);
 
     try {
       await securityNotifier.configurePassword(password);
       if (args.isImport) {
         await accountNotifier.importAccount(
           mnemonic: args.mnemonic,
-          birthdayHeight: args.birthdayHeight,
+          birthdayHeight: args.importBirthdayHeight,
         );
-        importDraftNotifier.clear();
       } else {
         await accountNotifier.createAccountFromMnemonic(
           mnemonic: args.mnemonic,
@@ -160,15 +108,15 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
       passwordMessage: _passwordMessage,
       confirmMessage: _confirmMessage,
       submitError: _submitError,
-      backRoutePath:
-          args?.backRoutePath ?? OnboardingStep.secretPassphrase.routePath,
+      backRoutePath: args.backRoutePath,
+      backRouteExtra: args.backRouteExtra,
       onChanged: () => setState(() {
         _submitError = null;
       }),
       onSubmit: _submit,
     );
 
-    if (args?.isImport ?? false) {
+    if (args.isImport) {
       return ImportOnboardingShell(
         activeStep: ImportOnboardingStep.setPassword,
         showPasswordStep: true,
@@ -190,6 +138,7 @@ class _SetPasswordContent extends StatelessWidget {
     required this.confirmMessage,
     required this.submitError,
     required this.backRoutePath,
+    required this.backRouteExtra,
     required this.onChanged,
     required this.onSubmit,
   });
@@ -202,6 +151,7 @@ class _SetPasswordContent extends StatelessWidget {
   final String? confirmMessage;
   final String? submitError;
   final String backRoutePath;
+  final Object backRouteExtra;
   final VoidCallback onChanged;
   final Future<void> Function() onSubmit;
 
@@ -215,7 +165,7 @@ class _SetPasswordContent extends StatelessWidget {
     final colors = context.colors;
     return Column(
       children: [
-        _BackRow(routePath: backRoutePath),
+        _BackRow(routePath: backRoutePath, routeExtra: backRouteExtra),
         const SizedBox(height: AppSpacing.s),
         Expanded(
           child: Column(
@@ -352,9 +302,10 @@ class _PasswordFieldBlock extends StatelessWidget {
 }
 
 class _BackRow extends StatelessWidget {
-  const _BackRow({required this.routePath});
+  const _BackRow({required this.routePath, required this.routeExtra});
 
   final String routePath;
+  final Object routeExtra;
 
   @override
   Widget build(BuildContext context) {
@@ -365,7 +316,7 @@ class _BackRow extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => context.go(routePath),
+          onTap: () => context.go(routePath, extra: routeExtra),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
             child: Row(

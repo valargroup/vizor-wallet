@@ -16,10 +16,12 @@ import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import 'onboarding_split_view.dart';
-import '../shared/set_password_screen.dart';
+import '../shared/onboarding_flow_args.dart';
 
 class SecretPassphraseScreen extends ConsumerStatefulWidget {
-  const SecretPassphraseScreen({super.key});
+  const SecretPassphraseScreen({this.args, super.key});
+
+  final CreateSecretPassphraseArgs? args;
 
   @override
   ConsumerState<SecretPassphraseScreen> createState() =>
@@ -38,7 +40,14 @@ class _SecretPassphraseScreenState
   @override
   void initState() {
     super.initState();
-    _prepareMnemonic();
+    final args = widget.args;
+    if (args == null) {
+      _prepareMnemonic();
+    } else {
+      _mnemonic = args.mnemonic;
+      _isPreparing = false;
+      _revealed = true;
+    }
   }
 
   void _prepareMnemonic() {
@@ -77,10 +86,10 @@ class _SecretPassphraseScreenState
       _isCreating = true;
       _submitError = null;
     });
+    final router = GoRouter.of(context);
+    final accountNotifier = ref.read(accountProvider.notifier);
     try {
-      await ref
-          .read(accountProvider.notifier)
-          .createAccountFromMnemonic(mnemonic: mnemonic);
+      await accountNotifier.createAccountFromMnemonic(mnemonic: mnemonic);
     } catch (e, st) {
       log('SecretPassphraseScreen._handlePrimaryAction: ERROR: $e\n$st');
       if (!mounted) return;
@@ -90,8 +99,7 @@ class _SecretPassphraseScreenState
       });
       return;
     }
-    if (!mounted) return;
-    context.go('/home');
+    router.go('/home');
   }
 
   Future<void> _copyMnemonic() async {

@@ -14,9 +14,9 @@ import 'src/features/onboarding/create/intro_zcash_screen.dart';
 import 'src/features/onboarding/create/onboarding_split_view.dart';
 import 'src/features/onboarding/create/secret_passphrase_screen.dart';
 import 'src/features/onboarding/create/things_to_know_screen.dart';
-import 'src/features/onboarding/import/import_draft_provider.dart';
 import 'src/features/onboarding/import/import_secret_passphrase_screen.dart';
 import 'src/features/onboarding/import/import_wallet_birthday_screen.dart';
+import 'src/features/onboarding/shared/onboarding_flow_args.dart';
 import 'src/features/onboarding/shared/set_password_screen.dart';
 import 'src/features/onboarding/unlock_screen.dart';
 import 'src/features/onboarding/welcome.dart';
@@ -172,24 +172,36 @@ final _routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/onboarding/secret-passphrase',
-            pageBuilder: (context, state) => CustomTransitionPage<void>(
-              key: state.pageKey,
-              transitionDuration: kOnboardingForwardDuration,
-              reverseTransitionDuration: kOnboardingReverseDuration,
-              child: const SecretPassphraseScreen(),
-              transitionsBuilder: _onboardingFadeTransition,
-            ),
+            pageBuilder: (context, state) {
+              final args = state.extra is CreateSecretPassphraseArgs
+                  ? state.extra as CreateSecretPassphraseArgs
+                  : null;
+
+              return CustomTransitionPage<void>(
+                key: state.pageKey,
+                transitionDuration: kOnboardingForwardDuration,
+                reverseTransitionDuration: kOnboardingReverseDuration,
+                child: SecretPassphraseScreen(args: args),
+                transitionsBuilder: _onboardingFadeTransition,
+              );
+            },
           ),
           GoRoute(
             path: '/onboarding/set-password',
+            redirect: (_, state) {
+              final args = state.extra;
+              if (args is SetPasswordScreenArgs &&
+                  args.flow == SetPasswordFlow.create) {
+                return null;
+              }
+              return OnboardingStep.secretPassphrase.routePath;
+            },
             pageBuilder: (context, state) => CustomTransitionPage<void>(
               key: state.pageKey,
               transitionDuration: kOnboardingForwardDuration,
               reverseTransitionDuration: kOnboardingReverseDuration,
               child: SetPasswordScreen(
-                args: state.extra is SetPasswordScreenArgs
-                    ? state.extra as SetPasswordScreenArgs
-                    : null,
+                args: state.extra as SetPasswordScreenArgs,
               ),
               transitionsBuilder: _onboardingFadeTransition,
             ),
@@ -198,39 +210,46 @@ final _routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/import',
-        pageBuilder: (context, state) => CustomTransitionPage<void>(
-          key: state.pageKey,
-          transitionDuration: kOnboardingForwardDuration,
-          reverseTransitionDuration: kOnboardingReverseDuration,
-          child: const ImportSecretPassphraseScreen(),
-          transitionsBuilder: _onboardingFadeTransition,
-        ),
+        pageBuilder: (context, state) {
+          final args = state.extra is ImportSecretPassphraseArgs
+              ? state.extra as ImportSecretPassphraseArgs
+              : null;
+
+          return CustomTransitionPage<void>(
+            key: state.pageKey,
+            transitionDuration: kOnboardingForwardDuration,
+            reverseTransitionDuration: kOnboardingReverseDuration,
+            child: ImportSecretPassphraseScreen(args: args),
+            transitionsBuilder: _onboardingFadeTransition,
+          );
+        },
       ),
       GoRoute(
         path: '/import/birthday',
-        redirect: (_, _) {
-          final draft = ref.read(importDraftProvider);
-          return draft.hasMnemonic ? null : '/import';
-        },
+        redirect: (_, state) =>
+            state.extra is ImportBirthdayArgs ? null : '/import',
         pageBuilder: (context, state) => CustomTransitionPage<void>(
           key: state.pageKey,
           transitionDuration: kOnboardingForwardDuration,
           reverseTransitionDuration: kOnboardingReverseDuration,
-          child: const ImportWalletBirthdayScreen(),
+          child: ImportWalletBirthdayScreen(
+            args: state.extra as ImportBirthdayArgs,
+          ),
           transitionsBuilder: _onboardingFadeTransition,
         ),
       ),
       GoRoute(
         path: '/import/set-password',
         redirect: (_, state) {
-          if (state.extra is SetPasswordScreenArgs) return null;
-          final draft = ref.read(importDraftProvider);
-          return draft.hasMnemonic ? '/import/birthday' : '/import';
+          final args = state.extra;
+          if (args is SetPasswordScreenArgs &&
+              args.flow == SetPasswordFlow.importWallet) {
+            return null;
+          }
+          return '/import';
         },
         pageBuilder: (context, state) {
-          final args = state.extra is SetPasswordScreenArgs
-              ? state.extra as SetPasswordScreenArgs
-              : null;
+          final args = state.extra as SetPasswordScreenArgs;
 
           return CustomTransitionPage<void>(
             key: state.pageKey,

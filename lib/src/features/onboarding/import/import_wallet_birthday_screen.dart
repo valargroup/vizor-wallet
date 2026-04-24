@@ -13,13 +13,16 @@ import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
-import '../shared/set_password_screen.dart';
+import '../shared/onboarding_flow_args.dart';
 import 'import_birthday_estimator.dart';
-import 'import_draft_provider.dart';
 import 'import_split_view.dart';
 
+enum ImportBirthdayTab { date, blockHeight }
+
 class ImportWalletBirthdayScreen extends ConsumerStatefulWidget {
-  const ImportWalletBirthdayScreen({super.key});
+  const ImportWalletBirthdayScreen({required this.args, super.key});
+
+  final ImportBirthdayArgs args;
 
   @override
   ConsumerState<ImportWalletBirthdayScreen> createState() =>
@@ -38,6 +41,9 @@ class _ImportWalletBirthdayScreenState
   late final FocusNode _manualHeightFocusNode;
 
   ImportBirthdayMetadata? _metadata;
+  ImportBirthdayTab _activeTab = ImportBirthdayTab.date;
+  DateTime? _selectedDate;
+  int? _birthdayHeight;
   bool _isLoadingMetadata = true;
   bool _isEstimating = false;
   bool _isSubmitting = false;
@@ -48,9 +54,12 @@ class _ImportWalletBirthdayScreenState
   @override
   void initState() {
     super.initState();
-    final draft = ref.read(importDraftProvider);
+    final initialBirthdayHeight = widget.args.initialBirthdayHeight;
+    if (initialBirthdayHeight != null) {
+      _activeTab = ImportBirthdayTab.blockHeight;
+    }
     _manualHeightController = TextEditingController(
-      text: draft.manualBirthdayHeightText,
+      text: initialBirthdayHeight?.toString() ?? '',
     );
     _manualHeightFocusNode = FocusNode()..addListener(_handleFocusChanged);
     _loadMetadata();
@@ -90,9 +99,8 @@ class _ImportWalletBirthdayScreenState
         _isLoadingMetadata = false;
       });
 
-      final draft = ref.read(importDraftProvider);
-      if (draft.selectedDate != null && draft.birthdayHeight == null) {
-        await _estimateSelectedDate(draft.selectedDate!);
+      if (_selectedDate != null && _birthdayHeight == null) {
+        await _estimateSelectedDate(_selectedDate!);
       }
     } catch (e, st) {
       log('ImportWalletBirthdayScreen._loadMetadata: ERROR: $e\n$st');
@@ -107,10 +115,11 @@ class _ImportWalletBirthdayScreenState
   Future<void> _estimateSelectedDate(DateTime date) async {
     final seq = ++_estimateSeq;
     setState(() {
+      _selectedDate = date;
+      _birthdayHeight = null;
       _isEstimating = true;
       _submitError = null;
     });
-    ref.read(importDraftProvider.notifier).setSelectedDate(date);
 
     try {
       final estimatedHeight =
@@ -119,10 +128,9 @@ class _ImportWalletBirthdayScreenState
             selectedDate: date,
           );
       if (!mounted || seq != _estimateSeq) return;
-      ref
-          .read(importDraftProvider.notifier)
-          .setSelectedDate(date, birthdayHeight: estimatedHeight);
       setState(() {
+        _selectedDate = date;
+        _birthdayHeight = estimatedHeight;
         _isEstimating = false;
       });
     } catch (e, st) {
@@ -136,30 +144,33 @@ class _ImportWalletBirthdayScreenState
   }
 
   void _handleTabSelected(ImportBirthdayTab tab) {
-    final draft = ref.read(importDraftProvider);
     if (tab == ImportBirthdayTab.blockHeight) {
       _estimateSeq++;
-      if (_isEstimating) {
-        setState(() {
-          _isEstimating = false;
-        });
-      }
+      setState(() {
+        _activeTab = tab;
+        _isEstimating = false;
+        _submitError = null;
+      });
+      return;
     }
-    ref.read(importDraftProvider.notifier).setTab(tab);
+
+    setState(() {
+      _activeTab = tab;
+      _submitError = null;
+    });
     if (tab == ImportBirthdayTab.date &&
-        draft.selectedDate != null &&
-        draft.birthdayHeight == null &&
+        _selectedDate != null &&
+        _birthdayHeight == null &&
         !_isEstimating) {
-      _estimateSelectedDate(draft.selectedDate!);
+      _estimateSelectedDate(_selectedDate!);
     }
   }
 
   Future<void> _pickDate() async {
     final metadata = _metadata;
     if (metadata == null) return;
-    final draft = ref.read(importDraftProvider);
     final initialDate = _clampDate(
-      draft.selectedDate ?? metadata.tipDate,
+      _selectedDate ?? metadata.tipDate,
       metadata.saplingActivationDate,
       metadata.tipDate,
     );
@@ -255,10 +266,9 @@ class _ImportWalletBirthdayScreenState
   }
 
   Future<void> _submit() async {
-    final draft = ref.read(importDraftProvider);
-    final mnemonic = draft.mnemonic;
-    final birthdayHeight = _resolvedBirthdayHeight(draft);
-    if (_isSubmitting || mnemonic == null || birthdayHeight == null) {
+    final mnemonic = widget.args.mnemonic;
+    final birthdayHeight = _resolvedBirthdayHeight();
+    if (_isSubmitting || birthdayHeight == null) {
       return;
     }
 
@@ -270,9 +280,6 @@ class _ImportWalletBirthdayScreenState
     try {
       final security = ref.read(appSecurityProvider);
       if (!security.isPasswordConfigured) {
-        ref
-            .read(importDraftProvider.notifier)
-            .setBirthdayHeight(birthdayHeight);
         if (!mounted) return;
         context.go(
           '/import/set-password',
@@ -285,13 +292,11 @@ class _ImportWalletBirthdayScreenState
       }
 
       final accountNotifier = ref.read(accountProvider.notifier);
-      final importDraftNotifier = ref.read(importDraftProvider.notifier);
       final router = GoRouter.of(context);
       await accountNotifier.importAccount(
         mnemonic: mnemonic,
         birthdayHeight: birthdayHeight,
       );
-      importDraftNotifier.clear();
       router.go('/home');
     } catch (e, st) {
       log('ImportWalletBirthdayScreen._submit: ERROR: $e\n$st');
@@ -304,9 +309,9 @@ class _ImportWalletBirthdayScreenState
     }
   }
 
-  int? _resolvedBirthdayHeight(ImportDraftState draft) {
-    return switch (draft.selectedTab) {
-      ImportBirthdayTab.date => draft.birthdayHeight,
+  int? _resolvedBirthdayHeight() {
+    return switch (_activeTab) {
+      ImportBirthdayTab.date => _birthdayHeight,
       ImportBirthdayTab.blockHeight => _validatedManualHeight,
     };
   }
@@ -347,10 +352,10 @@ class _ImportWalletBirthdayScreenState
     return null;
   }
 
-  bool _isSubmitEnabled(ImportDraftState draft) {
-    return switch (draft.selectedTab) {
+  bool get _isSubmitEnabled {
+    return switch (_activeTab) {
       ImportBirthdayTab.date =>
-        draft.birthdayHeight != null && !_isSubmitting && !_isEstimating,
+        _birthdayHeight != null && !_isSubmitting && !_isEstimating,
       ImportBirthdayTab.blockHeight =>
         _validatedManualHeight != null && !_isSubmitting,
     };
@@ -358,10 +363,9 @@ class _ImportWalletBirthdayScreenState
 
   @override
   Widget build(BuildContext context) {
-    final draft = ref.watch(importDraftProvider);
     final security = ref.watch(appSecurityProvider);
 
-    final activeTab = draft.selectedTab;
+    final activeTab = _activeTab;
     final buttonLabel = _isSubmitting
         ? 'Importing...'
         : activeTab == ImportBirthdayTab.date && _isEstimating
@@ -374,7 +378,14 @@ class _ImportWalletBirthdayScreenState
       child: ImportOnboardingTrailingPane(
         child: Column(
           children: [
-            _BackRow(onTap: () => context.go('/import')),
+            _BackRow(
+              onTap: () => context.go(
+                '/import',
+                extra: ImportSecretPassphraseArgs(
+                  mnemonic: widget.args.mnemonic,
+                ),
+              ),
+            ),
             const SizedBox(height: AppSpacing.xxs),
             Expanded(
               child: Column(
@@ -422,9 +433,9 @@ class _ImportWalletBirthdayScreenState
                               if (activeTab == ImportBirthdayTab.date)
                                 _DatePickerField(
                                   width: _contentWidth,
-                                  valueText: draft.selectedDate == null
+                                  valueText: _selectedDate == null
                                       ? null
-                                      : _formatDate(draft.selectedDate!),
+                                      : _formatDate(_selectedDate!),
                                   enabled:
                                       !_isLoadingMetadata && _metadata != null,
                                   onTap: _pickDate,
@@ -436,9 +447,6 @@ class _ImportWalletBirthdayScreenState
                                   width: _contentWidth,
                                   errorText: _manualHeightError,
                                   onChanged: (value) {
-                                    ref
-                                        .read(importDraftProvider.notifier)
-                                        .setManualBirthdayHeightText(value);
                                     setState(() {
                                       _submitError = null;
                                     });
@@ -464,7 +472,7 @@ class _ImportWalletBirthdayScreenState
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         AppButton(
-                          onPressed: _isSubmitEnabled(draft) ? _submit : null,
+                          onPressed: _isSubmitEnabled ? _submit : null,
                           variant: AppButtonVariant.primary,
                           minWidth: _buttonWidth,
                           trailing: const AppIcon(AppIcons.chevronForward),

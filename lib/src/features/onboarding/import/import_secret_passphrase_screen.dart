@@ -4,18 +4,19 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../main.dart' show log;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../providers/app_security_provider.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
-import 'import_draft_provider.dart';
+import '../shared/onboarding_flow_args.dart';
 import 'import_split_view.dart';
 
 class ImportSecretPassphraseScreen extends ConsumerStatefulWidget {
-  const ImportSecretPassphraseScreen({super.key});
+  const ImportSecretPassphraseScreen({this.args, super.key});
+
+  final ImportSecretPassphraseArgs? args;
 
   @override
   ConsumerState<ImportSecretPassphraseScreen> createState() =>
@@ -40,7 +41,7 @@ class _ImportSecretPassphraseScreenState
     super.initState();
     _controllers = List.generate(_wordCount, (_) => TextEditingController());
     _focusNodes = List.generate(_wordCount, (_) => FocusNode());
-    _restoreDraftMnemonic();
+    _restoreMnemonic();
   }
 
   @override
@@ -67,8 +68,8 @@ class _ImportSecretPassphraseScreenState
 
   bool get _canSubmit => !_isSubmitting && _isMnemonicValid;
 
-  void _restoreDraftMnemonic() {
-    final mnemonic = ref.read(importDraftProvider).mnemonic;
+  void _restoreMnemonic() {
+    final mnemonic = widget.args?.mnemonic;
     if (mnemonic == null || mnemonic.trim().isEmpty) return;
 
     final words = mnemonic
@@ -173,20 +174,11 @@ class _ImportSecretPassphraseScreenState
       _showValidationError = false;
     });
 
-    try {
-      ref.read(importDraftProvider.notifier).start(mnemonic: _mnemonic);
-    } catch (e, st) {
-      log('ImportSecretPassphraseScreen._submit: ERROR: $e\n$st');
-      if (!mounted) return;
-      setState(() {
-        _isSubmitting = false;
-        _submitError = e.toString();
-      });
-      return;
-    }
-
     if (!mounted) return;
-    context.go('/import/birthday');
+    context.go(
+      '/import/birthday',
+      extra: ImportBirthdayArgs(mnemonic: _mnemonic),
+    );
   }
 
   void _handleBack() {
