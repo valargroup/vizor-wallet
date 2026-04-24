@@ -20,6 +20,8 @@ import 'import_split_view.dart';
 
 enum ImportBirthdayTab { date, blockHeight }
 
+enum _ImportWalletSubmitPhase { idle, stoppingSync, importing }
+
 class ImportWalletBirthdayScreen extends ConsumerStatefulWidget {
   const ImportWalletBirthdayScreen({required this.args, super.key});
 
@@ -47,10 +49,12 @@ class _ImportWalletBirthdayScreenState
   int? _birthdayHeight;
   bool _isLoadingMetadata = true;
   bool _isEstimating = false;
-  bool _isSubmitting = false;
+  _ImportWalletSubmitPhase _submitPhase = _ImportWalletSubmitPhase.idle;
   String? _metadataError;
   String? _submitError;
   int _estimateSeq = 0;
+
+  bool get _isSubmitting => _submitPhase != _ImportWalletSubmitPhase.idle;
 
   @override
   void initState() {
@@ -274,7 +278,7 @@ class _ImportWalletBirthdayScreenState
     }
 
     setState(() {
-      _isSubmitting = true;
+      _submitPhase = _ImportWalletSubmitPhase.importing;
       _submitError = null;
     });
 
@@ -300,13 +304,25 @@ class _ImportWalletBirthdayScreenState
           mnemonic: mnemonic,
           birthdayHeight: birthdayHeight,
         ),
+        onStoppingSync: () {
+          if (!mounted) return;
+          setState(() {
+            _submitPhase = _ImportWalletSubmitPhase.stoppingSync;
+          });
+        },
+        onSyncPaused: () {
+          if (!mounted) return;
+          setState(() {
+            _submitPhase = _ImportWalletSubmitPhase.importing;
+          });
+        },
       );
       router.go('/home');
     } catch (e, st) {
       log('ImportWalletBirthdayScreen._submit: ERROR: $e\n$st');
       if (!mounted) return;
       setState(() {
-        _isSubmitting = false;
+        _submitPhase = _ImportWalletSubmitPhase.idle;
         _submitError = e.toString();
       });
       return;
@@ -368,11 +384,14 @@ class _ImportWalletBirthdayScreenState
   @override
   Widget build(BuildContext context) {
     final activeTab = _activeTab;
-    final buttonLabel = _isSubmitting
-        ? 'Importing...'
-        : activeTab == ImportBirthdayTab.date && _isEstimating
-        ? 'Estimating...'
-        : 'Import';
+    final buttonLabel = switch (_submitPhase) {
+      _ImportWalletSubmitPhase.stoppingSync => 'Stop syncing...',
+      _ImportWalletSubmitPhase.importing => 'Importing...',
+      _ImportWalletSubmitPhase.idle =>
+        activeTab == ImportBirthdayTab.date && _isEstimating
+            ? 'Estimating...'
+            : 'Import',
+    };
 
     return ImportOnboardingTrailingPane(
       child: Column(

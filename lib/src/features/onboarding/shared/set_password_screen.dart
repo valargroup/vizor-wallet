@@ -27,10 +27,12 @@ class SetPasswordScreen extends ConsumerStatefulWidget {
   ConsumerState<SetPasswordScreen> createState() => _SetPasswordScreenState();
 }
 
+enum _SetPasswordSubmitPhase { idle, stoppingSync, settingPassword }
+
 class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
-  bool _isSubmitting = false;
+  _SetPasswordSubmitPhase _submitPhase = _SetPasswordSubmitPhase.idle;
   String? _submitError;
 
   @override
@@ -47,7 +49,9 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
       _confirmController.text == _passwordController.text;
 
   bool get _canSubmit =>
-      !_isSubmitting && _passwordPolicyError == null && _matches;
+      _submitPhase == _SetPasswordSubmitPhase.idle &&
+      _passwordPolicyError == null &&
+      _matches;
 
   String? get _passwordMessage => _passwordPolicyError;
 
@@ -61,12 +65,14 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
     final args = widget.args;
     final passwordPolicyError = _passwordPolicyError;
     final password = _passwordController.text;
-    if (_isSubmitting || passwordPolicyError != null || !_matches) {
+    if (_submitPhase != _SetPasswordSubmitPhase.idle ||
+        passwordPolicyError != null ||
+        !_matches) {
       return;
     }
 
     setState(() {
-      _isSubmitting = true;
+      _submitPhase = _SetPasswordSubmitPhase.settingPassword;
       _submitError = null;
     });
 
@@ -82,18 +88,33 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
         await securityNotifier.preparePasswordSetup(password);
         passwordPrepared = true;
 
-        await runWithSyncPausedForAccountMutation(ref, () async {
-          if (args.isImport) {
-            await accountNotifier.importAccount(
-              mnemonic: args.mnemonic,
-              birthdayHeight: args.importBirthdayHeight,
-            );
-          } else {
-            await accountNotifier.createAccountFromMnemonic(
-              mnemonic: args.mnemonic,
-            );
-          }
-        });
+        await runWithSyncPausedForAccountMutation(
+          ref,
+          () async {
+            if (args.isImport) {
+              await accountNotifier.importAccount(
+                mnemonic: args.mnemonic,
+                birthdayHeight: args.importBirthdayHeight,
+              );
+            } else {
+              await accountNotifier.createAccountFromMnemonic(
+                mnemonic: args.mnemonic,
+              );
+            }
+          },
+          onStoppingSync: () {
+            if (!mounted) return;
+            setState(() {
+              _submitPhase = _SetPasswordSubmitPhase.stoppingSync;
+            });
+          },
+          onSyncPaused: () {
+            if (!mounted) return;
+            setState(() {
+              _submitPhase = _SetPasswordSubmitPhase.settingPassword;
+            });
+          },
+        );
 
         securityNotifier.commitPasswordSetup();
         passwordCommitted = true;
@@ -113,7 +134,7 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
       log('SetPasswordScreen._submit: ERROR: $e\n$st');
       if (!mounted) return;
       setState(() {
-        _isSubmitting = false;
+        _submitPhase = _SetPasswordSubmitPhase.idle;
         _submitError = e.toString();
       });
       return;
@@ -126,7 +147,7 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
     final content = _SetPasswordContent(
       passwordController: _passwordController,
       confirmController: _confirmController,
-      isSubmitting: _isSubmitting,
+      submitPhase: _submitPhase,
       canSubmit: _canSubmit,
       passwordMessage: _passwordMessage,
       confirmMessage: _confirmMessage,
@@ -149,7 +170,7 @@ class _SetPasswordContent extends StatelessWidget {
   const _SetPasswordContent({
     required this.passwordController,
     required this.confirmController,
-    required this.isSubmitting,
+    required this.submitPhase,
     required this.canSubmit,
     required this.passwordMessage,
     required this.confirmMessage,
@@ -162,7 +183,7 @@ class _SetPasswordContent extends StatelessWidget {
 
   final TextEditingController passwordController;
   final TextEditingController confirmController;
-  final bool isSubmitting;
+  final _SetPasswordSubmitPhase submitPhase;
   final bool canSubmit;
   final String? passwordMessage;
   final String? confirmMessage;
@@ -285,9 +306,13 @@ class _SetPasswordContent extends StatelessWidget {
                       variant: AppButtonVariant.primary,
                       minWidth: _contentWidth,
                       trailing: const AppIcon(AppIcons.chevronForward),
-                      child: Text(
-                        isSubmitting ? 'Setting password...' : 'Set Password',
-                      ),
+                      child: Text(switch (submitPhase) {
+                        _SetPasswordSubmitPhase.stoppingSync =>
+                          'Stop syncing...',
+                        _SetPasswordSubmitPhase.settingPassword =>
+                          'Setting password...',
+                        _SetPasswordSubmitPhase.idle => 'Set Password',
+                      }),
                     ),
                   ],
                 ),

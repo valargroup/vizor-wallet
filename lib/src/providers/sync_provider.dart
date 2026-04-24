@@ -96,12 +96,17 @@ class WalletMutationSyncPause {
   final bool hadActiveSync;
   final bool hadPolling;
   final bool hadBackgroundSync;
+  final bool hadMempoolObserver;
 
   const WalletMutationSyncPause({
     required this.hadActiveSync,
     required this.hadPolling,
     required this.hadBackgroundSync,
+    required this.hadMempoolObserver,
   });
+
+  bool get hadWorkToPause =>
+      hadActiveSync || hadPolling || hadBackgroundSync || hadMempoolObserver;
 }
 
 class SyncNotifier extends AsyncNotifier<SyncState> {
@@ -470,20 +475,28 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     );
   }
 
-  Future<WalletMutationSyncPause> pauseForWalletMutation() async {
-    final pause = WalletMutationSyncPause(
+  WalletMutationSyncPause _walletMutationSyncPauseSnapshot() {
+    return WalletMutationSyncPause(
       hadActiveSync: _isSyncing || rust_sync.isSyncRunning(),
       hadPolling: _pollTimer != null,
       hadBackgroundSync: _bgDelegate.isActive,
+      hadMempoolObserver: rust_sync.isMempoolObserverRunning(),
     );
+  }
 
-    if (!pause.hadActiveSync &&
-        !pause.hadPolling &&
-        !pause.hadBackgroundSync &&
-        !rust_sync.isMempoolObserverRunning()) {
+  bool needsPauseForWalletMutation() =>
+      _walletMutationSyncPauseSnapshot().hadWorkToPause;
+
+  Future<WalletMutationSyncPause> pauseForWalletMutation({
+    FutureOr<void> Function()? onStoppingSync,
+  }) async {
+    final pause = _walletMutationSyncPauseSnapshot();
+
+    if (!pause.hadWorkToPause) {
       return pause;
     }
 
+    await onStoppingSync?.call();
     log('SyncNotifier: pausing sync for wallet DB mutation');
     ++_syncGen;
     _stopPolling();

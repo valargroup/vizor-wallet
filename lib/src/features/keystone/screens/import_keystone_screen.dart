@@ -17,10 +17,14 @@ class ImportKeystoneScreen extends ConsumerStatefulWidget {
       _ImportKeystoneScreenState();
 }
 
+enum _KeystoneLoadingPhase { idle, connecting, stoppingSync, importing }
+
 class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
   List<KeystoneAccountInfo>? _accounts;
-  bool _isLoading = false;
+  _KeystoneLoadingPhase _loadingPhase = _KeystoneLoadingPhase.idle;
   String? _error;
+
+  bool get _isLoading => _loadingPhase != _KeystoneLoadingPhase.idle;
 
   @override
   void initState() {
@@ -32,13 +36,13 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
     if (!QrScanner.isAvailable) {
       setState(() {
         _error = 'QR scanning not available on this platform';
-        _isLoading = false;
+        _loadingPhase = _KeystoneLoadingPhase.idle;
       });
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _loadingPhase = _KeystoneLoadingPhase.connecting;
       _error = null;
     });
 
@@ -49,21 +53,21 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
       if (!mounted) return;
       setState(() {
         _accounts = accounts;
-        _isLoading = false;
+        _loadingPhase = _KeystoneLoadingPhase.idle;
       });
     } catch (e) {
       log('ImportKeystone: error: $e');
       if (!mounted) return;
       setState(() {
         _error = e.toString();
-        _isLoading = false;
+        _loadingPhase = _KeystoneLoadingPhase.idle;
       });
     }
   }
 
   Future<void> _importAccount(KeystoneAccountInfo info) async {
     setState(() {
-      _isLoading = true;
+      _loadingPhase = _KeystoneLoadingPhase.importing;
       _error = null;
     });
 
@@ -78,6 +82,18 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
               seedFingerprint: info.seedFingerprint.toList(),
               zip32Index: info.index,
             ),
+        onStoppingSync: () {
+          if (!mounted) return;
+          setState(() {
+            _loadingPhase = _KeystoneLoadingPhase.stoppingSync;
+          });
+        },
+        onSyncPaused: () {
+          if (!mounted) return;
+          setState(() {
+            _loadingPhase = _KeystoneLoadingPhase.importing;
+          });
+        },
       );
 
       if (!mounted) return;
@@ -88,7 +104,7 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
-        _isLoading = false;
+        _loadingPhase = _KeystoneLoadingPhase.idle;
       });
     }
   }
@@ -97,17 +113,23 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final loadingText = switch (_loadingPhase) {
+      _KeystoneLoadingPhase.connecting => 'Connecting to Keystone...',
+      _KeystoneLoadingPhase.stoppingSync => 'Stop syncing...',
+      _KeystoneLoadingPhase.importing => 'Importing...',
+      _KeystoneLoadingPhase.idle => '',
+    };
 
     return Scaffold(
       appBar: AppBar(title: const Text('Connect Keystone')),
       body: _isLoading
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Connecting to Keystone...'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(loadingText),
                 ],
               ),
             )

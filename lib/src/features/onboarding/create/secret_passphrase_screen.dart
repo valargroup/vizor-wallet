@@ -29,14 +29,18 @@ class SecretPassphraseScreen extends ConsumerStatefulWidget {
       _SecretPassphraseScreenState();
 }
 
+enum _CreateWalletSubmitPhase { idle, stoppingSync, creating }
+
 class _SecretPassphraseScreenState
     extends ConsumerState<SecretPassphraseScreen> {
   String? _mnemonic;
   bool _isPreparing = true;
-  bool _isCreating = false;
+  _CreateWalletSubmitPhase _submitPhase = _CreateWalletSubmitPhase.idle;
   bool _revealed = false;
   String? _prepareError;
   String? _submitError;
+
+  bool get _isSubmitting => _submitPhase != _CreateWalletSubmitPhase.idle;
 
   @override
   void initState() {
@@ -63,7 +67,7 @@ class _SecretPassphraseScreenState
   }
 
   Future<void> _handlePrimaryAction() async {
-    if (_isPreparing || _isCreating || _prepareError != null) return;
+    if (_isPreparing || _isSubmitting || _prepareError != null) return;
     if (!_revealed) {
       setState(() {
         _revealed = true;
@@ -84,7 +88,7 @@ class _SecretPassphraseScreenState
     }
 
     setState(() {
-      _isCreating = true;
+      _submitPhase = _CreateWalletSubmitPhase.creating;
       _submitError = null;
     });
     final router = GoRouter.of(context);
@@ -93,12 +97,24 @@ class _SecretPassphraseScreenState
       await runWithSyncPausedForAccountMutation(
         ref,
         () => accountNotifier.createAccountFromMnemonic(mnemonic: mnemonic),
+        onStoppingSync: () {
+          if (!mounted) return;
+          setState(() {
+            _submitPhase = _CreateWalletSubmitPhase.stoppingSync;
+          });
+        },
+        onSyncPaused: () {
+          if (!mounted) return;
+          setState(() {
+            _submitPhase = _CreateWalletSubmitPhase.creating;
+          });
+        },
       );
     } catch (e, st) {
       log('SecretPassphraseScreen._handlePrimaryAction: ERROR: $e\n$st');
       if (!mounted) return;
       setState(() {
-        _isCreating = false;
+        _submitPhase = _CreateWalletSubmitPhase.idle;
         _submitError = e.toString();
       });
       return;
@@ -126,7 +142,7 @@ class _SecretPassphraseScreenState
                 child: _HeroLayout(
                   mnemonic: _mnemonic,
                   isPreparing: _isPreparing,
-                  isCreating: _isCreating,
+                  submitPhase: _submitPhase,
                   revealed: _revealed,
                   needsPasswordStep: !security.isPasswordConfigured,
                   prepareError: _prepareError,
@@ -183,7 +199,7 @@ class _HeroLayout extends StatelessWidget {
   const _HeroLayout({
     required this.mnemonic,
     required this.isPreparing,
-    required this.isCreating,
+    required this.submitPhase,
     required this.revealed,
     required this.needsPasswordStep,
     required this.prepareError,
@@ -194,7 +210,7 @@ class _HeroLayout extends StatelessWidget {
 
   final String? mnemonic;
   final bool isPreparing;
-  final bool isCreating;
+  final _CreateWalletSubmitPhase submitPhase;
   final bool revealed;
   final bool needsPasswordStep;
   final String? prepareError;
@@ -219,7 +235,7 @@ class _HeroLayout extends StatelessWidget {
         ),
         _BottomActions(
           isPreparing: isPreparing,
-          isCreating: isCreating,
+          submitPhase: submitPhase,
           revealed: revealed,
           needsPasswordStep: needsPasswordStep,
           submitError: submitError,
@@ -281,7 +297,7 @@ class _HeroBlock extends StatelessWidget {
 class _BottomActions extends StatelessWidget {
   const _BottomActions({
     required this.isPreparing,
-    required this.isCreating,
+    required this.submitPhase,
     required this.revealed,
     required this.needsPasswordStep,
     required this.submitError,
@@ -289,7 +305,7 @@ class _BottomActions extends StatelessWidget {
   });
 
   final bool isPreparing;
-  final bool isCreating;
+  final _CreateWalletSubmitPhase submitPhase;
   final bool revealed;
   final bool needsPasswordStep;
   final String? submitError;
@@ -299,22 +315,24 @@ class _BottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isSubmitting = submitPhase != _CreateWalletSubmitPhase.idle;
     return Column(
       children: [
         AppButton(
-          onPressed: !isPreparing && !isCreating ? onPrimaryPressed : null,
+          onPressed: !isPreparing && !isSubmitting ? onPrimaryPressed : null,
           variant: AppButtonVariant.primary,
           minWidth: _buttonWidth,
           trailing: const AppIcon(AppIcons.chevronForward),
-          child: Text(
-            isCreating
-                ? 'Creating wallet...'
-                : revealed
-                ? needsPasswordStep
-                      ? 'Continue to Set Password'
-                      : 'I’m ready to use Vizor'
-                : 'Reveal the Phrase',
-          ),
+          child: Text(switch (submitPhase) {
+            _CreateWalletSubmitPhase.stoppingSync => 'Stop syncing...',
+            _CreateWalletSubmitPhase.creating => 'Creating wallet...',
+            _CreateWalletSubmitPhase.idle =>
+              revealed
+                  ? needsPasswordStep
+                        ? 'Continue to Set Password'
+                        : 'I’m ready to use Vizor'
+                  : 'Reveal the Phrase',
+          }),
         ),
         if (submitError != null) ...[
           const SizedBox(height: AppSpacing.xs),
