@@ -43,7 +43,6 @@ class _ImportWalletBirthdayScreenState
   bool _isSubmitting = false;
   String? _metadataError;
   String? _submitError;
-  bool _redirectScheduled = false;
   int _estimateSeq = 0;
 
   @override
@@ -75,15 +74,6 @@ class _ImportWalletBirthdayScreenState
     if (mounted) setState(() {});
   }
 
-  void _scheduleReturnToImport() {
-    if (_redirectScheduled) return;
-    _redirectScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      context.go('/import');
-    });
-  }
-
   Future<void> _loadMetadata() async {
     setState(() {
       _isLoadingMetadata = true;
@@ -101,7 +91,7 @@ class _ImportWalletBirthdayScreenState
       });
 
       final draft = ref.read(importDraftProvider);
-      if (draft.selectedDate != null && draft.estimatedBirthdayHeight == null) {
+      if (draft.selectedDate != null && draft.birthdayHeight == null) {
         await _estimateSelectedDate(draft.selectedDate!);
       }
     } catch (e, st) {
@@ -131,7 +121,7 @@ class _ImportWalletBirthdayScreenState
       if (!mounted || seq != _estimateSeq) return;
       ref
           .read(importDraftProvider.notifier)
-          .setSelectedDate(date, estimatedBirthdayHeight: estimatedHeight);
+          .setSelectedDate(date, birthdayHeight: estimatedHeight);
       setState(() {
         _isEstimating = false;
       });
@@ -158,7 +148,7 @@ class _ImportWalletBirthdayScreenState
     ref.read(importDraftProvider.notifier).setTab(tab);
     if (tab == ImportBirthdayTab.date &&
         draft.selectedDate != null &&
-        draft.estimatedBirthdayHeight == null &&
+        draft.birthdayHeight == null &&
         !_isEstimating) {
       _estimateSelectedDate(draft.selectedDate!);
     }
@@ -280,6 +270,9 @@ class _ImportWalletBirthdayScreenState
     try {
       final security = ref.read(appSecurityProvider);
       if (!security.isPasswordConfigured) {
+        ref
+            .read(importDraftProvider.notifier)
+            .setBirthdayHeight(birthdayHeight);
         if (!mounted) return;
         context.go(
           '/import/set-password',
@@ -313,7 +306,7 @@ class _ImportWalletBirthdayScreenState
 
   int? _resolvedBirthdayHeight(ImportDraftState draft) {
     return switch (draft.selectedTab) {
-      ImportBirthdayTab.date => draft.estimatedBirthdayHeight,
+      ImportBirthdayTab.date => draft.birthdayHeight,
       ImportBirthdayTab.blockHeight => _validatedManualHeight,
     };
   }
@@ -357,9 +350,7 @@ class _ImportWalletBirthdayScreenState
   bool _isSubmitEnabled(ImportDraftState draft) {
     return switch (draft.selectedTab) {
       ImportBirthdayTab.date =>
-        draft.estimatedBirthdayHeight != null &&
-            !_isSubmitting &&
-            !_isEstimating,
+        draft.birthdayHeight != null && !_isSubmitting && !_isEstimating,
       ImportBirthdayTab.blockHeight =>
         _validatedManualHeight != null && !_isSubmitting,
     };
@@ -369,9 +360,6 @@ class _ImportWalletBirthdayScreenState
   Widget build(BuildContext context) {
     final draft = ref.watch(importDraftProvider);
     final security = ref.watch(appSecurityProvider);
-    if (!draft.hasMnemonic && !_isSubmitting) {
-      _scheduleReturnToImport();
-    }
 
     final activeTab = draft.selectedTab;
     final buttonLabel = _isSubmitting
@@ -486,8 +474,8 @@ class _ImportWalletBirthdayScreenState
                         AppButton(
                           onPressed: activeTab == ImportBirthdayTab.date
                               ? () => _handleTabSelected(
-                                    ImportBirthdayTab.blockHeight,
-                                  )
+                                  ImportBirthdayTab.blockHeight,
+                                )
                               : () {},
                           variant: AppButtonVariant.ghost,
                           minWidth: _buttonWidth,

@@ -208,6 +208,10 @@ final _routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/import/birthday',
+        redirect: (_, _) {
+          final draft = ref.read(importDraftProvider);
+          return draft.hasMnemonic ? null : '/import';
+        },
         pageBuilder: (context, state) => CustomTransitionPage<void>(
           key: state.pageKey,
           transitionDuration: kOnboardingForwardDuration,
@@ -218,22 +222,21 @@ final _routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/import/set-password',
+        redirect: (_, state) {
+          if (state.extra is SetPasswordScreenArgs) return null;
+          final draft = ref.read(importDraftProvider);
+          return draft.hasMnemonic ? '/import/birthday' : '/import';
+        },
         pageBuilder: (context, state) {
           final args = state.extra is SetPasswordScreenArgs
               ? state.extra as SetPasswordScreenArgs
               : null;
-          final draft = ref.read(importDraftProvider);
-          final child = args != null
-              ? SetPasswordScreen(args: args)
-              : draft.hasMnemonic
-              ? const ImportWalletBirthdayScreen()
-              : const ImportSecretPassphraseScreen();
 
           return CustomTransitionPage<void>(
             key: state.pageKey,
             transitionDuration: kOnboardingForwardDuration,
             reverseTransitionDuration: kOnboardingReverseDuration,
-            child: child,
+            child: SetPasswordScreen(args: args),
             transitionsBuilder: _onboardingFadeTransition,
           );
         },

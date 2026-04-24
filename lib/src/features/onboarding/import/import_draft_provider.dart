@@ -7,14 +7,14 @@ class ImportDraftState {
     this.mnemonic,
     this.selectedTab = ImportBirthdayTab.date,
     this.selectedDate,
-    this.estimatedBirthdayHeight,
+    this.birthdayHeight,
     this.manualBirthdayHeightText = '',
   });
 
   final String? mnemonic;
   final ImportBirthdayTab selectedTab;
   final DateTime? selectedDate;
-  final int? estimatedBirthdayHeight;
+  final int? birthdayHeight;
   final String manualBirthdayHeightText;
 
   bool get hasMnemonic => mnemonic != null && mnemonic!.trim().isNotEmpty;
@@ -23,10 +23,10 @@ class ImportDraftState {
     String? mnemonic,
     ImportBirthdayTab? selectedTab,
     DateTime? selectedDate,
-    int? estimatedBirthdayHeight,
+    int? birthdayHeight,
     String? manualBirthdayHeightText,
     bool clearSelectedDate = false,
-    bool clearEstimatedBirthdayHeight = false,
+    bool clearBirthdayHeight = false,
   }) {
     return ImportDraftState(
       mnemonic: mnemonic ?? this.mnemonic,
@@ -34,9 +34,9 @@ class ImportDraftState {
       selectedDate: clearSelectedDate
           ? null
           : selectedDate ?? this.selectedDate,
-      estimatedBirthdayHeight: clearEstimatedBirthdayHeight
+      birthdayHeight: clearBirthdayHeight
           ? null
-          : estimatedBirthdayHeight ?? this.estimatedBirthdayHeight,
+          : birthdayHeight ?? this.birthdayHeight,
       manualBirthdayHeightText:
           manualBirthdayHeightText ?? this.manualBirthdayHeightText,
     );
@@ -52,22 +52,27 @@ class ImportDraftNotifier extends Notifier<ImportDraftState> {
   }
 
   void setTab(ImportBirthdayTab tab) {
-    state = state.copyWith(selectedTab: tab);
+    state = state.copyWith(selectedTab: tab, clearBirthdayHeight: true);
   }
 
-  void setSelectedDate(DateTime? date, {int? estimatedBirthdayHeight}) {
-    final shouldClearEstimate =
-        date == null || estimatedBirthdayHeight == null;
+  void setSelectedDate(DateTime? date, {int? birthdayHeight}) {
     state = state.copyWith(
       selectedDate: date,
-      estimatedBirthdayHeight: estimatedBirthdayHeight,
+      birthdayHeight: birthdayHeight,
       clearSelectedDate: date == null,
-      clearEstimatedBirthdayHeight: shouldClearEstimate,
+      clearBirthdayHeight: date == null || birthdayHeight == null,
     );
   }
 
   void setManualBirthdayHeightText(String value) {
-    state = state.copyWith(manualBirthdayHeightText: value);
+    state = state.copyWith(
+      manualBirthdayHeightText: value,
+      clearBirthdayHeight: true,
+    );
+  }
+
+  void setBirthdayHeight(int height) {
+    state = state.copyWith(birthdayHeight: height);
   }
 
   void clear() {
