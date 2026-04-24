@@ -92,7 +92,7 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
           );
         }
 
-        await securityNotifier.commitPasswordSetup(password);
+        securityNotifier.commitPasswordSetup();
         passwordCommitted = true;
         router.go('/home');
       });

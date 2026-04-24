@@ -38,7 +38,7 @@ class AppSecurityNotifier extends Notifier<AppSecurityState> {
 
   Future<void> configurePassword(String password) async {
     await preparePasswordSetup(password);
-    await commitPasswordSetup(password);
+    commitPasswordSetup();
   }
 
   Future<void> preparePasswordSetup(String password) async {
@@ -52,23 +52,17 @@ class AppSecurityNotifier extends Notifier<AppSecurityState> {
     if (error != null) {
       throw ArgumentError(error);
     }
-    // Account creation/import needs an unlocked secure-storage session to
-    // persist the mnemonic, but publishing the app security state here would
-    // expose a half-completed onboarding state to the router.
-    _store.setSessionPassword(password);
+    // Persist the verifier and open the secure-storage session before account
+    // creation/import writes the encrypted mnemonic. Publishing provider state
+    // is still delayed until commit so the router never sees half-completed
+    // onboarding.
+    await _store.configurePassword(password);
     _isPasswordSetupPrepared = true;
   }
 
-  Future<void> commitPasswordSetup(String password) async {
+  void commitPasswordSetup() {
     if (!_isPasswordSetupPrepared) {
       throw StateError('Password setup was not prepared.');
-    }
-    try {
-      await _store.configurePassword(password);
-    } catch (_) {
-      _isPasswordSetupPrepared = false;
-      await _store.clearPasswordConfiguration();
-      rethrow;
     }
     _isPasswordSetupPrepared = false;
     state = const AppSecurityState(
@@ -80,7 +74,7 @@ class AppSecurityNotifier extends Notifier<AppSecurityState> {
   Future<void> rollbackPasswordSetup() async {
     if (!_isPasswordSetupPrepared) return;
     _isPasswordSetupPrepared = false;
-    _store.clearSessionPassword();
+    await _store.clearPasswordConfiguration();
   }
 
   Future<bool> unlock(String password) async {
