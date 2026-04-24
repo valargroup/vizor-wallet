@@ -1,6 +1,5 @@
-import 'dart:io' show Platform, exit;
+import 'dart:io' show exit;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'
     show AlertDialog, Colors, Scaffold, TextButton, TextStyle, showDialog;
 import 'package:flutter/widgets.dart';
@@ -190,25 +189,23 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                       trailing: const AppIcon(AppIcons.chevronForward),
                       child: Text(_isSubmitting ? 'Unlocking...' : 'Unlock'),
                     ),
-                    if (kDebugMode && Platform.isMacOS) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _resetWallet(context),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.xs,
-                            vertical: AppSpacing.xxs,
-                          ),
-                          child: Text(
-                            'Reset State',
-                            style: AppTypography.labelLarge.copyWith(
-                              color: colors.text.warning,
-                            ),
+                    const SizedBox(height: AppSpacing.xs),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _resetWallet(context),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xs,
+                          vertical: AppSpacing.xxs,
+                        ),
+                        child: Text(
+                          'Reset State',
+                          style: AppTypography.labelLarge.copyWith(
+                            color: colors.text.warning,
                           ),
                         ),
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),
