@@ -18,6 +18,20 @@ use zip32::fingerprint::SeedFingerprint;
 
 use crate::wallet::network::WalletNetwork;
 
+type WalletDatabase = WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>;
+
+const WALLET_DB_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn open_wallet_db(db_path: &str, network: WalletNetwork) -> Result<WalletDatabase, String> {
+    let conn = rusqlite::Connection::open(db_path)
+        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    conn.busy_timeout(WALLET_DB_BUSY_TIMEOUT)
+        .map_err(|e| format!("Failed to configure wallet DB busy timeout: {e}"))?;
+    rusqlite::vtab::array::load_module(&conn)
+        .map_err(|e| format!("Failed to load SQLite array module: {e}"))?;
+    Ok(WalletDb::from_connection(conn, network, SystemClock, OsRng))
+}
+
 /// Generate a new 24-word BIP-39 mnemonic phrase.
 pub fn generate_mnemonic() -> String {
     let mnemonic = Mnemonic::<English>::generate(Count::Words24);
@@ -40,8 +54,7 @@ pub fn parse_network(network: &str) -> Result<WalletNetwork, String> {
 /// Initialize the wallet database schema. Idempotent — safe to call multiple times.
 /// Called without seed to avoid SeedNotRelevant errors when only Imported accounts exist.
 pub fn ensure_db_initialized(db_path: &str, network: WalletNetwork) -> Result<(), String> {
-    let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    let mut db = open_wallet_db(db_path, network)?;
     init_wallet_db(&mut db, None).map_err(|e| format!("Failed to init wallet DB: {e}"))?;
     Ok(())
 }
@@ -53,8 +66,7 @@ fn ensure_db_initialized_with_seed(
     network: WalletNetwork,
     seed: &SecretVec<u8>,
 ) -> Result<(), String> {
-    let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    let mut db = open_wallet_db(db_path, network)?;
     init_wallet_db(&mut db, Some(SecretVec::new(seed.expose_secret().to_vec())))
         .map_err(|e| format!("Failed to init wallet DB: {e}"))?;
     Ok(())
@@ -88,8 +100,7 @@ pub fn add_account(
     seed: &SecretVec<u8>,
     birthday_height: Option<u64>,
 ) -> Result<(String, String), String> {
-    let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    let mut db = open_wallet_db(db_path, network)?;
 
     let birthday = make_birthday(network, birthday_height);
 
@@ -143,8 +154,7 @@ pub fn import_hardware_account(
     // Ensure DB is initialized (without seed — hardware wallet has no local seed)
     ensure_db_initialized(db_path, network)?;
 
-    let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    let mut db = open_wallet_db(db_path, network)?;
 
     // Invariant: there must be at least one Derived account already. Otherwise
     // this import would leave the DB in a state where future seed-requiring
@@ -223,8 +233,7 @@ pub fn init_db_and_create_account(
 ) -> Result<(String, String), String> {
     ensure_db_initialized_with_seed(db_path, network, seed)?;
 
-    let mut db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    let mut db = open_wallet_db(db_path, network)?;
 
     let birthday = make_birthday(network, birthday_height);
 
@@ -251,8 +260,7 @@ pub struct AccountInfo {
 
 /// List all accounts in the wallet database.
 pub fn list_accounts(db_path: &str, network: WalletNetwork) -> Result<Vec<AccountInfo>, String> {
-    let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    let db = open_wallet_db(db_path, network)?;
 
     let account_ids = db
         .get_account_ids()
@@ -293,7 +301,7 @@ pub fn parse_account_uuid(s: &str) -> Result<AccountUuid, String> {
 
 /// Resolve account_id: if uuid provided, parse it; otherwise take first account.
 fn resolve_account_id(
-    db: &WalletDb<rusqlite::Connection, WalletNetwork, SystemClock, OsRng>,
+    db: &WalletDatabase,
     account_uuid: Option<&str>,
 ) -> Result<AccountUuid, String> {
     match account_uuid {
@@ -315,8 +323,7 @@ pub fn get_address_from_db(
     network: WalletNetwork,
     account_uuid: Option<&str>,
 ) -> Result<String, String> {
-    let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    let db = open_wallet_db(db_path, network)?;
 
     let account_id = resolve_account_id(&db, account_uuid)?;
 
@@ -365,8 +372,7 @@ pub fn get_transparent_address_from_db(
     network: WalletNetwork,
     account_uuid: Option<&str>,
 ) -> Result<String, String> {
-    let db = WalletDb::for_path(db_path, network, SystemClock, OsRng)
-        .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    let db = open_wallet_db(db_path, network)?;
 
     let account_id = resolve_account_id(&db, account_uuid)?;
 

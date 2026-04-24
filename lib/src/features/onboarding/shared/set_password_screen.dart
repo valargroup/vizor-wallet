@@ -13,6 +13,7 @@ import '../../../core/widgets/password_text_field.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
 import '../../../providers/router_refresh_provider.dart';
+import '../../../providers/wallet_mutation_guard.dart';
 import '../create/onboarding_split_view.dart';
 import '../import/import_split_view.dart';
 import 'onboarding_flow_args.dart';
@@ -81,16 +82,18 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
         await securityNotifier.preparePasswordSetup(password);
         passwordPrepared = true;
 
-        if (args.isImport) {
-          await accountNotifier.importAccount(
-            mnemonic: args.mnemonic,
-            birthdayHeight: args.importBirthdayHeight,
-          );
-        } else {
-          await accountNotifier.createAccountFromMnemonic(
-            mnemonic: args.mnemonic,
-          );
-        }
+        await runWithSyncPausedForAccountMutation(ref, () async {
+          if (args.isImport) {
+            await accountNotifier.importAccount(
+              mnemonic: args.mnemonic,
+              birthdayHeight: args.importBirthdayHeight,
+            );
+          } else {
+            await accountNotifier.createAccountFromMnemonic(
+              mnemonic: args.mnemonic,
+            );
+          }
+        });
 
         securityNotifier.commitPasswordSetup();
         passwordCommitted = true;

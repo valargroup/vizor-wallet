@@ -13,6 +13,7 @@ import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
+import '../../../providers/wallet_mutation_guard.dart';
 import '../shared/onboarding_flow_args.dart';
 import 'import_birthday_estimator.dart';
 import 'import_split_view.dart';
@@ -293,9 +294,12 @@ class _ImportWalletBirthdayScreenState
 
       final accountNotifier = ref.read(accountProvider.notifier);
       final router = GoRouter.of(context);
-      await accountNotifier.importAccount(
-        mnemonic: mnemonic,
-        birthdayHeight: birthdayHeight,
+      await runWithSyncPausedForAccountMutation(
+        ref,
+        () => accountNotifier.importAccount(
+          mnemonic: mnemonic,
+          birthdayHeight: birthdayHeight,
+        ),
       );
       router.go('/home');
     } catch (e, st) {

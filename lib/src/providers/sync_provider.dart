@@ -92,6 +92,18 @@ class SyncState {
   }
 }
 
+class WalletMutationSyncPause {
+  final bool hadActiveSync;
+  final bool hadPolling;
+  final bool hadBackgroundSync;
+
+  const WalletMutationSyncPause({
+    required this.hadActiveSync,
+    required this.hadPolling,
+    required this.hadBackgroundSync,
+  });
+}
+
 class SyncNotifier extends AsyncNotifier<SyncState> {
   late final BackgroundSyncDelegate _bgDelegate;
   bool _isSyncing = false;
@@ -456,6 +468,76 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         recentTransactions: prev?.recentTransactions ?? const [],
       ),
     );
+  }
+
+  Future<WalletMutationSyncPause> pauseForWalletMutation() async {
+    final pause = WalletMutationSyncPause(
+      hadActiveSync: _isSyncing || rust_sync.isSyncRunning(),
+      hadPolling: _pollTimer != null,
+      hadBackgroundSync: _bgDelegate.isActive,
+    );
+
+    if (!pause.hadActiveSync &&
+        !pause.hadPolling &&
+        !pause.hadBackgroundSync &&
+        !rust_sync.isMempoolObserverRunning()) {
+      return pause;
+    }
+
+    log('SyncNotifier: pausing sync for wallet DB mutation');
+    ++_syncGen;
+    _stopPolling();
+    _isSyncing = false;
+    rust_sync.setSyncMode(mode: 0);
+    rust_sync.cancelFullSync();
+    _stopMempoolObserver();
+    await _syncSub?.cancel();
+    _syncSub = null;
+
+    if (_bgDelegate.isActive) {
+      try {
+        await _bgDelegate.shutdownForLock();
+      } catch (e) {
+        log(
+          'SyncNotifier: background shutdown before wallet mutation failed: $e',
+        );
+      }
+    }
+
+    final prev = state.value;
+    if (prev != null) {
+      state = AsyncData(
+        prev.copyWith(isSyncing: false, isBackgroundMode: false, phase: ''),
+      );
+    }
+
+    final stopped = await _waitForRustTasksToStop(
+      timeoutMs: 120000,
+      onSyncTimeout:
+          'SyncNotifier: timed out waiting for Rust sync to stop before wallet '
+          'mutation',
+      onMempoolTimeout:
+          'SyncNotifier: timed out waiting for mempool observer to stop before '
+          'wallet mutation',
+    );
+    if (!stopped) {
+      resumeAfterWalletMutation(pause);
+      throw StateError('Sync did not stop before wallet database mutation.');
+    }
+
+    return pause;
+  }
+
+  void resumeAfterWalletMutation(WalletMutationSyncPause pause) {
+    if (_requiresUnlock) return;
+
+    if (pause.hadActiveSync || pause.hadBackgroundSync) {
+      log('SyncNotifier: resuming sync after wallet DB mutation');
+      startSync();
+    }
+    if (pause.hadPolling || pause.hadActiveSync || pause.hadBackgroundSync) {
+      _startPolling();
+    }
   }
 
   Future<void> clearSensitiveStateForLock() async {

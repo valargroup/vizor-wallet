@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
 import '../../../providers/account_provider.dart';
+import '../../../providers/wallet_mutation_guard.dart';
 import '../../../rust/wallet/keystone.dart' show KeystoneAccountInfo;
 import '../../../services/keystone_transport.dart';
 import '../../../services/qr_scanner.dart';
@@ -12,7 +13,8 @@ class ImportKeystoneScreen extends ConsumerStatefulWidget {
   const ImportKeystoneScreen({super.key});
 
   @override
-  ConsumerState<ImportKeystoneScreen> createState() => _ImportKeystoneScreenState();
+  ConsumerState<ImportKeystoneScreen> createState() =>
+      _ImportKeystoneScreenState();
 }
 
 class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
@@ -28,34 +30,54 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
 
   Future<void> _connectAndGetAccounts() async {
     if (!QrScanner.isAvailable) {
-      setState(() { _error = 'QR scanning not available on this platform'; _isLoading = false; });
+      setState(() {
+        _error = 'QR scanning not available on this platform';
+        _isLoading = false;
+      });
       return;
     }
 
-    setState(() { _isLoading = true; _error = null; });
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
     try {
       final qrTransport = QrKeystoneTransport();
       final accounts = await qrTransport.getAccounts(context);
 
       if (!mounted) return;
-      setState(() { _accounts = accounts; _isLoading = false; });
+      setState(() {
+        _accounts = accounts;
+        _isLoading = false;
+      });
     } catch (e) {
       log('ImportKeystone: error: $e');
       if (!mounted) return;
-      setState(() { _error = e.toString(); _isLoading = false; });
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
   Future<void> _importAccount(KeystoneAccountInfo info) async {
-    setState(() { _isLoading = true; _error = null; });
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
     try {
-      await ref.read(accountProvider.notifier).importKeystoneAccount(
-        name: info.name,
-        ufvk: info.ufvk,
-        seedFingerprint: info.seedFingerprint.toList(),
-        zip32Index: info.index,
+      await runWithSyncPausedForAccountMutation(
+        ref,
+        () => ref
+            .read(accountProvider.notifier)
+            .importKeystoneAccount(
+              name: info.name,
+              ufvk: info.ufvk,
+              seedFingerprint: info.seedFingerprint.toList(),
+              zip32Index: info.index,
+            ),
       );
 
       if (!mounted) return;
@@ -64,7 +86,10 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
     } catch (e) {
       log('ImportKeystone: import error: $e');
       if (!mounted) return;
-      setState(() { _error = e.toString(); _isLoading = false; });
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
@@ -87,30 +112,33 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
               ),
             )
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline, color: colors.error, size: 48),
-                        const SizedBox(height: 16),
-                        Text('Connection Failed', style: text.titleLarge),
-                        const SizedBox(height: 8),
-                        Text(_error!, textAlign: TextAlign.center,
-                            style: text.bodyMedium?.copyWith(color: colors.outline)),
-                        const SizedBox(height: 24),
-                        FilledButton(
-                          onPressed: _connectAndGetAccounts,
-                          child: const Text('Retry'),
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, color: colors.error, size: 48),
+                    const SizedBox(height: 16),
+                    Text('Connection Failed', style: text.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: text.bodyMedium?.copyWith(color: colors.outline),
                     ),
-                  ),
-                )
-              : _accounts != null
-                  ? _buildAccountList()
-                  : const SizedBox.shrink(),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: _connectAndGetAccounts,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : _accounts != null
+          ? _buildAccountList()
+          : const SizedBox.shrink(),
     );
   }
 
@@ -129,8 +157,10 @@ class _ImportKeystoneScreenState extends ConsumerState<ImportKeystoneScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 16),
-          child: Text('Select an account to import',
-              style: text.titleMedium?.copyWith(color: colors.outline)),
+          child: Text(
+            'Select an account to import',
+            style: text.titleMedium?.copyWith(color: colors.outline),
+          ),
         ),
         for (final account in _accounts!)
           Card(

@@ -14,6 +14,7 @@ import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
+import '../../../providers/wallet_mutation_guard.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import 'onboarding_split_view.dart';
 import '../shared/onboarding_flow_args.dart';
@@ -89,7 +90,10 @@ class _SecretPassphraseScreenState
     final router = GoRouter.of(context);
     final accountNotifier = ref.read(accountProvider.notifier);
     try {
-      await accountNotifier.createAccountFromMnemonic(mnemonic: mnemonic);
+      await runWithSyncPausedForAccountMutation(
+        ref,
+        () => accountNotifier.createAccountFromMnemonic(mnemonic: mnemonic),
+      );
     } catch (e, st) {
       log('SecretPassphraseScreen._handlePrimaryAction: ERROR: $e\n$st');
       if (!mounted) return;
