@@ -22,11 +22,27 @@ pub(crate) fn open_wallet_db_with_timeout(
 ) -> Result<WalletDatabase, String> {
     let conn = rusqlite::Connection::open(db_path)
         .map_err(|e| format!("Failed to open wallet DB: {e}"))?;
+    configure_wallet_connection(&conn, timeout)?;
+    Ok(WalletDb::from_connection(conn, network, SystemClock, OsRng))
+}
+
+fn configure_wallet_connection(
+    conn: &rusqlite::Connection,
+    timeout: Duration,
+) -> Result<(), String> {
     conn.busy_timeout(timeout)
         .map_err(|e| format!("Failed to configure wallet DB busy timeout: {e}"))?;
-    rusqlite::vtab::array::load_module(&conn)
+    let journal_mode: String = conn
+        .pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))
+        .map_err(|e| format!("Failed to enable wallet DB WAL mode: {e}"))?;
+    if !journal_mode.eq_ignore_ascii_case("wal") {
+        return Err(format!(
+            "Failed to enable wallet DB WAL mode: SQLite returned journal_mode={journal_mode}"
+        ));
+    }
+    rusqlite::vtab::array::load_module(conn)
         .map_err(|e| format!("Failed to load SQLite array module: {e}"))?;
-    Ok(WalletDb::from_connection(conn, network, SystemClock, OsRng))
+    Ok(())
 }
 
 pub(crate) fn open_readonly_conn_with_timeout(
@@ -41,4 +57,22 @@ pub(crate) fn open_readonly_conn_with_timeout(
             .map_err(|e| format!("Failed to configure DB busy timeout: {e}"))?;
     }
     Ok(conn)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn configure_wallet_connection_enables_wal_mode() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let conn = rusqlite::Connection::open(file.path()).unwrap();
+
+        configure_wallet_connection(&conn, Duration::from_millis(1)).unwrap();
+
+        let journal_mode: String = conn
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
+            .unwrap();
+        assert_eq!(journal_mode.to_ascii_lowercase(), "wal");
+    }
 }
