@@ -995,15 +995,7 @@ class _CachedQrBitmapState extends State<_CachedQrBitmap> {
             clipper: const _ReceiveQrEmbeddedImageClipper(),
             position: PrettyQrDecorationImagePosition.embedded,
           ),
-          // ignore: experimental_member_use
-          shape: PrettyQrShape.custom(
-            PrettyQrSmoothSymbol(roundFactor: 1, color: widget.color),
-            finderPattern: PrettyQrDotsSymbol(
-              color: widget.color,
-              density: 1,
-              unifiedFinderPattern: true,
-            ),
-          ),
+          shape: PrettyQrSmoothSymbol(roundFactor: 1, color: widget.color),
         ),
       );
       if (!mounted || generation != _generation) {
