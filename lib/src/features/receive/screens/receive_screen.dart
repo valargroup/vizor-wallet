@@ -477,30 +477,28 @@ class _ReceiveQrMetrics {
     required this.renewTop,
     required this.renewSize,
     required this.overlaySize,
-    required this.qrPadding,
+    required this.qrPaddingX,
+    required this.qrPaddingY,
   });
 
   static const _baseContentHeight = 520.0;
   static const _fixedBeforeQr = 44.0 + AppSpacing.md + 36.0 + AppSpacing.md;
   static const _baseBlockWidth = 356.0;
   static const _baseBlockHeight = 276.5337219238281;
-  static const _baseQrFrameWidth = 194.53372192382812;
-  static const _baseQrFrameHeight = 242.53372192382812;
   static const _baseQrSurfaceSize = 162.53372192382812;
-  static const _baseQrTop = 24.0;
+  static const _baseQrPaddingX = 16.0;
+  static const _baseQrPaddingY = 24.0;
   static const _baseAddressGap = 10.0;
   static const _addressLineHeight = 24.0;
   static const _baseRenewTop = 194.533203125;
   static const _baseRenewSize = 40.0;
-  static const _baseRenewGap = _baseRenewTop - _baseQrTop - _baseQrSurfaceSize;
-  static const _baseRenewBottomGap =
-      _baseQrFrameHeight - _baseRenewTop - _baseRenewSize;
+  static const _baseRenewOverlap =
+      _baseQrSurfaceSize + _baseQrPaddingY * 2 - _baseRenewTop;
+  static const _baseRenewBottomGap = 8.000518798828125;
   static const _baseOverlaySize = 36.0;
-  static const _baseQrPadding = AppSpacing.xxs;
-  static const _baseShieldBgLeft = -220.732421875;
-  static const _baseShieldBgTop = -196.7333984375;
   static const _baseShieldBgWidth = 636.0;
   static const _baseShieldBgHeight = 555.0;
+  static const _baseShieldBgCenterYOffset = 40.5;
   static const _minBalancedInset = AppSpacing.md;
   static const _minQrSurfaceSize = 112.0;
 
@@ -518,7 +516,8 @@ class _ReceiveQrMetrics {
   final double renewTop;
   final double renewSize;
   final double overlaySize;
-  final double qrPadding;
+  final double qrPaddingX;
+  final double qrPaddingY;
 
   static _ReceiveQrMetrics fromConstraints(BoxConstraints constraints) {
     final maxContentHeight = constraints.maxHeight.isFinite
@@ -533,28 +532,18 @@ class _ReceiveQrMetrics {
       maxContentHeight - _fixedBeforeQr - _minBalancedInset * 2,
     );
 
-    const frameToSurface =
-        (_baseQrTop +
-            _baseQrSurfaceSize +
-            _baseRenewGap +
-            _baseRenewBottomGap) /
-        _baseQrSurfaceSize;
+    const frameHeightExtra =
+        _baseQrPaddingY * 2 +
+        _baseRenewSize -
+        _baseRenewOverlap +
+        _baseRenewBottomGap;
+    const blockHeightExtra =
+        frameHeightExtra + _baseAddressGap + _addressLineHeight;
     final preferredBlockHeight =
         _baseBlockHeight + math.max(0, maxContentHeight - _baseContentHeight);
-    final preferredSurface =
-        (preferredBlockHeight -
-            _baseRenewSize -
-            _baseAddressGap -
-            _addressLineHeight) /
-        frameToSurface;
-    final maxSurfaceByHeight =
-        (maxBlockHeightByHeight -
-            _baseRenewSize -
-            _baseAddressGap -
-            _addressLineHeight) /
-        frameToSurface;
-    final blockWidthToSurface = _baseBlockWidth / _baseQrSurfaceSize;
-    final maxSurfaceByWidth = maxContentWidth / blockWidthToSurface;
+    final preferredSurface = preferredBlockHeight - blockHeightExtra;
+    final maxSurfaceByHeight = maxBlockHeightByHeight - blockHeightExtra;
+    final maxSurfaceByWidth = maxContentWidth - _baseQrPaddingX * 2;
 
     final qrSurfaceSize = math.max(
       _minQrSurfaceSize,
@@ -564,14 +553,16 @@ class _ReceiveQrMetrics {
       ),
     );
     final scale = qrSurfaceSize / _baseQrSurfaceSize;
-    final qrFrameWidth = _baseQrFrameWidth * scale;
+    final qrFrameWidth = qrSurfaceSize + _baseQrPaddingX * 2;
     final qrFrameHeight =
-        _baseQrTop * scale +
         qrSurfaceSize +
-        _baseRenewGap * scale +
+        _baseQrPaddingY * 2 +
         _baseRenewSize +
-        _baseRenewBottomGap * scale;
-    final computedBlockWidth = _baseBlockWidth * scale;
+        _baseRenewBottomGap -
+        _baseRenewOverlap;
+    final shieldBgWidth = _baseShieldBgWidth * scale;
+    final shieldBgHeight = _baseShieldBgHeight * scale;
+    final computedBlockWidth = math.max(_baseBlockWidth, qrFrameWidth);
 
     return _ReceiveQrMetrics(
       blockWidth: math.min(maxContentWidth, computedBlockWidth),
@@ -579,16 +570,20 @@ class _ReceiveQrMetrics {
       qrFrameWidth: qrFrameWidth,
       qrFrameHeight: qrFrameHeight,
       qrSurfaceSize: qrSurfaceSize,
-      qrTop: _baseQrTop * scale,
+      qrTop: 0,
       addressGap: _baseAddressGap,
-      shieldBgLeft: _baseShieldBgLeft * scale,
-      shieldBgTop: _baseShieldBgTop * scale,
-      shieldBgWidth: _baseShieldBgWidth * scale,
-      shieldBgHeight: _baseShieldBgHeight * scale,
-      renewTop: _baseRenewTop * scale,
+      shieldBgLeft: qrFrameWidth / 2 - shieldBgWidth / 2,
+      shieldBgTop:
+          qrFrameHeight / 2 -
+          _baseShieldBgCenterYOffset * scale -
+          shieldBgHeight / 2,
+      shieldBgWidth: shieldBgWidth,
+      shieldBgHeight: shieldBgHeight,
+      renewTop: qrSurfaceSize + _baseQrPaddingY * 2 - _baseRenewOverlap,
       renewSize: _baseRenewSize,
       overlaySize: _baseOverlaySize * scale,
-      qrPadding: math.max(_baseQrPadding, _baseQrPadding * scale),
+      qrPaddingX: _baseQrPaddingX,
+      qrPaddingY: _baseQrPaddingY,
     );
   }
 }
@@ -810,7 +805,8 @@ class _ReceiveQrBlock extends StatelessWidget {
                   child: _QrSurface(
                     address: address,
                     size: metrics.qrSurfaceSize,
-                    padding: metrics.qrPadding,
+                    paddingX: metrics.qrPaddingX,
+                    paddingY: metrics.qrPaddingY,
                     overlaySize: metrics.overlaySize,
                     iconName: _isShielded
                         ? AppIcons.shieldKeyhole
@@ -841,14 +837,18 @@ class _QrSurface extends StatelessWidget {
   const _QrSurface({
     required this.address,
     required this.size,
-    required this.padding,
+    required this.paddingX,
+    required this.paddingY,
     required this.overlaySize,
     required this.iconName,
   });
 
+  static const _wrapperRadius = 24.0;
+
   final String address;
   final double size;
-  final double padding;
+  final double paddingX;
+  final double paddingY;
   final double overlaySize;
   final String iconName;
 
@@ -856,27 +856,22 @@ class _QrSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final qrColor = colors.text.accent;
-    final qrBackground = colors.background.ground;
+    final qrBackground = colors.background.base;
     final iconBg = colors.background.ground.withValues(alpha: 0.96);
-    final qrImageSize = math.max(0.0, size - padding * 2);
 
     return Container(
-      width: size,
-      height: size,
-      padding: EdgeInsets.all(padding),
+      width: size + paddingX * 2,
+      height: size + paddingY * 2,
+      padding: EdgeInsets.symmetric(horizontal: paddingX, vertical: paddingY),
       decoration: BoxDecoration(
         color: qrBackground,
-        borderRadius: BorderRadius.circular(AppRadii.small),
+        borderRadius: BorderRadius.circular(_wrapperRadius),
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
           if (address.isNotEmpty)
-            _CachedQrBitmap(
-              data: 'zcash:$address',
-              color: qrColor,
-              size: qrImageSize,
-            )
+            _CachedQrBitmap(data: 'zcash:$address', color: qrColor, size: size)
           else
             Center(
               child: Text(
