@@ -888,7 +888,7 @@ class _QrSurface extends StatelessWidget {
       ),
       child: address.isNotEmpty
           ? _CachedQrBitmap(
-              data: 'zcash:$address',
+              data: address,
               color: qrColor,
               size: size,
               embeddedImageAsset: embeddedImageAsset,
@@ -979,7 +979,7 @@ class _CachedQrBitmapState extends State<_CachedQrBitmap> {
     try {
       final qrCode = QrCode.fromData(
         data: widget.data,
-        errorCorrectLevel: QrErrorCorrectLevel.H,
+        errorCorrectLevel: QrErrorCorrectLevel.M,
       );
       final qrImage = QrImage(qrCode);
       final image = await qrImage.toImage(
