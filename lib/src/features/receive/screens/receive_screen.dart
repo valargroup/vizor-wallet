@@ -46,11 +46,11 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(appLayoutProvider.notifier).setMode(AppLayoutMode.large);
-      _loadAddresses(generateShielded: true);
+      _loadAddresses();
     });
   }
 
-  Future<void> _loadAddresses({required bool generateShielded}) async {
+  Future<void> _loadAddresses() async {
     final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
     final walletAddress = ref.read(walletProvider).value?.unifiedAddress;
     if (accountUuid == null) {
@@ -67,38 +67,26 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
       _errorText = null;
       _activeAccountUuid = accountUuid;
       _isRenewingShielded = false;
-      if (generateShielded) _shieldedAddress = null;
+      _shieldedAddress = walletAddress;
       _transparentAddress = null;
     });
 
     try {
       final dbPath = await getWalletDbPath();
-      final transparentFuture = rust_wallet.getTransparentAddress(
+      final transparentAddress = await rust_wallet.getTransparentAddress(
         dbPath: dbPath,
         network: 'main',
         accountUuid: accountUuid,
       );
-      final shieldedFuture = generateShielded
-          ? rust_sync.getNextAvailableAddress(
-              dbPath: dbPath,
-              network: 'main',
-              accountUuid: accountUuid,
-            )
-          : Future<String>.value(_shieldedAddress ?? walletAddress ?? '');
-
-      final results = await Future.wait([shieldedFuture, transparentFuture]);
       if (!mounted) return;
       if (ref.read(accountProvider).value?.activeAccountUuid != accountUuid) {
         return;
       }
       setState(() {
-        _shieldedAddress = results[0];
-        _transparentAddress = results[1];
+        _shieldedAddress = walletAddress ?? _shieldedAddress ?? '';
+        _transparentAddress = transparentAddress;
         _isLoading = false;
       });
-      if (generateShielded) {
-        log('Receive: generated shielded diversified address');
-      }
     } catch (e) {
       log('Receive: ERROR loading addresses: $e');
       if (!mounted) return;
@@ -111,6 +99,8 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
   }
 
   Future<void> _renewShieldedAddress() async {
+    if (_isRenewingShielded) return;
+
     final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
     if (accountUuid == null) return;
 
@@ -170,7 +160,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     ref.listen(accountProvider, (previous, next) {
       final nextUuid = next.value?.activeAccountUuid;
       if (nextUuid != null && nextUuid != _activeAccountUuid) {
-        unawaited(_loadAddresses(generateShielded: true));
+        unawaited(_loadAddresses());
       }
     });
 

@@ -9,7 +9,7 @@ use zcash_client_backend::data_api::{
 use zcash_client_sqlite::{wallet::init::init_wallet_db, AccountUuid};
 use zcash_keys::{
     encoding::encode_transparent_address,
-    keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedSpendingKey},
+    keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
 };
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::{BlockHeight, NetworkConstants, NetworkUpgrade, Parameters};
@@ -286,12 +286,7 @@ pub fn list_accounts(db_path: &str, network: WalletNetwork) -> Result<Vec<Accoun
             .ok_or_else(|| format!("Account not found: {}", id.expose_uuid()))?;
 
         let address = match account.ufvk() {
-            Some(ufvk) => {
-                let (ua, _) = ufvk
-                    .default_address(shielded_address_request())
-                    .map_err(|e| format!("Failed to derive address: {e}"))?;
-                ua.encode(&network)
-            }
+            Some(ufvk) => current_receive_address(&db, network, id, ufvk)?,
             None => String::new(),
         };
 
@@ -346,14 +341,39 @@ pub fn get_address_from_db(
 
     let ufvk = account.ufvk().ok_or("Account does not have a UFVK")?;
 
-    // Try standard shielded request (Orchard + Sapling), fall back to Orchard-only
-    // for hardware wallets that don't have Sapling keys.
-    let (ua, _di) = ufvk
-        .default_address(shielded_address_request())
-        .or_else(|_| ufvk.default_address(orchard_address_request()))
-        .map_err(|e| format!("Failed to derive address: {e}"))?;
+    current_receive_address(&db, network, account_id, ufvk)
+}
 
-    Ok(ua.encode(&network))
+fn current_receive_address(
+    db: &WalletDatabase,
+    network: WalletNetwork,
+    account_id: AccountUuid,
+    ufvk: &UnifiedFullViewingKey,
+) -> Result<String, String> {
+    let address = match ufvk.default_address(shielded_address_request()) {
+        Ok((default, _)) => {
+            let last = db
+                .get_last_generated_address_matching(account_id, shielded_address_request())
+                .map_err(|e| format!("Failed to get last generated shielded address: {e}"))?;
+            last.unwrap_or(default)
+        }
+        Err(shielded_err) => {
+            let (default, _) =
+                ufvk.default_address(orchard_address_request())
+                    .map_err(|orchard_err| {
+                        format!(
+                            "Failed to derive shielded address: {shielded_err}; \
+                         orchard fallback failed: {orchard_err}"
+                        )
+                    })?;
+            let last = db
+                .get_last_generated_address_matching(account_id, orchard_address_request())
+                .map_err(|e| format!("Failed to get last generated orchard address: {e}"))?;
+            last.unwrap_or(default)
+        }
+    };
+
+    Ok(address.encode(&network))
 }
 
 /// Returns the standard shielded address request (Orchard + Sapling, no transparent).
@@ -465,6 +485,43 @@ mod tests {
         // Verify we can read the address back
         let address2 = get_address_from_db(db_path_str, WalletNetwork::Main, None).unwrap();
         assert_eq!(address, address2);
+    }
+
+    #[test]
+    fn test_get_address_returns_last_generated_receive_address() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("wallet.db");
+        let db_path_str = db_path.to_str().unwrap();
+
+        let phrase = generate_mnemonic();
+        let seed = mnemonic_to_seed(&phrase).unwrap();
+
+        let (uuid, default_address) =
+            init_db_and_create_account(db_path_str, WalletNetwork::Main, &seed, None, "test")
+                .unwrap();
+
+        crate::wallet::sync::update_chain_tip(db_path_str, WalletNetwork::Main, 2_500_000).unwrap();
+        let renewed_address = crate::wallet::sync::get_next_available_address(
+            db_path_str,
+            WalletNetwork::Main,
+            &uuid,
+        )
+        .unwrap();
+
+        assert_ne!(default_address, renewed_address);
+        assert_eq!(
+            renewed_address,
+            get_address_from_db(db_path_str, WalletNetwork::Main, Some(&uuid)).unwrap()
+        );
+        assert_eq!(
+            renewed_address,
+            list_accounts(db_path_str, WalletNetwork::Main)
+                .unwrap()
+                .into_iter()
+                .find(|account| account.uuid == uuid)
+                .unwrap()
+                .unified_address
+        );
     }
 
     #[test]
