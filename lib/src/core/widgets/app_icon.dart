@@ -54,6 +54,7 @@ abstract final class AppIcons {
   static const skip = 'skip';
   static const skull = 'skull';
   static const time = 'time';
+  static const transparentBalance = 'transparent_balance';
   static const unlock = 'unlock';
   static const users = 'users';
   static const wallet = 'wallet';
