@@ -9,7 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
 
 import '../../../../main.dart' show log;
 import '../../../core/layout/app_desktop_shell.dart';
@@ -932,7 +932,7 @@ class _CachedQrBitmap extends StatefulWidget {
     required this.size,
   });
 
-  static const _bitmapSize = 1536.0;
+  static const _bitmapSize = 1536;
 
   final String data;
   final Color color;
@@ -971,18 +971,26 @@ class _CachedQrBitmapState extends State<_CachedQrBitmap> {
   Future<void> _renderQr() async {
     final generation = ++_generation;
     try {
-      final painter = QrPainter(
+      final qrCode = QrCode.fromData(
         data: widget.data,
-        version: QrVersions.auto,
-        errorCorrectionLevel: QrErrorCorrectLevel.H,
-        gapless: true,
-        eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: widget.color),
-        dataModuleStyle: QrDataModuleStyle(
-          dataModuleShape: QrDataModuleShape.square,
-          color: widget.color,
+        errorCorrectLevel: QrErrorCorrectLevel.H,
+      );
+      final qrImage = QrImage(qrCode);
+      final image = await qrImage.toImage(
+        size: _CachedQrBitmap._bitmapSize,
+        decoration: PrettyQrDecoration(
+          quietZone: PrettyQrQuietZone.zero,
+          // ignore: experimental_member_use
+          shape: PrettyQrShape.custom(
+            PrettyQrSmoothSymbol(roundFactor: 1, color: widget.color),
+            finderPattern: PrettyQrDotsSymbol(
+              color: widget.color,
+              density: 1,
+              unifiedFinderPattern: true,
+            ),
+          ),
         ),
       );
-      final image = await painter.toImage(_CachedQrBitmap._bitmapSize);
       if (!mounted || generation != _generation) {
         image.dispose();
         return;
