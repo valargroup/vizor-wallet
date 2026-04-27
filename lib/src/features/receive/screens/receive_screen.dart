@@ -1061,6 +1061,8 @@ class _RenewButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    const strokeWidth = 3.0;
+
     return MouseRegion(
       cursor: onTap == null || renewing
           ? SystemMouseCursors.basic
@@ -1068,41 +1070,68 @@ class _RenewButton extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: renewing ? null : onTap,
-        child: Container(
+        child: SizedBox(
           width: size,
           height: size,
-          decoration: BoxDecoration(
-            color: colors.background.ground,
-            shape: BoxShape.circle,
-            border: Border.all(color: colors.border.subtle),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF000000).withValues(alpha: 0.08),
-                blurRadius: 12,
-                offset: const ui.Offset(0, 4),
+          child: CustomPaint(
+            painter: _OutsideCircleBorderPainter(
+              color: colors.background.ground,
+              strokeWidth: strokeWidth,
+            ),
+            child: DecoratedBox(
+              decoration: ShapeDecoration(
+                color: colors.background.base,
+                shape: const CircleBorder(),
               ),
-            ],
-          ),
-          child: Center(
-            child: renewing
-                ? SizedBox(
-                    width: size * 0.4,
-                    height: size * 0.4,
-                    child: CircularProgressIndicator(
-                      strokeWidth: math.max(2, size * 0.05),
-                      color: _brandTeal(context),
-                    ),
-                  )
-                : AppIcon(
-                    AppIcons.renew,
-                    size: size * 0.5,
-                    color: colors.icon.accent,
-                    semanticLabel: 'Renew shielded address',
-                  ),
+              child: Center(
+                child: renewing
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.icon.accent,
+                        ),
+                      )
+                    : AppIcon(
+                        AppIcons.renew,
+                        size: 20,
+                        color: colors.icon.accent,
+                        semanticLabel: 'Renew shielded address',
+                      ),
+              ),
+            ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _OutsideCircleBorderPainter extends CustomPainter {
+  const _OutsideCircleBorderPainter({
+    required this.color,
+    required this.strokeWidth,
+  });
+
+  final Color color;
+  final double strokeWidth;
+
+  @override
+  void paint(ui.Canvas canvas, ui.Size size) {
+    final radius = math.min(size.width, size.height) / 2 + strokeWidth / 2;
+    final center = ui.Offset(size.width / 2, size.height / 2);
+    final paint = ui.Paint()
+      ..color = color
+      ..style = ui.PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _OutsideCircleBorderPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
   }
 }
 
