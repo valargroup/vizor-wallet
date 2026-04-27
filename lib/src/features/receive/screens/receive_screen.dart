@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart'
     show CircularProgressIndicator, ScaffoldMessenger, SnackBar, Theme;
@@ -838,17 +838,10 @@ class _QrSurface extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           if (address.isNotEmpty)
-            QrImageView(
+            _CachedQrBitmap(
               data: 'zcash:$address',
+              color: qrColor,
               size: qrImageSize,
-              version: QrVersions.auto,
-              errorCorrectionLevel: QrErrorCorrectLevel.H,
-              padding: EdgeInsets.zero,
-              eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: qrColor),
-              dataModuleStyle: QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: qrColor,
-              ),
             )
           else
             Center(
@@ -877,6 +870,128 @@ class _QrSurface extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CachedQrBitmap extends StatefulWidget {
+  const _CachedQrBitmap({
+    required this.data,
+    required this.color,
+    required this.size,
+  });
+
+  static const _bitmapSize = 1536.0;
+
+  final String data;
+  final Color color;
+  final double size;
+
+  @override
+  State<_CachedQrBitmap> createState() => _CachedQrBitmapState();
+}
+
+class _CachedQrBitmapState extends State<_CachedQrBitmap> {
+  ui.Image? _image;
+  Object? _error;
+  int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_renderQr());
+  }
+
+  @override
+  void didUpdateWidget(covariant _CachedQrBitmap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data || oldWidget.color != widget.color) {
+      unawaited(_renderQr());
+    }
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _image?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _renderQr() async {
+    final generation = ++_generation;
+    try {
+      final painter = QrPainter(
+        data: widget.data,
+        version: QrVersions.auto,
+        errorCorrectionLevel: QrErrorCorrectLevel.H,
+        gapless: true,
+        eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: widget.color),
+        dataModuleStyle: QrDataModuleStyle(
+          dataModuleShape: QrDataModuleShape.square,
+          color: widget.color,
+        ),
+      );
+      final image = await painter.toImage(_CachedQrBitmap._bitmapSize);
+      if (!mounted || generation != _generation) {
+        image.dispose();
+        return;
+      }
+
+      final previous = _image;
+      setState(() {
+        _image = image;
+        _error = null;
+      });
+      _disposeImageAfterFrame(previous);
+    } catch (e) {
+      log('Receive: ERROR rendering QR bitmap: $e');
+      if (!mounted || generation != _generation) return;
+      final previous = _image;
+      setState(() {
+        _image = null;
+        _error = e;
+      });
+      _disposeImageAfterFrame(previous);
+    }
+  }
+
+  void _disposeImageAfterFrame(ui.Image? image) {
+    if (image == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => image.dispose());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final image = _image;
+    if (image != null) {
+      return RawImage(
+        image: image,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.fill,
+        filterQuality: FilterQuality.medium,
+      );
+    }
+
+    if (_error != null) {
+      return SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Center(
+          child: Text(
+            'QR unavailable',
+            style: AppTypography.bodySmall.copyWith(
+              color: context.colors.text.secondary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
     );
   }
 }
@@ -913,7 +1028,7 @@ class _RenewButton extends StatelessWidget {
               BoxShadow(
                 color: const Color(0xFF000000).withValues(alpha: 0.08),
                 blurRadius: 12,
-                offset: const Offset(0, 4),
+                offset: const ui.Offset(0, 4),
               ),
             ],
           ),
@@ -1194,7 +1309,7 @@ class _ReceiveInfoDialog extends StatelessWidget {
           ];
 
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+      filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
       child: Center(
         child: Container(
           width: 312,
@@ -1372,18 +1487,18 @@ class _ShieldQrBackgroundPainter extends CustomPainter {
   final Color color;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 0.58);
-    final paint = Paint()
+  void paint(ui.Canvas canvas, ui.Size size) {
+    final center = ui.Offset(size.width / 2, size.height * 0.58);
+    final paint = ui.Paint()
       ..color = color
-      ..style = PaintingStyle.stroke
+      ..style = ui.PaintingStyle.stroke
       ..strokeWidth = 1.1;
 
     for (var i = 0; i < 18; i++) {
       final width = 80.0 + i * 22;
       final height = 42.0 + i * 14;
       canvas.drawOval(
-        Rect.fromCenter(center: center, width: width, height: height),
+        ui.Rect.fromCenter(center: center, width: width, height: height),
         paint,
       );
     }
