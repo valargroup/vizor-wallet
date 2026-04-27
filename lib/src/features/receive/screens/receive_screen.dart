@@ -510,7 +510,6 @@ class _ReceiveQrMetrics {
     required this.shieldBgHeight,
     required this.renewTop,
     required this.renewSize,
-    required this.overlaySize,
     required this.qrPaddingX,
     required this.qrPaddingY,
   });
@@ -529,7 +528,7 @@ class _ReceiveQrMetrics {
   static const _baseRenewOverlap =
       _baseQrSurfaceSize + _baseQrPaddingY * 2 - _baseRenewTop;
   static const _baseRenewBottomGap = 8.000518798828125;
-  static const _baseOverlaySize = 36.0;
+  static const _baseEmbeddedImageSize = 36.0;
   static const _baseShieldBgWidth = 636.0;
   static const _baseShieldBgHeight = 555.0;
   static const _baseShieldBgCenterYOffset = 40.5;
@@ -537,6 +536,8 @@ class _ReceiveQrMetrics {
   static const _minQrSurfaceSize = 112.0;
 
   static double get fixedBeforeQrForLayout => _fixedBeforeQr;
+  static double get embeddedImageScale =>
+      _baseEmbeddedImageSize / _baseQrSurfaceSize;
 
   final double blockWidth;
   final double blockHeight;
@@ -551,7 +552,6 @@ class _ReceiveQrMetrics {
   final double shieldBgHeight;
   final double renewTop;
   final double renewSize;
-  final double overlaySize;
   final double qrPaddingX;
   final double qrPaddingY;
 
@@ -617,7 +617,6 @@ class _ReceiveQrMetrics {
       shieldBgHeight: shieldBgHeight,
       renewTop: qrSurfaceSize + _baseQrPaddingY * 2 - _baseRenewOverlap,
       renewSize: _baseRenewSize,
-      overlaySize: _baseOverlaySize * scale,
       qrPaddingX: _baseQrPaddingX,
       qrPaddingY: _baseQrPaddingY,
     );
@@ -829,10 +828,7 @@ class _ReceiveQrBlock extends StatelessWidget {
                     size: metrics.qrSurfaceSize,
                     paddingX: metrics.qrPaddingX,
                     paddingY: metrics.qrPaddingY,
-                    overlaySize: metrics.overlaySize,
-                    iconName: _isShielded
-                        ? AppIcons.shieldKeyhole
-                        : AppIcons.transparentBalance,
+                    type: type,
                   ),
                 ),
                 if (_isShielded)
@@ -861,8 +857,7 @@ class _QrSurface extends StatelessWidget {
     required this.size,
     required this.paddingX,
     required this.paddingY,
-    required this.overlaySize,
-    required this.iconName,
+    required this.type,
   });
 
   static const _wrapperRadius = 24.0;
@@ -871,15 +866,17 @@ class _QrSurface extends StatelessWidget {
   final double size;
   final double paddingX;
   final double paddingY;
-  final double overlaySize;
-  final String iconName;
+  final _ReceiveAddressType type;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final qrColor = colors.text.accent;
     final qrBackground = colors.background.base;
-    final iconBg = colors.background.ground.withValues(alpha: 0.96);
+    final embeddedImageAsset = _ReceiveQrEmbeddedImage.assetFor(
+      type,
+      Theme.of(context).brightness,
+    );
 
     return Container(
       width: size + paddingX * 2,
@@ -889,13 +886,15 @@ class _QrSurface extends StatelessWidget {
         color: qrBackground,
         borderRadius: BorderRadius.circular(_wrapperRadius),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (address.isNotEmpty)
-            _CachedQrBitmap(data: 'zcash:$address', color: qrColor, size: size)
-          else
-            Center(
+      child: address.isNotEmpty
+          ? _CachedQrBitmap(
+              data: 'zcash:$address',
+              color: qrColor,
+              size: size,
+              embeddedImageAsset: embeddedImageAsset,
+              embeddedImageScale: _ReceiveQrMetrics.embeddedImageScale,
+            )
+          : Center(
               child: Text(
                 'No address',
                 style: AppTypography.bodySmall.copyWith(
@@ -903,25 +902,25 @@ class _QrSurface extends StatelessWidget {
                 ),
               ),
             ),
-          Container(
-            width: overlaySize,
-            height: overlaySize,
-            decoration: BoxDecoration(
-              color: iconBg,
-              shape: BoxShape.circle,
-              border: Border.all(color: colors.border.subtle),
-            ),
-            child: Center(
-              child: AppIcon(
-                iconName,
-                size: overlaySize * 2 / 3,
-                color: _brandTeal(context),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
+  }
+}
+
+abstract final class _ReceiveQrEmbeddedImage {
+  static const _shieldLight = 'assets/icons/receive_qr_shield_light.png';
+  static const _shieldDark = 'assets/icons/receive_qr_shield_dark.png';
+  static const _transparentLight =
+      'assets/icons/receive_qr_transparent_light.png';
+  static const _transparentDark =
+      'assets/icons/receive_qr_transparent_dark.png';
+
+  static String assetFor(_ReceiveAddressType type, Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    return switch (type) {
+      _ReceiveAddressType.shielded => isDark ? _shieldDark : _shieldLight,
+      _ReceiveAddressType.transparent =>
+        isDark ? _transparentDark : _transparentLight,
+    };
   }
 }
 
@@ -930,6 +929,8 @@ class _CachedQrBitmap extends StatefulWidget {
     required this.data,
     required this.color,
     required this.size,
+    required this.embeddedImageAsset,
+    required this.embeddedImageScale,
   });
 
   static const _bitmapSize = 1536;
@@ -937,6 +938,8 @@ class _CachedQrBitmap extends StatefulWidget {
   final String data;
   final Color color;
   final double size;
+  final String embeddedImageAsset;
+  final double embeddedImageScale;
 
   @override
   State<_CachedQrBitmap> createState() => _CachedQrBitmapState();
@@ -956,7 +959,10 @@ class _CachedQrBitmapState extends State<_CachedQrBitmap> {
   @override
   void didUpdateWidget(covariant _CachedQrBitmap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.data != widget.data || oldWidget.color != widget.color) {
+    if (oldWidget.data != widget.data ||
+        oldWidget.color != widget.color ||
+        oldWidget.embeddedImageAsset != widget.embeddedImageAsset ||
+        oldWidget.embeddedImageScale != widget.embeddedImageScale) {
       unawaited(_renderQr());
     }
   }
@@ -980,6 +986,15 @@ class _CachedQrBitmapState extends State<_CachedQrBitmap> {
         size: _CachedQrBitmap._bitmapSize,
         decoration: PrettyQrDecoration(
           quietZone: PrettyQrQuietZone.zero,
+          image: PrettyQrDecorationImage(
+            image: AssetImage(widget.embeddedImageAsset),
+            scale: widget.embeddedImageScale,
+            fit: BoxFit.fill,
+            filterQuality: FilterQuality.high,
+            isAntiAlias: true,
+            clipper: const _ReceiveQrEmbeddedImageClipper(),
+            position: PrettyQrDecorationImagePosition.embedded,
+          ),
           // ignore: experimental_member_use
           shape: PrettyQrShape.custom(
             PrettyQrSmoothSymbol(roundFactor: 1, color: widget.color),
@@ -1051,6 +1066,20 @@ class _CachedQrBitmapState extends State<_CachedQrBitmap> {
       width: widget.size,
       height: widget.size,
       child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+    );
+  }
+}
+
+class _ReceiveQrEmbeddedImageClipper implements PrettyQrClipper {
+  const _ReceiveQrEmbeddedImageClipper();
+
+  static const _cornerRadiusRatio = 9.789 / 36.0;
+
+  @override
+  Path getClip(Size size) {
+    final radius = size.shortestSide * _cornerRadiusRatio;
+    return Path()..addRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
     );
   }
 }
