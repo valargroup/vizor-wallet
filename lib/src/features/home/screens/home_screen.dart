@@ -467,6 +467,7 @@ class _HomeBalanceCard extends StatelessWidget {
   final VoidCallback onShieldBalancePressed;
 
   static const _shieldedCardHeight = 196.0;
+  static const _actionButtonMinWidth = 196.0;
 
   @override
   Widget build(BuildContext context) {
@@ -603,36 +604,24 @@ class _HomeBalanceCard extends StatelessWidget {
                             ),
                             const Spacer(),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Expanded(
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      return AppButton(
-                                        onPressed: () => context.push('/send'),
-                                        variant: AppButtonVariant.primary,
-                                        minWidth: constraints.maxWidth,
-                                        leading: const AppIcon(AppIcons.plane),
-                                        child: const Text('Send'),
-                                      );
-                                    },
-                                  ),
+                                AppButton(
+                                  onPressed: () => context.push('/send'),
+                                  variant: AppButtonVariant.primary,
+                                  minWidth: _actionButtonMinWidth,
+                                  leading: const AppIcon(AppIcons.plane),
+                                  child: const Text('Send'),
                                 ),
                                 const SizedBox(width: AppSpacing.xs),
-                                Expanded(
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      return AppButton(
-                                        onPressed: () =>
-                                            context.push('/receive'),
-                                        variant: AppButtonVariant.secondary,
-                                        minWidth: constraints.maxWidth,
-                                        leading: const AppIcon(
-                                          AppIcons.arrowDownCircle,
-                                        ),
-                                        child: const Text('Receive'),
-                                      );
-                                    },
+                                AppButton(
+                                  onPressed: () => context.push('/receive'),
+                                  variant: AppButtonVariant.secondary,
+                                  minWidth: _actionButtonMinWidth,
+                                  leading: const AppIcon(
+                                    AppIcons.arrowDownCircle,
                                   ),
+                                  child: const Text('Receive'),
                                 ),
                               ],
                             ),
