@@ -25,7 +25,6 @@ import 'src/features/onboarding/shared/set_password_screen.dart';
 import 'src/features/onboarding/unlock_screen.dart';
 import 'src/features/onboarding/welcome.dart';
 import 'src/features/receive/screens/receive_screen.dart';
-import 'src/features/accounts/screens/accounts_screen.dart';
 import 'src/features/keystone/screens/import_keystone_screen.dart';
 import 'src/features/send/screens/send_review_screen.dart';
 import 'src/features/send/screens/send_screen.dart';
@@ -339,7 +338,6 @@ final _routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(path: '/receive', builder: (_, _) => const ReceiveScreen()),
-      GoRoute(path: '/accounts', builder: (_, _) => const AccountsScreen()),
       GoRoute(
         path: '/import-keystone',
         builder: (_, _) => const ImportKeystoneScreen(),

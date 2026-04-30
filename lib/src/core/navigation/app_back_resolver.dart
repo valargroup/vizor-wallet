@@ -47,7 +47,6 @@ abstract final class AppBackResolver {
     '/settings/secret-passphrase': 'Secret Passphrase',
     '/settings/change-password': 'Change Password',
     '/settings/endpoint': 'Endpoint',
-    '/accounts': 'Accounts',
     '/import-keystone': 'Import Keystone',
   };
 
