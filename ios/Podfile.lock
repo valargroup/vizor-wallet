@@ -45,10 +45,10 @@ SPEC CHECKSUMS:
   flutter_foreground_task: a159d2c2173b33699ddb3e6c2a067045d7cebb89
   flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
-  rust_lib_zcash_wallet: d6589a01236ae44ae19405ee82fe86ec80bd0366
+  rust_lib_zcash_wallet: 81289c417e775dee4944149f182523453083474c
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
-PODFILE CHECKSUM: f8c2dcdfb50bb67645580d28a6bf814fca30bdec
+PODFILE CHECKSUM: 288656d4464589360115d6f81dd5d8f559352730
 
 COCOAPODS: 1.16.2
