@@ -30,9 +30,7 @@ class _Content extends StatelessWidget {
       children: [
         _BackRow(),
         SizedBox(height: AppSpacing.xs),
-        Expanded(
-          child: _HeroLayout(),
-        ),
+        Expanded(child: _HeroLayout()),
       ],
     );
   }
@@ -46,28 +44,31 @@ class _BackRow extends StatelessWidget {
     final colors = context.colors;
     return Align(
       alignment: Alignment.centerLeft,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => context.go('/welcome'),
-        child: SizedBox(
-          height: 32,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              AppIcon(
-                AppIcons.chevronBackward,
-                size: AppIconSize.medium,
-                color: colors.text.accent,
-              ),
-              const SizedBox(width: AppSpacing.xxs),
-              Text(
-                'Back',
-                style: AppTypography.labelLarge.copyWith(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.go('/welcome'),
+          child: SizedBox(
+            height: 32,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                AppIcon(
+                  AppIcons.chevronBackward,
+                  size: AppIconSize.medium,
                   color: colors.text.accent,
                 ),
-              ),
-            ],
+                const SizedBox(width: AppSpacing.xxs),
+                Text(
+                  'Back',
+                  style: AppTypography.labelLarge.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -117,9 +118,7 @@ class _HeroBlock extends StatelessWidget {
       children: [
         Text(
           'The Shielded World',
-          style: AppTypography.displayLarge.copyWith(
-            color: colors.text.accent,
-          ),
+          style: AppTypography.displayLarge.copyWith(color: colors.text.accent),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: AppSpacing.sm),

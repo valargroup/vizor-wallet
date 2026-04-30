@@ -40,25 +40,28 @@ class _BackRow extends StatelessWidget {
       height: 32,
       child: Align(
         alignment: Alignment.centerLeft,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => context.go(OnboardingStep.addressTypes.routePath),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppIcon(
-                AppIcons.chevronBackward,
-                size: AppIconSize.medium,
-                color: colors.text.accent,
-              ),
-              const SizedBox(width: AppSpacing.xxs),
-              Text(
-                'Back',
-                style: AppTypography.labelLarge.copyWith(
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => context.go(OnboardingStep.addressTypes.routePath),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppIcon(
+                  AppIcons.chevronBackward,
+                  size: AppIconSize.medium,
                   color: colors.text.accent,
                 ),
-              ),
-            ],
+                const SizedBox(width: AppSpacing.xxs),
+                Text(
+                  'Back',
+                  style: AppTypography.labelLarge.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
