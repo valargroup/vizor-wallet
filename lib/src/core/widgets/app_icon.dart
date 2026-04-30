@@ -68,6 +68,7 @@ abstract final class AppIcons {
   static const transparentBalance = 'transparent_balance';
   static const unlock = 'unlock';
   static const users = 'users';
+  static const vizor = 'vizor';
   static const wallet = 'wallet';
   static const warning = 'warning';
   static const zcash = 'zcash';

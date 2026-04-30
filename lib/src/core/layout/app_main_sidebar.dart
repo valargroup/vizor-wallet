@@ -185,7 +185,7 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                         const SizedBox(height: AppSpacing.xs),
                         const AppSidebarItem(
                           label: 'About Vizor',
-                          iconName: AppIcons.crystalBall,
+                          iconName: AppIcons.vizor,
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         AppSidebarItem(
