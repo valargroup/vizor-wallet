@@ -183,7 +183,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return AppDesktopShell(
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 0, 0, 0),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, 0, 0),
         child: SizedBox.expand(
           child: walletAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -343,11 +343,11 @@ class _HomePaneState extends ConsumerState<_HomePane> {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    padding: const EdgeInsets.only(right: AppSpacing.md),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SizedBox(height: AppSpacing.sm),
+                        const SizedBox(height: AppSpacing.md),
                         _HomeBalanceCard(
                           shieldedBalanceText: widget.shieldedBalanceText,
                           transparentBalanceText: widget.transparentBalanceText,
@@ -373,7 +373,7 @@ class _HomePaneState extends ConsumerState<_HomePane> {
                             onTitleTap: () => context.push('/activity'),
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.sm),
+                        const SizedBox(height: AppSpacing.md),
                       ],
                     ),
                   ),
