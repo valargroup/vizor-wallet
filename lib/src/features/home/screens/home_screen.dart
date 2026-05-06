@@ -376,6 +376,7 @@ class _HomePaneState extends ConsumerState<_HomePane> {
                           child: ActivityTable(
                             rows: rows,
                             title: 'Recent Activity',
+                            rowKeyPrefix: 'home_activity',
                             isLoading: widget.isActivityLoading,
                             onTitleTap: () => context.push('/activity'),
                           ),
@@ -867,6 +868,9 @@ class _HomeBalanceCardState extends State<_HomeBalanceCard> {
                                               ),
                                               Text(
                                                 displayedShieldedBalance,
+                                                key: const ValueKey(
+                                                  'home_shielded_balance_text',
+                                                ),
                                                 style: AppTypography
                                                     .displayMedium
                                                     .copyWith(
@@ -1030,6 +1034,7 @@ class _HomeTransparentBalanceStrip extends StatelessWidget {
                     Flexible(
                       child: Text(
                         'Transparent balance: $displayedBalance',
+                        key: const ValueKey('home_transparent_balance_text'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.labelLarge.copyWith(
