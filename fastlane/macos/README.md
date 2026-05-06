@@ -12,13 +12,21 @@ bundle exec fastlane mac release
 
 `release` lane 순서:
 
-1. `match`로 Developer ID 인증서 + provisioning profile 설치
-2. `fvm flutter build macos --release`
-3. `.app` notarize + staple
-4. `.zip` / `.dmg` 생성
-5. `.dmg` notarize + staple
-6. stable release면 Sparkle `appcast.xml` + delta 생성
-7. GitHub Release asset 업로드
+1. mainnet/testnet flavor별로 `match`로 Developer ID 인증서 + provisioning profile 설치
+2. flavor별 `fvm flutter build macos --release --dart-define=ZCASH_DEFAULT_NETWORK=<network> --build-name <tag version> --build-number <RELEASE_BUILD_NUMBER>`
+3. flavor별 `.app` notarize + staple
+4. flavor별 `.zip` / `.dmg` 생성
+5. flavor별 `.dmg` notarize + staple
+6. stable release면 flavor별 Sparkle appcast/delta 생성
+7. GitHub Release에 모든 flavor/Sparkle asset 업로드
+
+기본 release flavor는 `mainnet,testnet`입니다. 단일 flavor만 빌드하려면:
+
+```bash
+VIZOR_MACOS_FLAVOR=mainnet bundle exec fastlane mac build
+VIZOR_MACOS_FLAVOR=testnet bundle exec fastlane mac build
+VIZOR_MACOS_FLAVORS=mainnet,testnet bundle exec fastlane mac release
+```
 
 ## Required environment variables
 
@@ -33,7 +41,8 @@ bundle exec fastlane mac release
 - `RELEASE_REPOSITORY`
 - `RELEASE_COMMITISH`
 - `RELEASE_BUILD_NUMBER`
-- `SPARKLE_PUBLIC_ED_KEY`
+- `SPARKLE_PUBLIC_ED_KEY_MAINNET`
+- `SPARKLE_PUBLIC_ED_KEY_TESTNET`
 
 태그 기반 워크플로우가 아니면 아래도 필요합니다.
 
@@ -44,9 +53,13 @@ bundle exec fastlane mac release
 - `MACOS_KEYCHAIN_NAME`
 - `MATCH_GIT_BRANCH`
 - `MATCH_READONLY`
+- `MATCH_APP_IDENTIFIER`
 - `RELEASE_NAME`
+- `VIZOR_MACOS_FLAVOR`
+- `VIZOR_MACOS_FLAVORS`
 - `GITHUB_RELEASE_PRERELEASE`
-- `SPARKLE_PRIVATE_ED_KEY` (stable release only)
+- `SPARKLE_PRIVATE_ED_KEY_MAINNET` (stable release only)
+- `SPARKLE_PRIVATE_ED_KEY_TESTNET` (stable release only)
 
 ## Notes
 
@@ -54,9 +67,11 @@ bundle exec fastlane mac release
 - `MATCH_GIT_BASIC_AUTHORIZATION`은 GitHub private repo 접근용 Basic auth Base64 문자열입니다. 예: `echo -n "github_user:pat" | base64`
 - CI는 `MATCH_READONLY=true`로 두고, `match` 저장소는 로컬에서 한 번 시드해 둔 상태를 전제로 합니다.
 - `MATCH_READONLY=false`로 돌리면 fastlane은 `match` write 모드로 동작합니다. 이때는 `APP_STORE_CONNECT_API_KEY_JSON`이 준비돼 있어야 하며, git commit identity는 deployment workflow가 설정합니다.
+- `MATCH_READONLY=false`일 때 testnet Bundle ID(`com.keplr.vizor.testnet`)가 없으면 fastlane이 App Store Connect API로 먼저 생성한 뒤 Developer ID provisioning profile을 생성합니다.
 - release display version은 `RELEASE_TAG`에서 파싱하고, build number는 `RELEASE_BUILD_NUMBER`만 사용합니다. `pubspec.yaml`의 `version`은 macOS release 산출물 버전으로 사용하지 않습니다.
 - `release/v1.2.3-rc.0` 같은 prerelease 태그는 release build/ZIP/DMG를 만들지만 Sparkle appcast/delta 업로드는 건너뜁니다.
 - `GITHUB_RELEASE_PRERELEASE`가 설정된 경우 태그에서 계산한 prerelease 여부와 일치해야 합니다.
-- `SPARKLE_PUBLIC_ED_KEY`는 앱 `Info.plist`에 주입되는 공개 Ed25519 키이며 prerelease/stable 모두 필요합니다.
-- `SPARKLE_PRIVATE_ED_KEY`는 `generate_appcast`가 update archive / delta 서명에 쓰는 비밀 Ed25519 키입니다.
+- `SPARKLE_PUBLIC_ED_KEY_MAINNET` / `SPARKLE_PUBLIC_ED_KEY_TESTNET`은 flavor별 앱 `Info.plist`에 주입되는 공개 Ed25519 키이며 prerelease/stable 모두 필요합니다.
+- `SPARKLE_PRIVATE_ED_KEY_MAINNET` / `SPARKLE_PRIVATE_ED_KEY_TESTNET`은 stable release에서 flavor별 appcast/delta 서명에 쓰는 비밀 Ed25519 키입니다.
+- mainnet Sparkle feed asset은 `appcast.xml`, testnet Sparkle feed asset은 `appcast-testnet.xml`입니다.
 - 산출물은 `/Users/junghwanyun/zcash-wallet/dist/macos` 아래에 생성됩니다.

@@ -87,7 +87,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
 
       final accountNotifier = ref.read(accountProvider.notifier);
-      final sync = ref.read(syncProvider).value ?? SyncState();
+      final sync = (ref.read(syncProvider).value ?? SyncState())
+          .scopedToAccount(accountUuid);
       if (!sync.canShieldTransparentBalance) {
         throw Exception(
           'Transparent balance is too small to shield after fees.',
@@ -160,7 +161,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final walletAsync = ref.watch(walletProvider);
     final bootstrap = ref.watch(appBootstrapProvider);
     final syncAsync = ref.watch(syncProvider);
-    final sync = syncAsync.value ?? SyncState();
+    final activeAccountUuid = ref.watch(
+      accountProvider.select((value) => value.value?.activeAccountUuid),
+    );
+    final syncState = syncAsync.value;
+    final sync = (syncState ?? SyncState()).scopedToAccount(activeAccountUuid);
+    final hasActivitySyncData =
+        syncState?.hasDataForAccount(activeAccountUuid) ?? false;
+    final isActivityLoading =
+        activeAccountUuid != null && !hasActivitySyncData && sync.error == null;
     final privacyModeEnabled = ref.watch(privacyModeProvider);
     final shieldedBalance =
         sync.saplingBalance +
@@ -188,6 +197,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             data: (_) => _HomePane(
               sync: sync,
+              hasActivitySyncData: hasActivitySyncData,
+              isActivityLoading: isActivityLoading,
               passwordRotationRecoveryFailed:
                   bootstrap.passwordRotationRecoveryFailed,
               canBackgroundSync: _canBackgroundSync,
@@ -219,6 +230,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 class _HomePane extends ConsumerStatefulWidget {
   const _HomePane({
     required this.sync,
+    required this.hasActivitySyncData,
+    required this.isActivityLoading,
     required this.passwordRotationRecoveryFailed,
     required this.canBackgroundSync,
     required this.privacyModeEnabled,
@@ -237,6 +250,8 @@ class _HomePane extends ConsumerStatefulWidget {
   });
 
   final SyncState sync;
+  final bool hasActivitySyncData;
+  final bool isActivityLoading;
   final bool passwordRotationRecoveryFailed;
   final bool canBackgroundSync;
   final bool privacyModeEnabled;
@@ -361,6 +376,8 @@ class _HomePaneState extends ConsumerState<_HomePane> {
                           child: ActivityTable(
                             rows: rows,
                             title: 'Recent Activity',
+                            rowKeyPrefix: 'home_activity',
+                            isLoading: widget.isActivityLoading,
                             onTitleTap: () => context.push('/activity'),
                           ),
                         ),
@@ -422,6 +439,9 @@ class _HomePaneState extends ConsumerState<_HomePane> {
   }
 
   List<ActivityRowData> _activityRows(BuildContext context) {
+    if (!widget.hasActivitySyncData) {
+      return const [];
+    }
     return buildActivityRows(
       context: context,
       sync: widget.sync,
@@ -848,6 +868,9 @@ class _HomeBalanceCardState extends State<_HomeBalanceCard> {
                                               ),
                                               Text(
                                                 displayedShieldedBalance,
+                                                key: const ValueKey(
+                                                  'home_shielded_balance_text',
+                                                ),
                                                 style: AppTypography
                                                     .displayMedium
                                                     .copyWith(
@@ -1011,6 +1034,7 @@ class _HomeTransparentBalanceStrip extends StatelessWidget {
                     Flexible(
                       child: Text(
                         'Transparent balance: $displayedBalance',
+                        key: const ValueKey('home_transparent_balance_text'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.labelLarge.copyWith(

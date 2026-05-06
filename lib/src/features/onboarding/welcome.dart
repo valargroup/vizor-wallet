@@ -294,6 +294,7 @@ class _ButtonsStack extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         AppButton(
+          key: const ValueKey('welcome_create_wallet_button'),
           onPressed: () => context.go('/onboarding/intro'),
           variant: AppButtonVariant.primary,
           minWidth: _welcomeActionWidth,
@@ -302,6 +303,7 @@ class _ButtonsStack extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.s),
         AppButton(
+          key: const ValueKey('welcome_import_wallet_button'),
           onPressed: () => context.go('/import'),
           variant: AppButtonVariant.secondary,
           minWidth: _welcomeActionWidth,
@@ -324,8 +326,7 @@ class _LegalFooter extends StatelessWidget {
     // hardcoded `#4D5252` — in light mode the token resolves to
     // `#626767`, one step lighter than the literal, but this preserves
     // legibility in dark mode where the literal would disappear into
-    // the background. Navigation handlers are intentionally stubbed
-    // until the Terms / Privacy destinations exist.
+    // the background.
     final bodyStyle = AppTypography.bodySmall.copyWith(
       color: colors.text.muted,
     );
@@ -339,13 +340,56 @@ class _LegalFooter extends StatelessWidget {
       TextSpan(
         children: [
           const TextSpan(text: 'By using Vizor you agree to our '),
-          TextSpan(text: 'Terms', style: linkStyle),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: _LegalFooterLink(
+              label: 'Terms',
+              style: linkStyle,
+              onTap: () => context.push('/terms'),
+            ),
+          ),
           const TextSpan(text: ' and '),
-          TextSpan(text: 'Privacy', style: linkStyle),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: _LegalFooterLink(
+              label: 'Privacy',
+              style: linkStyle,
+              onTap: () => context.push('/privacy'),
+            ),
+          ),
         ],
         style: bodyStyle,
       ),
       textAlign: TextAlign.center,
+    );
+  }
+}
+
+class _LegalFooterLink extends StatelessWidget {
+  const _LegalFooterLink({
+    required this.label,
+    required this.style,
+    required this.onTap,
+  });
+
+  final String label;
+  final TextStyle style;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      link: true,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Text(label, style: style),
+        ),
+      ),
     );
   }
 }

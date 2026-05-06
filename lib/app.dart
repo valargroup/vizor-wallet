@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:go_router/go_router.dart';
 import 'package:desktop_window_bootstrap/desktop_window_bootstrap.dart';
 
-import 'main.dart' show log;
 import 'src/app_bootstrap.dart';
+import 'src/core/layout/app_layout.dart';
 import 'src/core/motion/onboarding_motion.dart';
 import 'src/core/theme/app_theme_host.dart';
 import 'src/core/theme/legacy_material_theme.dart';
 import 'src/features/activity/screens/activity_screen.dart';
 import 'src/features/activity/screens/activity_transaction_status_screen.dart';
 import 'src/features/home/screens/home_screen.dart';
+import 'src/features/about/screens/about_screen.dart';
 import 'src/features/onboarding/create/address_types_screen.dart';
 import 'src/features/onboarding/create/intro_zcash_screen.dart';
 import 'src/features/onboarding/create/onboarding_split_view.dart';
@@ -36,6 +38,47 @@ import 'src/providers/theme_mode_provider.dart';
 import 'src/providers/app_security_provider.dart';
 import 'src/providers/router_refresh_provider.dart';
 import 'src/providers/wallet_provider.dart';
+import 'src/rust/frb_generated.dart';
+
+void log(String message) => debugPrint('[zcash] $message');
+
+Future<void> initializeZcashWalletRuntime() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  FlutterForegroundTask.initCommunicationPort();
+  log('runtime: initializing RustLib');
+  await RustLib.init();
+
+  // Order matters: window_manager creates and shows the NSWindow inside
+  // `initializeDesktopWindow`; the acrylic setup is only effective once
+  // that window exists.
+  log('runtime: initializing desktop window (no-op on mobile/web)');
+  await initializeDesktopWindow();
+  if (isDesktopLayoutPlatform) {
+    log('runtime: initializing desktop window visuals');
+    await DesktopWindowBootstrap.initialize();
+    await showDesktopWindow();
+  }
+}
+
+Future<Widget> buildBootstrappedZcashWalletApp() async {
+  final bootstrap = await loadAppBootstrap();
+  return buildZcashWalletApp(bootstrap: bootstrap);
+}
+
+Widget buildZcashWalletApp({required AppBootstrapState bootstrap}) {
+  return ProviderScope(
+    overrides: [appBootstrapProvider.overrideWithValue(bootstrap)],
+    child: const ZcashWalletApp(),
+  );
+}
+
+Future<void> runZcashWalletApp() async {
+  log('runtime: starting');
+  await initializeZcashWalletRuntime();
+  final app = await buildBootstrappedZcashWalletApp();
+  log('runtime: launching app');
+  runApp(app);
+}
 
 final _routerProvider = Provider<GoRouter>((ref) {
   final bootstrap = ref.watch(appBootstrapProvider);
@@ -67,6 +110,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == '/add-account' ||
           state.matchedLocation.startsWith('/onboarding/') ||
           state.matchedLocation.startsWith('/import');
+      final isPublicLegal =
+          state.matchedLocation == '/terms' ||
+          state.matchedLocation == '/privacy';
       final isUnlock = state.matchedLocation == '/unlock';
       final isLostPassword = state.matchedLocation == '/lost-password';
       final isUnlockFlow = isUnlock || isLostPassword;
@@ -77,13 +123,13 @@ final _routerProvider = Provider<GoRouter>((ref) {
       );
 
       if (!hasWallet && isUnlockFlow) return '/welcome';
-      if (!hasWallet && !isOnboarding) return '/welcome';
+      if (!hasWallet && !isOnboarding && !isPublicLegal) return '/welcome';
       if (!hasWallet && state.matchedLocation == '/add-account') {
         return '/welcome';
       }
       // `/lost-password` is intentionally part of the unlock flow: a locked
       // wallet must be able to reach its local reset path from `/unlock`.
-      if (requiresUnlock && !isUnlockFlow) return '/unlock';
+      if (requiresUnlock && !isUnlockFlow && !isPublicLegal) return '/unlock';
       if (!requiresUnlock && isUnlockFlow) {
         return hasWallet ? '/home' : '/welcome';
       }
@@ -292,7 +338,10 @@ final _routerProvider = Provider<GoRouter>((ref) {
         path: '/lost-password',
         builder: (_, _) => const LostPasswordScreen(),
       ),
+      GoRoute(path: '/terms', builder: (_, _) => const TermsScreen()),
+      GoRoute(path: '/privacy', builder: (_, _) => const PrivacyPolicyScreen()),
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
+      GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
       GoRoute(path: '/activity', builder: (_, _) => const ActivityScreen()),
       GoRoute(
         path: '/activity/tx/:txid',

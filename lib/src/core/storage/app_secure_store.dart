@@ -6,6 +6,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../config/network_config.dart';
 import '../security/password_policy.dart';
 
 const kWalletDbNameKey = 'zcash_wallet_db_name';
@@ -19,7 +20,6 @@ const _passwordVerifierSaltKey = 'zcash_password_verifier_salt';
 const _passwordRotationInProgressKey = 'zcash_rotation_in_progress';
 const _passwordRotationRollbackFailedKind = 'rollbackFailed';
 const _accountMnemonicKeyPrefix = 'zcash_account_mnemonic_';
-const _secureStoreService = 'com.keplr.vizor.secure_store';
 
 class PasswordRotationRecoveryFailedException implements Exception {
   const PasswordRotationRecoveryFailedException();
@@ -30,8 +30,8 @@ class PasswordRotationRecoveryFailedException implements Exception {
 }
 
 class AppSecureStore {
-  AppSecureStore._({FlutterSecureStorage storage = _defaultStorage})
-    : _storage = storage;
+  AppSecureStore._({FlutterSecureStorage? storage})
+    : _storage = storage ?? _defaultStorage();
 
   @visibleForTesting
   AppSecureStore.testing({required FlutterSecureStorage storage})
@@ -39,17 +39,23 @@ class AppSecureStore {
 
   static final AppSecureStore instance = AppSecureStore._();
 
-  static const _defaultStorage = FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accountName: _secureStoreService,
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-    mOptions: MacOsOptions(
-      accountName: _secureStoreService,
-      accessibility: KeychainAccessibility.first_unlock,
-      usesDataProtectionKeychain: true,
-    ),
-  );
+  static FlutterSecureStorage _defaultStorage() {
+    final service = secureStoreServiceForNetwork(kZcashDefaultNetworkName);
+    return FlutterSecureStorage(
+      iOptions: IOSOptions(
+        accountName: service,
+        accessibility: KeychainAccessibility.first_unlock,
+      ),
+      aOptions: kZcashDefaultNetworkName == 'main'
+          ? AndroidOptions.defaultOptions
+          : AndroidOptions(sharedPreferencesName: service),
+      mOptions: MacOsOptions(
+        accountName: service,
+        accessibility: KeychainAccessibility.first_unlock,
+        usesDataProtectionKeychain: true,
+      ),
+    );
+  }
 
   static final Cipher _cipher = AesGcm.with256bits();
   static final Pbkdf2 _kdf = Pbkdf2(

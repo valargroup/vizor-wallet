@@ -10,6 +10,7 @@ require "tempfile"
 require "tmpdir"
 require "uri"
 require "open3"
+require "spaceship"
 require_relative "../patches/developer_id_application_certificate_type_patch"
 
 def shell_escape(value)
@@ -18,6 +19,60 @@ end
 
 def workspace_root
   File.expand_path("../..", __dir__)
+end
+
+MACOS_RELEASE_FLAVOR_CONFIGS = {
+  "mainnet" => {
+    app_name: "Vizor",
+    artifact_name: "Vizor",
+    bundle_id: "com.keplr.vizor",
+    bundle_id_name: "Vizor",
+    sparkle_feed_asset_name: "appcast.xml",
+    sparkle_public_key_env: "SPARKLE_PUBLIC_ED_KEY_MAINNET",
+    sparkle_private_key_env: "SPARKLE_PRIVATE_ED_KEY_MAINNET",
+    zcash_default_network: "main",
+    volume_name: "Install Vizor Wallet"
+  },
+  "testnet" => {
+    app_name: "Vizor Testnet",
+    artifact_name: "Vizor-Testnet",
+    bundle_id: "com.keplr.vizor.testnet",
+    bundle_id_name: "Vizor Testnet",
+    sparkle_feed_asset_name: "appcast-testnet.xml",
+    sparkle_public_key_env: "SPARKLE_PUBLIC_ED_KEY_TESTNET",
+    sparkle_private_key_env: "SPARKLE_PRIVATE_ED_KEY_TESTNET",
+    zcash_default_network: "test",
+    volume_name: "Install Vizor Testnet Wallet"
+  }
+}.freeze
+
+DEFAULT_MACOS_RELEASE_FLAVORS = ["mainnet", "testnet"].freeze
+
+def normalize_macos_release_flavor(flavor)
+  normalized = flavor.to_s.strip.downcase
+  return normalized if MACOS_RELEASE_FLAVOR_CONFIGS.key?(normalized)
+
+  UI.user_error!("Unsupported macOS release flavor: #{flavor}. Expected one of: #{MACOS_RELEASE_FLAVOR_CONFIGS.keys.join(", ")}")
+end
+
+def macos_release_flavors
+  raw = ENV["VIZOR_MACOS_FLAVORS"].to_s.strip
+  if raw.empty?
+    single_flavor = ENV["VIZOR_MACOS_FLAVOR"].to_s.strip
+    return [normalize_macos_release_flavor(single_flavor)] unless single_flavor.empty?
+
+    return DEFAULT_MACOS_RELEASE_FLAVORS
+  end
+
+  flavors = raw.split(",").map(&:strip).reject(&:empty?)
+  UI.user_error!("VIZOR_MACOS_FLAVORS must include at least one flavor") if flavors.empty?
+  flavors.map { |flavor| normalize_macos_release_flavor(flavor) }.uniq
+end
+
+def single_macos_release_flavor(options = {})
+  raw = options[:flavor] || ENV["VIZOR_MACOS_FLAVOR"]
+  raw = raw.to_s.strip
+  raw.empty? ? "mainnet" : normalize_macos_release_flavor(raw)
 end
 
 def release_tag_info(tag)
@@ -38,7 +93,9 @@ def release_build_number
   build_number
 end
 
-def release_metadata
+def release_metadata(flavor: "mainnet")
+  flavor = normalize_macos_release_flavor(flavor)
+  flavor_config = MACOS_RELEASE_FLAVOR_CONFIGS.fetch(flavor)
   tag = ENV["RELEASE_TAG"]
 
   if tag.to_s.empty?
@@ -57,13 +114,20 @@ def release_metadata
     UI.user_error!("GITHUB_RELEASE_PRERELEASE=#{env_prerelease} does not match release tag #{tag}") unless env_prerelease == tag_info.fetch(:is_prerelease)
   end
 
-  app_name = "Vizor"
+  app_name = flavor_config.fetch(:app_name)
+  artifact_name = flavor_config.fetch(:artifact_name)
   dist_dir = File.join(workspace_root, "dist", "macos")
+  sparkle_dir = File.join(dist_dir, "sparkle", flavor)
   app_path = File.join(workspace_root, "build", "macos", "Build", "Products", "Release", "#{app_name}.app")
 
   {
+    flavor: flavor,
     app_name: app_name,
-    bundle_id: "com.keplr.vizor",
+    artifact_name: artifact_name,
+    bundle_id: flavor_config.fetch(:bundle_id),
+    bundle_id_name: flavor_config.fetch(:bundle_id_name),
+    zcash_default_network: flavor_config.fetch(:zcash_default_network),
+    volume_name: flavor_config.fetch(:volume_name),
     version: version,
     asset_version: asset_version,
     is_prerelease: tag_info.fetch(:is_prerelease),
@@ -71,12 +135,15 @@ def release_metadata
     tag: tag,
     release_name: ENV["RELEASE_NAME"] || tag,
     dist_dir: dist_dir,
-    sparkle_dir: File.join(dist_dir, "sparkle"),
+    sparkle_dir: sparkle_dir,
     app_path: app_path,
-    zip_path: File.join(dist_dir, "#{app_name}-#{asset_version}-macos.zip"),
-    dmg_path: File.join(dist_dir, "#{app_name}-#{asset_version}-macos.dmg"),
-    appcast_path: File.join(dist_dir, "sparkle", "appcast.xml"),
-    sparkle_release_notes_path: File.join(dist_dir, "sparkle", "#{app_name}-#{asset_version}-macos.md")
+    zip_path: File.join(dist_dir, "#{artifact_name}-#{asset_version}-macos.zip"),
+    dmg_path: File.join(dist_dir, "#{artifact_name}-#{asset_version}-macos.dmg"),
+    appcast_path: File.join(sparkle_dir, flavor_config.fetch(:sparkle_feed_asset_name)),
+    sparkle_feed_url: "https://github.com/#{ENV.fetch("RELEASE_REPOSITORY")}/releases/latest/download/#{flavor_config.fetch(:sparkle_feed_asset_name)}",
+    sparkle_release_notes_path: File.join(sparkle_dir, "#{artifact_name}-#{asset_version}-macos.md"),
+    sparkle_public_key_env: flavor_config.fetch(:sparkle_public_key_env),
+    sparkle_private_key_env: flavor_config.fetch(:sparkle_private_key_env)
   }
 end
 
@@ -107,18 +174,19 @@ def match_certificate_password
   ENV.fetch("MATCH_CERTIFICATE_PASSWORD")
 end
 
-def sparkle_enabled_for_release?(metadata = release_metadata)
+def sparkle_enabled_for_release?(metadata)
   !metadata.fetch(:is_prerelease)
 end
 
-def sparkle_public_ed_key
-  public_key = ENV["SPARKLE_PUBLIC_ED_KEY"].to_s.strip
-  UI.user_error!("SPARKLE_PUBLIC_ED_KEY is required for release builds") if public_key.empty?
+def sparkle_public_ed_key(metadata)
+  env_key = metadata.fetch(:sparkle_public_key_env)
+  public_key = ENV[env_key].to_s.strip
+  UI.user_error!("#{env_key} is required for #{metadata[:flavor]} release builds") if public_key.empty?
   public_key
 end
 
-def sparkle_private_ed_key
-  ENV.fetch("SPARKLE_PRIVATE_ED_KEY")
+def sparkle_private_ed_key(metadata)
+  ENV.fetch(metadata.fetch(:sparkle_private_key_env))
 end
 
 def github_release_page_url(metadata)
@@ -136,8 +204,9 @@ ensure
   File.binwrite(path, original_contents) if defined?(original_contents) && original_contents
 end
 
-def configure_sparkle_info_plist!(plist_path)
-  sh("/usr/bin/plutil -replace SUPublicEDKey -string #{shell_escape(sparkle_public_ed_key)} #{shell_escape(plist_path)}")
+def configure_sparkle_info_plist!(plist_path, metadata)
+  sh("/usr/bin/plutil -replace SUPublicEDKey -string #{shell_escape(sparkle_public_ed_key(metadata))} #{shell_escape(plist_path)}")
+  sh("/usr/bin/plutil -replace SUFeedURL -string #{shell_escape(metadata.fetch(:sparkle_feed_url))} #{shell_escape(plist_path)}")
 end
 
 def sparkle_tool_path(tool_name)
@@ -183,13 +252,14 @@ end
 
 def previous_release_zip_assets(metadata, limit: 5)
   releases = github_api_json("https://api.github.com/repos/#{ENV.fetch("RELEASE_REPOSITORY")}/releases?per_page=100")
+  zip_asset_pattern = /\A#{Regexp.escape(metadata.fetch(:artifact_name))}-\d+\.\d+\.\d+-macos\.zip\z/
 
   releases.filter_map do |release|
     tag_name = release["tag_name"].to_s
     next if release["draft"] || release["prerelease"] || tag_name == metadata[:tag]
     next unless tag_name.match?(/\Arelease\/v\d+\.\d+\.\d+\z/)
 
-    asset = Array(release["assets"]).find { |candidate| candidate["name"].to_s.end_with?("-macos.zip") }
+    asset = Array(release["assets"]).find { |candidate| candidate["name"].to_s.match?(zip_asset_pattern) }
     next unless asset
 
     {
@@ -232,15 +302,17 @@ def write_sparkle_release_notes!(notes_path, metadata)
 end
 
 def validate_sparkle_environment!(metadata)
-  sparkle_public_ed_key
-  UI.user_error!("SPARKLE_PRIVATE_ED_KEY is required for stable Sparkle releases") if sparkle_enabled_for_release?(metadata) && ENV["SPARKLE_PRIVATE_ED_KEY"].to_s.strip.empty?
+  sparkle_public_ed_key(metadata)
+
+  private_key_env = metadata.fetch(:sparkle_private_key_env)
+  UI.user_error!("#{private_key_env} is required for stable #{metadata[:flavor]} Sparkle releases") if sparkle_enabled_for_release?(metadata) && ENV[private_key_env].to_s.strip.empty?
 end
 
 def generate_sparkle_appcast!(archives_dir, metadata)
   tool_path = sparkle_tool_path("generate_appcast")
 
   Tempfile.create(["sparkle-private-ed-key", ".txt"]) do |private_key_file|
-    private_key_file.write(sparkle_private_ed_key)
+    private_key_file.write(sparkle_private_ed_key(metadata))
     private_key_file.flush
 
     sh(
@@ -301,6 +373,14 @@ def with_app_store_connect_api_key_path(required: true)
     file.flush
     yield(file.path)
   end
+end
+
+def with_sigh_certificate_verification_skipped
+  previous = ENV["SIGH_SKIP_CERTIFICATE_VERIFICATION"]
+  ENV["SIGH_SKIP_CERTIFICATE_VERIFICATION"] = "true"
+  yield
+ensure
+  previous.nil? ? ENV.delete("SIGH_SKIP_CERTIFICATE_VERIFICATION") : ENV["SIGH_SKIP_CERTIFICATE_VERIFICATION"] = previous
 end
 
 def find_codesigning_identities(keychain_path)
@@ -367,6 +447,73 @@ def collect_sparkle_assets!(metadata)
   [metadata[:appcast_path], metadata[:sparkle_release_notes_path], *Dir[File.join(metadata[:sparkle_dir], "*.delta")].sort]
 end
 
+def ensure_bundle_id_exists!(metadata, api_key_path)
+  Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.from(filepath: api_key_path)
+
+  if Spaceship::ConnectAPI::BundleId.find(metadata[:bundle_id])
+    UI.message("Bundle ID #{metadata[:bundle_id]} already exists")
+    return
+  end
+
+  UI.important("Creating macOS Bundle ID #{metadata[:bundle_id]}")
+  Spaceship::ConnectAPI::BundleId.create(
+    name: metadata[:bundle_id_name],
+    platform: Spaceship::ConnectAPI::BundleIdPlatform::MAC_OS,
+    identifier: metadata[:bundle_id]
+  )
+end
+
+def macos_flavor_overrides_xcconfig_path
+  File.join(workspace_root, "macos", "Runner", "Configs", "FlavorOverrides.xcconfig")
+end
+
+def macos_runner_project_path
+  File.join(workspace_root, "macos", "Runner.xcodeproj")
+end
+
+def macos_runner_pbxproj_path
+  File.join(macos_runner_project_path, "project.pbxproj")
+end
+
+def with_macos_runner_project_restored
+  path = macos_runner_pbxproj_path
+  original = File.binread(path)
+  yield
+ensure
+  File.binwrite(path, original) if original
+end
+
+def write_macos_flavor_overrides!(metadata)
+  path = macos_flavor_overrides_xcconfig_path
+  FileUtils.mkdir_p(File.dirname(path))
+  File.write(path, <<~XCCONFIG)
+    // Generated by fastlane; do not commit.
+    PRODUCT_NAME = #{metadata[:app_name]}
+    PRODUCT_BUNDLE_IDENTIFIER = #{metadata[:bundle_id]}
+  XCCONFIG
+end
+
+def delete_macos_flavor_overrides!
+  FileUtils.rm_f(macos_flavor_overrides_xcconfig_path)
+end
+
+def plist_value(path, key)
+  stdout, stderr, status = Open3.capture3("/usr/libexec/PlistBuddy", "-c", "Print :#{key}", path)
+  UI.user_error!("Failed to read #{key} from #{path}: #{stderr}") unless status.success?
+  stdout.strip
+end
+
+def verify_built_app_metadata!(metadata)
+  info_plist = File.join(metadata[:app_path], "Contents", "Info.plist")
+  UI.user_error!("Missing Info.plist at #{info_plist}") unless File.exist?(info_plist)
+
+  actual_bundle_id = plist_value(info_plist, "CFBundleIdentifier")
+  actual_bundle_name = plist_value(info_plist, "CFBundleName")
+
+  UI.user_error!("Expected bundle id #{metadata[:bundle_id]}, got #{actual_bundle_id}") unless actual_bundle_id == metadata[:bundle_id]
+  UI.user_error!("Expected bundle name #{metadata[:app_name]}, got #{actual_bundle_name}") unless actual_bundle_name == metadata[:app_name]
+end
+
 platform :mac do
   private_lane :validate_signing_environment do |options|
     readonly = options.fetch(:readonly, match_readonly?)
@@ -382,13 +529,15 @@ platform :mac do
   end
 
   private_lane :prepare_signing do |options|
-    metadata = release_metadata
+    metadata = release_metadata(flavor: single_macos_release_flavor(options))
     keychain = setup_signing_keychain
     readonly = options.fetch(:readonly, match_readonly?)
     validate_signing_environment(readonly: readonly)
 
     Dir.mktmpdir("match-signing-assets") do |output_dir|
       with_app_store_connect_api_key_path(required: !readonly) do |api_key_path|
+        ensure_bundle_id_exists!(metadata, api_key_path) unless readonly
+
         match_options = {
           type: "developer_id",
           app_identifier: metadata[:bundle_id],
@@ -401,7 +550,9 @@ platform :mac do
           output_path: output_dir
         }
         match_options[:api_key_path] = api_key_path if api_key_path
-        match(match_options)
+        with_sigh_certificate_verification_skipped do
+          match(match_options)
+        end
       end
 
       import_match_signing_assets!(output_dir, keychain)
@@ -410,7 +561,7 @@ platform :mac do
     profile_name = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING].fetch(metadata[:bundle_id])
     update_code_signing_settings(
       use_automatic_signing: false,
-      path: File.join(workspace_root, "macos", "Runner.xcodeproj"),
+      path: macos_runner_project_path,
       targets: ["Runner"],
       build_configurations: ["Release"],
       sdk: "macosx*",
@@ -422,8 +573,8 @@ platform :mac do
     )
   end
 
-  private_lane :notarize_app_bundle do
-    metadata = release_metadata
+  private_lane :notarize_app_bundle do |options|
+    metadata = release_metadata(flavor: single_macos_release_flavor(options))
     UI.user_error!("Missing app bundle at #{metadata[:app_path]}") unless File.directory?(metadata[:app_path])
 
     with_app_store_connect_api_key_path do |api_key_path|
@@ -439,8 +590,8 @@ platform :mac do
     sh("xcrun stapler staple #{shell_escape(metadata[:app_path])}")
   end
 
-  private_lane :notarize_dmg do
-    metadata = release_metadata
+  private_lane :notarize_dmg do |options|
+    metadata = release_metadata(flavor: single_macos_release_flavor(options))
     UI.user_error!("Missing disk image at #{metadata[:dmg_path]}") unless File.exist?(metadata[:dmg_path])
 
     with_app_store_connect_api_key_path do |api_key_path|
@@ -456,9 +607,12 @@ platform :mac do
     sh("xcrun stapler staple #{shell_escape(metadata[:dmg_path])}")
   end
 
-  private_lane :upload_github_release do
-    metadata = release_metadata
+  private_lane :upload_github_release do |options|
+    flavors = options[:flavors] || macos_release_flavors
+    metadata_items = flavors.map { |flavor| release_metadata(flavor: flavor) }
+    metadata = metadata_items.first
     extra_assets = Array((lane_context[:SPARKLE_RELEASE_ASSETS] || [])).compact
+    assets = metadata_items.flat_map { |item| [item[:zip_path], item[:dmg_path]] } + extra_assets
 
     set_github_release(
       repository_name: ENV.fetch("RELEASE_REPOSITORY"),
@@ -469,41 +623,49 @@ platform :mac do
       is_draft: false,
       is_prerelease: metadata.fetch(:is_prerelease),
       is_generate_release_notes: true,
-      upload_assets: [metadata[:zip_path], metadata[:dmg_path], *extra_assets]
+      upload_assets: assets
     )
   end
 
   desc "Build the macOS release app bundle"
-  lane :build do
-    metadata = release_metadata
+  lane :build do |options|
+    metadata = release_metadata(flavor: single_macos_release_flavor(options))
     plist_path = File.join(workspace_root, "macos", "Runner", "Info.plist")
 
     FileUtils.mkdir_p(metadata[:dist_dir])
+    write_macos_flavor_overrides!(metadata)
 
-    sh("cd #{shell_escape(workspace_root)} && fvm flutter pub get")
-    with_restored_file(plist_path) do |restored_plist_path|
-      configure_sparkle_info_plist!(restored_plist_path)
+    begin
+      sh("cd #{shell_escape(workspace_root)} && fvm flutter pub get")
+      with_restored_file(plist_path) do |restored_plist_path|
+        configure_sparkle_info_plist!(restored_plist_path, metadata)
 
-      Bundler.with_unbundled_env do
-        sh(
-          [
-            "cd #{shell_escape(workspace_root)} &&",
-            "fvm flutter build macos --release --no-pub",
-            "--build-name", shell_escape(metadata[:version]),
-            "--build-number", shell_escape(metadata[:build_number])
-          ].join(" ")
-        )
+        Bundler.with_unbundled_env do
+          dart_define = shell_escape("ZCASH_DEFAULT_NETWORK=#{metadata[:zcash_default_network]}")
+          sh(
+            [
+              "cd #{shell_escape(workspace_root)} &&",
+              "fvm flutter build macos --release --no-pub",
+              "--dart-define=#{dart_define}",
+              "--build-name", shell_escape(metadata[:version]),
+              "--build-number", shell_escape(metadata[:build_number])
+            ].join(" ")
+          )
+        end
       end
-    end
 
-    UI.user_error!("Expected app bundle at #{metadata[:app_path]}") unless File.directory?(metadata[:app_path])
+      UI.user_error!("Expected app bundle at #{metadata[:app_path]}") unless File.directory?(metadata[:app_path])
+      verify_built_app_metadata!(metadata)
+    ensure
+      delete_macos_flavor_overrides!
+    end
   end
 
   desc "Package the macOS release build into ZIP and DMG"
   lane :package do |options|
-    build unless options[:skip_build]
+    build(flavor: single_macos_release_flavor(options)) unless options[:skip_build]
 
-    metadata = release_metadata
+    metadata = release_metadata(flavor: single_macos_release_flavor(options))
     FileUtils.mkdir_p(metadata[:dist_dir])
     FileUtils.rm_f([metadata[:zip_path], metadata[:dmg_path]])
 
@@ -519,26 +681,37 @@ platform :mac do
       "--app-path", shell_escape(metadata[:app_path]),
       "--output", shell_escape(metadata[:dmg_path]),
       "--app-name", shell_escape(metadata[:app_name]),
-      "--volume-name", shell_escape("Install Vizor Wallet")
+      "--volume-name", shell_escape(metadata[:volume_name])
     ].join(" "))
   end
 
   desc "Install macOS signing identities and provisioning profiles via match"
   lane :sync_signing do |options|
-    prepare_signing(readonly: options.fetch(:readonly, match_readonly?))
+    with_macos_runner_project_restored do
+      prepare_signing(readonly: options.fetch(:readonly, match_readonly?), flavor: single_macos_release_flavor(options))
+    end
   end
 
   desc "Build, notarize, package, and upload the macOS release"
   lane :release do
-    metadata = release_metadata
+    flavors = macos_release_flavors
+    metadata_items = flavors.map { |flavor| release_metadata(flavor: flavor) }
 
-    validate_sparkle_environment!(metadata)
-    prepare_signing(readonly: match_readonly?)
-    build
-    notarize_app_bundle
-    package(skip_build: true)
-    notarize_dmg
-    lane_context[:SPARKLE_RELEASE_ASSETS] = sparkle_enabled_for_release?(metadata) ? collect_sparkle_assets!(metadata) : []
-    upload_github_release
+    metadata_items.each { |metadata| validate_sparkle_environment!(metadata) }
+    lane_context[:SPARKLE_RELEASE_ASSETS] = []
+
+    metadata_items.each do |metadata|
+      with_macos_runner_project_restored do
+        prepare_signing(readonly: match_readonly?, flavor: metadata[:flavor])
+        build(flavor: metadata[:flavor])
+        notarize_app_bundle(flavor: metadata[:flavor])
+        package(skip_build: true, flavor: metadata[:flavor])
+        notarize_dmg(flavor: metadata[:flavor])
+      end
+
+      lane_context[:SPARKLE_RELEASE_ASSETS] += collect_sparkle_assets!(metadata) if sparkle_enabled_for_release?(metadata)
+    end
+
+    upload_github_release(flavors: flavors)
   end
 end

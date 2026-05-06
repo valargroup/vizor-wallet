@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 import 'network_config.dart';
+export 'network_config.dart';
 
 const kDefaultRpcEndpointPresetId = 'default-mainnet';
 const kCustomRpcEndpointPresetId = 'custom';
@@ -132,11 +133,22 @@ final kTestnetRpcEndpointPresets = List<RpcEndpointPreset>.unmodifiable([
   ),
 ]);
 
+final kRegtestRpcEndpointPresets = List<RpcEndpointPreset>.unmodifiable([
+  RpcEndpointPreset(
+    id: 'default-regtest',
+    region: 'Regtest',
+    label: 'Local Regtest',
+    url: ZcashNetwork.regtest.lightwalletdUrl,
+    isDefault: true,
+  ),
+]);
+
 List<RpcEndpointPreset> rpcEndpointPresetsForNetwork(String networkName) {
   final network = zcashNetworkFromName(networkName);
   return switch (network) {
     ZcashNetwork.mainnet => kMainnetRpcEndpointPresets,
     ZcashNetwork.testnet => kTestnetRpcEndpointPresets,
+    ZcashNetwork.regtest => kRegtestRpcEndpointPresets,
   };
 }
 
@@ -152,12 +164,6 @@ RpcEndpointConfig defaultRpcEndpointConfig(String networkName) {
     lightwalletdUrl: preset.url,
     presetId: preset.id,
   );
-}
-
-ZcashNetwork zcashNetworkFromName(String networkName) {
-  return networkName == ZcashNetwork.testnet.name
-      ? ZcashNetwork.testnet
-      : ZcashNetwork.mainnet;
 }
 
 RpcEndpointPreset? findRpcEndpointPresetById(
@@ -229,7 +235,10 @@ String normalizeRpcEndpointUrl(
 
 bool _isLocalhost(String host) {
   final lower = host.toLowerCase();
-  return lower == 'localhost' || lower == '::1' || lower.startsWith('127.');
+  return lower == 'localhost' ||
+      lower == '::1' ||
+      lower == '10.0.2.2' ||
+      lower.startsWith('127.');
 }
 
 bool _hasExplicitPort(String url) {

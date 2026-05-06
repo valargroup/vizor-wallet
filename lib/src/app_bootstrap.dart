@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +20,9 @@ const _activeAccountKey = 'zcash_active_account';
 const _networkKey = 'zcash_wallet_network';
 const _backgroundSyncChannel = MethodChannel(
   'com.zcash.wallet/background_sync',
+);
+const _e2eLightwalletdUrlOverride = String.fromEnvironment(
+  'ZCASH_E2E_LIGHTWALLETD_URL',
 );
 
 final appBootstrapProvider = Provider<AppBootstrapState>((_) {
@@ -58,8 +61,8 @@ class AppBootstrapState {
     initialLocation: '/welcome',
     initialAccountState: AccountState(),
     initialSyncSnapshot: AppSyncSnapshot.empty,
-    network: 'main',
-    rpcEndpointConfig: defaultRpcEndpointConfig('main'),
+    network: kZcashDefaultNetworkName,
+    rpcEndpointConfig: defaultRpcEndpointConfig(kZcashDefaultNetworkName),
     themeMode: ThemeMode.system,
     privacyModeEnabled: false,
     isPasswordConfigured: false,
@@ -70,6 +73,8 @@ class AppBootstrapState {
 
 class AppSyncSnapshot {
   const AppSyncSnapshot({
+    this.accountUuid,
+    this.hasAccountScopedData = false,
     required this.scannedHeight,
     required this.chainTipHeight,
     required this.percentage,
@@ -87,6 +92,8 @@ class AppSyncSnapshot {
     required this.recentTransactions,
   });
 
+  final String? accountUuid;
+  final bool hasAccountScopedData;
   final int scannedHeight;
   final int chainTipHeight;
   final double percentage;
@@ -120,6 +127,25 @@ class AppSyncSnapshot {
     totalBalance: BigInt.zero,
     recentTransactions: [],
   );
+
+  static AppSyncSnapshot emptyForAccount(String accountUuid) => AppSyncSnapshot(
+    accountUuid: accountUuid,
+    scannedHeight: 0,
+    chainTipHeight: 0,
+    percentage: 0,
+    transparentBalance: BigInt.zero,
+    saplingBalance: BigInt.zero,
+    orchardBalance: BigInt.zero,
+    transparentPendingBalance: BigInt.zero,
+    saplingPendingBalance: BigInt.zero,
+    orchardPendingBalance: BigInt.zero,
+    canShieldTransparentBalance: false,
+    shieldTransparentFee: BigInt.zero,
+    shieldTransparentAmount: BigInt.zero,
+    spendableBalance: BigInt.zero,
+    totalBalance: BigInt.zero,
+    recentTransactions: [],
+  );
 }
 
 Future<AppBootstrapState> loadAppBootstrap() async {
@@ -128,6 +154,7 @@ Future<AppBootstrapState> loadAppBootstrap() async {
   try {
     log('bootstrap: loading startup snapshot');
     await storage.ensureWalletDbName();
+    await _applyE2eBootstrapOverrides(storage);
     var passwordRotationRecoveryFailed = false;
     try {
       await storage.recoverInterruptedPasswordRotation();
@@ -139,7 +166,9 @@ Future<AppBootstrapState> loadAppBootstrap() async {
     } catch (e) {
       log('bootstrap: failed to recover password rotation: $e');
     }
-    final network = await storage.readString(_networkKey) ?? 'main';
+    final network = resolveStoredOrDefaultZcashNetworkName(
+      await storage.readString(_networkKey),
+    );
     final rpcEndpointConfig = await _readRpcEndpointConfig(storage, network);
     await _seedNativeRpcEndpointMirror(rpcEndpointConfig);
     final themeMode = await _readThemeMode(storage);
@@ -234,6 +263,23 @@ Future<AppBootstrapState> loadAppBootstrap() async {
     log('bootstrap: failed, falling back to welcome: $e');
     return AppBootstrapState.empty;
   }
+}
+
+Future<void> _applyE2eBootstrapOverrides(AppSecureStore storage) async {
+  final lightwalletdUrl = _e2eLightwalletdUrlOverride.trim();
+  if (lightwalletdUrl.isEmpty) return;
+
+  if (!kDebugMode) {
+    log('bootstrap: ignoring E2E overrides outside debug mode');
+    return;
+  }
+
+  await storage.writePlain(kRpcEndpointUrlKey, lightwalletdUrl);
+  await storage.writePlain(kRpcEndpointPresetKey, kCustomRpcEndpointPresetId);
+  log(
+    'bootstrap: applied E2E lightwalletd override '
+    'lightwalletd=$lightwalletdUrl',
+  );
 }
 
 @visibleForTesting
@@ -400,6 +446,8 @@ Future<AppSyncSnapshot> _loadInitialSyncSnapshot({
     );
 
     return AppSyncSnapshot(
+      accountUuid: accountUuid,
+      hasAccountScopedData: true,
       scannedHeight: scannedHeight,
       chainTipHeight: chainTipHeight,
       percentage: percentage,
@@ -418,6 +466,6 @@ Future<AppSyncSnapshot> _loadInitialSyncSnapshot({
     );
   } catch (e) {
     log('bootstrap: failed to load initial sync snapshot: $e');
-    return AppSyncSnapshot.empty;
+    return AppSyncSnapshot.emptyForAccount(accountUuid);
   }
 }
