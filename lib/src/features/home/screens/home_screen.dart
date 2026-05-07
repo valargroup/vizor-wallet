@@ -1101,6 +1101,7 @@ class _HomeShieldBalanceButton extends StatelessWidget {
     final isInteractive = enabled && !isLoading;
 
     return Semantics(
+      key: const ValueKey('home_shield_balance_button'),
       button: true,
       enabled: isInteractive,
       child: MouseRegion(
