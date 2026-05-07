@@ -19,6 +19,10 @@ bundle exec fastlane mac release
 5. flavor별 `.dmg` notarize + staple
 6. GitHub Release에 모든 flavor asset 업로드
 
+Flavor별 앱 이름, bundle id, 기본 네트워크, macOS 앱 아이콘은
+`fastlane/macos/Fastfile`의 `MACOS_RELEASE_FLAVOR_CONFIGS`에서 선택합니다.
+testnet 빌드는 `macos/Runner/TestnetAppIcon.icon`을 사용합니다.
+
 기본 release flavor는 `mainnet,testnet`입니다. 단일 flavor만 빌드하려면:
 
 ```bash

@@ -10,6 +10,9 @@ PRODUCT_NAME = Vizor
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.keplr.vizor
 
+// The application's macOS icon composer asset name.
+MACOS_APP_ICON_FILE = AppIcon
+
 // Fastlane writes this ignored file for macOS release flavors. It is included
 // here, instead of passed as global xcodebuild settings, so Pods targets keep
 // their own PRODUCT_NAME and bundle paths.
