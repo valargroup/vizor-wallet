@@ -402,7 +402,7 @@ class _SendReviewReceiptCard extends StatelessWidget {
             width: 320,
             height: 21,
             child: Text(
-              'Tx Fee: $feeText',
+              'Fee: $feeText',
               style: AppTypography.bodyMediumStrong.copyWith(
                 color: colors.text.accent,
               ),
