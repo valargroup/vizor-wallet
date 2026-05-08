@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart'
-    show CircularProgressIndicator, Scrollbar;
+    show CircularProgressIndicator, Scrollbar, Tooltip;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,6 +30,9 @@ import '../../activity/models/activity_row_data.dart';
 import '../../activity/screens/activity_transaction_status_screen.dart';
 import '../../activity/widgets/activity_table.dart';
 
+const _shieldErrorTooltipIconSize = 14.0;
+const _shieldErrorTooltipGap = AppSpacing.xxs;
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -41,6 +44,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _canBackgroundSync = false;
   bool _isShieldingBalance = false;
   String? _shieldBalanceError;
+  String? _shieldBalanceErrorDetail;
 
   @override
   void initState() {
@@ -69,6 +73,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _dismissShieldBalanceError() {
     setState(() {
       _shieldBalanceError = null;
+      _shieldBalanceErrorDetail = null;
     });
   }
 
@@ -78,6 +83,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     setState(() {
       _isShieldingBalance = true;
       _shieldBalanceError = null;
+      _shieldBalanceErrorDetail = null;
     });
 
     try {
@@ -126,6 +132,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _shieldBalanceError = _friendlyShieldBalanceError(e);
+        _shieldBalanceErrorDetail = _shieldBalanceErrorDetails(e);
       });
     } finally {
       if (mounted) {
@@ -155,6 +162,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return "Couldn't broadcast your shielding transaction. Try again.";
     }
     return "Couldn't shield your balance. Try again.";
+  }
+
+  String? _shieldBalanceErrorDetails(Object error) {
+    final message = error.toString().trim();
+    return message.isEmpty ? null : message;
   }
 
   @override
@@ -213,6 +225,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               canShieldBalance: canShieldTransparentBalance,
               isShieldingBalance: _isShieldingBalance,
               shieldBalanceError: _shieldBalanceError,
+              shieldBalanceErrorDetail: _shieldBalanceErrorDetail,
               onTogglePrivacyMode: () =>
                   ref.read(privacyModeProvider.notifier).toggle(),
               onShieldBalancePressed: () =>
@@ -245,6 +258,7 @@ class _HomePane extends ConsumerStatefulWidget {
     required this.canShieldBalance,
     required this.isShieldingBalance,
     required this.shieldBalanceError,
+    required this.shieldBalanceErrorDetail,
     required this.onTogglePrivacyMode,
     required this.onShieldBalancePressed,
     required this.onDismissShieldBalanceError,
@@ -265,6 +279,7 @@ class _HomePane extends ConsumerStatefulWidget {
   final bool canShieldBalance;
   final bool isShieldingBalance;
   final String? shieldBalanceError;
+  final String? shieldBalanceErrorDetail;
   final VoidCallback onTogglePrivacyMode;
   final VoidCallback onShieldBalancePressed;
   final VoidCallback onDismissShieldBalanceError;
@@ -412,6 +427,7 @@ class _HomePaneState extends ConsumerState<_HomePane> {
       return _HomeNoticeData(
         iconName: AppIcons.warning,
         message: widget.shieldBalanceError!,
+        detailMessage: widget.shieldBalanceErrorDetail,
         actionLabel: 'Dismiss',
         onTap: widget.onDismissShieldBalanceError,
       );
@@ -1229,12 +1245,14 @@ class _HomeNoticeData {
   const _HomeNoticeData({
     required this.iconName,
     required this.message,
+    this.detailMessage,
     required this.actionLabel,
     required this.onTap,
   });
 
   final String iconName;
   final String message;
+  final String? detailMessage;
   final String actionLabel;
   final VoidCallback onTap;
 }
@@ -1247,6 +1265,7 @@ class _HomeNoticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final detailMessage = data.detailMessage;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xs),
       decoration: BoxDecoration(
@@ -1258,11 +1277,46 @@ class _HomeNoticeCard extends StatelessWidget {
           AppIcon(data.iconName, size: 16, color: colors.icon.warning),
           const SizedBox(width: AppSpacing.xs),
           Expanded(
-            child: Text(
-              data.message,
-              style: AppTypography.labelLarge.copyWith(
-                color: colors.text.accent,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    data.message,
+                    style: AppTypography.labelLarge.copyWith(
+                      color: colors.text.accent,
+                    ),
+                  ),
+                ),
+                if (detailMessage != null) ...[
+                  const SizedBox(width: AppSpacing.xxs),
+                  Tooltip(
+                    message: detailMessage,
+                    waitDuration: const Duration(milliseconds: 350),
+                    showDuration: const Duration(seconds: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s,
+                      vertical: AppSpacing.xs,
+                    ),
+                    margin: EdgeInsets.zero,
+                    preferBelow: false,
+                    positionDelegate: _positionShieldErrorTooltip,
+                    decoration: BoxDecoration(
+                      color: colors.background.inverse,
+                      borderRadius: BorderRadius.circular(AppRadii.xSmall),
+                    ),
+                    textStyle: AppTypography.bodySmall.copyWith(
+                      color: colors.text.inverse,
+                      letterSpacing: 0,
+                    ),
+                    child: AppIcon(
+                      AppIcons.help,
+                      size: _shieldErrorTooltipIconSize,
+                      color: colors.text.accent,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           AppButton(
@@ -1276,4 +1330,24 @@ class _HomeNoticeCard extends StatelessWidget {
       ),
     );
   }
+}
+
+Offset _positionShieldErrorTooltip(TooltipPositionContext context) {
+  const edgeMargin = AppSpacing.md;
+  final targetTop = context.target.dy - (context.targetSize.height / 2);
+  final y = (targetTop - _shieldErrorTooltipGap - context.tooltipSize.height)
+      .clamp(
+        edgeMargin,
+        context.overlaySize.height - context.tooltipSize.height - edgeMargin,
+      )
+      .toDouble();
+
+  final flexibleSpace = context.overlaySize.width - context.tooltipSize.width;
+  final x = flexibleSpace <= edgeMargin * 2
+      ? flexibleSpace / 2
+      : (context.target.dx - (context.tooltipSize.width / 2))
+            .clamp(edgeMargin, flexibleSpace - edgeMargin)
+            .toDouble();
+
+  return Offset(x, y);
 }
