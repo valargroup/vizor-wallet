@@ -49,6 +49,7 @@ MACOS_RELEASE_FLAVOR_CONFIGS = {
 }.freeze
 
 DEFAULT_MACOS_RELEASE_FLAVORS = ["mainnet", "testnet"].freeze
+DEVELOPER_ID_APPLICATION_IDENTITY = "Developer ID Application: Chainapsis Inc. (SZTB68DXM4)".freeze
 
 def normalize_macos_release_flavor(flavor)
   normalized = flavor.to_s.strip.downcase
@@ -313,6 +314,51 @@ def validate_sparkle_environment!(metadata)
   UI.user_error!("#{private_key_env} is required for stable #{metadata[:flavor]} Sparkle releases") if ENV[private_key_env].to_s.strip.empty?
 end
 
+def codesign_for_distribution!(path, preserve_metadata: nil)
+  UI.user_error!("Expected codesign input at #{path}") unless File.exist?(path)
+
+  command = [
+    "/usr/bin/codesign",
+    "--force",
+    "--sign", DEVELOPER_ID_APPLICATION_IDENTITY,
+    "--timestamp",
+    "--options", "runtime"
+  ]
+  command << "--preserve-metadata=#{preserve_metadata}" if preserve_metadata
+  command << path
+
+  sh(command.map { |part| shell_escape(part) }.join(" "))
+end
+
+def resign_sparkle_for_notarization!(metadata)
+  app_path = metadata.fetch(:app_path)
+  sparkle_framework_path = File.join(app_path, "Contents", "Frameworks", "Sparkle.framework")
+  return unless File.directory?(sparkle_framework_path)
+
+  UI.message("Re-signing Sparkle.framework nested helpers for notarization")
+
+  sparkle_version_path = File.join(sparkle_framework_path, "Versions", "B")
+  sparkle_signing_targets = [
+    { path: File.join(sparkle_version_path, "XPCServices", "Installer.xpc") },
+    {
+      path: File.join(sparkle_version_path, "XPCServices", "Downloader.xpc"),
+      preserve_metadata: "entitlements"
+    },
+    { path: File.join(sparkle_version_path, "Autoupdate") },
+    { path: File.join(sparkle_version_path, "Updater.app") },
+    { path: sparkle_framework_path }
+  ]
+
+  sparkle_signing_targets.each do |target|
+    path = target.fetch(:path)
+    next unless File.exist?(path)
+
+    codesign_for_distribution!(path, preserve_metadata: target[:preserve_metadata])
+  end
+
+  codesign_for_distribution!(app_path, preserve_metadata: "identifier,entitlements")
+end
+
 def generate_sparkle_appcast!(archives_dir, metadata)
   tool_path = sparkle_tool_path("generate_appcast")
 
@@ -395,7 +441,7 @@ end
 
 def ensure_developer_id_identity!(keychain_path)
   identities = find_codesigning_identities(keychain_path)
-  return if identities.include?('Developer ID Application: Chainapsis Inc. (SZTB68DXM4)')
+  return if identities.include?(DEVELOPER_ID_APPLICATION_IDENTITY)
 
   UI.user_error!("Developer ID Application identity is not available in #{keychain_path}")
 end
@@ -584,6 +630,8 @@ platform :mac do
   private_lane :notarize_app_bundle do |options|
     metadata = release_metadata(flavor: single_macos_release_flavor(options))
     UI.user_error!("Missing app bundle at #{metadata[:app_path]}") unless File.directory?(metadata[:app_path])
+
+    resign_sparkle_for_notarization!(metadata)
 
     with_app_store_connect_api_key_path do |api_key_path|
       notarize(
