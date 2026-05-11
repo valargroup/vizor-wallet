@@ -187,7 +187,14 @@ class _Pane extends StatelessWidget {
                     height: _canvasHeight,
                     child: Padding(
                       padding: const EdgeInsets.all(AppSpacing.md),
-                      child: child,
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.bottomCenter,
+                          child: child,
+                        ),
+                      ),
                     ),
                   ),
                 );
