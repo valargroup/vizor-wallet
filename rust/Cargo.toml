@@ -2,6 +2,7 @@
 name = "rust_lib_zcash_wallet"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.85.1"
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
@@ -26,7 +27,7 @@ zcash_client_backend = { version = "0.22", features = [
 ] }
 zcash_client_sqlite = { version = "0.20", features = ["orchard", "transparent-inputs", "unstable", "serde"] }
 # Must match versions used by zcash_client_sqlite to avoid type conflicts
-orchard = "0.13"
+orchard = { version = "=0.13.1", features = ["unstable-voting-circuits"] }
 sapling-crypto = { version = "0.7", default-features = false, features = ["circuit"] }
 uuid = "1.1"
 zip32 = "0.2"

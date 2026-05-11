@@ -645,7 +645,7 @@ Important desktop design rule:
 
 ## Crate Versions
 
-Constrained in `rust/Cargo.toml` and resolved in `rust/Cargo.lock`. Key crates: `zcash_client_backend` 0.22.0, `zcash_client_sqlite` 0.20.2, `orchard` 0.13.1, `sapling-crypto` 0.7.0. These must stay compatible — check librustzcash releases before bumping.
+Constrained in `rust/Cargo.toml` and resolved in `rust/Cargo.lock`. Key crates: `zcash_client_backend` 0.22.0, `zcash_client_sqlite` 0.20.2, `zcash_keys` 0.13, `pczt` 0.6, `zcash_primitives` 0.27, `orchard` 0.13.1, and `sapling-crypto` 0.7.0. These must stay compatible — check librustzcash releases before bumping. Voting integration requires the `orchard` `unstable-voting-circuits` feature so it can use `zcash_voting` without local `[patch.crates-io]` overrides.
 
 `tonic` 0.14 with `tls-ring` + `tls-webpki-roots` features for gRPC TLS. `rustls` 0.23+ requires explicit crypto provider — `tls-ring` provides this.
 
