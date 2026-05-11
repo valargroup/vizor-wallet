@@ -273,24 +273,24 @@ mod tests {
 
     #[test]
     fn endpoint_failover_candidate_is_limited_to_transport_failures() {
-        assert!(SyncError::Network("gRPC connect failed: connection refused".into())
-            .is_endpoint_failover_candidate());
-        assert!(SyncError::Other("DeadlineExceeded while reading stream".into())
-            .is_endpoint_failover_candidate());
+        assert!(
+            SyncError::Network("gRPC connect failed: connection refused".into())
+                .is_endpoint_failover_candidate()
+        );
+        assert!(
+            SyncError::Other("DeadlineExceeded while reading stream".into())
+                .is_endpoint_failover_candidate()
+        );
 
         assert!(!SyncError::Db("database is locked".into()).is_endpoint_failover_candidate());
-        assert!(
-            !SyncError::Continuity {
-                at_height: 123,
-                detail: "PrevHashMismatch".into(),
-            }
-            .is_endpoint_failover_candidate()
-        );
-        assert!(
-            !is_endpoint_failover_candidate_message(
-                "Endpoint is for test, but this wallet uses main."
-            )
-        );
+        assert!(!SyncError::Continuity {
+            at_height: 123,
+            detail: "PrevHashMismatch".into(),
+        }
+        .is_endpoint_failover_candidate());
+        assert!(!is_endpoint_failover_candidate_message(
+            "Endpoint is for test, but this wallet uses main."
+        ));
         assert!(!is_endpoint_failover_candidate_message(
             "Proposal not found (expired or already executed)"
         ));

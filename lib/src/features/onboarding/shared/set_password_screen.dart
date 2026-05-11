@@ -15,6 +15,7 @@ import '../../../providers/router_refresh_provider.dart';
 import '../../../providers/wallet_mutation_guard.dart';
 import '../create/onboarding_split_view.dart';
 import '../import/import_split_view.dart';
+import '../keystone/keystone_onboarding_flow.dart';
 import 'onboarding_flow_args.dart';
 import 'onboarding_error_messages.dart';
 
@@ -91,15 +92,24 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
         await runWithSyncPausedForAccountMutation(
           ref,
           () async {
-            if (args.isImport) {
-              await accountNotifier.importAccount(
-                mnemonic: args.mnemonic,
-                birthdayHeight: args.importBirthdayHeight,
-              );
-            } else {
-              await accountNotifier.createAccountFromMnemonic(
-                mnemonic: args.mnemonic,
-              );
+            switch (args.flow) {
+              case SetPasswordFlow.create:
+                await accountNotifier.createAccountFromMnemonic(
+                  mnemonic: args.requiredMnemonic,
+                );
+              case SetPasswordFlow.importWallet:
+                await accountNotifier.importAccount(
+                  mnemonic: args.requiredMnemonic,
+                  birthdayHeight: args.importBirthdayHeight,
+                );
+              case SetPasswordFlow.importKeystone:
+                await accountNotifier.importKeystoneAccount(
+                  name: args.requiredKeystoneAccountName,
+                  ufvk: args.requiredKeystoneUfvk,
+                  seedFingerprint: args.requiredKeystoneSeedFingerprint,
+                  zip32Index: args.requiredKeystoneZip32Index,
+                  birthdayHeight: args.importBirthdayHeight,
+                );
             }
           },
           onStoppingSync: () {
@@ -118,6 +128,9 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
 
         securityNotifier.commitPasswordSetup();
         passwordCommitted = true;
+        if (args.flow == SetPasswordFlow.importKeystone) {
+          ref.read(keystoneOnboardingProvider.notifier).resetScan();
+        }
         router.go('/home');
       });
     } catch (e, st) {
@@ -160,9 +173,15 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
       onSubmit: _submit,
     );
 
-    return args.isImport
-        ? ImportOnboardingTrailingPane(child: content)
-        : OnboardingTrailingPane(child: content);
+    return switch (args.flow) {
+      SetPasswordFlow.create => OnboardingTrailingPane(child: content),
+      SetPasswordFlow.importWallet => ImportOnboardingTrailingPane(
+        child: content,
+      ),
+      SetPasswordFlow.importKeystone => KeystoneOnboardingTrailingPane(
+        child: content,
+      ),
+    };
   }
 }
 

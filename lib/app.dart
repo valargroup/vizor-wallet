@@ -14,6 +14,7 @@ import 'src/core/widgets/network_fallback_toast.dart';
 import 'src/features/activity/screens/activity_screen.dart';
 import 'src/features/activity/screens/activity_transaction_status_screen.dart';
 import 'src/features/accounts/screens/accounts_screen.dart';
+import 'src/features/home/screens/keystone_shield_confirm_screen.dart';
 import 'src/features/home/screens/home_screen.dart';
 import 'src/features/about/screens/about_screen.dart';
 import 'src/features/onboarding/create/address_types_screen.dart';
@@ -24,12 +25,19 @@ import 'src/features/onboarding/create/things_to_know_screen.dart';
 import 'src/features/onboarding/import/import_secret_passphrase_screen.dart';
 import 'src/features/onboarding/import/import_split_view.dart';
 import 'src/features/onboarding/import/import_wallet_birthday_screen.dart';
+import 'src/features/onboarding/keystone/keystone_how_to_connect_screen.dart';
+import 'src/features/onboarding/keystone/keystone_onboarding_flow.dart';
+import 'src/features/onboarding/keystone/keystone_scan_qr_screen.dart';
+import 'src/features/onboarding/keystone/keystone_select_account_screen.dart';
+import 'src/features/onboarding/keystone/keystone_wallet_birthday_screen.dart';
 import 'src/features/onboarding/lost_password_screen.dart';
 import 'src/features/onboarding/shared/onboarding_flow_args.dart';
 import 'src/features/onboarding/shared/set_password_screen.dart';
 import 'src/features/onboarding/unlock_screen.dart';
 import 'src/features/onboarding/welcome.dart';
 import 'src/features/receive/screens/receive_screen.dart';
+import 'src/features/send/screens/keystone_send_confirm_screen.dart';
+import 'src/features/send/screens/keystone_send_scan_screen.dart';
 import 'src/features/send/screens/send_review_screen.dart';
 import 'src/features/send/screens/send_screen.dart';
 import 'src/features/send/screens/send_status_screen.dart';
@@ -281,6 +289,100 @@ final _routerProvider = Provider<GoRouter>((ref) {
           key: state.pageKey,
           transitionDuration: kOnboardingForwardDuration,
           reverseTransitionDuration: kOnboardingReverseDuration,
+          child: KeystoneOnboardingShell(
+            activeStep: keystoneOnboardingStepFromLocation(
+              state.matchedLocation,
+            ),
+            showPasswordStep: !ref
+                .read(appSecurityProvider)
+                .isPasswordConfigured,
+            child: child,
+          ),
+          transitionsBuilder: (_, _, _, child) => child,
+        ),
+        routes: [
+          GoRoute(
+            path: KeystoneOnboardingStep.howToConnect.routePath,
+            pageBuilder: (context, state) => CustomTransitionPage<void>(
+              key: state.pageKey,
+              transitionDuration: kOnboardingForwardDuration,
+              reverseTransitionDuration: kOnboardingReverseDuration,
+              child: const KeystoneHowToConnectScreen(),
+              transitionsBuilder: _onboardingFadeTransition,
+            ),
+          ),
+          GoRoute(
+            path: KeystoneOnboardingStep.scanQrCode.routePath,
+            pageBuilder: (context, state) => CustomTransitionPage<void>(
+              key: state.pageKey,
+              transitionDuration: kOnboardingForwardDuration,
+              reverseTransitionDuration: kOnboardingReverseDuration,
+              child: const KeystoneScanQrScreen(),
+              transitionsBuilder: _onboardingFadeTransition,
+            ),
+          ),
+          GoRoute(
+            path: KeystoneOnboardingStep.selectAccount.routePath,
+            redirect: (_, _) {
+              final accounts = ref.read(keystoneOnboardingProvider).accounts;
+              return accounts.isEmpty
+                  ? KeystoneOnboardingStep.scanQrCode.routePath
+                  : null;
+            },
+            pageBuilder: (context, state) => CustomTransitionPage<void>(
+              key: state.pageKey,
+              transitionDuration: kOnboardingForwardDuration,
+              reverseTransitionDuration: kOnboardingReverseDuration,
+              child: const KeystoneSelectAccountScreen(),
+              transitionsBuilder: _onboardingFadeTransition,
+            ),
+          ),
+          GoRoute(
+            path: KeystoneOnboardingStep.walletBirthdayHeight.routePath,
+            redirect: (_, _) {
+              final state = ref.read(keystoneOnboardingProvider);
+              if (state.accounts.isEmpty) {
+                return KeystoneOnboardingStep.scanQrCode.routePath;
+              }
+              return state.selectedAccount == null
+                  ? KeystoneOnboardingStep.selectAccount.routePath
+                  : null;
+            },
+            pageBuilder: (context, state) => CustomTransitionPage<void>(
+              key: state.pageKey,
+              transitionDuration: kOnboardingForwardDuration,
+              reverseTransitionDuration: kOnboardingReverseDuration,
+              child: const KeystoneWalletBirthdayScreen(),
+              transitionsBuilder: _onboardingFadeTransition,
+            ),
+          ),
+          GoRoute(
+            path: KeystoneOnboardingStep.setPassword.routePath,
+            redirect: (_, state) {
+              final args = state.extra;
+              if (args is SetPasswordScreenArgs &&
+                  args.flow == SetPasswordFlow.importKeystone) {
+                return null;
+              }
+              return KeystoneOnboardingStep.walletBirthdayHeight.routePath;
+            },
+            pageBuilder: (context, state) => CustomTransitionPage<void>(
+              key: state.pageKey,
+              transitionDuration: kOnboardingForwardDuration,
+              reverseTransitionDuration: kOnboardingReverseDuration,
+              child: SetPasswordScreen(
+                args: state.extra as SetPasswordScreenArgs,
+              ),
+              transitionsBuilder: _onboardingFadeTransition,
+            ),
+          ),
+        ],
+      ),
+      ShellRoute(
+        pageBuilder: (context, state, child) => CustomTransitionPage<void>(
+          key: state.pageKey,
+          transitionDuration: kOnboardingForwardDuration,
+          reverseTransitionDuration: kOnboardingReverseDuration,
           child: ImportOnboardingShell(
             activeStep: importOnboardingStepFromLocation(state.matchedLocation),
             showPasswordStep: !ref
@@ -353,6 +455,10 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/terms', builder: (_, _) => const TermsScreen()),
       GoRoute(path: '/privacy', builder: (_, _) => const PrivacyPolicyScreen()),
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
+      GoRoute(
+        path: '/home/keystone/shield/confirm',
+        builder: (_, _) => const KeystoneShieldConfirmScreen(),
+      ),
       GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
       GoRoute(path: '/activity', builder: (_, _) => const ActivityScreen()),
       GoRoute(
@@ -390,15 +496,38 @@ final _routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
+        path: '/send/keystone/confirm',
+        builder: (_, state) {
+          final args = state.extra;
+          if (args is! SendReviewArgs) return const SendScreen();
+          return KeystoneSendConfirmScreen(args: args);
+        },
+      ),
+      GoRoute(
+        path: '/send/keystone/scan',
+        builder: (_, _) => const KeystoneSendScanScreen(),
+      ),
+      GoRoute(
         path: '/send/status',
         builder: (_, state) {
           final args = state.extra;
+          if (args is KeystoneBroadcastArgs) {
+            return SendStatusScreen(args: args.reviewArgs, keystone: args);
+          }
           if (args is! SendReviewArgs) return const SendScreen();
           return SendStatusScreen(args: args);
         },
       ),
       GoRoute(path: '/receive', builder: (_, _) => const ReceiveScreen()),
       GoRoute(path: '/accounts', builder: (_, _) => const AccountsScreen()),
+      GoRoute(
+        path: '/import-keystone',
+        redirect: (_, _) => KeystoneOnboardingStep.howToConnect.routePath,
+      ),
+      GoRoute(
+        path: '/import-keystone/set-password',
+        redirect: (_, _) => KeystoneOnboardingStep.howToConnect.routePath,
+      ),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(
         path: '/settings/secret-passphrase',

@@ -80,6 +80,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         accountState?.activeAccount?.profilePictureId ??
         kDefaultProfilePictureId;
     final hasActiveAccount = accountState?.activeAccountUuid != null;
+    final activeAccountIsHardware =
+        accountState?.activeAccount?.isHardware ?? false;
     final themeMode = ref.watch(themeModeProvider);
     final endpointLabel = ref.watch(rpcEndpointProvider).hostPort;
 
@@ -96,6 +98,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 profilePictureLabel: _profilePictureLabel(
                   activeProfilePictureId,
                 ),
+                activeAccountIsHardware: activeAccountIsHardware,
                 endpointLabel: endpointLabel,
                 themeLabel: _themeLabel(themeMode),
                 onSeedPhrase: () => context.push('/settings/secret-passphrase'),
@@ -159,6 +162,7 @@ class _SettingsPane extends StatelessWidget {
   const _SettingsPane({
     required this.accountName,
     required this.profilePictureLabel,
+    required this.activeAccountIsHardware,
     required this.endpointLabel,
     required this.themeLabel,
     required this.onSeedPhrase,
@@ -171,6 +175,7 @@ class _SettingsPane extends StatelessWidget {
 
   final String accountName;
   final String profilePictureLabel;
+  final bool activeAccountIsHardware;
   final String endpointLabel;
   final String themeLabel;
   final VoidCallback onSeedPhrase;
@@ -212,6 +217,7 @@ class _SettingsPane extends StatelessWidget {
                       _SettingsList(
                         accountName: accountName,
                         profilePictureLabel: profilePictureLabel,
+                        activeAccountIsHardware: activeAccountIsHardware,
                         endpointLabel: endpointLabel,
                         themeLabel: themeLabel,
                         onSeedPhrase: onSeedPhrase,
@@ -237,6 +243,7 @@ class _SettingsList extends StatelessWidget {
   const _SettingsList({
     required this.accountName,
     required this.profilePictureLabel,
+    required this.activeAccountIsHardware,
     required this.endpointLabel,
     required this.themeLabel,
     required this.onSeedPhrase,
@@ -249,6 +256,7 @@ class _SettingsList extends StatelessWidget {
 
   final String accountName;
   final String profilePictureLabel;
+  final bool activeAccountIsHardware;
   final String endpointLabel;
   final String themeLabel;
   final VoidCallback onSeedPhrase;
@@ -269,8 +277,8 @@ class _SettingsList extends StatelessWidget {
             _SettingsRow(
               iconName: AppIcons.key,
               label: 'Secret Passphrase',
-              value: 'View',
-              onTap: onSeedPhrase,
+              value: activeAccountIsHardware ? 'Unavailable' : 'View',
+              onTap: activeAccountIsHardware ? null : onSeedPhrase,
             ),
             const _SettingsRowDivider(),
             _SettingsRow(

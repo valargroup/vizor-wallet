@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,20 +21,19 @@ import '../../../providers/rpc_endpoint_failover_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../../../rust/api/wallet.dart' as rust_wallet;
+import '../../keystone/widgets/keystone_transaction_progress_panel.dart';
+import '../services/sapling_params.dart';
 import '../widgets/sapling_params_prompt.dart';
 import '../widgets/transaction_receipt_view.dart';
 import 'send_review_screen.dart';
 
-const _saplingSpendHash = 'a15ab54c2888880e53c823a3063820c728444126';
-const _saplingOutputHash = '0ebc5a1ef3653948e1c46cf7a16071eac4b7e352';
-const _saplingParamBaseUrl = 'https://download.z.cash/downloads/';
-
 enum _SendStatusPhase { sending, pendingBroadcast, succeeded, failed }
 
 class SendStatusScreen extends ConsumerStatefulWidget {
-  const SendStatusScreen({super.key, required this.args});
+  const SendStatusScreen({super.key, required this.args, this.keystone});
 
   final SendReviewArgs args;
+  final KeystoneBroadcastArgs? keystone;
 
   @override
   ConsumerState<SendStatusScreen> createState() => _SendStatusScreenState();
@@ -56,6 +54,7 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
   @override
   void initState() {
     super.initState();
+    _proposalConsumed = widget.keystone != null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(appLayoutProvider.notifier).setMode(AppLayoutMode.large);
@@ -142,6 +141,24 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
       return "Transaction was created locally but didn't reach the network. "
           'The wallet will keep retrying until it expires. '
           "Don't send again unless this one expires.";
+    }
+    return 'Transaction was created locally but could not be broadcast. It will retry automatically when the network is available. Do not send again unless this transaction expires.';
+  }
+
+  String _pcztBroadcastStatusMessage(
+    rust_sync.ExtractAndBroadcastPcztResult result,
+  ) {
+    if (result.status == 'broadcast_unknown') {
+      return result.message ??
+          'The transaction may have reached the network, but confirmation timed out. Check activity before sending again.';
+    }
+    if (result.status == 'broadcasted_storage_failed') {
+      return result.message ??
+          'The transaction reached the network, but Vizor could not store it locally. Do not send again until sync or an explorer confirms the latest status.';
+    }
+    final rawMessage = result.message?.toLowerCase() ?? '';
+    if (rawMessage.contains('broadcast rejected')) {
+      return 'Transaction was rejected by the network. Please try again later.';
     }
     return 'Transaction was created locally but could not be broadcast. It will retry automatically when the network is available. Do not send again unless this transaction expires.';
   }
@@ -243,39 +260,6 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
     completer.complete(confirmed);
   }
 
-  Future<void> _downloadAndVerify(
-    String url,
-    String destPath,
-    String expectedSha1,
-  ) async {
-    final client = HttpClient();
-    try {
-      final request = await client.getUrl(Uri.parse(url));
-      final response = await request.close();
-      if (response.statusCode != 200) {
-        throw Exception(
-          'Download failed: HTTP ${response.statusCode} for $url',
-        );
-      }
-      final tempPath = '${destPath}_tmp';
-      final file = File(tempPath);
-      final sink = file.openWrite();
-      await response.pipe(sink);
-
-      final bytes = await File(tempPath).readAsBytes();
-      final digest = sha1.convert(bytes);
-      if (digest.toString() != expectedSha1) {
-        await File(tempPath).delete();
-        throw Exception('SHA-1 mismatch: expected $expectedSha1, got $digest');
-      }
-
-      await File(tempPath).rename(destPath);
-      log('SendStatus: downloaded and verified $destPath');
-    } finally {
-      client.close();
-    }
-  }
-
   Future<void> _goHome() async {
     if (!mounted) return;
     context.go('/home');
@@ -328,21 +312,12 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
 
   Future<void> _startBroadcast() async {
     try {
-      final supportDir = await getWalletSupportDirectory();
       final dbPath = await getWalletDbPath();
       final endpoint = ref.read(rpcEndpointFailoverProvider).current;
-      final paramsDir =
-          '${supportDir.path}${Platform.pathSeparator}sapling_params';
-      final spendPath =
-          '$paramsDir${Platform.pathSeparator}sapling-spend.params';
-      final outputPath =
-          '$paramsDir${Platform.pathSeparator}sapling-output.params';
+      var saplingParams = await loadSaplingParamsStatus();
 
       if (widget.args.needsSaplingParams) {
-        final spendExists = File(spendPath).existsSync();
-        final outputExists = File(outputPath).existsSync();
-
-        if (!spendExists || !outputExists) {
+        if (!saplingParams.complete) {
           if (await _abortIfUnmounted()) return;
           final downloadConfirmed = await _showSaplingParamsDialog();
           if (!downloadConfirmed) {
@@ -355,57 +330,95 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
             return;
           }
 
-          await Directory(paramsDir).create(recursive: true);
-          if (!spendExists) {
-            await _downloadAndVerify(
-              '${_saplingParamBaseUrl}sapling-spend.params',
-              spendPath,
-              _saplingSpendHash,
-            );
-          }
-          if (!outputExists) {
-            await _downloadAndVerify(
-              '${_saplingParamBaseUrl}sapling-output.params',
-              outputPath,
-              _saplingOutputHash,
-            );
-          }
+          await downloadMissingSaplingParams(
+            saplingParams,
+            log: (message) => log('SendStatus: $message'),
+          );
+          saplingParams = await loadSaplingParamsStatus();
           if (await _abortIfUnmounted()) return;
         }
       }
 
       final accountNotifier = ref.read(accountProvider.notifier);
-      final mnemonic = await accountNotifier.getMnemonicForAccount(
+      final isHardware = accountNotifier.isHardwareAccount(
         widget.args.proposalAccountUuid,
       );
-      if (mnemonic == null) {
-        if (await _abortIfUnmounted()) return;
-        setState(() {
-          _phase = _SendStatusPhase.failed;
-          _error = 'Mnemonic not found for the proposal account.';
-        });
-        return;
+
+      late final String txids;
+      late final bool broadcastComplete;
+      late final String? pendingStatusMessage;
+      String? broadcastMessageForFallback;
+
+      if (isHardware) {
+        final keystone = widget.keystone;
+        if (keystone == null) {
+          throw Exception('Missing Keystone transaction signature.');
+        }
+        _proposalConsumed = true;
+        final result = await rust_sync.extractAndBroadcastPczt(
+          dbPath: dbPath,
+          lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+          network: endpoint.networkName,
+          pcztWithProofsBytes: keystone.pcztWithProofsBytes,
+          pcztWithSignaturesBytes: keystone.pcztWithSignaturesBytes,
+          spendParamsPath: widget.args.needsSaplingParams
+              ? saplingParams.spendPath
+              : null,
+          outputParamsPath: widget.args.needsSaplingParams
+              ? saplingParams.outputPath
+              : null,
+        );
+        txids = result.txid;
+        broadcastComplete = result.status == 'broadcasted';
+        pendingStatusMessage = broadcastComplete
+            ? null
+            : _pcztBroadcastStatusMessage(result);
+        broadcastMessageForFallback = result.message;
+      } else {
+        final mnemonic = await accountNotifier.getMnemonicForAccount(
+          widget.args.proposalAccountUuid,
+        );
+        if (mnemonic == null) {
+          if (await _abortIfUnmounted()) return;
+          setState(() {
+            _phase = _SendStatusPhase.failed;
+            _error = 'Mnemonic not found for the proposal account.';
+          });
+          return;
+        }
+
+        final seedBytes = await rust_wallet.deriveSeed(mnemonic: mnemonic);
+        final result = await rust_sync.executeProposal(
+          dbPath: dbPath,
+          lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+          proposalId: widget.args.proposalId,
+          sendFlowId: widget.args.sendFlowId,
+          seed: seedBytes,
+          spendParamsPath: widget.args.needsSaplingParams
+              ? saplingParams.spendPath
+              : null,
+          outputParamsPath: widget.args.needsSaplingParams
+              ? saplingParams.outputPath
+              : null,
+        );
+        _proposalConsumed = true;
+        txids = result.txids;
+        broadcastComplete = result.status == 'broadcasted';
+        pendingStatusMessage = broadcastComplete
+            ? null
+            : _broadcastStatusMessage(result);
+        broadcastMessageForFallback = result.message;
       }
 
-      final seedBytes = await rust_wallet.deriveSeed(mnemonic: mnemonic);
-      final result = await rust_sync.executeProposal(
-        dbPath: dbPath,
-        lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-        proposalId: widget.args.proposalId,
-        sendFlowId: widget.args.sendFlowId,
-        seed: seedBytes,
-        spendParamsPath: widget.args.needsSaplingParams ? spendPath : null,
-        outputParamsPath: widget.args.needsSaplingParams ? outputPath : null,
-      );
-      _proposalConsumed = true;
-      final broadcastComplete = result.status == 'broadcasted';
-      if (!broadcastComplete && result.message != null) {
+      if (!broadcastComplete && broadcastMessageForFallback != null) {
         final switched = await ref
             .read(rpcEndpointFailoverProvider.notifier)
             .switchToFallbackFor(
-              result.message!,
+              broadcastMessageForFallback,
               endpoint: endpoint,
-              operation: 'send broadcast',
+              operation: isHardware
+                  ? 'keystone send broadcast'
+                  : 'send broadcast',
             );
         if (switched) {
           unawaited(ref.read(syncProvider.notifier).restartSync());
@@ -440,10 +453,8 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
         _phase = broadcastComplete
             ? _SendStatusPhase.succeeded
             : _SendStatusPhase.pendingBroadcast;
-        _txid = _firstTxid(result.txids);
-        _statusMessage = broadcastComplete
-            ? null
-            : _broadcastStatusMessage(result);
+        _txid = _firstTxid(txids);
+        _statusMessage = pendingStatusMessage;
         _completedAt = DateTime.now();
       });
     } catch (e) {
@@ -468,6 +479,42 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
     }
   }
 
+  Widget _buildKeystoneSubmittingScreen(BuildContext context) {
+    final colors = context.colors;
+    return AppDesktopShell(
+      sidebar: const AppMainSidebar(),
+      pane: AppDesktopPane(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: AppRouteBackLink(),
+            ),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Scan your Keystone QR Code',
+                      style: AppTypography.headlineLarge.copyWith(
+                        color: colors.button.ghost.label,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    const KeystoneTransactionProgressPanel(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final addressLines = _splitAddress();
@@ -479,6 +526,8 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
     };
     final useFailedReceiptLayout = _phase == _SendStatusPhase.failed;
     final statusMessage = _statusMessage;
+    final isKeystoneSubmitting =
+        widget.keystone != null && _phase == _SendStatusPhase.sending;
 
     return PopScope<void>(
       canPop: false,
@@ -487,117 +536,132 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
           unawaited(_goHome());
         }
       },
-      child: AppDesktopShell(
-        sidebar: const AppMainSidebar(),
-        pane: AppDesktopPane(
-          padding: EdgeInsets.zero,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: TransactionReceiptIllustration(
-                    failed: useFailedReceiptLayout,
-                  ),
-                ),
-              ),
-              Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.md,
-                    0,
-                    AppSpacing.md,
-                  ),
-                  child: Column(
-                    children: [
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: AppRouteBackLink(),
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 255),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: TransactionReceiptView(
-                              key: ValueKey('send_status_${receiptPhase.name}'),
-                              phase: receiptPhase,
-                              amountText: _formatReceiptAmount(
-                                widget.args.amountZatoshi,
-                              ),
-                              primaryBlock: TransactionReceiptBlockData(
-                                title: 'To',
-                                child: useFailedReceiptLayout
-                                    ? TransactionReceiptAddressText(
-                                        address: widget.args.address,
-                                        highlightEdges: widget.args.isShielded,
-                                      )
-                                    : Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          for (final line in addressLines)
-                                            RichText(
-                                              text: TextSpan(
-                                                children: _addressSpans(
-                                                  context,
-                                                  line,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                onCopy: useFailedReceiptLayout
-                                    ? () => unawaited(_copyRecipientAddress())
-                                    : null,
-                              ),
-                              feeText: _formatFee(widget.args.feeZatoshi),
-                              extraBlocks: [
-                                if (statusMessage != null)
-                                  TransactionReceiptBlockData(
-                                    title: 'Status',
-                                    child: Text(
-                                      statusMessage,
-                                      style: AppTypography.bodyMedium.copyWith(
-                                        color: context.colors.text.accent,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                              dateText: _formatDate(_completedAt ?? _startedAt),
-                              error: _error,
-                              failureFallbackText: 'Send failed',
-                              useFailedReceiptLayout: useFailedReceiptLayout,
-                              onTransactionHashPressed:
-                                  (_phase == _SendStatusPhase.succeeded ||
-                                          _phase ==
-                                              _SendStatusPhase
-                                                  .pendingBroadcast) &&
-                                      _txid != null
-                                  ? _openTransactionExplorer
-                                  : null,
-                              onBackToWallet: _phase == _SendStatusPhase.failed
-                                  ? _goHome
-                                  : null,
-                            ),
-                          ),
+      child: isKeystoneSubmitting
+          ? _buildKeystoneSubmittingScreen(context)
+          : AppDesktopShell(
+              sidebar: const AppMainSidebar(),
+              pane: AppDesktopPane(
+                padding: EdgeInsets.zero,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: TransactionReceiptIllustration(
+                          failed: useFailedReceiptLayout,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.md,
+                          AppSpacing.md,
+                          0,
+                          AppSpacing.md,
+                        ),
+                        child: Column(
+                          children: [
+                            const Align(
+                              alignment: Alignment.centerLeft,
+                              child: AppRouteBackLink(),
+                            ),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 255),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: TransactionReceiptView(
+                                    key: ValueKey(
+                                      'send_status_${receiptPhase.name}',
+                                    ),
+                                    phase: receiptPhase,
+                                    amountText: _formatReceiptAmount(
+                                      widget.args.amountZatoshi,
+                                    ),
+                                    primaryBlock: TransactionReceiptBlockData(
+                                      title: 'To',
+                                      child: useFailedReceiptLayout
+                                          ? TransactionReceiptAddressText(
+                                              address: widget.args.address,
+                                              highlightEdges:
+                                                  widget.args.isShielded,
+                                            )
+                                          : Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                for (final line in addressLines)
+                                                  RichText(
+                                                    text: TextSpan(
+                                                      children: _addressSpans(
+                                                        context,
+                                                        line,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                      onCopy: useFailedReceiptLayout
+                                          ? () => unawaited(
+                                              _copyRecipientAddress(),
+                                            )
+                                          : null,
+                                    ),
+                                    feeText: _formatFee(widget.args.feeZatoshi),
+                                    extraBlocks: [
+                                      if (statusMessage != null)
+                                        TransactionReceiptBlockData(
+                                          title: 'Status',
+                                          child: Text(
+                                            statusMessage,
+                                            style: AppTypography.bodyMedium
+                                                .copyWith(
+                                                  color: context
+                                                      .colors
+                                                      .text
+                                                      .accent,
+                                                ),
+                                          ),
+                                        ),
+                                    ],
+                                    dateText: _formatDate(
+                                      _completedAt ?? _startedAt,
+                                    ),
+                                    error: _error,
+                                    failureFallbackText: 'Send failed',
+                                    useFailedReceiptLayout:
+                                        useFailedReceiptLayout,
+                                    onTransactionHashPressed:
+                                        (_phase == _SendStatusPhase.succeeded ||
+                                                _phase ==
+                                                    _SendStatusPhase
+                                                        .pendingBroadcast) &&
+                                            _txid != null
+                                        ? _openTransactionExplorer
+                                        : null,
+                                    onBackToWallet:
+                                        _phase == _SendStatusPhase.failed
+                                        ? _goHome
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_showSaplingParamsPrompt)
+                      Positioned.fill(
+                        child: SaplingParamsPrompt(
+                          onDownload: () => _resolveSaplingParamsDialog(true),
+                          onCancel: () => _resolveSaplingParamsDialog(false),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              if (_showSaplingParamsPrompt)
-                Positioned.fill(
-                  child: SaplingParamsPrompt(
-                    onDownload: () => _resolveSaplingParamsDialog(true),
-                    onCancel: () => _resolveSaplingParamsDialog(false),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 }

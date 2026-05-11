@@ -80,6 +80,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _shieldTransparentBalance() async {
     if (_isShieldingBalance) return;
 
+    final wallet = ref.read(walletProvider).value;
+    final accountUuid = wallet?.activeAccountUuid;
+    if (accountUuid == null) {
+      setState(() {
+        _shieldBalanceError = 'No active account.';
+      });
+      return;
+    }
+
+    final accountNotifier = ref.read(accountProvider.notifier);
+    if (accountNotifier.isHardwareAccount(accountUuid)) {
+      context.go('/home/keystone/shield/confirm');
+      return;
+    }
+
     setState(() {
       _isShieldingBalance = true;
       _shieldBalanceError = null;
@@ -88,13 +103,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     RpcEndpointConfig? attemptedEndpoint;
     try {
-      final wallet = ref.read(walletProvider).value;
-      final accountUuid = wallet?.activeAccountUuid;
-      if (accountUuid == null) {
-        throw Exception('No active account.');
-      }
-
-      final accountNotifier = ref.read(accountProvider.notifier);
       final sync = (ref.read(syncProvider).value ?? SyncState())
           .scopedToAccount(accountUuid);
       if (!sync.canShieldTransparentBalance) {

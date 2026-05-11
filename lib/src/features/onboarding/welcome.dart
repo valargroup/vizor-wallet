@@ -310,7 +310,65 @@ class _ButtonsStack extends StatelessWidget {
           leading: const AppIcon(AppIcons.importWallet),
           child: const Text('Import a wallet'),
         ),
+        const SizedBox(height: AppSpacing.sm),
+        const _OrDivider(),
+        const SizedBox(height: AppSpacing.sm),
+        AppButton(
+          key: const ValueKey('welcome_connect_keystone_button'),
+          onPressed: () => context.go('/onboarding/keystone'),
+          variant: AppButtonVariant.ghost,
+          minWidth: _welcomeActionWidth,
+          leading: const AppIcon(AppIcons.qrCodeFill, size: 18),
+          child: const Text('Connect Keystone'),
+        ),
       ],
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Opacity(
+      opacity: 0.4,
+      child: SizedBox(
+        width: _welcomeActionWidth,
+        height: 18,
+        child: Row(
+          children: [
+            Expanded(child: _OrDividerLine(color: colors.text.secondary)),
+            const SizedBox(width: 20),
+            Text(
+              'or',
+              style: AppTypography.labelLarge.copyWith(
+                color: colors.text.secondary,
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(child: _OrDividerLine(color: colors.text.secondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrDividerLine extends StatelessWidget {
+  const _OrDividerLine({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(AppRadii.full),
+      ),
+      child: const SizedBox(height: 1),
     );
   }
 }

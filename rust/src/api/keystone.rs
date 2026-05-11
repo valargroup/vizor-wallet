@@ -4,17 +4,6 @@ use crate::wallet::keystone;
 
 pub use crate::wallet::keystone::{KeystoneAccountInfo, UrDecodeResult};
 
-/// Check if a Keystone device is connected via USB.
-pub async fn is_keystone_connected() -> bool {
-    keystone::is_keystone_connected().await
-}
-
-/// Sign PCZT bytes via Keystone USB. Returns signed PCZT bytes.
-/// The device will display the transaction for user confirmation.
-pub async fn keystone_usb_sign_pczt(pczt_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
-    keystone::usb_sign_pczt(&pczt_bytes).await
-}
-
 /// Encode PCZT bytes to a UR string for QR code display.
 pub fn encode_pczt_to_ur(pczt_bytes: Vec<u8>) -> Result<String, String> {
     keystone::encode_pczt_to_ur(&pczt_bytes)
@@ -46,10 +35,10 @@ pub fn encode_pczt_ur_parts(
 /// scan ended (cancel, back button, mid-stream error).
 ///
 /// Marked `#[frb(sync)]` so the Dart caller does not race with the camera:
-/// `_AnimatedUrScanScreenState.initState` needs the Rust `UR_SESSION` to be
-/// clean **before** the first `onDetect` callback fires, and a fire-and-forget
-/// `Future` provides no such ordering guarantee. The Rust body is a single
-/// mutex lock + `None` assignment, so it's trivially non-blocking.
+/// QR scan screen entry needs the Rust `UR_SESSION` to be clean **before** the
+/// first `onDetect` callback fires, and a fire-and-forget `Future` provides no
+/// such ordering guarantee. The Rust body is a single mutex lock + `None`
+/// assignment, so it's trivially non-blocking.
 #[flutter_rust_bridge::frb(sync)]
 pub fn reset_ur_session() {
     keystone::reset_ur_session();

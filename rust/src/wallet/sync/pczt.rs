@@ -13,14 +13,15 @@
 //!         │        the proposal has a non-empty Sapling bundle)
 //!         │
 //!         └── 2b. redact_pczt_for_signer(base)        → redactedPczt     (phone)
-//!                 → Keystone device (animated QR or USB)
+//!                 → Keystone device (animated QR)
 //!                 → device signs Orchard spend_auth_sig
 //!                 → signed PCZT back to phone          → pcztWithSignatures
 //!                                                            │
 //!   3. extract_and_broadcast_pczt(                             │
 //!        pcztWithProofs, pcztWithSignatures,                   │
 //!        spend_params?, output_params?,                        │
-//!      )                                               → txid ◄┘
+//!      )                                               → finalize transparent spends
+//!                                                        + extract tx + txid ◄┘
 //! ```
 //!
 //! ## Critical invariants (each of these was a real regression at some point)
@@ -86,6 +87,7 @@ pub struct ExtractAndBroadcastPcztResult {
 impl ExtractAndBroadcastPcztResult {
     const BROADCASTED: &'static str = "broadcasted";
     const BROADCAST_UNKNOWN: &'static str = "broadcast_unknown";
+    const BROADCASTED_STORAGE_FAILED: &'static str = "broadcasted_storage_failed";
 
     fn broadcasted(txid: String) -> Self {
         Self {
@@ -99,6 +101,14 @@ impl ExtractAndBroadcastPcztResult {
         Self {
             txid,
             status: Self::BROADCAST_UNKNOWN.to_string(),
+            message: Some(message),
+        }
+    }
+
+    fn broadcasted_storage_failed(txid: String, message: String) -> Self {
+        Self {
+            txid,
+            status: Self::BROADCASTED_STORAGE_FAILED.to_string(),
             message: Some(message),
         }
     }
@@ -255,6 +265,7 @@ pub async fn extract_and_broadcast_pczt(
     output_params_path: Option<&str>,
 ) -> Result<ExtractAndBroadcastPcztResult, String> {
     use pczt::roles::combiner::Combiner;
+    use pczt::roles::spend_finalizer::SpendFinalizer;
     use pczt::roles::tx_extractor::TransactionExtractor;
     use zcash_client_backend::data_api::wallet::{
         decrypt_and_store_transaction, extract_and_store_transaction_from_pczt,
@@ -296,11 +307,14 @@ pub async fn extract_and_broadcast_pczt(
     // keep `tx` around after broadcast so the fallback storage path
     // can use it.
     let tx = {
-        let mut extractor = TransactionExtractor::new(combine_pczts(
+        let finalized_pczt = SpendFinalizer::new(combine_pczts(
             pczt_with_proofs_bytes,
             pczt_with_signatures_bytes,
         )?)
-        .with_orchard(&orchard_vk);
+        .finalize_spends()
+        .map_err(|e| format!("Finalize transparent spends in PCZT: {e:?}"))?;
+
+        let mut extractor = TransactionExtractor::new(finalized_pczt).with_orchard(&orchard_vk);
         if let Some((spend_vk, output_vk)) = sapling_vks.as_ref() {
             extractor = extractor.with_sapling(spend_vk, output_vk);
         }
@@ -419,13 +433,20 @@ pub async fn extract_and_broadcast_pczt(
     // Step 3: broadcast was accepted. Persist locally so the UI
     // sees the tx immediately and the spent notes stop showing up
     // as spendable.
-    store_locally().map_err(|storage_err| {
-        format!(
-            "Broadcast succeeded (txid={txid}) but local storage failed. {storage_err}. \
-             The transaction is on the network; check an explorer to confirm, and do not \
-             attempt to send again until the next sync reconciles your balance."
-        )
-    })?;
+    if let Err(storage_err) = store_locally() {
+        log::error!(
+            "keystone: broadcast succeeded but local storage failed \
+             (txid={txid}): {storage_err}"
+        );
+        return Ok(ExtractAndBroadcastPcztResult::broadcasted_storage_failed(
+            txid.to_string(),
+            format!(
+                "Broadcast succeeded (txid={txid}) but local storage failed. {storage_err}. \
+                 The transaction is on the network; check an explorer to confirm, and do not \
+                 attempt to send again until the next sync reconciles your balance."
+            ),
+        ));
+    }
 
     Ok(ExtractAndBroadcastPcztResult::broadcasted(txid.to_string()))
 }

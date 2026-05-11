@@ -39,7 +39,10 @@ abstract final class AppBackResolver {
     '/home': 'Home',
     '/send': 'Send',
     '/send/review': 'Review',
+    '/send/keystone/confirm': 'Keystone',
+    '/send/keystone/scan': 'Keystone',
     '/send/status': 'Status',
+    '/home/keystone/shield/confirm': 'Keystone',
     '/receive': 'Receive',
     '/activity': 'Activity',
     '/activity/tx/:txid': 'Transaction',
@@ -48,6 +51,7 @@ abstract final class AppBackResolver {
     '/settings/secret-passphrase': 'Secret Passphrase',
     '/settings/change-password': 'Change Password',
     '/settings/endpoint': 'Endpoint',
+    '/onboarding/keystone': 'Connect Keystone',
   };
 
   static AppBackTarget resolve(BuildContext context) {

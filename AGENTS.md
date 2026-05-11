@@ -66,17 +66,15 @@ Single DB (`zcash_wallet.db`) holds multiple accounts from different seeds. Sing
 > *"We do not check whether the seed is relevant to any imported account, because that would require brute-forcing the ZIP 32 account index space. Consequentially, seed-requiring migrations cannot be applied to imported accounts."*
 
 What this means for our DB shape:
-- **First account** (`Derived`, known seed): future seed-requiring migrations run correctly for this account.
-- **Every account after the first** (`Imported`, different seed fingerprint): the DB holds derivation metadata but not the seed, and librustzcash's migration machinery cannot distinguish "software account with a second seed we happen to know" from "external account imported from another wallet entirely." Both look like `AccountSource::Imported` with a non-matching fingerprint. The hardware (Keystone) case is a special instance of this general pattern, not a separate problem.
+- **Software bootstrap account** (`Derived`, known seed): future seed-requiring migrations run correctly for this account when the wallet was created through the software create/import path.
+- **Imported accounts** (`Imported`, different seed fingerprint): the DB holds derivation metadata but not the seed, and librustzcash's migration machinery cannot distinguish "software account with a second seed we happen to know" from "external account imported from another wallet entirely." Both look like `AccountSource::Imported` with a non-matching fingerprint. The hardware (Keystone) case is a special instance of this general pattern, not a separate problem.
 - What happens to 2nd+ accounts during a seed-requiring migration depends entirely on how the individual migration is written. Schema-only migrations (the common case) apply unchanged. UFVK-based re-derivation migrations also work. Migrations that strictly need the per-account seed for an `Imported` record either skip the step, run a best-effort fallback, or — in the worst case — refuse to complete.
 - The correct mental model: **our wallet behaves as a multi-seed wallet inside librustzcash's officially-unsupported envelope**. Everything works today because current migrations tolerate `Imported` accounts. A future migration that doesn't is a real risk, and there is no clean in-library escape hatch because `create_account` cannot be called on a DB that already holds unrelated `Imported` accounts.
 
-**Hardware-first wallet constraint** (Keystone). Enforcing the general rule above, the first account in any wallet **must** be a software (`Derived`) account. `importKeystoneAccount` in `lib/src/providers/account_provider.dart` rejects the call when `accounts.isEmpty`, and `import_hardware_account` in `rust/src/wallet/keys.rs` backstops the same invariant by scanning `AccountSource::Derived` before proceeding. This does not make the multi-account migration limitation go away — it only guarantees that:
-- `init_wallet_db(Some(seed))` has at least one `Derived` account to verify against, so future seed-requiring migrations can at least *start* (an `Imported`-only DB would fail the relevance check with `SeedRelevance::NoDerivedAccounts` and refuse to open).
-- The first account in every wallet is always fully covered by any seed-requiring migration.
-- `create_account()` cannot rescue a DB that has already fallen into `Imported`-only state — that call itself needs seed-aware init, which re-fails the relevance check. Once you are in the bad state, you are stuck there. Forcing the first account to be `Derived` is the only way to prevent it at DB-creation time.
-
-**Production tradeoff** (to revisit before release). Blocking hardware-first bootstrap gives the strongest migration guarantee but is hostile to Keystone-only users (they are forced to create or import a software mnemonic first). Alternatives considered: a hidden throwaway-mnemonic bootstrap (hacky, confuses the account list), or accepting the risk and documenting a re-import recovery flow when a future seed-requiring migration lands (simpler UX but requires users to re-scan from Keystone birthday when it happens). The current branch takes the conservative block. The actual production decision is deferred.
+**Hardware-first wallet policy** (Keystone). Keystone accounts are allowed to be the first account. `importKeystoneAccount` in `lib/src/providers/account_provider.dart` routes a fresh install through password setup and then imports the hardware UFVK, and `import_hardware_account` in `rust/src/wallet/keys.rs` does not require an existing `Derived` account. This improves Keystone-only onboarding but accepts the known librustzcash tradeoff:
+- A Keystone-first wallet can be `Imported`-only from DB creation time. Additional software accounts are also imported through UFVK metadata, so they do not automatically turn the wallet into a `Derived`-account DB.
+- Current schema and UFVK-tolerant migrations should continue to work. A future seed-requiring migration that refuses `Imported`-only wallets may require a product recovery path, such as warning the user and re-importing/rescanning from the Keystone account birthday.
+- Calling `create_account()` later is not a clean rescue mechanism for an `Imported`-only DB because that path itself depends on seed-aware initialization and seed relevance.
 
 **Account deletion and reset invariants.** Per-account deletion is allowed for
 `Imported` accounts and for a `Derived` account only if another `Derived`
@@ -110,8 +108,8 @@ AccountProvider (account_provider.dart)
   ├── Manages account list, active account, per-account mnemonics
   ├── createAccount() — first: create_wallet, additional: generateMnemonic + addAccount
   ├── importAccount() — first: import_wallet, additional: addAccount
-  ├── importKeystoneAccount() — hardware UFVK import, requires non-empty
-  │                              account list (see Hardware-first constraint)
+  ├── importKeystoneAccount() — hardware UFVK import; may be first account
+  │                              (Keystone-first accepts Imported-only DB risk)
   ├── switchAccount() — updates active, refreshes address
   ├── renameAccount() — AccountInfo.copyWith (preserves isHardware)
   ├── clearSensitiveStateForLock() — preserves account list/active UUID, clears in-memory address
@@ -213,11 +211,10 @@ rust/src/
 │   │                    # redact_pczt_for_signer, extract_and_broadcast_pczt,
 │   │                    # discard_proposal (hardware-wallet PCZT pipeline),
 │   │                    # DESIRED_SYNC_MODE, SYNC_RUNNING, SYNC_CANCEL globals
-│   └── keystone.rs     # FRB: is_keystone_connected, keystone_usb_sign_pczt (USB),
-│                        # encode_pczt_to_ur, decode_ur_to_pczt, encode_pczt_ur_parts,
+│   └── keystone.rs     # FRB: encode_pczt_to_ur, decode_ur_to_pczt, encode_pczt_ur_parts,
 │                        # decode_ur_part, reset_ur_session (#[frb(sync)]),
 │                        # decode_accounts_from_cbor, decode_pczt_from_cbor,
-│                        # decode_accounts_ur.
+│                        # decode_accounts_ur. Keystone UX is QR-only.
 │                        # Re-exports KeystoneAccountInfo, UrDecodeResult from
 │                        # crate::wallet::keystone via `pub use`.
 ├── ffi.rs              # C FFI for Swift: zcash_run_full_sync(), zcash_cancel_sync(),
@@ -232,8 +229,8 @@ rust/src/
 │   │                    # list_accounts, ensure_db_initialized, parse_account_uuid,
 │   │                    # delete_account with last-Derived seed-anchor guard,
 │   │                    # init_db_and_create_account (software first-account bootstrap),
-│   │                    # import_hardware_account (Keystone UFVK import with
-│   │                    # Derived-account backstop check)
+│   │                    # import_hardware_account (Keystone UFVK import;
+│   │                    # Keystone-first is allowed)
 │   ├── sync.rs         # Per-account wallet operations (balance, send, history, etc.)
 │   │                    # All per-account functions take account_uuid parameter
 │   │                    # NoOp Sapling provers for Orchard-only software TXs
@@ -259,10 +256,8 @@ rust/src/
 │                        #   encode_pczt_ur_parts, decode_ur_part, reset_ur_session
 │                        #   (ur::Decoder directly, not KeystoneURDecoder, to avoid
 │                        #   URType registry issues with `zcash-accounts`)
-│                        # - Single-part UR helpers (used by USB path)
-│                        # - USB EAPDU protocol (KEYSTONE_VID/PID, CMD_RESOLVE_UR,
-│                        #   encode_eapdu_packets, usb_sign_pczt) — preserved for
-│                        #   future Keystone firmware support
+│                        # - Single-part UR helpers retained for compatibility
+│                        # - QR-only product flow; USB transport is intentionally absent
 │                        # - Global UR_SESSION: Mutex<Option<UrSession>>, auto-reset
 │                        #   on type change / completion, caller resets via
 │                        #   reset_ur_session() on scan-screen entry
@@ -407,7 +402,7 @@ clones of the same base PCZT and the phone combines them at the end.
       │        proposal has needsSaplingParams=true)
       │
       └── 2b. redactPcztForSigner(base)        → redactedPczt     (phone)
-              → Keystone device (animated QR or USB EAPDU)
+              → Keystone device (animated QR)
               → device signs Orchard spend_auth_sig
               → signed PCZT back to phone       → pcztWithSignatures
                                                        ↓
@@ -510,9 +505,9 @@ All per-account API functions take `account_uuid: String`. Sync-level operations
 `WalletDb::for_path()` requires 4 params: `(path, Network, SystemClock, OsRng)`. `init_wallet_db()` must be called before `create_account()` — it runs schema migrations.
 
 Seed-relevance rule:
-- **First account (software)**: `init_db_and_create_account` calls `init_wallet_db(Some(seed))` then `create_account` → `AccountSource::Derived`. This pins the seed fingerprint so future seed-requiring migrations can verify relevance.
+- **Software bootstrap account**: `init_db_and_create_account` calls `init_wallet_db(Some(seed))` then `create_account` → `AccountSource::Derived`. This pins the seed fingerprint so future seed-requiring migrations can verify relevance.
 - **Subsequent opens**: `ensure_db_initialized` calls `init_wallet_db(None)`. Calling `init_wallet_db(Some(other_seed))` after the first account would fail the relevance check when any `Imported` account exists.
-- **Hardware-first bootstrap is refused**: `import_hardware_account` returns an error if no `Derived` account exists yet. See "Multi-Account Model → Hardware-first wallet constraint" for the full rationale and the production tradeoff.
+- **Hardware-first bootstrap is allowed**: `import_hardware_account` initializes without a local seed and imports the Keystone UFVK. This can produce an `Imported`-only DB, so seed-requiring migration recovery must be handled at the product layer if such a migration appears.
 
 ### Dart Sync Provider
 
