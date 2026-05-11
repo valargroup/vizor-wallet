@@ -1,0 +1,382 @@
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
+import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
+import 'package:zcash_wallet/src/features/voting/voting_resume_plan.dart';
+import 'package:zcash_wallet/src/rust/api/voting.dart' as rust_voting;
+
+void main() {
+  test('empty round resumes delegation for every bundle', () async {
+    final api = FakeVotingRecoveryApi(state: recoveryState(bundleCount: 3));
+    final service = VotingRecoveryService(api: api);
+
+    final plan = await service.loadResumePlan(
+      dbPath: 'wallet.db',
+      walletId: 'wallet-1',
+      roundId: 'round-1',
+    );
+
+    expect(plan.pendingDelegationBundleIndexes, [0, 1, 2]);
+    expect(plan.pendingVoteSubmissionKeys, isEmpty);
+    expect(plan.hasPendingWork, isTrue);
+    expect(api.clearCalls, isEmpty);
+  });
+
+  test('mixed delegation hashes only resume missing bundle indexes', () async {
+    final service = VotingRecoveryService(
+      api: FakeVotingRecoveryApi(
+        state: recoveryState(
+          bundleCount: 4,
+          delegationTxHashes: [
+            delegationTx(bundleIndex: 0),
+            delegationTx(bundleIndex: 2),
+          ],
+        ),
+      ),
+    );
+
+    final plan = await service.loadResumePlan(
+      dbPath: 'wallet.db',
+      walletId: 'wallet-1',
+      roundId: 'round-1',
+    );
+
+    expect(plan.pendingDelegationBundleIndexes, [1, 3]);
+  });
+
+  test(
+    'vote records and tx hashes are matched by bundle and proposal',
+    () async {
+      final service = VotingRecoveryService(
+        api: FakeVotingRecoveryApi(
+          state: recoveryState(
+            votes: [
+              vote(bundleIndex: 0, proposalId: 1),
+              vote(bundleIndex: 1, proposalId: 1),
+              vote(bundleIndex: 1, proposalId: 2),
+            ],
+            voteTxHashes: [
+              voteTx(bundleIndex: 1, proposalId: 1, txHash: 'tx-1-1'),
+            ],
+          ),
+        ),
+      );
+
+      final plan = await service.loadResumePlan(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        roundId: 'round-1',
+      );
+
+      expect(
+        plan.voteTxHashFor(const VotingVoteKey(bundleIndex: 1, proposalId: 1)),
+        'tx-1-1',
+      );
+      expect(plan.pendingVoteSubmissionKeys, [
+        const VotingVoteKey(bundleIndex: 0, proposalId: 1),
+        const VotingVoteKey(bundleIndex: 1, proposalId: 2),
+      ]);
+    },
+  );
+
+  test('commitment bundle recovery is surfaced for exact vote keys', () async {
+    final service = VotingRecoveryService(
+      api: FakeVotingRecoveryApi(
+        state: recoveryState(
+          votes: [
+            vote(bundleIndex: 0, proposalId: 1),
+            vote(bundleIndex: 1, proposalId: 1),
+          ],
+          voteTxHashes: [voteTx(bundleIndex: 1, proposalId: 1)],
+          commitmentBundles: [
+            commitmentBundle(
+              bundleIndex: 1,
+              proposalId: 1,
+              commitmentBundleJson: '{"bundle":"one"}',
+              vcTreePosition: 42,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final plan = await service.loadResumePlan(
+      dbPath: 'wallet.db',
+      walletId: 'wallet-1',
+      roundId: 'round-1',
+    );
+
+    final missingKey = const VotingVoteKey(bundleIndex: 0, proposalId: 1);
+    final recoveredKey = const VotingVoteKey(bundleIndex: 1, proposalId: 1);
+
+    expect(plan.commitmentBundleFor(missingKey), isNull);
+    expect(
+      plan.commitmentBundleFor(recoveredKey)?.commitmentBundleJson,
+      '{"bundle":"one"}',
+    );
+    expect(
+      plan.commitmentBundleFor(recoveredKey)?.vcTreePosition,
+      BigInt.from(42),
+    );
+    expect(plan.incompleteVoteRecoveryKeys, [missingKey]);
+  });
+
+  test('only unconfirmed share delegations are returned for retry', () async {
+    final confirmed = share(shareIndex: 0, confirmed: true);
+    final unconfirmed = share(shareIndex: 1, confirmed: false);
+    final service = VotingRecoveryService(
+      api: FakeVotingRecoveryApi(
+        state: recoveryState(
+          shareDelegations: [confirmed, unconfirmed],
+          // Keep the service conservative even if a caller supplies stale data.
+          unconfirmedShareDelegations: [confirmed, unconfirmed],
+        ),
+      ),
+    );
+
+    final plan = await service.loadResumePlan(
+      dbPath: 'wallet.db',
+      walletId: 'wallet-1',
+      roundId: 'round-1',
+    );
+
+    expect(plan.shareDelegations, [confirmed, unconfirmed]);
+    expect(plan.unconfirmedShareDelegations, [unconfirmed]);
+  });
+
+  test(
+    'finalize and abandon clear recovery state but loading does not',
+    () async {
+      final api = FakeVotingRecoveryApi(state: recoveryState());
+      final service = VotingRecoveryService(api: api);
+
+      await service.loadResumePlan(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        roundId: 'round-1',
+      );
+      expect(api.clearCalls, isEmpty);
+
+      await service.finalizeRound(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        roundId: 'round-1',
+      );
+      await service.abandonRound(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        roundId: 'round-2',
+      );
+
+      expect(api.clearCalls, ['round-1', 'round-2']);
+    },
+  );
+
+  test(
+    'addSentServersForShare forwards exact share key and new URLs',
+    () async {
+      final api = FakeVotingRecoveryApi(state: recoveryState());
+      final service = VotingRecoveryService(api: api);
+      final record = share(bundleIndex: 2, proposalId: 3, shareIndex: 4);
+
+      await service.addSentServersForShare(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        share: record,
+        newUrls: ['https://helper-b.example'],
+      );
+
+      expect(api.addSentServersCalls, [
+        const AddSentServersCall(
+          roundId: 'round-1',
+          bundleIndex: 2,
+          proposalId: 3,
+          shareIndex: 4,
+          newUrls: ['https://helper-b.example'],
+        ),
+      ]);
+    },
+  );
+}
+
+class FakeVotingRecoveryApi implements VotingRecoveryApi {
+  FakeVotingRecoveryApi({required this.state});
+
+  rust_voting.ApiRoundRecoveryState state;
+  final clearCalls = <String>[];
+  final addSentServersCalls = <AddSentServersCall>[];
+
+  @override
+  Future<rust_voting.ApiRoundRecoveryState> getRoundRecoveryState({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+  }) async {
+    return state;
+  }
+
+  @override
+  Future<void> addSentServers({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+    required int shareIndex,
+    required List<String> newUrls,
+  }) async {
+    addSentServersCalls.add(
+      AddSentServersCall(
+        roundId: roundId,
+        bundleIndex: bundleIndex,
+        proposalId: proposalId,
+        shareIndex: shareIndex,
+        newUrls: newUrls,
+      ),
+    );
+  }
+
+  @override
+  Future<void> clearRecoveryState({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+  }) async {
+    clearCalls.add(roundId);
+  }
+}
+
+class AddSentServersCall {
+  final String roundId;
+  final int bundleIndex;
+  final int proposalId;
+  final int shareIndex;
+  final List<String> newUrls;
+
+  const AddSentServersCall({
+    required this.roundId,
+    required this.bundleIndex,
+    required this.proposalId,
+    required this.shareIndex,
+    required this.newUrls,
+  });
+
+  @override
+  int get hashCode => Object.hash(
+    roundId,
+    bundleIndex,
+    proposalId,
+    shareIndex,
+    Object.hashAll(newUrls),
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AddSentServersCall &&
+          runtimeType == other.runtimeType &&
+          roundId == other.roundId &&
+          bundleIndex == other.bundleIndex &&
+          proposalId == other.proposalId &&
+          shareIndex == other.shareIndex &&
+          _listEquals(newUrls, other.newUrls);
+}
+
+rust_voting.ApiRoundRecoveryState recoveryState({
+  int bundleCount = 0,
+  List<rust_voting.ApiDelegationTxRecovery> delegationTxHashes = const [],
+  List<rust_voting.ApiVoteRecord> votes = const [],
+  List<rust_voting.ApiVoteTxRecovery> voteTxHashes = const [],
+  List<rust_voting.ApiCommitmentBundleRecovery> commitmentBundles = const [],
+  List<rust_voting.ApiShareDelegationRecord> shareDelegations = const [],
+  List<rust_voting.ApiShareDelegationRecord> unconfirmedShareDelegations =
+      const [],
+}) {
+  return rust_voting.ApiRoundRecoveryState(
+    roundId: 'round-1',
+    bundleCount: bundleCount,
+    delegationTxHashes: delegationTxHashes,
+    votes: votes,
+    voteTxHashes: voteTxHashes,
+    commitmentBundles: commitmentBundles,
+    shareDelegations: shareDelegations,
+    unconfirmedShareDelegations: unconfirmedShareDelegations,
+  );
+}
+
+rust_voting.ApiDelegationTxRecovery delegationTx({
+  required int bundleIndex,
+  String txHash = 'delegation-tx',
+}) {
+  return rust_voting.ApiDelegationTxRecovery(
+    bundleIndex: bundleIndex,
+    txHash: txHash,
+  );
+}
+
+rust_voting.ApiVoteRecord vote({
+  required int bundleIndex,
+  required int proposalId,
+  int choice = 0,
+}) {
+  return rust_voting.ApiVoteRecord(
+    proposalId: proposalId,
+    bundleIndex: bundleIndex,
+    choice: choice,
+    submitted: false,
+  );
+}
+
+rust_voting.ApiVoteTxRecovery voteTx({
+  required int bundleIndex,
+  required int proposalId,
+  String txHash = 'vote-tx',
+}) {
+  return rust_voting.ApiVoteTxRecovery(
+    bundleIndex: bundleIndex,
+    proposalId: proposalId,
+    txHash: txHash,
+  );
+}
+
+rust_voting.ApiCommitmentBundleRecovery commitmentBundle({
+  required int bundleIndex,
+  required int proposalId,
+  String commitmentBundleJson = '{}',
+  int vcTreePosition = 0,
+}) {
+  return rust_voting.ApiCommitmentBundleRecovery(
+    bundleIndex: bundleIndex,
+    proposalId: proposalId,
+    commitmentBundleJson: commitmentBundleJson,
+    vcTreePosition: BigInt.from(vcTreePosition),
+  );
+}
+
+rust_voting.ApiShareDelegationRecord share({
+  int bundleIndex = 0,
+  int proposalId = 1,
+  int shareIndex = 0,
+  bool confirmed = false,
+}) {
+  return rust_voting.ApiShareDelegationRecord(
+    roundId: 'round-1',
+    bundleIndex: bundleIndex,
+    proposalId: proposalId,
+    shareIndex: shareIndex,
+    sentToUrls: const ['https://helper-a.example'],
+    nullifier: Uint8List.fromList(List.filled(32, shareIndex)),
+    confirmed: confirmed,
+    submitAt: BigInt.zero,
+    createdAt: BigInt.one,
+  );
+}
+
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (a.length != b.length) return false;
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) return false;
+  }
+  return true;
+}
