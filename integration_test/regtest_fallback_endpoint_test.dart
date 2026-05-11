@@ -10,13 +10,17 @@ import 'package:zcash_wallet/src/core/storage/wallet_paths.dart';
 import 'package:zcash_wallet/src/core/widgets/app_button.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
+import 'support/regtest_lightwalletd_proxy.dart';
+
 const _mnemonic =
     'winter shiver fetch refuse absurd mail pistol eight market lounge manual '
     'roast miracle ethics found child scare curve congress renew salute pig '
     'better used';
 const _password = 'Vizor123!';
+const _primaryProxyUrl = 'http://127.0.0.1:19068';
 const _fallbackToast =
     'Selected endpoint is unstable. Switched to fallback endpoint.';
+final _currencyTickerLower = kZcashDefaultCurrencyTicker.toLowerCase();
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -26,16 +30,19 @@ void main() {
   });
 
   testWidgets(
-    'falls back from an unavailable primary endpoint during sync',
+    'falls back when the primary endpoint becomes unavailable during sync',
     (tester) async {
       addTearDown(() async {
         await _cleanupE2eWalletState();
       });
 
       await _cleanupE2eWalletState();
-      await _configureUnavailablePresetPrimary();
+      final proxy = RegtestLightwalletdProxy(log: _log);
+      await proxy.start();
+      addTearDown(proxy.stop);
+      await _configureProxyPresetPrimary();
 
-      _log('pumping app with intentionally unavailable primary endpoint');
+      _log('pumping app with healthy primary endpoint proxy');
       await tester.pumpWidget(await buildBootstrappedZcashWalletApp());
 
       _log('opening import flow');
@@ -48,6 +55,8 @@ void main() {
         _mnemonic,
       );
       await _tapButton(tester, const ValueKey('import_secret_submit_button'));
+
+      await _waitForBirthdayMetadata(tester);
 
       _log('skipping birthday');
       await _tapButton(tester, const ValueKey('import_birthday_skip_button'));
@@ -63,22 +72,25 @@ void main() {
         const ValueKey('set_password_confirm_field'),
         _password,
       );
+
+      _log('making primary proxy unavailable before sync starts');
+      proxy.setDown();
       await _tapButton(tester, const ValueKey('set_password_submit_button'));
 
       await _pumpUntil(
         tester,
         () => tester.any(find.text(_fallbackToast)),
-        description: 'fallback endpoint toast',
+        description: 'fallback endpoint toast during sync',
         timeout: const Duration(seconds: 60),
       );
-      _log('fallback toast appeared');
+      _log('fallback toast appeared during sync');
 
       await _pumpUntil(
         tester,
         () => _keyedTextEquals(
           tester,
           const ValueKey('home_shielded_balance_text'),
-          '1.25 zec',
+          '1.25 $_currencyTickerLower',
         ),
         description: 'shielded balance to sync through fallback',
         timeout: const Duration(minutes: 4),
@@ -89,12 +101,12 @@ void main() {
   );
 }
 
-Future<void> _configureUnavailablePresetPrimary() async {
+Future<void> _configureProxyPresetPrimary() async {
   final storage = AppSecureStore.instance;
-  await storage.writePlain(kRpcEndpointUrlKey, 'http://127.0.0.1:19067');
+  await storage.writePlain(kRpcEndpointUrlKey, _primaryProxyUrl);
   await storage.writePlain(
     kRpcEndpointPresetKey,
-    kRegtestUnavailableRpcEndpointPresetId,
+    kRegtestSlowRpcEndpointPresetId,
   );
 }
 
@@ -170,6 +182,28 @@ Future<void> _enterText(WidgetTester tester, Key key, String text) async {
   await tester.enterText(editable, text);
   await tester.pump(const Duration(milliseconds: 100));
   _log('entered text into $key');
+}
+
+Future<void> _waitForBirthdayMetadata(WidgetTester tester) async {
+  final placeholder = find.text('mm/dd/yyyy');
+  await _pumpUntil(
+    tester,
+    () {
+      if (!tester.any(placeholder)) return false;
+      final mouseRegion = find.ancestor(
+        of: placeholder,
+        matching: find.byType(MouseRegion),
+      );
+      if (!tester.any(mouseRegion)) return false;
+      return tester.widget<MouseRegion>(mouseRegion).cursor ==
+          SystemMouseCursors.click;
+    },
+    description: 'birthday metadata to load through primary proxy',
+    timeout: const Duration(seconds: 60),
+  );
+
+  expect(tester.any(find.text(_fallbackToast)), isFalse);
+  _log('birthday metadata loaded without fallback');
 }
 
 bool _keyedTextEquals(WidgetTester tester, Key key, String expected) {

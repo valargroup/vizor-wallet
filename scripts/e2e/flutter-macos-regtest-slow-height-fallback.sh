@@ -44,10 +44,10 @@ scripts/regtest/up.sh
 addresses_json="$(cd rust && cargo run --quiet --example regtest_wallet_addresses -- "$MNEMONIC")"
 unified_address="$(json_field "$addresses_json" unifiedAddress)"
 
-echo "preparing reusable shielded faucet with ${FAUCET_AMOUNT} ZEC"
+echo "preparing reusable shielded faucet with ${FAUCET_AMOUNT} TAZ"
 faucet_zaddr="$(scripts/regtest/prepare-unmined-faucet.sh "$FAUCET_AMOUNT")"
 
-echo "funding shielded address with ${SHIELDED_AMOUNT} ZEC"
+echo "funding shielded address with ${SHIELDED_AMOUNT} TAZ"
 REGTEST_UNMINED_FAUCET_ZADDR="$faucet_zaddr" \
   scripts/regtest/fund-wallet-unmined.sh "$unified_address" "$SHIELDED_AMOUNT" >/dev/null
 scripts/regtest/mine.sh "$CONFIRMING_BLOCKS" >/dev/null

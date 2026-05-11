@@ -19,6 +19,7 @@ shield_opid="$(extract_opid "$(zcash_cli z_shieldcoinbase "$sender_address" "$fa
 wait_for_operation "$shield_opid" >/dev/null
 zcash_cli generate 20 >/dev/null
 wait_for_lightwalletd_tip "$(zcash_cli getblockcount)"
+wait_for_zaddr_balance "$faucet_zaddr" "$requested_amount"
 
 recipients="$(python3 - "$destination" "$requested_amount" <<'PY'
 import json

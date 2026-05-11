@@ -226,8 +226,8 @@ Future<void> _importAdditionalWallet(WidgetTester tester) async {
 
 Future<void> _openAddAccountFlow(WidgetTester tester) async {
   _log('opening add-account flow');
-  await _tapWidget(tester, const ValueKey('sidebar_account_selector_button'));
-  await _tapAppButton(tester, const ValueKey('sidebar_add_account_button'));
+  await _tapWidget(tester, const ValueKey('sidebar_accounts_button'));
+  await _tapAppButton(tester, const ValueKey('accounts_add_account_button'));
   await _pumpUntil(
     tester,
     () =>
@@ -365,9 +365,10 @@ Future<void> _openActivity(WidgetTester tester) async {
 
 Future<void> _switchAccount(WidgetTester tester, int accountOrder) async {
   _log('switching to account order $accountOrder');
-  await _tapWidget(tester, const ValueKey('sidebar_account_selector_button'));
-  await _tapWidget(tester, ValueKey('sidebar_account_row_$accountOrder'));
-  await _waitForHome(tester);
+  final accountUuid = await _accountUuidAtOrder(accountOrder);
+  await _tapWidget(tester, const ValueKey('sidebar_accounts_button'));
+  await _tapWidget(tester, ValueKey('accounts_other_row_$accountUuid'));
+  await _openWallet(tester);
 }
 
 Future<void> _waitForHome(WidgetTester tester) async {

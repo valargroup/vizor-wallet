@@ -316,6 +316,7 @@ class _AccountsPane extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   AppButton(
+                    key: const ValueKey('accounts_add_account_button'),
                     onPressed: () => context.go('/add-account'),
                     minWidth: 256,
                     trailing: const AppIcon(AppIcons.chevronForward),

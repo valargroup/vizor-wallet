@@ -40,7 +40,7 @@ scripts/regtest/up.sh
 addresses_json="$(cd rust && cargo run --quiet --example regtest_wallet_addresses -- "$MNEMONIC")"
 unified_address="$(json_field "$addresses_json" unifiedAddress)"
 
-echo "funding shielded address with ${SHIELDED_AMOUNT} ZEC"
+echo "funding shielded address with ${SHIELDED_AMOUNT} TAZ"
 scripts/regtest/fund-wallet.sh "$unified_address" "$SHIELDED_AMOUNT" "$CONFIRMING_BLOCKS" >/dev/null
 
 echo "running Flutter macOS fallback endpoint integration test"
