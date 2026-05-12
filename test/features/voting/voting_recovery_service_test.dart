@@ -46,6 +46,40 @@ void main() {
   });
 
   test(
+    'submitted delegation resumes confirmation polling, not fresh submit',
+    () async {
+      final service = VotingRecoveryService(
+        api: FakeVotingRecoveryApi(
+          state: recoveryState(
+            bundleCount: 3,
+            delegationWorkflows: [
+              delegationWorkflow(
+                bundleIndex: 0,
+                phase: VotingWorkflowPhase.confirmed,
+              ),
+              delegationWorkflow(
+                bundleIndex: 1,
+                phase: VotingWorkflowPhase.submittedDelegation,
+                txHash: 'delegation-tx-1',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final plan = await service.loadResumePlan(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        roundId: 'round-1',
+      );
+
+      expect(plan.pendingDelegationBundleIndexes, [2]);
+      expect(plan.submittedDelegationBundleIndexes, [1]);
+      expect(plan.hasPendingWork, isTrue);
+    },
+  );
+
+  test(
     'vote records and tx hashes are matched by bundle and proposal',
     () async {
       final service = VotingRecoveryService(
@@ -121,6 +155,81 @@ void main() {
     );
     expect(plan.incompleteVoteRecoveryKeys, [missingKey]);
   });
+
+  test(
+    'submitted votes resume confirmation polling and confirmed votes vanish',
+    () async {
+      final submittedKey = const VotingVoteKey(bundleIndex: 0, proposalId: 1);
+      final confirmedKey = const VotingVoteKey(bundleIndex: 1, proposalId: 1);
+      final service = VotingRecoveryService(
+        api: FakeVotingRecoveryApi(
+          state: recoveryState(
+            votes: [
+              vote(
+                bundleIndex: submittedKey.bundleIndex,
+                proposalId: submittedKey.proposalId,
+              ),
+              vote(
+                bundleIndex: confirmedKey.bundleIndex,
+                proposalId: confirmedKey.proposalId,
+              ),
+            ],
+            voteWorkflows: [
+              voteWorkflow(
+                bundleIndex: submittedKey.bundleIndex,
+                proposalId: submittedKey.proposalId,
+                phase: VotingWorkflowPhase.submittedVote,
+                txHash: 'vote-tx-submitted',
+                hasCommitmentBundle: true,
+              ),
+              voteWorkflow(
+                bundleIndex: confirmedKey.bundleIndex,
+                proposalId: confirmedKey.proposalId,
+                phase: VotingWorkflowPhase.confirmed,
+                txHash: 'vote-tx-confirmed',
+                vcTreePosition: 42,
+                hasCommitmentBundle: true,
+              ),
+            ],
+            voteTxHashes: [
+              voteTx(
+                bundleIndex: submittedKey.bundleIndex,
+                proposalId: submittedKey.proposalId,
+                txHash: 'vote-tx-submitted',
+              ),
+              voteTx(
+                bundleIndex: confirmedKey.bundleIndex,
+                proposalId: confirmedKey.proposalId,
+                txHash: 'vote-tx-confirmed',
+              ),
+            ],
+            commitmentBundles: [
+              commitmentBundle(
+                bundleIndex: submittedKey.bundleIndex,
+                proposalId: submittedKey.proposalId,
+              ),
+              commitmentBundle(
+                bundleIndex: confirmedKey.bundleIndex,
+                proposalId: confirmedKey.proposalId,
+                vcTreePosition: 42,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final plan = await service.loadResumePlan(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        roundId: 'round-1',
+      );
+
+      expect(plan.pendingVoteSubmissionKeys, isEmpty);
+      expect(plan.submittedVoteConfirmationKeys, [submittedKey]);
+      expect(plan.incompleteVoteRecoveryKeys, isEmpty);
+      expect(plan.votePhasesByKey[confirmedKey], VotingWorkflowPhase.confirmed);
+    },
+  );
 
   test('only unconfirmed share delegations are returned for retry', () async {
     final confirmed = share(shareIndex: 0, confirmed: true);
@@ -286,9 +395,13 @@ class AddSentServersCall {
 rust_voting.ApiRoundRecoveryState recoveryState({
   int bundleCount = 0,
   List<rust_voting.ApiDelegationTxRecovery> delegationTxHashes = const [],
+  List<rust_voting.ApiDelegationWorkflowRecovery> delegationWorkflows =
+      const [],
   List<rust_voting.ApiVoteRecord> votes = const [],
+  List<rust_voting.ApiVoteWorkflowRecovery> voteWorkflows = const [],
   List<rust_voting.ApiVoteTxRecovery> voteTxHashes = const [],
   List<rust_voting.ApiCommitmentBundleRecovery> commitmentBundles = const [],
+  List<rust_voting.ApiShareWorkflowRecovery> shareWorkflows = const [],
   List<rust_voting.ApiShareDelegationRecord> shareDelegations = const [],
   List<rust_voting.ApiShareDelegationRecord> unconfirmedShareDelegations =
       const [],
@@ -296,12 +409,29 @@ rust_voting.ApiRoundRecoveryState recoveryState({
   return rust_voting.ApiRoundRecoveryState(
     roundId: 'round-1',
     bundleCount: bundleCount,
+    delegationWorkflows: delegationWorkflows,
     delegationTxHashes: delegationTxHashes,
     votes: votes,
+    voteWorkflows: voteWorkflows,
     voteTxHashes: voteTxHashes,
     commitmentBundles: commitmentBundles,
+    shareWorkflows: shareWorkflows,
     shareDelegations: shareDelegations,
     unconfirmedShareDelegations: unconfirmedShareDelegations,
+  );
+}
+
+rust_voting.ApiDelegationWorkflowRecovery delegationWorkflow({
+  required int bundleIndex,
+  required String phase,
+  String? txHash,
+  int? vanLeafPosition,
+}) {
+  return rust_voting.ApiDelegationWorkflowRecovery(
+    bundleIndex: bundleIndex,
+    phase: phase,
+    txHash: txHash,
+    vanLeafPosition: vanLeafPosition,
   );
 }
 
@@ -340,6 +470,24 @@ rust_voting.ApiVoteTxRecovery voteTx({
   );
 }
 
+rust_voting.ApiVoteWorkflowRecovery voteWorkflow({
+  required int bundleIndex,
+  required int proposalId,
+  required String phase,
+  String? txHash,
+  int? vcTreePosition,
+  bool hasCommitmentBundle = false,
+}) {
+  return rust_voting.ApiVoteWorkflowRecovery(
+    bundleIndex: bundleIndex,
+    proposalId: proposalId,
+    phase: phase,
+    txHash: txHash,
+    vcTreePosition: vcTreePosition == null ? null : BigInt.from(vcTreePosition),
+    hasCommitmentBundle: hasCommitmentBundle,
+  );
+}
+
 rust_voting.ApiCommitmentBundleRecovery commitmentBundle({
   required int bundleIndex,
   required int proposalId,
@@ -367,6 +515,9 @@ rust_voting.ApiShareDelegationRecord share({
     shareIndex: shareIndex,
     sentToUrls: const ['https://helper-a.example'],
     nullifier: Uint8List.fromList(List.filled(32, shareIndex)),
+    phase: confirmed
+        ? VotingWorkflowPhase.confirmed
+        : VotingWorkflowPhase.submittedShare,
     confirmed: confirmed,
     submitAt: BigInt.zero,
     createdAt: BigInt.one,

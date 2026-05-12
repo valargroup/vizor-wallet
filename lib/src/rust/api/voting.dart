@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `catch`, `selection_result`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Derive the opaque per-account, per-round voting hotkey bytes.
 ///
@@ -192,6 +192,36 @@ Future<void> storeDelegationTxHash({
   roundId: roundId,
   bundleIndex: bundleIndex,
   txHash: txHash,
+);
+
+Future<void> markDelegationSubmitted({
+  required String dbPath,
+  required String walletId,
+  required String roundId,
+  required int bundleIndex,
+  required String txHash,
+}) => RustLib.instance.api.crateApiVotingMarkDelegationSubmitted(
+  dbPath: dbPath,
+  walletId: walletId,
+  roundId: roundId,
+  bundleIndex: bundleIndex,
+  txHash: txHash,
+);
+
+Future<void> markDelegationConfirmed({
+  required String dbPath,
+  required String walletId,
+  required String roundId,
+  required int bundleIndex,
+  required String txHash,
+  required int vanLeafPosition,
+}) => RustLib.instance.api.crateApiVotingMarkDelegationConfirmed(
+  dbPath: dbPath,
+  walletId: walletId,
+  roundId: roundId,
+  bundleIndex: bundleIndex,
+  txHash: txHash,
+  vanLeafPosition: vanLeafPosition,
 );
 
 /// Store the vote-authority-note leaf position emitted by the delegation TX.
@@ -388,6 +418,44 @@ Future<void> storeVoteTxHash({
   bundleIndex: bundleIndex,
   proposalId: proposalId,
   txHash: txHash,
+);
+
+Future<void> markVoteSubmitted({
+  required String dbPath,
+  required String walletId,
+  required String roundId,
+  required int bundleIndex,
+  required int proposalId,
+  required String txHash,
+}) => RustLib.instance.api.crateApiVotingMarkVoteSubmitted(
+  dbPath: dbPath,
+  walletId: walletId,
+  roundId: roundId,
+  bundleIndex: bundleIndex,
+  proposalId: proposalId,
+  txHash: txHash,
+);
+
+Future<void> markVoteConfirmed({
+  required String dbPath,
+  required String walletId,
+  required String roundId,
+  required int bundleIndex,
+  required int proposalId,
+  required String txHash,
+  required int vanPosition,
+  required BigInt vcTreePosition,
+  required String commitmentBundleJson,
+}) => RustLib.instance.api.crateApiVotingMarkVoteConfirmed(
+  dbPath: dbPath,
+  walletId: walletId,
+  roundId: roundId,
+  bundleIndex: bundleIndex,
+  proposalId: proposalId,
+  txHash: txHash,
+  vanPosition: vanPosition,
+  vcTreePosition: vcTreePosition,
+  commitmentBundleJson: commitmentBundleJson,
 );
 
 /// Load the broadcast transaction hash for one vote, if present.
@@ -649,6 +717,37 @@ class ApiDelegationTxRecovery {
           txHash == other.txHash;
 }
 
+class ApiDelegationWorkflowRecovery {
+  final int bundleIndex;
+  final String phase;
+  final String? txHash;
+  final int? vanLeafPosition;
+
+  const ApiDelegationWorkflowRecovery({
+    required this.bundleIndex,
+    required this.phase,
+    this.txHash,
+    this.vanLeafPosition,
+  });
+
+  @override
+  int get hashCode =>
+      bundleIndex.hashCode ^
+      phase.hashCode ^
+      txHash.hashCode ^
+      vanLeafPosition.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiDelegationWorkflowRecovery &&
+          runtimeType == other.runtimeType &&
+          bundleIndex == other.bundleIndex &&
+          phase == other.phase &&
+          txHash == other.txHash &&
+          vanLeafPosition == other.vanLeafPosition;
+}
+
 /// One requested vote for a proposal in a bundle.
 ///
 /// `choice` is zero-indexed and must be less than `num_options`. `single_share`
@@ -692,20 +791,26 @@ class ApiDraftVote {
 class ApiRoundRecoveryState {
   final String roundId;
   final int bundleCount;
+  final List<ApiDelegationWorkflowRecovery> delegationWorkflows;
   final List<ApiDelegationTxRecovery> delegationTxHashes;
   final List<ApiVoteRecord> votes;
+  final List<ApiVoteWorkflowRecovery> voteWorkflows;
   final List<ApiVoteTxRecovery> voteTxHashes;
   final List<ApiCommitmentBundleRecovery> commitmentBundles;
+  final List<ApiShareWorkflowRecovery> shareWorkflows;
   final List<ApiShareDelegationRecord> shareDelegations;
   final List<ApiShareDelegationRecord> unconfirmedShareDelegations;
 
   const ApiRoundRecoveryState({
     required this.roundId,
     required this.bundleCount,
+    required this.delegationWorkflows,
     required this.delegationTxHashes,
     required this.votes,
+    required this.voteWorkflows,
     required this.voteTxHashes,
     required this.commitmentBundles,
+    required this.shareWorkflows,
     required this.shareDelegations,
     required this.unconfirmedShareDelegations,
   });
@@ -714,10 +819,13 @@ class ApiRoundRecoveryState {
   int get hashCode =>
       roundId.hashCode ^
       bundleCount.hashCode ^
+      delegationWorkflows.hashCode ^
       delegationTxHashes.hashCode ^
       votes.hashCode ^
+      voteWorkflows.hashCode ^
       voteTxHashes.hashCode ^
       commitmentBundles.hashCode ^
+      shareWorkflows.hashCode ^
       shareDelegations.hashCode ^
       unconfirmedShareDelegations.hashCode;
 
@@ -728,10 +836,13 @@ class ApiRoundRecoveryState {
           runtimeType == other.runtimeType &&
           roundId == other.roundId &&
           bundleCount == other.bundleCount &&
+          delegationWorkflows == other.delegationWorkflows &&
           delegationTxHashes == other.delegationTxHashes &&
           votes == other.votes &&
+          voteWorkflows == other.voteWorkflows &&
           voteTxHashes == other.voteTxHashes &&
           commitmentBundles == other.commitmentBundles &&
+          shareWorkflows == other.shareWorkflows &&
           shareDelegations == other.shareDelegations &&
           unconfirmedShareDelegations == other.unconfirmedShareDelegations;
 }
@@ -744,6 +855,7 @@ class ApiShareDelegationRecord {
   final int shareIndex;
   final List<String> sentToUrls;
   final Uint8List nullifier;
+  final String phase;
   final bool confirmed;
   final BigInt submitAt;
   final BigInt createdAt;
@@ -755,6 +867,7 @@ class ApiShareDelegationRecord {
     required this.shareIndex,
     required this.sentToUrls,
     required this.nullifier,
+    required this.phase,
     required this.confirmed,
     required this.submitAt,
     required this.createdAt,
@@ -768,6 +881,7 @@ class ApiShareDelegationRecord {
       shareIndex.hashCode ^
       sentToUrls.hashCode ^
       nullifier.hashCode ^
+      phase.hashCode ^
       confirmed.hashCode ^
       submitAt.hashCode ^
       createdAt.hashCode;
@@ -783,9 +897,41 @@ class ApiShareDelegationRecord {
           shareIndex == other.shareIndex &&
           sentToUrls == other.sentToUrls &&
           nullifier == other.nullifier &&
+          phase == other.phase &&
           confirmed == other.confirmed &&
           submitAt == other.submitAt &&
           createdAt == other.createdAt;
+}
+
+class ApiShareWorkflowRecovery {
+  final int bundleIndex;
+  final int proposalId;
+  final int shareIndex;
+  final String phase;
+
+  const ApiShareWorkflowRecovery({
+    required this.bundleIndex,
+    required this.proposalId,
+    required this.shareIndex,
+    required this.phase,
+  });
+
+  @override
+  int get hashCode =>
+      bundleIndex.hashCode ^
+      proposalId.hashCode ^
+      shareIndex.hashCode ^
+      phase.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiShareWorkflowRecovery &&
+          runtimeType == other.runtimeType &&
+          bundleIndex == other.bundleIndex &&
+          proposalId == other.proposalId &&
+          shareIndex == other.shareIndex &&
+          phase == other.phase;
 }
 
 /// Signed delegation bundle result plus broadcast/storage status.
@@ -1142,6 +1288,45 @@ class ApiVoteTxRecovery {
           bundleIndex == other.bundleIndex &&
           proposalId == other.proposalId &&
           txHash == other.txHash;
+}
+
+class ApiVoteWorkflowRecovery {
+  final int bundleIndex;
+  final int proposalId;
+  final String phase;
+  final String? txHash;
+  final BigInt? vcTreePosition;
+  final bool hasCommitmentBundle;
+
+  const ApiVoteWorkflowRecovery({
+    required this.bundleIndex,
+    required this.proposalId,
+    required this.phase,
+    this.txHash,
+    this.vcTreePosition,
+    required this.hasCommitmentBundle,
+  });
+
+  @override
+  int get hashCode =>
+      bundleIndex.hashCode ^
+      proposalId.hashCode ^
+      phase.hashCode ^
+      txHash.hashCode ^
+      vcTreePosition.hashCode ^
+      hasCommitmentBundle.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiVoteWorkflowRecovery &&
+          runtimeType == other.runtimeType &&
+          bundleIndex == other.bundleIndex &&
+          proposalId == other.proposalId &&
+          phase == other.phase &&
+          txHash == other.txHash &&
+          vcTreePosition == other.vcTreePosition &&
+          hasCommitmentBundle == other.hasCommitmentBundle;
 }
 
 /// Summary of bundle setup keyed by `(round_id, wallet_id)`.

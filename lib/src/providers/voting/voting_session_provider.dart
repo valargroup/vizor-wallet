@@ -97,6 +97,47 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final completedBundleIndexes = <int>{};
       final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
       final rust = ref.read(votingRustApiProvider);
+      final submittedDelegationsByBundle = {
+        for (final record in plan.recoveryState.delegationWorkflows)
+          if (record.phase == VotingWorkflowPhase.submittedDelegation &&
+              record.txHash != null)
+            record.bundleIndex: record.txHash!,
+      };
+      for (final entry in submittedDelegationsByBundle.entries) {
+        final bundleIndex = entry.key;
+        final txHash = entry.value;
+        final confirmation = await _awaitTxConfirmation(api, txHash);
+        if (confirmation == null) continue;
+        if (confirmation.code != 0) {
+          throw StateError(
+            confirmation.log.isEmpty
+                ? 'Delegation transaction failed.'
+                : confirmation.log,
+          );
+        }
+        final leafIndex = int.tryParse(
+          confirmation.event('delegate_vote')?.attribute('leaf_index') ?? '',
+        );
+        if (leafIndex == null) {
+          throw StateError(
+            'Missing delegate_vote leaf_index for bundle $bundleIndex.',
+          );
+        }
+        await rust.markDelegationConfirmed(
+          dbPath: context.dbPath,
+          walletId: context.accountUuid,
+          roundId: context.round.roundId,
+          bundleIndex: bundleIndex,
+          txHash: txHash,
+          vanLeafPosition: leafIndex,
+        );
+        completedBundleIndexes.add(bundleIndex);
+        progress[bundleIndex] = VotingSessionProgress(
+          phase: 'confirmed',
+          bundleIndex: bundleIndex,
+          message: txHash,
+        );
+      }
       for (final bundleIndex in plan.pendingDelegationBundleIndexes) {
         await _awaitDelegationPirPrecomputeIfRunning(context, bundleIndex);
         final bundleTimer = Stopwatch()..start();
@@ -166,7 +207,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                 : result.log,
           );
         }
-        await rust.storeDelegationTxHash(
+        await rust.markDelegationSubmitted(
           dbPath: context.dbPath,
           walletId: context.accountUuid,
           roundId: context.round.roundId,
@@ -199,12 +240,13 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             'Missing delegate_vote leaf_index for bundle $bundleIndex.',
           );
         }
-        await rust.storeVanPosition(
+        await rust.markDelegationConfirmed(
           dbPath: context.dbPath,
           walletId: context.accountUuid,
           roundId: context.round.roundId,
           bundleIndex: bundleIndex,
-          position: leafIndex,
+          txHash: result.txHash,
+          vanLeafPosition: leafIndex,
         );
         debugPrint(
           '[zcash] Voting: delegation bundle completed '
@@ -273,9 +315,42 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final progress = Map<VotingVoteKey, VotingSessionProgress>.from(
         current.voteProgress,
       );
-      final pendingBundles = _pendingVoteBundleIndexes(
-        current.resumePlan ?? context.resumePlan,
-      );
+      final plan = current.resumePlan ?? context.resumePlan;
+      final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+      final rust = ref.read(votingRustApiProvider);
+      for (final key in plan.submittedVoteConfirmationKeys) {
+        final txHash = plan.voteTxHashFor(key);
+        final commitmentBundle = plan.commitmentBundleFor(key);
+        if (txHash == null || commitmentBundle == null) continue;
+        final confirmation = await _awaitTxConfirmation(api, txHash);
+        if (confirmation == null) continue;
+        if (confirmation.code != 0) {
+          throw StateError(
+            confirmation.log.isEmpty
+                ? 'Vote commitment transaction failed.'
+                : confirmation.log,
+          );
+        }
+        final leafPositions = _castVoteLeafPositions(confirmation);
+        await rust.markVoteConfirmed(
+          dbPath: context.dbPath,
+          walletId: context.accountUuid,
+          roundId: context.round.roundId,
+          bundleIndex: key.bundleIndex,
+          proposalId: key.proposalId,
+          txHash: txHash,
+          vanPosition: leafPositions.vanPosition,
+          vcTreePosition: leafPositions.vcTreePosition,
+          commitmentBundleJson: commitmentBundle.commitmentBundleJson,
+        );
+        progress[key] = VotingSessionProgress(
+          phase: 'confirmed',
+          bundleIndex: key.bundleIndex,
+          proposalId: key.proposalId,
+          message: txHash,
+        );
+      }
+      final pendingBundles = _pendingVoteBundleIndexes(plan);
       debugPrint(
         '[zcash] Voting: cast votes start '
         'round=${context.round.roundId} bundles=${pendingBundles.length} '
@@ -550,7 +625,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       if (result.txHash.isEmpty) {
         throw StateError('Vote commitment response did not include tx_hash.');
       }
-      await rust.storeVoteTxHash(
+      await rust.markVoteSubmitted(
         dbPath: context.dbPath,
         walletId: context.accountUuid,
         roundId: context.round.roundId,
@@ -579,19 +654,14 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         'proposal=${commitment.proposalId} vanPosition=${leafPositions.vanPosition} '
         'vcTreePosition=${leafPositions.vcTreePosition}',
       );
-      await rust.storeVanPosition(
-        dbPath: context.dbPath,
-        walletId: context.accountUuid,
-        roundId: context.round.roundId,
-        bundleIndex: commitments.bundleIndex,
-        position: leafPositions.vanPosition,
-      );
-      await rust.storeCommitmentBundle(
+      await rust.markVoteConfirmed(
         dbPath: context.dbPath,
         walletId: context.accountUuid,
         roundId: context.round.roundId,
         bundleIndex: commitments.bundleIndex,
         proposalId: commitment.proposalId,
+        txHash: result.txHash,
+        vanPosition: leafPositions.vanPosition,
         commitmentBundleJson: commitment.commitmentBundleJson,
         vcTreePosition: leafPositions.vcTreePosition,
       );
@@ -804,7 +874,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       );
     } on PirSnapshotNoMatchingEndpoint catch (e) {
       _setError(
-        'No PIR endpoint matched snapshot height ${e.expectedSnapshotHeight}.',
+        'No PIR endpoint matched the voting round snapshot.',
         cause: e,
         pirDiagnostics: e.diagnostics,
       );
@@ -906,10 +976,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   static VotingSessionPhase _phaseForResumePlan(VotingResumePlan plan) {
-    if (plan.pendingDelegationBundleIndexes.isNotEmpty) {
+    if (plan.pendingDelegationBundleIndexes.isNotEmpty ||
+        plan.submittedDelegationBundleIndexes.isNotEmpty) {
       return VotingSessionPhase.readyToDelegate;
     }
     if (plan.pendingVoteSubmissionKeys.isNotEmpty ||
+        plan.submittedVoteConfirmationKeys.isNotEmpty ||
         plan.incompleteVoteRecoveryKeys.isNotEmpty) {
       return VotingSessionPhase.readyToVote;
     }
@@ -924,6 +996,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       return plan.pendingVoteSubmissionKeys
           .map((key) => key.bundleIndex)
           .toSet();
+    }
+    if (plan.votesByKey.isNotEmpty ||
+        plan.submittedVoteConfirmationKeys.isNotEmpty) {
+      return const {};
     }
     final bundleCount = plan.bundleCount;
     if (bundleCount == 0) return const {};

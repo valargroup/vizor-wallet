@@ -25,6 +25,7 @@ use super::{
         BundleSetupResult, DelegationPirPrecomputeResult, PreparedDelegationKey, ProofEvent,
         SignedDelegation,
     },
+    workflow,
 };
 
 static PREPARED_DELEGATION_PCZTS: OnceLock<
@@ -42,13 +43,24 @@ struct RoundContext {
     round_name: String,
 }
 
-/// Initialize the local voting database for delegation operations.
+/// Initializes the local voting database for delegation operations.
+///
+/// Opens or creates the voting DB scoped to `wallet_id`; returns an error if
+/// the DB cannot be opened or migrated.
 pub fn prepare_delegation(db_path: &str, wallet_id: &str) -> Result<(), String> {
     open_voting_db(db_path, wallet_id).map(|_| ())
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Select notes and create/reuse delegation bundle rows for a round.
+///
+/// The selected notes are taken at the round snapshot height. Existing bundle
+/// rows are reused only when they match the current eligible note set.
+///
+/// # Errors
+///
+/// Returns an error if round initialization, lightwalletd note selection, or
+/// bundle setup/validation fails.
+#[allow(clippy::too_many_arguments)]
 pub async fn setup_delegation_bundles(
     db_path: &str,
     lightwalletd_url: &str,
@@ -73,6 +85,17 @@ pub async fn setup_delegation_bundles(
     ensure_bundles(&voting_db, round_params.vote_round_id.as_str(), &note_infos)
 }
 
+/// Warms PIR and governance-PCZT state for a single delegation bundle.
+///
+/// Validates the PIR endpoint against the round snapshot, persists witnesses,
+/// caches a branch-specific governance PCZT, and precomputes delegation PIR
+/// rows for `bundle_index`.
+///
+/// # Errors
+///
+/// Returns an error if the round, endpoint, note selection, bundle index,
+/// witness generation, account data, consensus branch, PCZT build, or PIR
+/// precompute step fails.
 #[allow(clippy::too_many_arguments)]
 pub async fn precompute_delegation_pir(
     db_path: &str,
@@ -142,6 +165,7 @@ pub async fn precompute_delegation_pir(
         account_uuid: account_uuid.to_string(),
         round_id: round_id.clone(),
         bundle_index,
+        branch_id,
         hotkey_raw_address: hotkey_raw_address.clone(),
     };
     prepared_pczt_cache()
@@ -192,11 +216,18 @@ pub async fn precompute_delegation_pir(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Build, prove, sign, broadcast, and locally store one delegation bundle.
 ///
-/// Broadcast is attempted before local transaction storage. If broadcast succeeds
-/// but storage fails, the returned status tells callers not to retry the bundle.
+/// Emits progress phases through `on_progress`. The returned value is a signed
+/// delegation payload ready for submission; `bundle_index` must identify an
+/// eligible persisted bundle for this round.
+///
+/// # Errors
+///
+/// Returns an error if endpoint validation, note/bundle validation, witness
+/// generation, PCZT construction, PIR proof generation, or delegation signing
+/// fails.
+#[allow(clippy::too_many_arguments)]
 pub async fn build_and_prove_delegation_bundle<F>(
     db_path: &str,
     lightwalletd_url: &str,
@@ -276,6 +307,7 @@ where
         account_uuid: account_uuid.to_string(),
         round_id: round_id.clone(),
         bundle_index,
+        branch_id,
         hotkey_raw_address: hotkey_raw_address.clone(),
     };
     let prepared_governance_pczt = prepared_pczt_cache()
@@ -390,6 +422,10 @@ where
     })
 }
 
+/// Ensures the round exists and resolves the display name used in PCZT metadata.
+///
+/// An empty `round_name` falls back to the round ID. Returns the persisted round
+/// snapshot height used for note selection.
 fn ensure_round_initialized(
     voting_db: &zcash_voting::storage::VotingDb,
     round_params: &zcash_voting::VotingRoundParams,
@@ -408,29 +444,68 @@ fn ensure_round_initialized(
     })
 }
 
+/// Creates bundle rows for eligible notes or validates existing rows.
+///
+/// Existing rows are accepted only when current chunking and stored note
+/// identities match; this prevents recovery state from drifting from the live
+/// note set.
 fn ensure_bundles(
     voting_db: &zcash_voting::storage::VotingDb,
     round_id: &str,
     notes: &[zcash_voting::NoteInfo],
 ) -> Result<BundleSetupResult, String> {
-    match voting_db.get_bundle_count(round_id) {
-        Ok(count) if count > 0 => {
-            let chunks = zcash_voting::chunk_notes(notes);
-            Ok(BundleSetupResult {
-                bundle_count: count,
-                eligible_weight_zatoshi: chunks.eligible_weight,
-            })
+    let stored_count = voting_db
+        .get_bundle_count(round_id)
+        .map_err(|e| format!("get_bundle_count failed: {e}"))?;
+    if stored_count > 0 {
+        let chunks = zcash_voting::chunk_notes(notes);
+        if chunks.bundles.len() != stored_count as usize {
+            return Err(format!(
+                "current note selection produces {} delegation bundles, but {stored_count} \
+                 bundle rows are already persisted for round {round_id}",
+                chunks.bundles.len()
+            ));
         }
-        _ => voting_db
-            .setup_bundles(round_id, notes)
-            .map(|(count, weight)| BundleSetupResult {
-                bundle_count: count,
-                eligible_weight_zatoshi: weight,
-            })
-            .map_err(|e| format!("setup_bundles failed: {e}")),
+        validate_persisted_bundle_notes(voting_db, round_id, &chunks.bundles)?;
+        return Ok(BundleSetupResult {
+            bundle_count: stored_count,
+            eligible_weight_zatoshi: chunks.eligible_weight,
+        });
     }
+
+    voting_db
+        .setup_bundles(round_id, notes)
+        .map(|(count, weight)| BundleSetupResult {
+            bundle_count: count,
+            eligible_weight_zatoshi: weight,
+        })
+        .map_err(|e| format!("setup_bundles failed: {e}"))
 }
 
+/// Verifies that persisted bundle rows match the current note chunks.
+///
+/// The check includes stored positions and note identity hashes where available.
+fn validate_persisted_bundle_notes(
+    voting_db: &zcash_voting::storage::VotingDb,
+    round_id: &str,
+    bundles: &[Vec<zcash_voting::NoteInfo>],
+) -> Result<(), String> {
+    let wallet_id = voting_db.wallet_id();
+    let conn = voting_db.conn();
+    for (bundle_index, bundle_notes) in bundles.iter().enumerate() {
+        zcash_voting::storage::queries::require_bundle_notes(
+            &conn,
+            round_id,
+            &wallet_id,
+            bundle_index as u32,
+            bundle_notes,
+        )
+        .map_err(|e| format!("persisted bundle notes do not match current selection: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Validates that `bundle_index` is in `[0, bundle_count)`.
 fn validate_bundle_index(bundle_count: u32, bundle_index: u32) -> Result<(), String> {
     if bundle_index < bundle_count {
         Ok(())
@@ -441,6 +516,7 @@ fn validate_bundle_index(bundle_count: u32, bundle_index: u32) -> Result<(), Str
     }
 }
 
+/// Returns the eligible notes for one chunked delegation bundle.
 fn bundle_notes(
     notes: &[zcash_voting::NoteInfo],
     bundle_index: u32,
@@ -453,6 +529,9 @@ fn bundle_notes(
         .ok_or_else(|| format!("bundle_index {bundle_index} has no eligible note bundle"))
 }
 
+/// Returns the bundle voting weight rounded down to the ballot divisor.
+///
+/// Fails if summing note values overflows `u64`.
 fn bundle_weight_zatoshi(notes: &[zcash_voting::NoteInfo]) -> Result<u64, String> {
     let total = notes.iter().try_fold(0u64, |acc, note| {
         acc.checked_add(note.value)
@@ -462,6 +541,7 @@ fn bundle_weight_zatoshi(notes: &[zcash_voting::NoteInfo]) -> Result<u64, String
         * zcash_voting::governance::BALLOT_DIVISOR)
 }
 
+/// Checks whether the PCZT action index points at the governance output.
 fn governance_pczt_output_paired_with_signed_action(
     governance_pczt: &zcash_voting::GovernancePczt,
 ) -> Result<bool, String> {
@@ -482,6 +562,10 @@ fn governance_pczt_output_paired_with_signed_action(
     Ok(action.output().cmx().as_slice() == governance_pczt.cmx_new.as_slice())
 }
 
+/// Builds a governance PCZT whose signed action is paired with its output.
+///
+/// Retries randomized PCZT construction to avoid an action/output layout that
+/// would make downstream submission ambiguous.
 #[allow(clippy::too_many_arguments)]
 fn build_paired_governance_pczt(
     voting_db: &zcash_voting::storage::VotingDb,
@@ -535,7 +619,10 @@ fn build_paired_governance_pczt(
     ))
 }
 
-/// Return the stored bundle count for `round_id`.
+/// Returns the stored bundle count for `round_id`.
+///
+/// The count is scoped to `wallet_id`; missing rounds return zero through the
+/// underlying voting DB query.
 pub fn get_bundle_count(db_path: &str, wallet_id: &str, round_id: &str) -> Result<u32, String> {
     let voting_db = open_voting_db(db_path, wallet_id)?;
     voting_db
@@ -547,6 +634,11 @@ pub fn get_bundle_count(db_path: &str, wallet_id: &str, round_id: &str) -> Resul
 ///
 /// Used by partial-bundle recovery when the user elects not to delegate later
 /// bundles. Returns the number of deleted rows.
+///
+/// # Errors
+///
+/// Returns an error if the voting DB cannot be opened, deletion fails, or the
+/// deleted row count does not fit in `u32`.
 pub fn delete_skipped_bundles(
     db_path: &str,
     wallet_id: &str,
@@ -565,6 +657,9 @@ pub fn delete_skipped_bundles(
 }
 
 /// Store and verify the transaction hash for one delegation bundle row.
+///
+/// Marks the bundle as submitted in the recovery workflow. The hash is scoped
+/// by `(wallet_id, round_id, bundle_index)`.
 pub fn store_delegation_tx_hash(
     db_path: &str,
     wallet_id: &str,
@@ -572,25 +667,12 @@ pub fn store_delegation_tx_hash(
     bundle_index: u32,
     tx_hash: &str,
 ) -> Result<(), String> {
-    let voting_db = open_voting_db(db_path, wallet_id)?;
-    voting_db
-        .store_delegation_tx_hash(round_id, bundle_index, tx_hash)
-        .map_err(|e| format!("store_delegation_tx_hash failed: {e}"))?;
-    match voting_db
-        .get_delegation_tx_hash(round_id, bundle_index)
-        .map_err(|e| format!("get_delegation_tx_hash failed after store: {e}"))?
-    {
-        Some(stored) if stored == tx_hash => Ok(()),
-        Some(stored) => Err(format!(
-            "stored tx hash {stored} did not match requested tx hash {tx_hash}"
-        )),
-        None => Err(format!(
-            "no delegation bundle row found for bundle_index {bundle_index}"
-        )),
-    }
+    workflow::mark_delegation_submitted(db_path, wallet_id, round_id, bundle_index, tx_hash)
 }
 
 /// Load the transaction hash for one delegation bundle row, if present.
+///
+/// Returns `Ok(None)` when the bundle exists but has not been marked submitted.
 pub fn get_delegation_tx_hash(
     db_path: &str,
     wallet_id: &str,
@@ -603,6 +685,9 @@ pub fn get_delegation_tx_hash(
         .map_err(|e| format!("get_delegation_tx_hash failed: {e}"))
 }
 
+/// Persists the selected anchor tree state and Merkle witnesses for a bundle.
+///
+/// The witnesses are generated at the voting round snapshot height.
 fn store_and_generate_witnesses(
     db_path: &str,
     network: WalletNetwork,
@@ -621,6 +706,10 @@ fn store_and_generate_witnesses(
         .map_err(|e| format!("store_witnesses failed: {e}"))
 }
 
+/// Generates Orchard Merkle witnesses for the bundle notes at the round snapshot.
+///
+/// Validates the cached tree state against the round roots before querying the
+/// wallet DB for historical witnesses.
 fn generate_note_witnesses(
     db_path: &str,
     network: WalletNetwork,
@@ -695,6 +784,7 @@ fn generate_note_witnesses(
         .collect())
 }
 
+/// Validates that cached lightwalletd tree state belongs to the voting round.
 fn validate_cached_tree_state_for_round(
     tree_state: &TreeState,
     orchard_root: &[u8],
@@ -719,6 +809,10 @@ struct DelegationAccount {
     seed_fingerprint: [u8; 32],
 }
 
+/// Loads the account metadata required for delegation PCZT construction.
+///
+/// The account must have ZIP-32 derivation metadata, a UFVK, and an Orchard
+/// viewing key. Hardware/imported accounts without those fields are rejected.
 fn load_account_for_delegation(
     db_path: &str,
     network: WalletNetwork,
@@ -747,6 +841,7 @@ fn load_account_for_delegation(
     })
 }
 
+/// Fetches the current lightwalletd chain height.
 async fn current_chain_height(lightwalletd_url: &str) -> Result<u64, String> {
     let mut client = crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url)
         .await
@@ -757,6 +852,7 @@ async fn current_chain_height(lightwalletd_url: &str) -> Result<u64, String> {
     Ok(tip.height)
 }
 
+/// Resolves the consensus branch ID active at `height` for `network`.
 fn consensus_branch_id(network: WalletNetwork, height: u64) -> Result<u32, String> {
     let height = u32::try_from(height)
         .map(BlockHeight::from_u32)
@@ -837,15 +933,16 @@ mod tests {
     }
 
     #[test]
-    fn ensure_bundles_creates_once_then_reuses_existing_bundle_count() {
+    fn ensure_bundles_creates_once_then_reuses_matching_bundle_rows() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("zcash_wallet.db");
         let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
         let params = test_round_params();
         ensure_voting_round(&voting_db, &params, None).unwrap();
+        let notes = vec![test_note_info(42)];
 
-        let created = ensure_bundles(&voting_db, ROUND_ID, &[test_note_info(42)]).unwrap();
-        let reused = ensure_bundles(&voting_db, ROUND_ID, &[]).unwrap();
+        let created = ensure_bundles(&voting_db, ROUND_ID, &notes).unwrap();
+        let reused = ensure_bundles(&voting_db, ROUND_ID, &notes).unwrap();
 
         assert_eq!(created.bundle_count, 1);
         assert_eq!(
@@ -853,7 +950,29 @@ mod tests {
             zcash_voting::governance::BALLOT_DIVISOR
         );
         assert_eq!(reused.bundle_count, 1);
-        assert_eq!(reused.eligible_weight_zatoshi, 0);
+        assert_eq!(
+            reused.eligible_weight_zatoshi,
+            zcash_voting::governance::BALLOT_DIVISOR
+        );
+    }
+
+    #[test]
+    fn ensure_bundles_rejects_current_note_selection_drift() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("zcash_wallet.db");
+        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
+        let params = test_round_params();
+        ensure_voting_round(&voting_db, &params, None).unwrap();
+
+        ensure_bundles(&voting_db, ROUND_ID, &[test_note_info(42)]).unwrap();
+
+        let shape_err = ensure_bundles(&voting_db, ROUND_ID, &[]).unwrap_err();
+        assert!(shape_err.contains("bundle rows are already persisted"));
+
+        let mut substituted = test_note_info(42);
+        substituted.nullifier[0] ^= 0x01;
+        let identity_err = ensure_bundles(&voting_db, ROUND_ID, &[substituted]).unwrap_err();
+        assert!(identity_err.contains("persisted bundle notes do not match current selection"));
     }
 
     #[test]

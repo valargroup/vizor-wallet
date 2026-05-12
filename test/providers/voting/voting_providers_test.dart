@@ -126,6 +126,36 @@ void main() {
     expect(rust.delegationBundleCalls, isEmpty);
   });
 
+  test(
+    'PIR endpoint without identity is accepted when root height matches',
+    () async {
+      final rust = FakeVotingRustApi();
+      final pir = PirSnapshotResolver(
+        httpClient: FakeVotingHttpClient(
+          responses: {
+            'https://pir.example/root': {'height': 123},
+          },
+        ),
+      );
+      final container = _sessionContainer(rust: rust, pirResolver: pir);
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      await container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .prepareDelegation();
+      final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+      expect(state.phase, VotingSessionPhase.readyToDelegate);
+      expect(state.pirEndpoint, Uri.parse('https://pir.example'));
+      expect(
+        state.pirDiagnostics.single.status,
+        PirSnapshotEndpointStatus.matched,
+      );
+      expect(rust.setupCalls, 1);
+    },
+  );
+
   test('resume after delegated does not rebuild delegation bundle', () async {
     final rust = FakeVotingRustApi();
     final recoveryApi = FakeVotingRecoveryApi(
@@ -531,10 +561,14 @@ Map<String, dynamic> roundStatusJson({required String roundId}) => {
 
 rust_voting.ApiRoundRecoveryState recoveryState({
   int bundleCount = 1,
+  List<rust_voting.ApiDelegationWorkflowRecovery> delegationWorkflows =
+      const [],
   List<rust_voting.ApiDelegationTxRecovery> delegationTxHashes = const [],
   List<rust_voting.ApiVoteRecord> votes = const [],
+  List<rust_voting.ApiVoteWorkflowRecovery> voteWorkflows = const [],
   List<rust_voting.ApiVoteTxRecovery> voteTxHashes = const [],
   List<rust_voting.ApiCommitmentBundleRecovery> commitmentBundles = const [],
+  List<rust_voting.ApiShareWorkflowRecovery> shareWorkflows = const [],
   List<rust_voting.ApiShareDelegationRecord> shareDelegations = const [],
   List<rust_voting.ApiShareDelegationRecord> unconfirmedShareDelegations =
       const [],
@@ -542,10 +576,13 @@ rust_voting.ApiRoundRecoveryState recoveryState({
   return rust_voting.ApiRoundRecoveryState(
     roundId: kRoundId,
     bundleCount: bundleCount,
+    delegationWorkflows: delegationWorkflows,
     delegationTxHashes: delegationTxHashes,
     votes: votes,
+    voteWorkflows: voteWorkflows,
     voteTxHashes: voteTxHashes,
     commitmentBundles: commitmentBundles,
+    shareWorkflows: shareWorkflows,
     shareDelegations: shareDelegations,
     unconfirmedShareDelegations: unconfirmedShareDelegations,
   );
@@ -783,7 +820,31 @@ class FakeVotingRustApi implements VotingRustApi {
     required int bundleIndex,
     required String txHash,
   }) async {
-    storedDelegationTxHashes.add('$bundleIndex:$txHash');
+    _addUnique(storedDelegationTxHashes, '$bundleIndex:$txHash');
+  }
+
+  @override
+  Future<void> markDelegationSubmitted({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required String txHash,
+  }) async {
+    _addUnique(storedDelegationTxHashes, '$bundleIndex:$txHash');
+  }
+
+  @override
+  Future<void> markDelegationConfirmed({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required String txHash,
+    required int vanLeafPosition,
+  }) async {
+    _addUnique(storedDelegationTxHashes, '$bundleIndex:$txHash');
+    storedVanPositions.add('$bundleIndex:$vanLeafPosition');
   }
 
   @override
@@ -861,7 +922,38 @@ class FakeVotingRustApi implements VotingRustApi {
     required int proposalId,
     required String txHash,
   }) async {
-    storedVoteTxHashes.add('$bundleIndex:$proposalId:$txHash');
+    _addUnique(storedVoteTxHashes, '$bundleIndex:$proposalId:$txHash');
+  }
+
+  @override
+  Future<void> markVoteSubmitted({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+    required String txHash,
+  }) async {
+    _addUnique(storedVoteTxHashes, '$bundleIndex:$proposalId:$txHash');
+  }
+
+  @override
+  Future<void> markVoteConfirmed({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+    required String txHash,
+    required int vanPosition,
+    required BigInt vcTreePosition,
+    required String commitmentBundleJson,
+  }) async {
+    _addUnique(storedVoteTxHashes, '$bundleIndex:$proposalId:$txHash');
+    storedVanPositions.add('$bundleIndex:$vanPosition');
+    storedCommitmentBundles.add(
+      '$bundleIndex:$proposalId:$vcTreePosition:$commitmentBundleJson',
+    );
   }
 
   @override
@@ -929,6 +1021,12 @@ class FakeVotingRustApi implements VotingRustApi {
     required String accountUuid,
   }) async {
     return [roundId.length, accountUuid.length, ...seedBytes.take(2)];
+  }
+}
+
+void _addUnique<T>(List<T> values, T value) {
+  if (!values.contains(value)) {
+    values.add(value);
   }
 }
 

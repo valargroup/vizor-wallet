@@ -33,12 +33,30 @@ class VotingRecoveryService {
   /// Bundle/proposal pairs are keyed together because voting is bundle-indexed:
   /// one proposal can have independent state for each note bundle.
   VotingResumePlan buildResumePlan(rust_voting.ApiRoundRecoveryState state) {
-    final delegatedBundleIndexes = state.delegationTxHashes
-        .map((record) => record.bundleIndex)
-        .toSet();
+    final delegationPhasesByIndex = <int, String>{
+      for (final record in state.delegationWorkflows)
+        record.bundleIndex: record.phase,
+    };
+    final submittedDelegationBundleIndexes =
+        state.delegationWorkflows
+            .where(
+              (record) =>
+                  record.phase == VotingWorkflowPhase.submittedDelegation,
+            )
+            .map((record) => record.bundleIndex)
+            .toList()
+          ..sort();
+    final delegatedBundleIndexes = state.delegationWorkflows.isNotEmpty
+        ? state.delegationWorkflows
+              .where((record) => record.phase == VotingWorkflowPhase.confirmed)
+              .map((record) => record.bundleIndex)
+              .toSet()
+        : state.delegationTxHashes.map((record) => record.bundleIndex).toSet();
     final pendingDelegationBundleIndexes = [
       for (var index = 0; index < state.bundleCount; index++)
-        if (!delegatedBundleIndexes.contains(index)) index,
+        if (!delegatedBundleIndexes.contains(index) &&
+            !submittedDelegationBundleIndexes.contains(index))
+          index,
     ];
 
     final votesByKey = <VotingVoteKey, rust_voting.ApiVoteRecord>{
@@ -55,6 +73,13 @@ class VotingRecoveryService {
           proposalId: record.proposalId,
         ): record.txHash,
     };
+    final votePhasesByKey = <VotingVoteKey, String>{
+      for (final record in state.voteWorkflows)
+        VotingVoteKey(
+          bundleIndex: record.bundleIndex,
+          proposalId: record.proposalId,
+        ): record.phase,
+    };
     final commitmentBundlesByKey =
         <VotingVoteKey, rust_voting.ApiCommitmentBundleRecovery>{
           for (final record in state.commitmentBundles)
@@ -65,8 +90,19 @@ class VotingRecoveryService {
         };
 
     final voteKeys = votesByKey.keys.toList()..sort(_compareVoteKeys);
+    final submittedVoteConfirmationKeys =
+        votePhasesByKey.entries
+            .where((entry) => entry.value == VotingWorkflowPhase.submittedVote)
+            .map((entry) => entry.key)
+            .toList()
+          ..sort(_compareVoteKeys);
     final pendingVoteSubmissionKeys = voteKeys
-        .where((key) => !voteTxHashesByKey.containsKey(key))
+        .where(
+          (key) =>
+              !voteTxHashesByKey.containsKey(key) &&
+              votePhasesByKey[key] != VotingWorkflowPhase.submittedVote &&
+              votePhasesByKey[key] != VotingWorkflowPhase.confirmed,
+        )
         .toList();
     final incompleteVoteRecoveryKeys = voteKeys
         .where(
@@ -87,10 +123,14 @@ class VotingRecoveryService {
     return VotingResumePlan(
       recoveryState: state,
       pendingDelegationBundleIndexes: pendingDelegationBundleIndexes,
+      delegationPhasesByIndex: delegationPhasesByIndex,
+      submittedDelegationBundleIndexes: submittedDelegationBundleIndexes,
       votesByKey: votesByKey,
+      votePhasesByKey: votePhasesByKey,
       voteTxHashesByKey: voteTxHashesByKey,
       commitmentBundlesByKey: commitmentBundlesByKey,
       pendingVoteSubmissionKeys: pendingVoteSubmissionKeys,
+      submittedVoteConfirmationKeys: submittedVoteConfirmationKeys,
       incompleteVoteRecoveryKeys: incompleteVoteRecoveryKeys,
       shareDelegations: shareDelegations,
       unconfirmedShareDelegations: unconfirmedShareDelegations,

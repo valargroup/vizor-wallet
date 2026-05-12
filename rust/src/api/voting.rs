@@ -6,7 +6,10 @@ use crate::wallet::{
     voting::{
         bundle::{self, SelectedNotes},
         delegation, hotkey, recovery, state, tree_sync,
-        types::{BundleSetupResult, DelegationPirPrecomputeResult, ProofEvent, SignedDelegation},
+        types::{
+            BundleSetupResult, DelegationPirPrecomputeResult, ProofEvent, SignedDelegation,
+            VanWitness,
+        },
         vote,
     },
 };
@@ -224,9 +227,36 @@ pub struct ApiShareDelegationRecord {
     pub share_index: u32,
     pub sent_to_urls: Vec<String>,
     pub nullifier: Vec<u8>,
+    pub phase: String,
     pub confirmed: bool,
     pub submit_at: u64,
     pub created_at: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiDelegationWorkflowRecovery {
+    pub bundle_index: u32,
+    pub phase: String,
+    pub tx_hash: Option<String>,
+    pub van_leaf_position: Option<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiVoteWorkflowRecovery {
+    pub bundle_index: u32,
+    pub proposal_id: u32,
+    pub phase: String,
+    pub tx_hash: Option<String>,
+    pub vc_tree_position: Option<u64>,
+    pub has_commitment_bundle: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiShareWorkflowRecovery {
+    pub bundle_index: u32,
+    pub proposal_id: u32,
+    pub share_index: u32,
+    pub phase: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -234,10 +264,13 @@ pub struct ApiShareDelegationRecord {
 pub struct ApiRoundRecoveryState {
     pub round_id: String,
     pub bundle_count: u32,
+    pub delegation_workflows: Vec<ApiDelegationWorkflowRecovery>,
     pub delegation_tx_hashes: Vec<ApiDelegationTxRecovery>,
     pub votes: Vec<ApiVoteRecord>,
+    pub vote_workflows: Vec<ApiVoteWorkflowRecovery>,
     pub vote_tx_hashes: Vec<ApiVoteTxRecovery>,
     pub commitment_bundles: Vec<ApiCommitmentBundleRecovery>,
+    pub share_workflows: Vec<ApiShareWorkflowRecovery>,
     pub share_delegations: Vec<ApiShareDelegationRecord>,
     pub unconfirmed_share_delegations: Vec<ApiShareDelegationRecord>,
 }
@@ -366,8 +399,8 @@ impl From<ProofEvent> for ApiDelegationProofEvent {
     }
 }
 
-impl From<tree_sync::VanWitness> for ApiVanWitness {
-    fn from(witness: tree_sync::VanWitness) -> Self {
+impl From<VanWitness> for ApiVanWitness {
+    fn from(witness: VanWitness) -> Self {
         Self {
             auth_path: witness.auth_path,
             position: witness.position,
@@ -376,7 +409,7 @@ impl From<tree_sync::VanWitness> for ApiVanWitness {
     }
 }
 
-impl From<ApiVanWitness> for tree_sync::VanWitness {
+impl From<ApiVanWitness> for VanWitness {
     fn from(witness: ApiVanWitness) -> Self {
         Self {
             auth_path: witness.auth_path,
@@ -551,6 +584,41 @@ impl From<recovery::VoteTxRecovery> for ApiVoteTxRecovery {
     }
 }
 
+impl From<recovery::DelegationWorkflowRecovery> for ApiDelegationWorkflowRecovery {
+    fn from(record: recovery::DelegationWorkflowRecovery) -> Self {
+        Self {
+            bundle_index: record.bundle_index,
+            phase: record.phase,
+            tx_hash: record.tx_hash,
+            van_leaf_position: record.van_leaf_position,
+        }
+    }
+}
+
+impl From<recovery::VoteWorkflowRecovery> for ApiVoteWorkflowRecovery {
+    fn from(record: recovery::VoteWorkflowRecovery) -> Self {
+        Self {
+            bundle_index: record.bundle_index,
+            proposal_id: record.proposal_id,
+            phase: record.phase,
+            tx_hash: record.tx_hash,
+            vc_tree_position: record.vc_tree_position,
+            has_commitment_bundle: record.has_commitment_bundle,
+        }
+    }
+}
+
+impl From<recovery::ShareWorkflowRecovery> for ApiShareWorkflowRecovery {
+    fn from(record: recovery::ShareWorkflowRecovery) -> Self {
+        Self {
+            bundle_index: record.bundle_index,
+            proposal_id: record.proposal_id,
+            share_index: record.share_index,
+            phase: record.phase,
+        }
+    }
+}
+
 impl From<recovery::ShareDelegationRecord> for ApiShareDelegationRecord {
     fn from(record: recovery::ShareDelegationRecord) -> Self {
         Self {
@@ -560,6 +628,7 @@ impl From<recovery::ShareDelegationRecord> for ApiShareDelegationRecord {
             share_index: record.share_index,
             sent_to_urls: record.sent_to_urls,
             nullifier: record.nullifier,
+            phase: record.phase,
             confirmed: record.confirmed,
             submit_at: record.submit_at,
             created_at: record.created_at,
@@ -572,18 +641,25 @@ impl From<recovery::RoundRecoveryState> for ApiRoundRecoveryState {
         Self {
             round_id: state.round_id,
             bundle_count: state.bundle_count,
+            delegation_workflows: state
+                .delegation_workflows
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             delegation_tx_hashes: state
                 .delegation_tx_hashes
                 .into_iter()
                 .map(Into::into)
                 .collect(),
             votes: state.votes.into_iter().map(Into::into).collect(),
+            vote_workflows: state.vote_workflows.into_iter().map(Into::into).collect(),
             vote_tx_hashes: state.vote_tx_hashes.into_iter().map(Into::into).collect(),
             commitment_bundles: state
                 .commitment_bundles
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            share_workflows: state.share_workflows.into_iter().map(Into::into).collect(),
             share_delegations: state
                 .share_delegations
                 .into_iter()
@@ -859,6 +935,44 @@ pub fn store_delegation_tx_hash(
     })
 }
 
+pub fn mark_delegation_submitted(
+    db_path: String,
+    wallet_id: String,
+    round_id: String,
+    bundle_index: u32,
+    tx_hash: String,
+) -> Result<(), String> {
+    catch(|| {
+        delegation::store_delegation_tx_hash(
+            &db_path,
+            &wallet_id,
+            &round_id,
+            bundle_index,
+            &tx_hash,
+        )
+    })
+}
+
+pub fn mark_delegation_confirmed(
+    db_path: String,
+    wallet_id: String,
+    round_id: String,
+    bundle_index: u32,
+    tx_hash: String,
+    van_leaf_position: u32,
+) -> Result<(), String> {
+    catch(|| {
+        recovery::mark_delegation_confirmed(
+            &db_path,
+            &wallet_id,
+            &round_id,
+            bundle_index,
+            &tx_hash,
+            van_leaf_position,
+        )
+    })
+}
+
 /// Store the vote-authority-note leaf position emitted by the delegation TX.
 pub fn store_van_position(
     db_path: String,
@@ -1080,6 +1194,53 @@ pub fn store_vote_tx_hash(
             bundle_index,
             proposal_id,
             &tx_hash,
+        )
+    })
+}
+
+pub fn mark_vote_submitted(
+    db_path: String,
+    wallet_id: String,
+    round_id: String,
+    bundle_index: u32,
+    proposal_id: u32,
+    tx_hash: String,
+) -> Result<(), String> {
+    catch(|| {
+        recovery::store_vote_tx_hash(
+            &db_path,
+            &wallet_id,
+            &round_id,
+            bundle_index,
+            proposal_id,
+            &tx_hash,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn mark_vote_confirmed(
+    db_path: String,
+    wallet_id: String,
+    round_id: String,
+    bundle_index: u32,
+    proposal_id: u32,
+    tx_hash: String,
+    van_position: u32,
+    vc_tree_position: u64,
+    commitment_bundle_json: String,
+) -> Result<(), String> {
+    catch(|| {
+        recovery::mark_vote_confirmed(
+            &db_path,
+            &wallet_id,
+            &round_id,
+            bundle_index,
+            proposal_id,
+            &tx_hash,
+            van_position,
+            vc_tree_position,
+            &commitment_bundle_json,
         )
     })
 }
@@ -1313,7 +1474,7 @@ mod tests {
 
     #[test]
     fn api_van_witness_preserves_core_fields() {
-        let api = ApiVanWitness::from(tree_sync::VanWitness {
+        let api = ApiVanWitness::from(VanWitness {
             auth_path: vec![vec![1; 32], vec![2; 32]],
             position: 7,
             anchor_height: 123,

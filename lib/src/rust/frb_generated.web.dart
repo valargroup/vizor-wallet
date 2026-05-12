@@ -73,6 +73,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ApiDelegationTxRecovery dco_decode_api_delegation_tx_recovery(dynamic raw);
 
   @protected
+  ApiDelegationWorkflowRecovery dco_decode_api_delegation_workflow_recovery(
+    dynamic raw,
+  );
+
+  @protected
   ApiDraftVote dco_decode_api_draft_vote(dynamic raw);
 
   @protected
@@ -83,6 +88,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ApiShareDelegationRecord dco_decode_api_share_delegation_record(dynamic raw);
+
+  @protected
+  ApiShareWorkflowRecovery dco_decode_api_share_workflow_recovery(dynamic raw);
 
   @protected
   ApiSignedDelegation dco_decode_api_signed_delegation(dynamic raw);
@@ -110,6 +118,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ApiVoteTxRecovery dco_decode_api_vote_tx_recovery(dynamic raw);
+
+  @protected
+  ApiVoteWorkflowRecovery dco_decode_api_vote_workflow_recovery(dynamic raw);
 
   @protected
   ApiVotingBundleSetupResult dco_decode_api_voting_bundle_setup_result(
@@ -195,10 +206,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<ApiDelegationWorkflowRecovery>
+  dco_decode_list_api_delegation_workflow_recovery(dynamic raw);
+
+  @protected
   List<ApiDraftVote> dco_decode_list_api_draft_vote(dynamic raw);
 
   @protected
   List<ApiShareDelegationRecord> dco_decode_list_api_share_delegation_record(
+    dynamic raw,
+  );
+
+  @protected
+  List<ApiShareWorkflowRecovery> dco_decode_list_api_share_workflow_recovery(
     dynamic raw,
   );
 
@@ -215,6 +235,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ApiVoteTxRecovery> dco_decode_list_api_vote_tx_recovery(dynamic raw);
+
+  @protected
+  List<ApiVoteWorkflowRecovery> dco_decode_list_api_vote_workflow_recovery(
+    dynamic raw,
+  );
 
   @protected
   List<ApiVotingNoteRef> dco_decode_list_api_voting_note_ref(dynamic raw);
@@ -411,6 +436,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ApiDelegationWorkflowRecovery sse_decode_api_delegation_workflow_recovery(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ApiDraftVote sse_decode_api_draft_vote(SseDeserializer deserializer);
 
   @protected
@@ -425,6 +455,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ApiShareDelegationRecord sse_decode_api_share_delegation_record(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ApiShareWorkflowRecovery sse_decode_api_share_workflow_recovery(
     SseDeserializer deserializer,
   );
 
@@ -466,6 +501,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ApiVoteTxRecovery sse_decode_api_vote_tx_recovery(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ApiVoteWorkflowRecovery sse_decode_api_vote_workflow_recovery(
     SseDeserializer deserializer,
   );
 
@@ -567,12 +607,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<ApiDelegationWorkflowRecovery>
+  sse_decode_list_api_delegation_workflow_recovery(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<ApiDraftVote> sse_decode_list_api_draft_vote(
     SseDeserializer deserializer,
   );
 
   @protected
   List<ApiShareDelegationRecord> sse_decode_list_api_share_delegation_record(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ApiShareWorkflowRecovery> sse_decode_list_api_share_workflow_recovery(
     SseDeserializer deserializer,
   );
 
@@ -593,6 +644,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ApiVoteTxRecovery> sse_decode_list_api_vote_tx_recovery(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ApiVoteWorkflowRecovery> sse_decode_list_api_vote_workflow_recovery(
     SseDeserializer deserializer,
   );
 
@@ -838,6 +894,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_api_delegation_workflow_recovery(
+    ApiDelegationWorkflowRecovery self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_api_draft_vote(ApiDraftVote self, SseSerializer serializer);
 
   @protected
@@ -855,6 +917,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_api_share_delegation_record(
     ApiShareDelegationRecord self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_api_share_workflow_recovery(
+    ApiShareWorkflowRecovery self,
     SseSerializer serializer,
   );
 
@@ -903,6 +971,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_api_vote_tx_recovery(
     ApiVoteTxRecovery self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_api_vote_workflow_recovery(
+    ApiVoteWorkflowRecovery self,
     SseSerializer serializer,
   );
 
@@ -1024,6 +1098,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_api_delegation_workflow_recovery(
+    List<ApiDelegationWorkflowRecovery> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_api_draft_vote(
     List<ApiDraftVote> self,
     SseSerializer serializer,
@@ -1032,6 +1112,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_api_share_delegation_record(
     List<ApiShareDelegationRecord> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_api_share_workflow_recovery(
+    List<ApiShareWorkflowRecovery> self,
     SseSerializer serializer,
   );
 
@@ -1056,6 +1142,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_api_vote_tx_recovery(
     List<ApiVoteTxRecovery> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_api_vote_workflow_recovery(
+    List<ApiVoteWorkflowRecovery> self,
     SseSerializer serializer,
   );
 
