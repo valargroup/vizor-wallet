@@ -29,8 +29,6 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
-    super.applicationDidFinishLaunching(notification)
-
 #if SPARKLE_ENABLED
     guard let updaterController else {
       checkForUpdatesMenuItem.isEnabled = false
