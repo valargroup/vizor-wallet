@@ -28,6 +28,27 @@ class VotingOptionView {
   final String label;
 }
 
+/// Stable owner key for voting UI state that must not cross accounts.
+///
+/// [roundId] is the vote round identifier used by Rust recovery state, and
+/// [accountUuid] is the account pinned when the voting session was created.
+class VotingSessionKey {
+  const VotingSessionKey({required this.roundId, required this.accountUuid});
+
+  final String roundId;
+  final String accountUuid;
+
+  @override
+  bool operator ==(Object other) {
+    return other is VotingSessionKey &&
+        other.roundId == roundId &&
+        other.accountUuid == accountUuid;
+  }
+
+  @override
+  int get hashCode => Object.hash(roundId, accountUuid);
+}
+
 class VotingDraftState {
   const VotingDraftState({this.choices = const {}});
 
@@ -58,9 +79,10 @@ class VotingDraftState {
 }
 
 class VotingDraftNotifier extends Notifier<VotingDraftState> {
-  VotingDraftNotifier(this.roundId);
+  VotingDraftNotifier(this.key);
 
-  final String roundId;
+  /// Round/account owner for this in-memory draft.
+  final VotingSessionKey key;
 
   @override
   VotingDraftState build() => const VotingDraftState();
@@ -71,9 +93,11 @@ class VotingDraftNotifier extends Notifier<VotingDraftState> {
 }
 
 final votingDraftProvider =
-    NotifierProvider.family<VotingDraftNotifier, VotingDraftState, String>(
-      VotingDraftNotifier.new,
-    );
+    NotifierProvider.family<
+      VotingDraftNotifier,
+      VotingDraftState,
+      VotingSessionKey
+    >(VotingDraftNotifier.new);
 
 List<VotingProposalView> proposalsFromRound(VotingRoundDetails round) {
   return proposalsFromJson(round.rawJson);

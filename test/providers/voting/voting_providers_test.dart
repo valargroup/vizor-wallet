@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
+import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
 import 'package:zcash_wallet/src/features/voting/voting_resume_plan.dart';
@@ -313,6 +314,35 @@ void main() {
 
     expect(rust.accountUuids.toSet(), {'account-1'});
     expect(recoveryApi.walletIds.toSet(), {'account-1'});
+  });
+
+  test('draft choices are isolated by pinned voting account', () async {
+    final activeAccount = _MutableActiveAccount('account-1');
+    final container = _sessionContainer(activeAccountUuid: activeAccount.call);
+    addTearDown(container.dispose);
+
+    final session = await container.read(
+      votingSessionProvider(kRoundId).future,
+    );
+    final pinnedDraftKey = VotingSessionKey(
+      roundId: kRoundId,
+      accountUuid: session.accountUuid!,
+    );
+    container
+        .read(votingDraftProvider(pinnedDraftKey).notifier)
+        .setChoice(7, 1);
+    activeAccount.value = 'account-2';
+
+    const switchedDraftKey = VotingSessionKey(
+      roundId: kRoundId,
+      accountUuid: 'account-2',
+    );
+    expect(
+      container.read(votingSessionProvider(kRoundId)).value?.accountUuid,
+      'account-1',
+    );
+    expect(container.read(votingDraftProvider(pinnedDraftKey)).choices, {7: 1});
+    expect(container.read(votingDraftProvider(switchedDraftKey)).isEmpty, true);
   });
 
   test(

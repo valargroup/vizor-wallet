@@ -214,6 +214,13 @@ class VotingRoundDetails {
 /// single ambiguous "current vote" marker.
 class VotingSessionState {
   final String roundId;
+
+  /// Account UUID pinned to this session's Rust recovery and proof work.
+  ///
+  /// UI state such as vote drafts must use this value, not the live active
+  /// account, so an account switch cannot submit choices for the wrong wallet.
+  final String? accountUuid;
+
   final VotingSessionPhase phase;
   final VotingConfig? config;
   final VotingRoundDetails? round;
@@ -229,6 +236,7 @@ class VotingSessionState {
 
   VotingSessionState({
     required this.roundId,
+    this.accountUuid,
     this.phase = VotingSessionPhase.idle,
     this.config,
     this.round,
@@ -248,6 +256,7 @@ class VotingSessionState {
   bool get hasError => phase == VotingSessionPhase.error;
 
   VotingSessionState copyWith({
+    String? accountUuid,
     VotingSessionPhase? phase,
     VotingConfig? config,
     VotingRoundDetails? round,
@@ -266,6 +275,7 @@ class VotingSessionState {
   }) {
     return VotingSessionState(
       roundId: roundId,
+      accountUuid: accountUuid ?? this.accountUuid,
       phase: phase ?? this.phase,
       config: config ?? this.config,
       round: round ?? this.round,
