@@ -125,7 +125,14 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         final bundleIndex = entry.key;
         final txHash = entry.value;
         final confirmation = await _awaitTxConfirmation(api, txHash);
-        if (confirmation == null) continue;
+        if (confirmation == null) {
+          _setError(
+            'Delegation transaction $txHash for bundle $bundleIndex is still '
+            'unconfirmed after repeated checks. Retry to resume confirmation '
+            'before continuing.',
+          );
+          return;
+        }
         if (confirmation.code != 0) {
           throw StateError(
             confirmation.log.isEmpty
@@ -347,7 +354,15 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         final commitmentBundle = plan.commitmentBundleFor(key);
         if (txHash == null || commitmentBundle == null) continue;
         final confirmation = await _awaitTxConfirmation(api, txHash);
-        if (confirmation == null) continue;
+        if (confirmation == null) {
+          _setError(
+            'Vote commitment transaction $txHash for bundle '
+            '${key.bundleIndex}, proposal ${key.proposalId} is still '
+            'unconfirmed after repeated checks. Retry to resume confirmation '
+            'before continuing.',
+          );
+          return;
+        }
         if (confirmation.code != 0) {
           throw StateError(
             confirmation.log.isEmpty
@@ -706,8 +721,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     VotingApiClient api,
     String txHash,
   ) async {
-    const attempts = 45;
-    const delay = Duration(seconds: 2);
+    final polling = ref.read(votingTxConfirmationPollingProvider);
+    final attempts = polling.attempts;
+    final delay = polling.delay;
     final timer = Stopwatch()..start();
     debugPrint('[zcash] Voting: tx confirmation wait start txHash=$txHash');
     for (var attempt = 0; attempt < attempts; attempt++) {
@@ -1267,3 +1283,23 @@ final votingSessionProvider =
       VotingSessionState,
       String
     >(VotingSessionNotifier.new);
+
+@visibleForTesting
+final votingTxConfirmationPollingProvider =
+    Provider<VotingTxConfirmationPolling>((ref) {
+      return const VotingTxConfirmationPolling(
+        attempts: 45,
+        delay: Duration(seconds: 2),
+      );
+    });
+
+@visibleForTesting
+class VotingTxConfirmationPolling {
+  final int attempts;
+  final Duration delay;
+
+  const VotingTxConfirmationPolling({
+    required this.attempts,
+    required this.delay,
+  }) : assert(attempts > 0);
+}

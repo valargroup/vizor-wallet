@@ -9,6 +9,30 @@ helper-server share delegations each move through their own lifecycle. The share
 phase names are exposed through Rust recovery APIs as strings for Dart resume
 logic.
 
+## Account Invariants
+
+Coinholder voting is software-account only. The delegation and vote flows need
+the active account's mnemonic-derived seed to derive the voting hotkey and sign
+the delegation payload. Hardware accounts, locked wallets, and accounts without
+a stored mnemonic must fail before proof or recovery work starts, with a
+user-facing message that voting requires a software account.
+
+A `votingSessionProvider(roundId)` instance is pinned to the active account UUID
+captured when the session is built. All later context reloads, recovery reads,
+delegation setup, vote-tree sync, vote submission, share recovery, and
+round-scoped cleanup must continue using that session account, even if the user
+switches accounts while the round screen is open. Do not re-read the active
+account inside individual session actions except through the session-pinned
+account helper.
+
+Durable voting state and process-local caches are account scoped. Any key or
+cleanup path that touches prepared delegation PCZTs, vote-tree sync state,
+hotkeys, recovery rows, or share-delegation history must include the wallet DB
+path plus the session account UUID where applicable. Account-wide lifecycle
+events such as account switch, account removal, wallet reset, or lock/sign-out
+invalidate process-local state for the abandoned account; they do not delete
+durable `zcash_voting` recovery rows.
+
 ## State Diagram
 
 ```mermaid
