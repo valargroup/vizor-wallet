@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,7 @@ import 'package:zcash_wallet/src/rust/api/voting.dart' as rust_voting;
 import 'package:zcash_wallet/src/services/voting/pir_snapshot_resolver.dart';
 import 'package:zcash_wallet/src/services/voting/voting_config_loader.dart';
 import 'package:zcash_wallet/src/services/voting/voting_http.dart';
+import 'package:zcash_wallet/src/services/voting/voting_models.dart';
 
 import '../../services/voting/fake_voting_http.dart';
 
@@ -57,8 +59,12 @@ void main() {
         'https://voting.example/dynamic-voting-config.json':
             dynamicConfigJson(),
         '/shielded-vote/v1/rounds': [
-          {'round_id': kRoundId, 'title': 'Poll', 'status': 'active'},
-          {'round_id': kOtherRoundId, 'title': 'Other', 'status': 'active'},
+          {'vote_round_id': kRoundId, 'title': 'Poll', 'status': 'active'},
+          {
+            'vote_round_id': kOtherRoundId,
+            'title': 'Other',
+            'status': 'active',
+          },
         ],
         '/shielded-vote/v1/endorsed-rounds/zodl': {
           'endorsed_round_ids': [kRoundId],
@@ -73,8 +79,21 @@ void main() {
     expect(rounds, hasLength(2));
     expect(rounds.first.endorsed, isTrue);
     expect(rounds.first.unverified, isFalse);
+    expect(rounds.first.roundId, kRoundId);
     expect(rounds.last.endorsed, isFalse);
     expect(rounds.last.unverified, isTrue);
+    expect(rounds.last.roundId, kOtherRoundId);
+  });
+
+  test('round details normalize base64 vote_round_id to hex', () {
+    final details = VotingRoundDetails.fromStatus(
+      VotingRoundStatus.fromJson(
+        roundStatusJson(roundId: kEncodedRoundId)..remove('round_id'),
+      ),
+    );
+
+    expect(details.roundId, kEncodedRoundIdHex);
+    expect(details.toRoundParams().voteRoundId, kEncodedRoundIdHex);
   });
 
   test('PIR mismatch fails before Rust delegation work is called', () async {
@@ -133,6 +152,23 @@ void main() {
     expect(rust.delegationBundleCalls, isEmpty);
   });
 
+  test('delegation submits chain payload and stores recovery state', () async {
+    final rust = FakeVotingRustApi();
+    final container = _sessionContainer(rust: rust);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(state.phase, VotingSessionPhase.delegated);
+    expect(rust.delegationBundleCalls, [0]);
+    expect(rust.storedDelegationTxHashes, ['0:delegation-tx']);
+    expect(rust.storedVanPositions, ['0:0']);
+  });
+
   test('vote progress is isolated by bundle index', () async {
     final rust = FakeVotingRustApi();
     final recoveryApi = FakeVotingRecoveryApi(
@@ -181,6 +217,45 @@ void main() {
     expect(rust.voteCommitBundleCalls, [0, 1]);
   });
 
+  test('vote commitments submit shares and record recovery rows', () async {
+    final rust = FakeVotingRustApi(emitCommitments: true);
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(
+        bundleCount: 1,
+        delegationTxHashes: [
+          rust_voting.ApiDelegationTxRecovery(
+            bundleIndex: 0,
+            txHash: 'delegation-0',
+          ),
+        ],
+        votes: [vote(bundleIndex: 0, proposalId: 7)],
+      ),
+    );
+    final container = _sessionContainer(rust: rust, recoveryApi: recoveryApi);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .castVotes(
+          draftVotes: [
+            rust_voting.ApiDraftVote(
+              proposalId: 7,
+              choice: 1,
+              numOptions: 2,
+              vcTreePosition: BigInt.zero,
+              singleShare: false,
+            ),
+          ],
+        );
+
+    expect(rust.recordedShares, hasLength(1));
+    expect(rust.recordedShares.single.bundleIndex, 0);
+    expect(rust.recordedShares.single.proposalId, 7);
+    expect(rust.storedVoteTxHashes, ['0:7:vote-tx']);
+    expect(rust.storedCommitmentBundles, ['0:7:2:{"proposal_id":7}']);
+  });
+
   test('session actions are serialized', () async {
     final rust = FakeVotingRustApi(
       setupDelay: const Duration(milliseconds: 10),
@@ -218,22 +293,19 @@ void main() {
     addTearDown(container.dispose);
 
     await container.read(votingSessionProvider(kRoundId).future);
-    await expectLater(
-      container
-          .read(votingSessionProvider(kRoundId).notifier)
-          .castVotes(
-            draftVotes: [
-              rust_voting.ApiDraftVote(
-                proposalId: 7,
-                choice: 1,
-                numOptions: 2,
-                vcTreePosition: BigInt.zero,
-                singleShare: false,
-              ),
-            ],
-          ),
-      throwsA(isA<VotingHotkeyUnavailable>()),
-    );
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .castVotes(
+          draftVotes: [
+            rust_voting.ApiDraftVote(
+              proposalId: 7,
+              choice: 1,
+              numOptions: 2,
+              vcTreePosition: BigInt.zero,
+              singleShare: false,
+            ),
+          ],
+        );
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
     expect(state.phase, VotingSessionPhase.error);
@@ -269,6 +341,42 @@ ProviderContainer _sessionContainer({
       'https://voting.example/dynamic-voting-config.json': dynamicConfigJson(),
       '/shielded-vote/v1/round/$kRoundId': {
         'round': roundStatusJson(roundId: kRoundId),
+      },
+      '/shielded-vote/v1/delegate-vote': {
+        'tx_hash': 'delegation-tx',
+        'code': 0,
+        'log': '',
+      },
+      '/shielded-vote/v1/tx/delegation-tx': {
+        'height': 10,
+        'code': 0,
+        'log': '',
+        'events': [
+          {
+            'type': 'delegate_vote',
+            'attributes': [
+              {'key': 'leaf_index', 'value': '0'},
+            ],
+          },
+        ],
+      },
+      '/shielded-vote/v1/cast-vote': {
+        'tx_hash': 'vote-tx',
+        'code': 0,
+        'log': '',
+      },
+      '/shielded-vote/v1/tx/vote-tx': {
+        'height': 11,
+        'code': 0,
+        'log': '',
+        'events': [
+          {
+            'type': 'cast_vote',
+            'attributes': [
+              {'key': 'leaf_index', 'value': '1,2'},
+            ],
+          },
+        ],
       },
       '/shielded-vote/v1/share-status/$kRoundId/0102': {'status': 'confirmed'},
     },
@@ -324,6 +432,9 @@ const kRoundId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const kOtherRoundId =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const kEncodedRoundId = 'El5UdfZTsHTV9MNnMIUmlfNWQWwrbDBCUWqRLlv/3RE=';
+const kEncodedRoundIdHex =
+    '125e5475f653b074d5f4c36730852695f356416c2b6c3042516a912e5bffdd11';
 const _hex32 =
     '0101010101010101010101010101010101010101010101010101010101010101';
 
@@ -461,35 +572,70 @@ class FakeVotingHotkeyStore implements VotingHotkeyStore {
   const FakeVotingHotkeyStore(this.hotkey);
 
   @override
-  Future<List<int>> readHotkey({
+  Future<List<int>?> readHotkey({
     required String accountUuid,
     required String roundId,
   }) async {
     return hotkey;
   }
+
+  @override
+  Future<void> writeHotkey({
+    required String accountUuid,
+    required String roundId,
+    required List<int> hotkey,
+  }) async {}
+
+  @override
+  Future<void> deleteHotkey({
+    required String accountUuid,
+    required String roundId,
+  }) async {}
 }
 
 class FailingVotingHotkeyStore implements VotingHotkeyStore {
   const FailingVotingHotkeyStore();
 
   @override
-  Future<List<int>> readHotkey({
+  Future<List<int>?> readHotkey({
     required String accountUuid,
     required String roundId,
   }) {
     throw const VotingHotkeyUnavailable('missing test hotkey');
   }
+
+  @override
+  Future<void> writeHotkey({
+    required String accountUuid,
+    required String roundId,
+    required List<int> hotkey,
+  }) async {}
+
+  @override
+  Future<void> deleteHotkey({
+    required String accountUuid,
+    required String roundId,
+  }) async {}
 }
 
 class FakeVotingRustApi implements VotingRustApi {
-  FakeVotingRustApi({this.setupDelay = Duration.zero});
+  FakeVotingRustApi({
+    this.setupDelay = Duration.zero,
+    this.emitCommitments = false,
+  });
 
   final Duration setupDelay;
+  final bool emitCommitments;
   int setupCalls = 0;
   int _activeSetups = 0;
   int maxConcurrentSetups = 0;
   final delegationBundleCalls = <int>[];
   final voteCommitBundleCalls = <int>[];
+  final storedDelegationTxHashes = <String>[];
+  final storedVoteTxHashes = <String>[];
+  final storedCommitmentBundles = <String>[];
+  final storedVanPositions = <String>[];
+  final recordedShares = <_RecordedShare>[];
 
   @override
   Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
@@ -533,8 +679,51 @@ class FakeVotingRustApi implements VotingRustApi {
     delegationBundleCalls.add(bundleIndex);
     yield rust_voting.ApiDelegationProofEvent(
       phase: 'result',
-      txidHex: 'delegation-$bundleIndex',
+      txidHex: null,
+      signedDelegation: rust_voting.ApiSignedDelegation(
+        pcztBytes: Uint8List.fromList(const []),
+        txidHex: '',
+        status: 'ready_for_submission',
+        message: null,
+        proof: Uint8List.fromList(const [1]),
+        rk: Uint8List.fromList(const [2]),
+        spendAuthSig: Uint8List.fromList(const [3]),
+        sighash: Uint8List.fromList(const [4]),
+        nfSigned: Uint8List.fromList(const [5]),
+        cmxNew: Uint8List.fromList(const [6]),
+        govComm: Uint8List.fromList(const [7]),
+        govNullifiers: [
+          Uint8List.fromList(const [8]),
+        ],
+        voteRoundId: roundParams.voteRoundId,
+        eligibleWeightZatoshi: BigInt.from(100),
+        delegatedWeightZatoshi: BigInt.from(100),
+        bundleCount: 1,
+        bundleIndex: bundleIndex,
+      ),
     );
+  }
+
+  @override
+  Future<void> storeDelegationTxHash({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required String txHash,
+  }) async {
+    storedDelegationTxHashes.add('$bundleIndex:$txHash');
+  }
+
+  @override
+  Future<void> storeVanPosition({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int position,
+  }) async {
+    storedVanPositions.add('$bundleIndex:$position');
   }
 
   @override
@@ -579,6 +768,14 @@ class FakeVotingRustApi implements VotingRustApi {
         phase: 'result',
         proposalId: draft.proposalId,
         bundleIndex: bundleIndex,
+        commitments: emitCommitments
+            ? _commitments(
+                roundId: roundId,
+                bundleIndex: bundleIndex,
+                proposalId: draft.proposalId,
+                choice: draft.choice,
+              )
+            : null,
       );
     }
   }
@@ -591,7 +788,24 @@ class FakeVotingRustApi implements VotingRustApi {
     required int bundleIndex,
     required int proposalId,
     required String txHash,
-  }) async {}
+  }) async {
+    storedVoteTxHashes.add('$bundleIndex:$proposalId:$txHash');
+  }
+
+  @override
+  Future<void> storeCommitmentBundle({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+    required String commitmentBundleJson,
+    required BigInt vcTreePosition,
+  }) async {
+    storedCommitmentBundles.add(
+      '$bundleIndex:$proposalId:$vcTreePosition:$commitmentBundleJson',
+    );
+  }
 
   @override
   Future<void> recordShareDelegation({
@@ -604,7 +818,15 @@ class FakeVotingRustApi implements VotingRustApi {
     required List<String> sentToUrls,
     required List<int> nullifier,
     required BigInt submitAt,
-  }) async {}
+  }) async {
+    recordedShares.add(
+      _RecordedShare(
+        bundleIndex: bundleIndex,
+        proposalId: proposalId,
+        shareIndex: shareIndex,
+      ),
+    );
+  }
 
   @override
   Future<void> markShareConfirmed({
@@ -615,4 +837,83 @@ class FakeVotingRustApi implements VotingRustApi {
     required int proposalId,
     required int shareIndex,
   }) async {}
+
+  @override
+  Future<String> computeShareNullifierHex({
+    required List<int> voteCommitment,
+    required int shareIndex,
+    required List<int> primaryBlind,
+  }) async {
+    return List.filled(
+      32,
+      shareIndex,
+    ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  @override
+  Future<List<int>> deriveHotkey({
+    required List<int> seedBytes,
+    required String roundId,
+    required String accountUuid,
+  }) async {
+    return [roundId.length, accountUuid.length, ...seedBytes.take(2)];
+  }
+}
+
+class _RecordedShare {
+  const _RecordedShare({
+    required this.bundleIndex,
+    required this.proposalId,
+    required this.shareIndex,
+  });
+
+  final int bundleIndex;
+  final int proposalId;
+  final int shareIndex;
+}
+
+rust_voting.ApiSignedVoteCommitments _commitments({
+  required String roundId,
+  required int bundleIndex,
+  required int proposalId,
+  required int choice,
+}) {
+  final wireShare = rust_voting.ApiWireEncryptedShare(
+    ciphertext1: Uint8List.fromList([8]),
+    ciphertext2: Uint8List.fromList([9]),
+    shareIndex: 0,
+  );
+  return rust_voting.ApiSignedVoteCommitments(
+    bundleIndex: bundleIndex,
+    commitments: [
+      rust_voting.ApiSignedVoteCommitment(
+        proposalId: proposalId,
+        choice: choice,
+        voteRoundId: roundId,
+        vanNullifier: Uint8List.fromList(List.filled(32, 1)),
+        voteAuthorityNoteNew: Uint8List.fromList(List.filled(32, 2)),
+        voteCommitment: Uint8List.fromList(List.filled(32, 3)),
+        proof: Uint8List.fromList([4]),
+        encryptedShares: [wireShare],
+        sharePayloads: [
+          rust_voting.ApiVoteSharePayload(
+            sharesHash: Uint8List.fromList(List.filled(32, 7)),
+            proposalId: proposalId,
+            voteDecision: choice,
+            encryptedShare: wireShare,
+            treePosition: BigInt.from(9),
+            allEncryptedShares: [wireShare],
+            shareComms: [Uint8List.fromList(List.filled(32, 10))],
+            primaryBlind: Uint8List.fromList(List.filled(32, 11)),
+          ),
+        ],
+        anchorHeight: 10,
+        sharesHash: Uint8List.fromList(List.filled(32, 7)),
+        shareComms: [Uint8List.fromList(List.filled(32, 10))],
+        rVpkBytes: Uint8List.fromList(List.filled(32, 13)),
+        voteAuthSig: Uint8List.fromList(List.filled(64, 12)),
+        commitmentBundleJson: '{"proposal_id":$proposalId}',
+      ),
+    ],
+  );
 }

@@ -133,7 +133,7 @@ class VotingRoundDetails {
   factory VotingRoundDetails.fromStatus(VotingRoundStatus status) {
     final json = status.rawJson;
     return VotingRoundDetails(
-      roundId: _stringFromJson(json, const ['vote_round_id', 'round_id', 'id']),
+      roundId: _roundIdFromJson(json),
       title: _optionalStringFromJson(json, const ['title', 'name']) ?? '',
       status: status.status,
       snapshotHeight: _intFromJson(json, const ['snapshot_height']),
@@ -173,6 +173,7 @@ class VotingSessionState {
   final VotingRoundDetails? round;
   final VotingResumePlan? resumePlan;
   final Uri? pirEndpoint;
+  final BigInt? eligibleWeightZatoshi;
   final UnmodifiableListView<PirSnapshotEndpointDiagnostic> pirDiagnostics;
   final UnmodifiableMapView<int, VotingSessionProgress> delegationProgress;
   final UnmodifiableMapView<VotingVoteKey, VotingSessionProgress> voteProgress;
@@ -187,6 +188,7 @@ class VotingSessionState {
     this.round,
     this.resumePlan,
     this.pirEndpoint,
+    this.eligibleWeightZatoshi,
     List<PirSnapshotEndpointDiagnostic> pirDiagnostics = const [],
     Map<int, VotingSessionProgress> delegationProgress = const {},
     Map<VotingVoteKey, VotingSessionProgress> voteProgress = const {},
@@ -205,6 +207,7 @@ class VotingSessionState {
     VotingRoundDetails? round,
     VotingResumePlan? resumePlan,
     Uri? pirEndpoint,
+    BigInt? eligibleWeightZatoshi,
     List<PirSnapshotEndpointDiagnostic>? pirDiagnostics,
     Map<int, VotingSessionProgress>? delegationProgress,
     Map<VotingVoteKey, VotingSessionProgress>? voteProgress,
@@ -222,6 +225,8 @@ class VotingSessionState {
       round: round ?? this.round,
       resumePlan: resumePlan ?? this.resumePlan,
       pirEndpoint: pirEndpoint ?? this.pirEndpoint,
+      eligibleWeightZatoshi:
+          eligibleWeightZatoshi ?? this.eligibleWeightZatoshi,
       pirDiagnostics: pirDiagnostics ?? this.pirDiagnostics,
       delegationProgress: delegationProgress ?? this.delegationProgress,
       voteProgress: voteProgress ?? this.voteProgress,
@@ -253,6 +258,26 @@ String? _optionalStringFromJson(Map<String, dynamic> json, List<String> keys) {
   return null;
 }
 
+String _roundIdFromJson(Map<String, dynamic> json) {
+  final voteRoundId = _optionalStringFromJson(json, const ['vote_round_id']);
+  if (voteRoundId != null && voteRoundId.isNotEmpty) {
+    return _normalizeRoundId(voteRoundId);
+  }
+  return _stringFromJson(json, const ['round_id', 'id']);
+}
+
+String _normalizeRoundId(String value) {
+  final trimmed = value.trim();
+  if (_isHexRoundId(trimmed)) return trimmed.toLowerCase();
+  try {
+    final bytes = base64Decode(trimmed);
+    if (bytes.length == 32) return _hexFromBytes(bytes);
+  } on FormatException {
+    // Early fixtures used human-readable ids; keep those readable in tests.
+  }
+  return trimmed;
+}
+
 int _intFromJson(Map<String, dynamic> json, List<String> keys) {
   for (final key in keys) {
     final value = json[key];
@@ -274,4 +299,13 @@ Uint8List _bytesFromJson(Map<String, dynamic> json, List<String> keys) {
     ]);
   }
   return Uint8List.fromList(base64Decode(value));
+}
+
+bool _isHexRoundId(String value) {
+  if (value.length != 64) return false;
+  return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
+}
+
+String _hexFromBytes(List<int> bytes) {
+  return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }

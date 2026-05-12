@@ -43,6 +43,12 @@ import 'src/features/settings/screens/settings_screen.dart';
 import 'src/features/settings/screens/settings_change_password_screen.dart';
 import 'src/features/settings/screens/settings_endpoint_screen.dart';
 import 'src/features/settings/screens/settings_seed_phrase_screen.dart';
+import 'src/features/voting/screens/voting_polls_screen.dart';
+import 'src/features/voting/screens/voting_proposal_detail_screen.dart';
+import 'src/features/voting/screens/voting_results_screen.dart';
+import 'src/features/voting/screens/voting_review_screen.dart';
+import 'src/features/voting/screens/voting_status_screen.dart';
+import 'src/features/voting/screens/voting_submission_confirmation_screen.dart';
 import 'src/providers/theme_mode_provider.dart';
 import 'src/providers/app_security_provider.dart';
 import 'src/providers/rpc_endpoint_failover_provider.dart';
@@ -526,6 +532,34 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/endpoint',
         builder: (_, _) => const SettingsEndpointScreen(),
+      ),
+      GoRoute(path: '/voting', builder: (_, _) => const VotingPollsScreen()),
+      GoRoute(
+        path: '/voting/poll/:roundId',
+        builder: (_, state) => VotingProposalDetailScreen(
+          roundId: state.pathParameters['roundId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/voting/poll/:roundId/review',
+        builder: (_, state) =>
+            VotingReviewScreen(roundId: state.pathParameters['roundId'] ?? ''),
+      ),
+      GoRoute(
+        path: '/voting/poll/:roundId/status',
+        builder: (_, state) =>
+            VotingStatusScreen(roundId: state.pathParameters['roundId'] ?? ''),
+      ),
+      GoRoute(
+        path: '/voting/poll/:roundId/submitted',
+        builder: (_, state) => VotingSubmissionConfirmationScreen(
+          roundId: state.pathParameters['roundId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/voting/poll/:roundId/results',
+        builder: (_, state) =>
+            VotingResultsScreen(roundId: state.pathParameters['roundId'] ?? ''),
       ),
     ],
   );

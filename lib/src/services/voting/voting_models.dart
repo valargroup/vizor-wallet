@@ -176,6 +176,97 @@ class VotingConfig {
   }
 }
 
+class VotingTxResult {
+  final String txHash;
+  final int code;
+  final String log;
+
+  const VotingTxResult({
+    required this.txHash,
+    required this.code,
+    required this.log,
+  });
+
+  factory VotingTxResult.fromJson(Map<String, dynamic> json) {
+    return VotingTxResult(
+      txHash: _optionalStringFromJson(json, const ['tx_hash']) ?? '',
+      code: _optionalIntFromJson(json, const ['code']) ?? 0,
+      log: _optionalStringFromJson(json, const ['log']) ?? '',
+    );
+  }
+}
+
+class VotingTxConfirmation {
+  final int height;
+  final int code;
+  final String log;
+  final List<VotingTxEvent> events;
+
+  const VotingTxConfirmation({
+    required this.height,
+    required this.code,
+    required this.log,
+    required this.events,
+  });
+
+  factory VotingTxConfirmation.fromJson(Map<String, dynamic> json) {
+    return VotingTxConfirmation(
+      height: _optionalIntFromJson(json, const ['height']) ?? 0,
+      code: _optionalIntFromJson(json, const ['code']) ?? 0,
+      log: _optionalStringFromJson(json, const ['log']) ?? '',
+      events: _optionalListFromJson(json, const ['events'])
+          .map(_objectFromValue)
+          .map(VotingTxEvent.fromJson)
+          .toList(growable: false),
+    );
+  }
+
+  VotingTxEvent? event(String type) {
+    for (final event in events) {
+      if (event.type == type) return event;
+    }
+    return null;
+  }
+}
+
+class VotingTxEvent {
+  final String type;
+  final List<VotingTxEventAttribute> attributes;
+
+  const VotingTxEvent({required this.type, required this.attributes});
+
+  factory VotingTxEvent.fromJson(Map<String, dynamic> json) {
+    return VotingTxEvent(
+      type: _stringFromJson(json, const ['type']),
+      attributes: _optionalListFromJson(json, const ['attributes'])
+          .map(_objectFromValue)
+          .map(VotingTxEventAttribute.fromJson)
+          .toList(growable: false),
+    );
+  }
+
+  String? attribute(String key) {
+    for (final attribute in attributes) {
+      if (attribute.key == key) return attribute.value;
+    }
+    return null;
+  }
+}
+
+class VotingTxEventAttribute {
+  final String key;
+  final String value;
+
+  const VotingTxEventAttribute({required this.key, required this.value});
+
+  factory VotingTxEventAttribute.fromJson(Map<String, dynamic> json) {
+    return VotingTxEventAttribute(
+      key: _stringFromJson(json, const ['key']),
+      value: _stringFromJson(json, const ['value']),
+    );
+  }
+}
+
 /// Base URL plus optional label for a vote server or PIR endpoint.
 class VotingServiceEndpoint {
   final Uri url;
@@ -351,9 +442,7 @@ class VotingRoundSummary {
 
   factory VotingRoundSummary.fromJson(Map<String, dynamic> json) {
     return VotingRoundSummary(
-      roundId:
-          _optionalStringFromJson(json, const ['roundId', 'round_id', 'id']) ??
-          '',
+      roundId: _roundIdFromJson(json),
       title: _optionalStringFromJson(json, const ['title', 'name']) ?? '',
       status: _optionalStringFromJson(json, const ['status', 'phase']) ?? '',
       rawJson: Map.unmodifiable(json),
@@ -375,9 +464,7 @@ class VotingRoundStatus {
 
   factory VotingRoundStatus.fromJson(Map<String, dynamic> json) {
     return VotingRoundStatus(
-      roundId:
-          _optionalStringFromJson(json, const ['roundId', 'round_id', 'id']) ??
-          '',
+      roundId: _optionalRoundIdFromJson(json) ?? '',
       status: _optionalStringFromJson(json, const ['status', 'phase']) ?? '',
       rawJson: Map.unmodifiable(json),
     );
@@ -393,9 +480,7 @@ class VotingRoundTally {
 
   factory VotingRoundTally.fromJson(Map<String, dynamic> json) {
     return VotingRoundTally(
-      roundId:
-          _optionalStringFromJson(json, const ['roundId', 'round_id', 'id']) ??
-          '',
+      roundId: _optionalRoundIdFromJson(json) ?? '',
       rawJson: Map.unmodifiable(json),
     );
   }
@@ -443,6 +528,8 @@ class VotingShareStatus {
     );
   }
 }
+
+String normalizeVotingRoundId(String value) => _normalizeRoundId(value);
 
 /// HTTP status error that preserves the response body for diagnostics.
 class VotingHttpException implements Exception {
@@ -526,7 +613,43 @@ String? _optionalStringFromJson(Map<String, dynamic> json, List<String> keys) {
   return null;
 }
 
+String _roundIdFromJson(Map<String, dynamic> json) {
+  final value = _optionalRoundIdFromJson(json);
+  if (value == null || value.isEmpty) {
+    throw const FormatException('Missing required string: vote_round_id');
+  }
+  return value;
+}
+
+String? _optionalRoundIdFromJson(Map<String, dynamic> json) {
+  final voteRoundId = _optionalStringFromJson(json, const ['vote_round_id']);
+  if (voteRoundId != null && voteRoundId.isNotEmpty) {
+    return _normalizeRoundId(voteRoundId);
+  }
+  return _optionalStringFromJson(json, const ['roundId', 'round_id', 'id']);
+}
+
+String _normalizeRoundId(String value) {
+  final trimmed = value.trim();
+  if (_isHexRoundId(trimmed)) return trimmed.toLowerCase();
+  try {
+    final bytes = base64Decode(trimmed);
+    if (bytes.length == 32) return _hexFromBytes(bytes);
+  } on FormatException {
+    // Early fixtures used human-readable ids; keep those readable in tests.
+  }
+  return trimmed;
+}
+
 int _intFromJson(Map<String, dynamic> json, List<String> keys) {
+  final value = _optionalIntFromJson(json, keys);
+  if (value == null) {
+    throw FormatException('Missing required int: ${keys.first}');
+  }
+  return value;
+}
+
+int? _optionalIntFromJson(Map<String, dynamic> json, List<String> keys) {
   for (final key in keys) {
     final value = json[key];
     if (value == null) continue;
@@ -534,7 +657,17 @@ int _intFromJson(Map<String, dynamic> json, List<String> keys) {
     if (value is num) return value.toInt();
     return int.parse(value.toString());
   }
-  throw FormatException('Missing required int: ${keys.first}');
+  return null;
+}
+
+List<Object?> _optionalListFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value == null) continue;
+    if (value is List) return value;
+    throw FormatException('Expected list: $key');
+  }
+  return const [];
 }
 
 List<int> _bytesFromJson(Map<String, dynamic> json, List<String> keys) {
@@ -560,4 +693,13 @@ Map<String, dynamic> _objectFromValue(Object? value) {
 bool _isLowercaseHexRoundId(String value) {
   if (value.length != 64) return false;
   return RegExp(r'^[0-9a-f]+$').hasMatch(value);
+}
+
+bool _isHexRoundId(String value) {
+  if (value.length != 64) return false;
+  return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
+}
+
+String _hexFromBytes(List<int> bytes) {
+  return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }

@@ -1,8 +1,13 @@
+fn voting_db_path_for_wallet_db(db_path: &str) -> String {
+    format!("{db_path}.voting")
+}
+
 pub fn open_voting_db(
     db_path: &str,
     wallet_id: &str,
 ) -> Result<zcash_voting::storage::VotingDb, String> {
-    let db = zcash_voting::storage::VotingDb::open(db_path)
+    let voting_db_path = voting_db_path_for_wallet_db(db_path);
+    let db = zcash_voting::storage::VotingDb::open(&voting_db_path)
         .map_err(|e| format!("Error opening voting database: {e}"))?;
     db.set_wallet_id(wallet_id);
     Ok(db)
@@ -45,6 +50,25 @@ mod tests {
         let db = open_voting_db(db_path.to_str().unwrap(), "wallet-1").unwrap();
 
         assert!(db.list_rounds().unwrap().is_empty());
+        assert!(
+            std::path::Path::new(&voting_db_path_for_wallet_db(db_path.to_str().unwrap())).exists()
+        );
+    }
+
+    #[test]
+    fn open_voting_db_uses_sidecar_path_not_wallet_user_version() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("zcash_wallet.db");
+        let wallet_conn = rusqlite::Connection::open(&db_path).unwrap();
+        wallet_conn.pragma_update(None, "user_version", 8).unwrap();
+
+        let db = open_voting_db(db_path.to_str().unwrap(), "wallet-1").unwrap();
+
+        assert!(db.list_rounds().unwrap().is_empty());
+        let wallet_version: u32 = wallet_conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(wallet_version, 8);
     }
 
     #[test]

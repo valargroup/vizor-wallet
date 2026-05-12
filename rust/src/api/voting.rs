@@ -6,7 +6,7 @@ use crate::wallet::{
     voting::{
         bundle::{self, SelectedNotes},
         delegation::{self, BundleSetupResult, ProofEvent, SignedDelegation},
-        recovery, state, tree_sync, vote,
+        hotkey, recovery, state, tree_sync, vote,
     },
 };
 
@@ -57,6 +57,15 @@ pub struct ApiSignedDelegation {
     pub txid_hex: String,
     pub status: String,
     pub message: Option<String>,
+    pub proof: Vec<u8>,
+    pub rk: Vec<u8>,
+    pub spend_auth_sig: Vec<u8>,
+    pub sighash: Vec<u8>,
+    pub nf_signed: Vec<u8>,
+    pub cmx_new: Vec<u8>,
+    pub gov_comm: Vec<u8>,
+    pub gov_nullifiers: Vec<Vec<u8>>,
+    pub vote_round_id: String,
     pub eligible_weight_zatoshi: u64,
     pub delegated_weight_zatoshi: u64,
     pub bundle_count: u32,
@@ -150,7 +159,9 @@ pub struct ApiSignedVoteCommitment {
     pub anchor_height: u32,
     pub shares_hash: Vec<u8>,
     pub share_comms: Vec<Vec<u8>>,
+    pub r_vpk_bytes: Vec<u8>,
     pub vote_auth_sig: Vec<u8>,
+    pub commitment_bundle_json: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -220,6 +231,21 @@ pub struct ApiRoundRecoveryState {
     pub unconfirmed_share_delegations: Vec<ApiShareDelegationRecord>,
 }
 
+/// Derive the opaque per-account, per-round voting hotkey bytes.
+///
+/// The seed stays platform-owned; Rust only applies the same zcash_voting
+/// hotkey derivation used by delegation and returns bytes for secure storage.
+pub fn derive_voting_hotkey(
+    seed_bytes: Vec<u8>,
+    round_id: String,
+    account_uuid: String,
+) -> Result<Vec<u8>, String> {
+    catch(|| {
+        let seed = secrecy::SecretVec::new(seed_bytes);
+        hotkey::derive_hotkey(&seed, &round_id, &account_uuid)
+    })
+}
+
 impl From<ApiVotingRoundParams> for zcash_voting::VotingRoundParams {
     fn from(params: ApiVotingRoundParams) -> Self {
         Self {
@@ -263,6 +289,15 @@ impl From<SignedDelegation> for ApiSignedDelegation {
             txid_hex: result.txid_hex,
             status: result.status,
             message: result.message,
+            proof: result.proof,
+            rk: result.rk,
+            spend_auth_sig: result.spend_auth_sig,
+            sighash: result.sighash,
+            nf_signed: result.nf_signed,
+            cmx_new: result.cmx_new,
+            gov_comm: result.gov_comm,
+            gov_nullifiers: result.gov_nullifiers,
+            vote_round_id: result.vote_round_id,
             eligible_weight_zatoshi: result.eligible_weight_zatoshi,
             delegated_weight_zatoshi: result.delegated_weight_zatoshi,
             bundle_count: result.bundle_count,
@@ -432,7 +467,9 @@ impl From<vote::SignedVoteCommitment> for ApiSignedVoteCommitment {
             anchor_height: commitment.anchor_height,
             shares_hash: commitment.shares_hash,
             share_comms: commitment.share_comms,
+            r_vpk_bytes: commitment.r_vpk_bytes,
             vote_auth_sig: commitment.vote_auth_sig,
+            commitment_bundle_json: commitment.commitment_bundle_json,
         }
     }
 }
@@ -762,6 +799,21 @@ pub fn store_delegation_tx_hash(
     })
 }
 
+/// Store the vote-authority-note leaf position emitted by the delegation TX.
+pub fn store_van_position(
+    db_path: String,
+    wallet_id: String,
+    round_id: String,
+    bundle_index: u32,
+    position: u32,
+) -> Result<(), String> {
+    catch(|| {
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        db.store_van_position(&round_id, bundle_index, position)
+            .map_err(|e| format!("store_van_position failed: {e}"))
+    })
+}
+
 /// Load the broadcast transaction hash for one delegation bundle, if present.
 pub fn get_delegation_tx_hash(
     db_path: String,
@@ -981,6 +1033,30 @@ pub fn get_vote_tx_hash(
     catch(|| recovery::get_vote_tx_hash(&db_path, &wallet_id, &round_id, bundle_index, proposal_id))
 }
 
+#[allow(clippy::too_many_arguments)]
+/// Store commitment bundle recovery JSON and confirmed vote-tree position for one vote.
+pub fn store_commitment_bundle(
+    db_path: String,
+    wallet_id: String,
+    round_id: String,
+    bundle_index: u32,
+    proposal_id: u32,
+    commitment_bundle_json: String,
+    vc_tree_position: u64,
+) -> Result<(), String> {
+    catch(|| {
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        db.store_commitment_bundle(
+            &round_id,
+            bundle_index,
+            proposal_id,
+            &commitment_bundle_json,
+            vc_tree_position,
+        )
+        .map_err(|e| format!("store_commitment_bundle failed: {e}"))
+    })
+}
+
 /// Load commitment bundle recovery JSON and vote-tree position for one vote.
 pub fn get_commitment_bundle(
     db_path: String,
@@ -1146,6 +1222,15 @@ mod tests {
             txid_hex: "abc".to_string(),
             status: "broadcasted".to_string(),
             message: Some("ok".to_string()),
+            proof: vec![4],
+            rk: vec![5],
+            spend_auth_sig: vec![6],
+            sighash: vec![7],
+            nf_signed: vec![8],
+            cmx_new: vec![9],
+            gov_comm: vec![10],
+            gov_nullifiers: vec![vec![11]],
+            vote_round_id: "round".to_string(),
             eligible_weight_zatoshi: 20,
             delegated_weight_zatoshi: 10,
             bundle_count: 2,
@@ -1156,6 +1241,8 @@ mod tests {
         assert_eq!(api.txid_hex, "abc");
         assert_eq!(api.status, "broadcasted");
         assert_eq!(api.message.as_deref(), Some("ok"));
+        assert_eq!(api.proof, vec![4]);
+        assert_eq!(api.vote_round_id, "round");
         assert_eq!(api.eligible_weight_zatoshi, 20);
         assert_eq!(api.delegated_weight_zatoshi, 10);
         assert_eq!(api.bundle_count, 2);
@@ -1195,6 +1282,15 @@ mod tests {
                 txid_hex: "txid".to_string(),
                 status: "broadcasted".to_string(),
                 message: None,
+                proof: vec![1],
+                rk: vec![2],
+                spend_auth_sig: vec![3],
+                sighash: vec![4],
+                nf_signed: vec![5],
+                cmx_new: vec![6],
+                gov_comm: vec![7],
+                gov_nullifiers: vec![vec![8]],
+                vote_round_id: "round".to_string(),
                 eligible_weight_zatoshi: 10,
                 delegated_weight_zatoshi: 10,
                 bundle_count: 1,
@@ -1270,7 +1366,9 @@ mod tests {
                 anchor_height: 100,
                 shares_hash: vec![7; 32],
                 share_comms: vec![vec![8; 32]],
+                r_vpk_bytes: vec![10; 32],
                 vote_auth_sig: vec![9; 64],
+                commitment_bundle_json: "{\"proposal_id\":2}".to_string(),
             }],
         });
 

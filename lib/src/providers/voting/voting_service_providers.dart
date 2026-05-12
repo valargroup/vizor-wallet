@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/voting/voting_recovery_service.dart';
 import '../../core/config/rpc_endpoint_config.dart';
+import '../../core/storage/app_secure_store.dart';
 import '../../core/storage/wallet_paths.dart';
 import '../../providers/account_provider.dart';
 import '../../providers/rpc_endpoint_provider.dart';
@@ -65,9 +66,9 @@ final votingRustApiProvider = Provider<VotingRustApi>((ref) {
   return const FrbVotingRustApi();
 });
 
-/// Secret hotkey access, filled in by ZCA-391.
+/// Secret hotkey access. Bytes are app-encrypted in platform secure storage.
 final votingHotkeyStoreProvider = Provider<VotingHotkeyStore>((ref) {
-  return const UnavailableVotingHotkeyStore();
+  return AppSecureStoreVotingHotkeyStore(AppSecureStore.instance);
 });
 
 /// Test seam for wallet DB path resolution.
@@ -87,39 +88,68 @@ final votingRpcEndpointConfigProvider = Provider<RpcEndpointConfig>((ref) {
   return ref.watch(rpcEndpointProvider);
 });
 
-/// Reads per-account, per-round voting hotkeys.
-///
-/// Production storage is intentionally blocked on ZCA-391 so this interface can
-/// be tested now without inventing secure-storage behavior in the provider task.
 abstract interface class VotingHotkeyStore {
-  Future<List<int>> readHotkey({
+  Future<List<int>?> readHotkey({
+    required String accountUuid,
+    required String roundId,
+  });
+
+  Future<void> writeHotkey({
+    required String accountUuid,
+    required String roundId,
+    required List<int> hotkey,
+  });
+
+  Future<void> deleteHotkey({
     required String accountUuid,
     required String roundId,
   });
 }
 
-/// Raised when a flow reaches hotkey-dependent work before ZCA-391 is wired.
 class VotingHotkeyUnavailable implements Exception {
-  final String message;
+  const VotingHotkeyUnavailable(this.message);
 
-  const VotingHotkeyUnavailable([
-    this.message = 'Voting hotkey storage is not available yet.',
-  ]);
+  final String message;
 
   @override
   String toString() => 'VotingHotkeyUnavailable: $message';
 }
 
-/// Placeholder production adapter until secure hotkey storage lands.
-class UnavailableVotingHotkeyStore implements VotingHotkeyStore {
-  const UnavailableVotingHotkeyStore();
+class AppSecureStoreVotingHotkeyStore implements VotingHotkeyStore {
+  const AppSecureStoreVotingHotkeyStore(this._store);
+
+  final AppSecureStore _store;
 
   @override
-  Future<List<int>> readHotkey({
+  Future<List<int>?> readHotkey({
     required String accountUuid,
     required String roundId,
   }) {
-    throw const VotingHotkeyUnavailable();
+    return _store.readVotingHotkey(accountUuid: accountUuid, roundId: roundId);
+  }
+
+  @override
+  Future<void> writeHotkey({
+    required String accountUuid,
+    required String roundId,
+    required List<int> hotkey,
+  }) {
+    return _store.writeVotingHotkey(
+      accountUuid: accountUuid,
+      roundId: roundId,
+      hotkey: hotkey,
+    );
+  }
+
+  @override
+  Future<void> deleteHotkey({
+    required String accountUuid,
+    required String roundId,
+  }) {
+    return _store.deleteVotingHotkey(
+      accountUuid: accountUuid,
+      roundId: roundId,
+    );
   }
 }
 
@@ -150,6 +180,22 @@ abstract interface class VotingRustApi {
     required String accountUuid,
     required List<int> seedBytes,
     required int bundleIndex,
+  });
+
+  Future<void> storeDelegationTxHash({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required String txHash,
+  });
+
+  Future<void> storeVanPosition({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int position,
   });
 
   Future<int> syncVoteTree({
@@ -187,6 +233,16 @@ abstract interface class VotingRustApi {
     required String txHash,
   });
 
+  Future<void> storeCommitmentBundle({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+    required String commitmentBundleJson,
+    required BigInt vcTreePosition,
+  });
+
   Future<void> recordShareDelegation({
     required String dbPath,
     required String walletId,
@@ -206,6 +262,18 @@ abstract interface class VotingRustApi {
     required int bundleIndex,
     required int proposalId,
     required int shareIndex,
+  });
+
+  Future<String> computeShareNullifierHex({
+    required List<int> voteCommitment,
+    required int shareIndex,
+    required List<int> primaryBlind,
+  });
+
+  Future<List<int>> deriveHotkey({
+    required List<int> seedBytes,
+    required String roundId,
+    required String accountUuid,
   });
 }
 
@@ -259,6 +327,40 @@ class FrbVotingRustApi implements VotingRustApi {
       accountUuid: accountUuid,
       seedBytes: seedBytes,
       bundleIndex: bundleIndex,
+    );
+  }
+
+  @override
+  Future<void> storeDelegationTxHash({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required String txHash,
+  }) {
+    return rust_voting.storeDelegationTxHash(
+      dbPath: dbPath,
+      walletId: walletId,
+      roundId: roundId,
+      bundleIndex: bundleIndex,
+      txHash: txHash,
+    );
+  }
+
+  @override
+  Future<void> storeVanPosition({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int position,
+  }) {
+    return rust_voting.storeVanPosition(
+      dbPath: dbPath,
+      walletId: walletId,
+      roundId: roundId,
+      bundleIndex: bundleIndex,
+      position: position,
     );
   }
 
@@ -337,6 +439,27 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
+  Future<void> storeCommitmentBundle({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+    required String commitmentBundleJson,
+    required BigInt vcTreePosition,
+  }) {
+    return rust_voting.storeCommitmentBundle(
+      dbPath: dbPath,
+      walletId: walletId,
+      roundId: roundId,
+      bundleIndex: bundleIndex,
+      proposalId: proposalId,
+      commitmentBundleJson: commitmentBundleJson,
+      vcTreePosition: vcTreePosition,
+    );
+  }
+
+  @override
   Future<void> recordShareDelegation({
     required String dbPath,
     required String walletId,
@@ -377,6 +500,32 @@ class FrbVotingRustApi implements VotingRustApi {
       bundleIndex: bundleIndex,
       proposalId: proposalId,
       shareIndex: shareIndex,
+    );
+  }
+
+  @override
+  Future<String> computeShareNullifierHex({
+    required List<int> voteCommitment,
+    required int shareIndex,
+    required List<int> primaryBlind,
+  }) {
+    return rust_voting.computeShareNullifierHex(
+      voteCommitment: voteCommitment,
+      shareIndex: shareIndex,
+      primaryBlind: primaryBlind,
+    );
+  }
+
+  @override
+  Future<List<int>> deriveHotkey({
+    required List<int> seedBytes,
+    required String roundId,
+    required String accountUuid,
+  }) {
+    return rust_voting.deriveVotingHotkey(
+      seedBytes: seedBytes,
+      roundId: roundId,
+      accountUuid: accountUuid,
     );
   }
 }

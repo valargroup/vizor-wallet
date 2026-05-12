@@ -390,6 +390,36 @@ Separate `BGContinuedProcessingTask` (`com.zcash.zcashWallet.txtrack`) polls lig
 - Post-send: `refreshAfterSend()` for immediate pending TX display
 - Friendly error messages via `_friendlyError()` pattern matching
 
+### Coinholder Polling
+
+Coinholder polling is macOS-first and software-account only. Hardware accounts
+must hide the live entry point and show a Keystone/hardware-coming-soon hint.
+
+- Rust voting modules live under `rust/src/wallet/voting/`. Keep FRB API
+  functions in `rust/src/api/voting.rs` thin: Dart may orchestrate, but Rust
+  should continue to own wallet DB access, `zcash_voting` calls, note selection,
+  delegation, vote commitments, vote-tree sync, and recovery helpers.
+- `WalletNetwork::voting_id()` is the single source for the vote network ID
+  mapping: testnet/regtest = `0`, mainnet = `1`. Do not duplicate this mapping
+  in Dart.
+- `zcash_voting::storage::VotingDb` owns local voting workflow state. Do not add
+  a Vizor-specific `voting_round_state` table or parallel recovery schema.
+- Durable state is bundle-indexed. Preserve explicit `bundle_index` in
+  delegation tx hashes, vote records, commitment bundles, share delegation rows,
+  progress maps, and recovery UI.
+- PIR endpoint resolution must fail closed unless the endpoint's `/root.height`
+  equals the round snapshot height exactly.
+- REST, config, endorser, and PIR endpoint selection live in Dart. Rust should
+  only perform crypto, wallet queries, `zcash_voting` storage/recovery, and the
+  Rust-native vote-tree/PIR work supplied by `zcash_voting`.
+- Voting hotkeys are secret material. Store them encrypted in
+  `AppSecureStore` under `zcash_account_voting_hotkey_{accountUuid}_{roundId}`;
+  rotate them with mnemonic payloads and delete them on account removal.
+- Share payload JSON should stay compatible with Swift `VotingTypes.swift`
+  snake_case names (`shares_hash`, `proposal_id`, `enc_share`, `all_enc_shares`,
+  `share_comms`, etc.). Use `zcash_voting` helpers for share nullifiers rather
+  than recomputing them in Dart.
+
 ### Hardware Wallet (Keystone) Send Flow
 
 Hardware send uses a **three-PCZT pipeline** that matches the

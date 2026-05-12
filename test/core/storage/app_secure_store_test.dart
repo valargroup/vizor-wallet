@@ -92,6 +92,85 @@ void main() {
     );
   });
 
+  test(
+    'voting hotkey round-trips, requires unlock, and deletes idempotently',
+    () async {
+      await store.configurePassword(_oldPassword);
+      final hotkey = List<int>.generate(32, (index) => index);
+
+      await store.writeVotingHotkey(
+        accountUuid: 'account-1',
+        roundId: 'round-1',
+        hotkey: hotkey,
+      );
+
+      expect(
+        await store.readVotingHotkey(
+          accountUuid: 'account-1',
+          roundId: 'round-1',
+        ),
+        hotkey,
+      );
+
+      store.clearSessionPassword();
+      expect(
+        await store.readVotingHotkey(
+          accountUuid: 'account-1',
+          roundId: 'round-1',
+        ),
+        isNull,
+      );
+
+      expect(await store.verifyPassword(_oldPassword), isTrue);
+      await store.deleteVotingHotkey(
+        accountUuid: 'account-1',
+        roundId: 'round-1',
+      );
+      await store.deleteVotingHotkey(
+        accountUuid: 'account-1',
+        roundId: 'round-1',
+      );
+      expect(
+        await store.readVotingHotkey(
+          accountUuid: 'account-1',
+          roundId: 'round-1',
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test('deleteVotingHotkeysForAccount only clears matching account', () async {
+    await store.configurePassword(_oldPassword);
+    await store.writeVotingHotkey(
+      accountUuid: 'account-1',
+      roundId: 'round-1',
+      hotkey: const [1],
+    );
+    await store.writeVotingHotkey(
+      accountUuid: 'account-2',
+      roundId: 'round-1',
+      hotkey: const [2],
+    );
+
+    await store.deleteVotingHotkeysForAccount('account-1');
+
+    expect(
+      await store.readVotingHotkey(
+        accountUuid: 'account-1',
+        roundId: 'round-1',
+      ),
+      isNull,
+    );
+    expect(
+      await store.readVotingHotkey(
+        accountUuid: 'account-2',
+        roundId: 'round-1',
+      ),
+      const [2],
+    );
+  });
+
   test('changePassword journal stores only roll-forward data', () async {
     final blockingStorage = _BlockingDeleteStorage(
       blockKey: _rotationInProgressKey,
@@ -197,9 +276,14 @@ void main() {
     expect(validateRequiredWalletPassword(''), kWalletPasswordMinLengthMessage);
   });
 
-  test('changePassword only rotates app-managed mnemonic payloads', () async {
+  test('changePassword only rotates app-managed secret payloads', () async {
     await store.configurePassword(_oldPassword);
     await store.writeAccountMnemonic(_accountUuid, _mnemonic);
+    await store.writeVotingHotkey(
+      accountUuid: 'account-1',
+      roundId: 'round-1',
+      hotkey: const [1, 2, 3],
+    );
     await store.writeSecretString(_externalEncryptedKey, 'external secret');
     final externalPayload = await store.readPlain(_externalEncryptedKey);
 
@@ -211,6 +295,13 @@ void main() {
     expect(didChange, isTrue);
     expect(await store.readPlain(_externalEncryptedKey), externalPayload);
     expect(await store.readAccountMnemonic(_accountUuid), _mnemonic);
+    expect(
+      await store.readVotingHotkey(
+        accountUuid: 'account-1',
+        roundId: 'round-1',
+      ),
+      const [1, 2, 3],
+    );
   });
 
   test('changePassword rejects unreadable mnemonic payloads', () async {

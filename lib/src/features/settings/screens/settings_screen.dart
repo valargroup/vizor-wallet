@@ -102,17 +102,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 endpointLabel: endpointLabel,
                 themeLabel: _themeLabel(themeMode),
                 onSeedPhrase: () => context.push('/settings/secret-passphrase'),
-                onChangePassword:
-                    () => context.push('/settings/change-password'),
+                onChangePassword: () =>
+                    context.push('/settings/change-password'),
                 onEndpoint: () => context.push('/settings/endpoint'),
-                onAccountName:
-                    hasActiveAccount
-                        ? () => _showModal(_SettingsModalType.accountName)
-                        : null,
-                onProfilePicture:
-                    hasActiveAccount
-                        ? () => _showModal(_SettingsModalType.profilePicture)
-                        : null,
+                onVoting: activeAccountIsHardware
+                    ? null
+                    : () => context.push('/voting'),
+                onAccountName: hasActiveAccount
+                    ? () => _showModal(_SettingsModalType.accountName)
+                    : null,
+                onProfilePicture: hasActiveAccount
+                    ? () => _showModal(_SettingsModalType.profilePicture)
+                    : null,
                 onTheme: () => _showModal(_SettingsModalType.theme),
               ),
             ),
@@ -168,6 +169,7 @@ class _SettingsPane extends StatelessWidget {
     required this.onSeedPhrase,
     required this.onChangePassword,
     required this.onEndpoint,
+    required this.onVoting,
     required this.onAccountName,
     required this.onProfilePicture,
     required this.onTheme,
@@ -181,6 +183,7 @@ class _SettingsPane extends StatelessWidget {
   final VoidCallback onSeedPhrase;
   final VoidCallback onChangePassword;
   final VoidCallback onEndpoint;
+  final VoidCallback? onVoting;
   final VoidCallback? onAccountName;
   final VoidCallback? onProfilePicture;
   final VoidCallback onTheme;
@@ -223,6 +226,7 @@ class _SettingsPane extends StatelessWidget {
                         onSeedPhrase: onSeedPhrase,
                         onChangePassword: onChangePassword,
                         onEndpoint: onEndpoint,
+                        onVoting: onVoting,
                         onAccountName: onAccountName,
                         onProfilePicture: onProfilePicture,
                         onTheme: onTheme,
@@ -249,6 +253,7 @@ class _SettingsList extends StatelessWidget {
     required this.onSeedPhrase,
     required this.onChangePassword,
     required this.onEndpoint,
+    required this.onVoting,
     required this.onAccountName,
     required this.onProfilePicture,
     required this.onTheme,
@@ -262,6 +267,7 @@ class _SettingsList extends StatelessWidget {
   final VoidCallback onSeedPhrase;
   final VoidCallback onChangePassword;
   final VoidCallback onEndpoint;
+  final VoidCallback? onVoting;
   final VoidCallback? onAccountName;
   final VoidCallback? onProfilePicture;
   final VoidCallback onTheme;
@@ -300,6 +306,20 @@ class _SettingsList extends StatelessWidget {
               label: 'Account Name',
               value: accountName,
               onTap: onAccountName,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.s),
+        _SettingsBlock(
+          title: 'Governance',
+          rows: [
+            _SettingsRow(
+              iconName: AppIcons.scroll,
+              label: 'Coinholder Polling',
+              value: activeAccountIsHardware
+                  ? 'Hardware accounts coming soon'
+                  : 'Open',
+              onTap: onVoting,
             ),
           ],
         ),
@@ -347,7 +367,11 @@ class _SettingsModalCard extends StatelessWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [header, const SizedBox(height: AppSpacing.md), child],
+        children: [
+          header,
+          const SizedBox(height: AppSpacing.md),
+          child,
+        ],
       ),
     );
   }
@@ -469,33 +493,30 @@ class _ThemeModalState extends State<_ThemeModal> {
                 iconName: AppIcons.monitor,
                 label: 'System (Auto)',
                 selected: _selectedMode == ThemeMode.system,
-                onTap:
-                    () => setState(() {
-                      _submitError = null;
-                      _selectedMode = ThemeMode.system;
-                    }),
+                onTap: () => setState(() {
+                  _submitError = null;
+                  _selectedMode = ThemeMode.system;
+                }),
               ),
               const SizedBox(height: AppSpacing.xs),
               _ThemeOptionCard(
                 iconName: AppIcons.day,
                 label: 'Light Mode',
                 selected: _selectedMode == ThemeMode.light,
-                onTap:
-                    () => setState(() {
-                      _submitError = null;
-                      _selectedMode = ThemeMode.light;
-                    }),
+                onTap: () => setState(() {
+                  _submitError = null;
+                  _selectedMode = ThemeMode.light;
+                }),
               ),
               const SizedBox(height: AppSpacing.xs),
               _ThemeOptionCard(
                 iconName: AppIcons.night,
                 label: 'Dark Mode',
                 selected: _selectedMode == ThemeMode.dark,
-                onTap:
-                    () => setState(() {
-                      _submitError = null;
-                      _selectedMode = ThemeMode.dark;
-                    }),
+                onTap: () => setState(() {
+                  _submitError = null;
+                  _selectedMode = ThemeMode.dark;
+                }),
               ),
             ],
           ),
@@ -606,22 +627,20 @@ class _ThemeOptionIndicator extends StatelessWidget {
       width: 16,
       height: 16,
       decoration: BoxDecoration(
-        color:
-            selected
-                ? colors.background.inverse
-                : colors.background.neutralSubtleOpacity,
+        color: selected
+            ? colors.background.inverse
+            : colors.background.neutralSubtleOpacity,
         shape: BoxShape.circle,
       ),
-      child:
-          selected
-              ? Center(
-                child: AppIcon(
-                  AppIcons.check,
-                  size: 12,
-                  color: colors.background.ground,
-                ),
-              )
-              : null,
+      child: selected
+          ? Center(
+              child: AppIcon(
+                AppIcons.check,
+                size: 12,
+                color: colors.background.ground,
+              ),
+            )
+          : null,
     );
   }
 }
@@ -735,10 +754,9 @@ class _SettingsRowState extends State<_SettingsRow> {
           height: 40,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
           decoration: BoxDecoration(
-            color:
-                isInteractive && _hovered
-                    ? _settingsRowHoverBackgroundColor(context)
-                    : null,
+            color: isInteractive && _hovered
+                ? _settingsRowHoverBackgroundColor(context)
+                : null,
             borderRadius: BorderRadius.circular(AppRadii.xSmall),
           ),
           child: Row(
