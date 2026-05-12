@@ -111,6 +111,7 @@ where
     let mut commitments = Vec::with_capacity(draft_votes.len());
 
     for draft in draft_votes {
+        let total_start = std::time::Instant::now();
         on_progress(VoteCommitEvent::BuildingProof {
             proposal_id: draft.proposal_id,
             bundle_index,
@@ -151,6 +152,7 @@ where
             proposal_id: draft.proposal_id,
             bundle_index,
         });
+        let payload_start = std::time::Instant::now();
         let share_payloads = voting_db
             .build_share_payloads(
                 &wire_shares,
@@ -161,6 +163,11 @@ where
                 draft.single_share,
             )
             .map_err(|e| format!("build_share_payloads failed: {e}"))?;
+        eprintln!(
+            "[ZKP2] Share payloads: {:.2}s (proposal_id={}, bundle_index={bundle_index})",
+            payload_start.elapsed().as_secs_f64(),
+            draft.proposal_id
+        );
 
         let commitment_json = public_commitment_json(&bundle, &wire_shares, &share_payloads)?;
         voting_db
@@ -177,6 +184,7 @@ where
             proposal_id: draft.proposal_id,
             bundle_index,
         });
+        let signing_start = std::time::Instant::now();
         let signature = zcash_voting::vote_commitment::sign_cast_vote(
             hotkey_seed,
             network.voting_id().into(),
@@ -190,6 +198,11 @@ where
             &bundle.alpha_v,
         )
         .map_err(|e| format!("sign_cast_vote failed: {e}"))?;
+        eprintln!(
+            "[ZKP2] Signing: {:.2}s (proposal_id={}, bundle_index={bundle_index})",
+            signing_start.elapsed().as_secs_f64(),
+            draft.proposal_id
+        );
 
         commitments.push(SignedVoteCommitment {
             proposal_id: draft.proposal_id,
@@ -211,6 +224,11 @@ where
             vote_auth_sig: signature.vote_auth_sig,
             commitment_bundle_json: commitment_json,
         });
+        eprintln!(
+            "[ZKP2] TOTAL: {:.2}s (proposal_id={}, bundle_index={bundle_index})",
+            total_start.elapsed().as_secs_f64(),
+            draft.proposal_id
+        );
     }
 
     on_progress(VoteCommitEvent::Done);

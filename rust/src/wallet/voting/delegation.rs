@@ -201,21 +201,52 @@ where
         branch_height,
         branch_id
     );
-    let governance_pczt = voting_db
-        .build_governance_pczt(
-            &round_id,
-            bundle_index,
-            &bundle_note_infos,
-            &account.orchard_fvk_bytes,
-            &hotkey_raw_address,
-            branch_id,
-            network.network_type().coin_type(),
-            &account.seed_fingerprint,
-            account.account_index,
-            &round_context.round_name,
-            0,
-        )
-        .map_err(|e| format!("build_governance_pczt failed: {e}"))?;
+    let governance_pczt = {
+        let mut last_unpaired = None;
+        let mut paired = None;
+        for attempt in 1..=16 {
+            let candidate = voting_db
+                .build_governance_pczt(
+                    &round_id,
+                    bundle_index,
+                    &bundle_note_infos,
+                    &account.orchard_fvk_bytes,
+                    &hotkey_raw_address,
+                    branch_id,
+                    network.network_type().coin_type(),
+                    &account.seed_fingerprint,
+                    account.account_index,
+                    &round_context.round_name,
+                    0,
+                )
+                .map_err(|e| format!("build_governance_pczt failed: {e}"))?;
+            if governance_pczt_output_paired_with_signed_action(&candidate)? {
+                if attempt > 1 {
+                    log::info!(
+                        "voting delegation: rebuilt governance PCZT after unpaired action layout \
+                         (round_id={}, account_uuid={}, bundle_index={}, attempts={})",
+                        round_id,
+                        account_uuid,
+                        bundle_index,
+                        attempt
+                    );
+                }
+                paired = Some(candidate);
+                break;
+            }
+            last_unpaired = Some(candidate);
+        }
+        paired.ok_or_else(|| {
+            let action_index = last_unpaired
+                .as_ref()
+                .map(|pczt| pczt.action_index.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            format!(
+                "build_governance_pczt produced unpaired governance output after 16 attempts \
+                 (last action_index={action_index})"
+            )
+        })?
+    };
     log::info!(
         "voting delegation: built governance PCZT \
          (round_id={}, account_uuid={}, bundle_index={}, action_index={}, \
@@ -393,6 +424,26 @@ fn bundle_weight_zatoshi(notes: &[zcash_voting::NoteInfo]) -> Result<u64, String
     })?;
     Ok((total / zcash_voting::governance::BALLOT_DIVISOR)
         * zcash_voting::governance::BALLOT_DIVISOR)
+}
+
+fn governance_pczt_output_paired_with_signed_action(
+    governance_pczt: &zcash_voting::GovernancePczt,
+) -> Result<bool, String> {
+    let pczt = pczt::Pczt::parse(&governance_pczt.pczt_bytes)
+        .map_err(|e| format!("failed to parse governance PCZT: {e:?}"))?;
+    let action = pczt
+        .orchard()
+        .actions()
+        .get(governance_pczt.action_index)
+        .ok_or_else(|| {
+            format!(
+                "governance PCZT action_index {} is out of range for {} actions",
+                governance_pczt.action_index,
+                pczt.orchard().actions().len()
+            )
+        })?;
+
+    Ok(action.output().cmx().as_slice() == governance_pczt.cmx_new.as_slice())
 }
 
 /// Return the stored bundle count for `round_id`.

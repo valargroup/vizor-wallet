@@ -27,6 +27,7 @@ class VotingStatusScreen extends ConsumerStatefulWidget {
 
 class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   bool _started = false;
+  bool _completedInThisRun = false;
 
   @override
   void initState() {
@@ -67,6 +68,9 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     await sessionNotifier.submitPendingShares();
     final done = ref.read(votingSessionProvider(roundId)).value;
     if (!mounted || done?.phase != VotingSessionPhase.done) return;
+    setState(() {
+      _completedInThisRun = true;
+    });
     context.go(votingSubmissionConfirmedRoute(roundId));
   }
 
@@ -88,11 +92,14 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
                 errorMessage: '$error',
                 onRetry: _retry,
               ),
-              data: (state) => _StatusContent(
-                phase: state.phase,
-                errorMessage: state.error?.message,
-                onRetry: _retry,
-              ),
+              data: (state) {
+                final phase = _displayPhase(state.phase);
+                return _StatusContent(
+                  phase: phase,
+                  errorMessage: state.error?.message,
+                  onRetry: _retry,
+                );
+              },
             ),
           ),
         ),
@@ -100,8 +107,16 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     );
   }
 
+  VotingSessionPhase _displayPhase(VotingSessionPhase phase) {
+    if (phase == VotingSessionPhase.done && !_completedInThisRun) {
+      return VotingSessionPhase.loadingWitnesses;
+    }
+    return phase;
+  }
+
   void _retry() {
     _started = false;
+    _completedInThisRun = false;
     unawaited(_run());
   }
 }

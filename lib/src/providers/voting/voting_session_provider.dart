@@ -66,6 +66,11 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
       final rust = ref.read(votingRustApiProvider);
       for (final bundleIndex in plan.pendingDelegationBundleIndexes) {
+        final bundleTimer = Stopwatch()..start();
+        debugPrint(
+          '[zcash] Voting: delegation bundle start '
+          'round=${context.round.roundId} bundle=$bundleIndex',
+        );
         state = AsyncData(
           (state.value ?? current).copyWith(
             phase: VotingSessionPhase.delegating,
@@ -96,14 +101,30 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             (state.value ?? current).copyWith(delegationProgress: progress),
           );
         }
+        debugPrint(
+          '[zcash] Voting: delegation proof stream completed '
+          'round=${context.round.roundId} bundle=$bundleIndex '
+          'elapsed=${_formatElapsed(bundleTimer.elapsed)}',
+        );
         final submission = signedDelegation;
         if (submission == null) {
           throw StateError(
             'Delegation proof completed without submission payload.',
           );
         }
+        final submitTimer = Stopwatch()..start();
+        debugPrint(
+          '[zcash] Voting: submitting delegation '
+          'round=${context.round.roundId} bundle=$bundleIndex',
+        );
         final result = await api.submitDelegation(
           submission: _delegationSubmissionJson(submission),
+        );
+        debugPrint(
+          '[zcash] Voting: delegation submit response '
+          'round=${context.round.roundId} bundle=$bundleIndex '
+          'txHash=${result.txHash} code=${result.code} '
+          'elapsed=${_formatElapsed(submitTimer.elapsed)}',
         );
         if (result.code != 0) {
           throw StateError(
@@ -118,6 +139,11 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           roundId: context.round.roundId,
           bundleIndex: bundleIndex,
           txHash: result.txHash,
+        );
+        debugPrint(
+          '[zcash] Voting: delegation tx hash stored '
+          'round=${context.round.roundId} bundle=$bundleIndex '
+          'txHash=${result.txHash}',
         );
         final confirmation = await _awaitTxConfirmation(api, result.txHash);
         if (confirmation == null) {
@@ -147,6 +173,11 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           bundleIndex: bundleIndex,
           position: leafIndex,
         );
+        debugPrint(
+          '[zcash] Voting: delegation bundle completed '
+          'round=${context.round.roundId} bundle=$bundleIndex '
+          'leafIndex=$leafIndex total=${_formatElapsed(bundleTimer.elapsed)}',
+        );
         completedBundleIndexes.add(bundleIndex);
         progress[bundleIndex] = VotingSessionProgress(
           phase: 'submitted',
@@ -158,7 +189,19 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         );
       }
 
+      final resumeTimer = Stopwatch()..start();
+      debugPrint(
+        '[zcash] Voting: loading resume plan after delegation '
+        'round=${context.round.roundId}',
+      );
       final refreshedPlan = await _loadResumePlan(context);
+      debugPrint(
+        '[zcash] Voting: resume plan after delegation loaded '
+        'round=${context.round.roundId} '
+        'pendingDelegations=${refreshedPlan.pendingDelegationBundleIndexes.length} '
+        'pendingVotes=${refreshedPlan.pendingVoteSubmissionKeys.length} '
+        'elapsed=${_formatElapsed(resumeTimer.elapsed)}',
+      );
       final nextPhase =
           refreshedPlan.pendingDelegationBundleIndexes
               .where((index) => !completedBundleIndexes.contains(index))
@@ -200,14 +243,26 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final pendingBundles = _pendingVoteBundleIndexes(
         current.resumePlan ?? context.resumePlan,
       );
+      debugPrint(
+        '[zcash] Voting: cast votes start '
+        'round=${context.round.roundId} bundles=${pendingBundles.length} '
+        'proposals=${draftVotes.length}',
+      );
       for (final bundleIndex in pendingBundles) {
         for (final draftVote in draftVotes) {
+          final voteTimer = Stopwatch()..start();
           state = AsyncData(
             (state.value ?? current).copyWith(
               phase: VotingSessionPhase.syncingVoteTree,
               currentBundleIndex: bundleIndex,
             ),
           );
+          debugPrint(
+            '[zcash] Voting: vote tree sync start '
+            'round=${context.round.roundId} bundle=$bundleIndex '
+            'proposal=${draftVote.proposalId}',
+          );
+          final syncTimer = Stopwatch()..start();
           final anchorHeight = await ref
               .read(votingRustApiProvider)
               .syncVoteTree(
@@ -216,7 +271,19 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                 roundId: context.round.roundId,
                 nodeUrl: context.config.apiBaseUrl.toString(),
               );
+          debugPrint(
+            '[zcash] Voting: vote tree sync completed '
+            'round=${context.round.roundId} bundle=$bundleIndex '
+            'proposal=${draftVote.proposalId} anchorHeight=$anchorHeight '
+            'elapsed=${_formatElapsed(syncTimer.elapsed)}',
+          );
 
+          final witnessTimer = Stopwatch()..start();
+          debugPrint(
+            '[zcash] Voting: VAN witness generation start '
+            'round=${context.round.roundId} bundle=$bundleIndex '
+            'proposal=${draftVote.proposalId} anchorHeight=$anchorHeight',
+          );
           final witness = await ref
               .read(votingRustApiProvider)
               .generateVanWitness(
@@ -226,11 +293,22 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                 bundleIndex: bundleIndex,
                 anchorHeight: anchorHeight,
               );
+          debugPrint(
+            '[zcash] Voting: VAN witness generation completed '
+            'round=${context.round.roundId} bundle=$bundleIndex '
+            'proposal=${draftVote.proposalId} position=${witness.position} '
+            'elapsed=${_formatElapsed(witnessTimer.elapsed)}',
+          );
           state = AsyncData(
             (state.value ?? current).copyWith(
               phase: VotingSessionPhase.castingVotes,
               currentBundleIndex: bundleIndex,
             ),
+          );
+          debugPrint(
+            '[zcash] Voting: ZKP2 commitment stream start '
+            'round=${context.round.roundId} bundle=$bundleIndex '
+            'proposal=${draftVote.proposalId}',
           );
           await for (final event
               in ref
@@ -276,10 +354,28 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               );
             }
           }
+          debugPrint(
+            '[zcash] Voting: vote flow completed '
+            'round=${context.round.roundId} bundle=$bundleIndex '
+            'proposal=${draftVote.proposalId} '
+            'total=${_formatElapsed(voteTimer.elapsed)}',
+          );
         }
       }
 
+      final resumeTimer = Stopwatch()..start();
+      debugPrint(
+        '[zcash] Voting: loading resume plan after vote flow '
+        'round=${context.round.roundId}',
+      );
       final refreshedPlan = await _loadResumePlan(context);
+      debugPrint(
+        '[zcash] Voting: resume plan after vote flow loaded '
+        'round=${context.round.roundId} '
+        'pendingVotes=${refreshedPlan.pendingVoteSubmissionKeys.length} '
+        'unconfirmedShares=${refreshedPlan.unconfirmedShareDelegations.length} '
+        'elapsed=${_formatElapsed(resumeTimer.elapsed)}',
+      );
       state = AsyncData(
         (state.value ?? current).copyWith(
           phase: VotingSessionPhase.submittingShares,
@@ -477,12 +573,15 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   ) async {
     const attempts = 45;
     const delay = Duration(seconds: 2);
+    final timer = Stopwatch()..start();
+    debugPrint('[zcash] Voting: tx confirmation wait start txHash=$txHash');
     for (var attempt = 0; attempt < attempts; attempt++) {
       final confirmation = await api.getTxConfirmation(txHash);
       if (confirmation != null) {
         debugPrint(
           '[zcash] Voting: tx confirmation found txHash=$txHash '
-          'attempt=${attempt + 1} code=${confirmation.code}',
+          'attempt=${attempt + 1} code=${confirmation.code} '
+          'elapsed=${_formatElapsed(timer.elapsed)}',
         );
         return confirmation;
       }
@@ -496,6 +595,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         await Future<void>.delayed(delay);
       }
     }
+    debugPrint(
+      '[zcash] Voting: tx confirmation wait timed out txHash=$txHash '
+      'elapsed=${_formatElapsed(timer.elapsed)}',
+    );
     return null;
   }
 
@@ -802,6 +905,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       throw StateError('Value is too large to encode as JSON integer: $value');
     }
     return value.toInt();
+  }
+
+  static String _formatElapsed(Duration duration) {
+    return '${(duration.inMicroseconds / Duration.microsecondsPerSecond).toStringAsFixed(2)}s';
   }
 }
 
