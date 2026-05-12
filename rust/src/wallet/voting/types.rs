@@ -52,5 +52,24 @@ pub(super) struct PreparedDelegationKey {
     pub(super) account_uuid: String,
     pub(super) round_id: String,
     pub(super) bundle_index: u32,
+    pub(super) branch_id: u32,
     pub(super) hotkey_raw_address: Vec<u8>,
+}
+
+/// FRB-friendly representation of a Vote Authority Note Merkle witness.
+///
+/// `zcash_voting::tree_sync::VanWitness` stores the authentication path as
+/// fixed-size arrays. This shape keeps the public Vizor wrapper on simple byte
+/// vectors that are easy to pass through the API layer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VanWitness {
+    pub auth_path: Vec<Vec<u8>>,
+    pub position: u32,
+    pub anchor_height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(super) struct RegistryKey {
+    pub(super) db_path: String,
+    pub(super) wallet_id: String,
 }

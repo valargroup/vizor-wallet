@@ -2,7 +2,7 @@ use crate::wallet::network::WalletNetwork;
 
 use secrecy::{ExposeSecret, SecretVec};
 
-use super::{state::open_voting_db, tree_sync::VanWitness};
+use super::{state::open_voting_db, types::VanWitness, workflow};
 
 const VAN_AUTH_PATH_LEN: usize = 24;
 
@@ -173,15 +173,6 @@ where
         );
 
         let commitment_json = public_commitment_json(&bundle, &wire_shares, &share_payloads)?;
-        voting_db
-            .store_commitment_bundle(
-                round_id,
-                bundle_index,
-                draft.proposal_id,
-                &commitment_json,
-                draft.vc_tree_position,
-            )
-            .map_err(|e| format!("store_commitment_bundle failed: {e}"))?;
 
         on_progress(VoteCommitEvent::Signing {
             proposal_id: draft.proposal_id,
@@ -207,6 +198,14 @@ where
             draft.proposal_id,
             signing_start.elapsed().as_secs_f64(),
         );
+
+        workflow::store_signed_vote_commitment(
+            &voting_db,
+            round_id,
+            bundle_index,
+            draft.proposal_id,
+            &commitment_json,
+        )?;
 
         commitments.push(SignedVoteCommitment {
             proposal_id: draft.proposal_id,

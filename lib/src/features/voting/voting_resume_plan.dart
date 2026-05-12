@@ -2,6 +2,19 @@ import 'dart:collection';
 
 import '../../rust/api/voting.dart' as rust_voting;
 
+/// Phase strings emitted by Rust voting recovery.
+///
+/// Keep these in sync with `WorkflowPhase::as_str` in
+/// `rust/src/wallet/voting/workflow.rs`.
+abstract final class VotingWorkflowPhase {
+  static const prepared = 'prepared';
+  static const signed = 'signed';
+  static const submittedDelegation = 'submitted_delegation';
+  static const submittedVote = 'submitted_vote';
+  static const submittedShare = 'submitted_share';
+  static const confirmed = 'confirmed';
+}
+
 /// Stable key for per-proposal vote state within one note bundle.
 ///
 /// A round can split voting power across bundles, and every bundle/proposal pair
@@ -36,8 +49,11 @@ class VotingVoteKey {
 class VotingResumePlan {
   final rust_voting.ApiRoundRecoveryState recoveryState;
   final UnmodifiableListView<int> pendingDelegationBundleIndexes;
+  final UnmodifiableMapView<int, String> delegationPhasesByIndex;
+  final UnmodifiableListView<int> submittedDelegationBundleIndexes;
   final UnmodifiableMapView<VotingVoteKey, rust_voting.ApiVoteRecord>
   votesByKey;
+  final UnmodifiableMapView<VotingVoteKey, String> votePhasesByKey;
   final UnmodifiableMapView<VotingVoteKey, String> voteTxHashesByKey;
   final UnmodifiableMapView<
     VotingVoteKey,
@@ -45,6 +61,7 @@ class VotingResumePlan {
   >
   commitmentBundlesByKey;
   final UnmodifiableListView<VotingVoteKey> pendingVoteSubmissionKeys;
+  final UnmodifiableListView<VotingVoteKey> submittedVoteConfirmationKeys;
   final UnmodifiableListView<VotingVoteKey> incompleteVoteRecoveryKeys;
   final UnmodifiableListView<rust_voting.ApiShareDelegationRecord>
   shareDelegations;
@@ -54,11 +71,15 @@ class VotingResumePlan {
   VotingResumePlan({
     required this.recoveryState,
     required List<int> pendingDelegationBundleIndexes,
+    required Map<int, String> delegationPhasesByIndex,
+    required List<int> submittedDelegationBundleIndexes,
     required Map<VotingVoteKey, rust_voting.ApiVoteRecord> votesByKey,
+    required Map<VotingVoteKey, String> votePhasesByKey,
     required Map<VotingVoteKey, String> voteTxHashesByKey,
     required Map<VotingVoteKey, rust_voting.ApiCommitmentBundleRecovery>
     commitmentBundlesByKey,
     required List<VotingVoteKey> pendingVoteSubmissionKeys,
+    required List<VotingVoteKey> submittedVoteConfirmationKeys,
     required List<VotingVoteKey> incompleteVoteRecoveryKeys,
     required List<rust_voting.ApiShareDelegationRecord> shareDelegations,
     required List<rust_voting.ApiShareDelegationRecord>
@@ -66,11 +87,19 @@ class VotingResumePlan {
   }) : pendingDelegationBundleIndexes = UnmodifiableListView(
          pendingDelegationBundleIndexes,
        ),
+       delegationPhasesByIndex = UnmodifiableMapView(delegationPhasesByIndex),
+       submittedDelegationBundleIndexes = UnmodifiableListView(
+         submittedDelegationBundleIndexes,
+       ),
        votesByKey = UnmodifiableMapView(votesByKey),
+       votePhasesByKey = UnmodifiableMapView(votePhasesByKey),
        voteTxHashesByKey = UnmodifiableMapView(voteTxHashesByKey),
        commitmentBundlesByKey = UnmodifiableMapView(commitmentBundlesByKey),
        pendingVoteSubmissionKeys = UnmodifiableListView(
          pendingVoteSubmissionKeys,
+       ),
+       submittedVoteConfirmationKeys = UnmodifiableListView(
+         submittedVoteConfirmationKeys,
        ),
        incompleteVoteRecoveryKeys = UnmodifiableListView(
          incompleteVoteRecoveryKeys,
@@ -88,6 +117,8 @@ class VotingResumePlan {
   bool get hasPendingWork =>
       pendingDelegationBundleIndexes.isNotEmpty ||
       pendingVoteSubmissionKeys.isNotEmpty ||
+      submittedDelegationBundleIndexes.isNotEmpty ||
+      submittedVoteConfirmationKeys.isNotEmpty ||
       unconfirmedShareDelegations.isNotEmpty;
 
   rust_voting.ApiCommitmentBundleRecovery? commitmentBundleFor(
