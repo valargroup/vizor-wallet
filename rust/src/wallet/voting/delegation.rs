@@ -19,7 +19,6 @@ use crate::wallet::{
 
 use super::{
     bundle::{select_notes_with_lwd, validate_bundle_index, voting_power, SelectedNotes},
-    endpoint_validation,
     hotkey::derive_hotkey_raw_orchard_address,
     progress::{ProofProgressBridge, VotingWorkCancellation},
     state::{ensure_voting_round, open_voting_db},
@@ -423,8 +422,6 @@ pub async fn precompute_delegation_pir(
     let round_context =
         ensure_round_initialized(&voting_db, &round_params, round_name, session_json)?;
     let round_id = round_params.vote_round_id.clone();
-    let pir_server_url =
-        endpoint_validation::validate_pir_endpoint(pir_server_url, &round_params).await?;
 
     let selected = select_notes_with_lwd(
         db_path,
@@ -488,7 +485,7 @@ pub async fn precompute_delegation_pir(
     let proof_account_uuid = account_uuid.to_string();
     let proof_round_id = round_id.clone();
     let proof_bundle_note_infos = bundle_note_infos.clone();
-    let proof_pir_server_url = pir_server_url;
+    let proof_pir_server_url = pir_server_url.to_string();
     let proof_network_id = network.voting_id().into();
     let proof_cancellation = cancellation.clone();
     let precompute = tokio::task::spawn_blocking(move || {
@@ -558,7 +555,7 @@ pub async fn precompute_delegation_pir(
 ///
 /// # Errors
 ///
-/// Returns an error if endpoint validation, note/bundle validation, witness
+/// Returns an error if note/bundle validation, witness
 /// generation, PCZT construction, PIR proof generation, or delegation signing
 /// fails.
 #[allow(clippy::too_many_arguments)]
@@ -584,8 +581,6 @@ where
     let round_context =
         ensure_round_initialized(&voting_db, &round_params, round_name, session_json)?;
     let round_id = round_params.vote_round_id.clone();
-    let pir_server_url =
-        endpoint_validation::validate_pir_endpoint(pir_server_url, &round_params).await?;
 
     cancellation.check()?;
     on_progress(ProofEvent::SelectingNotes);
@@ -684,7 +679,7 @@ where
     cancellation.check()?;
     on_progress(ProofEvent::BuildingProof);
     let proof_db_path = db_path.to_string();
-    let proof_pir_server_url = pir_server_url;
+    let proof_pir_server_url = pir_server_url.to_string();
     let proof_account_uuid = account_uuid.to_string();
     let proof_round_id = round_id.clone();
     let proof_bundle_note_infos = bundle_note_infos.clone();

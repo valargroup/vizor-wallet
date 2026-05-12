@@ -165,6 +165,12 @@ class VotingConfig {
         'pir_endpoints must contain at least one entry',
       );
     }
+    for (final endpoint in voteServers) {
+      endpoint.validate(fieldName: 'vote_servers');
+    }
+    for (final endpoint in pirEndpoints) {
+      endpoint.validate(fieldName: 'pir_endpoints');
+    }
     for (final roundId in rounds.keys) {
       if (!_isLowercaseHexRoundId(roundId)) {
         throw VotingConfigDecodeException(
@@ -280,9 +286,13 @@ class VotingServiceEndpoint {
       throw const VotingConfigDecodeException('service endpoint missing url');
     }
     return VotingServiceEndpoint(
-      url: url,
+      url: _normalizedServiceEndpointUrl(url, fieldName: 'service endpoint'),
       label: _optionalStringFromJson(json, const ['label', 'name']) ?? '',
     );
+  }
+
+  void validate({required String fieldName}) {
+    _normalizedServiceEndpointUrl(url, fieldName: fieldName);
   }
 }
 
@@ -585,7 +595,8 @@ List<dynamic> _requiredListFromJson(
 
 Uri? _uriFromJson(Map<String, dynamic> json, List<String> keys) {
   final value = _optionalStringFromJson(json, keys);
-  return value == null || value.isEmpty ? null : Uri.parse(value);
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? null : Uri.parse(trimmed);
 }
 
 Uri _requiredUriFromJson(Map<String, dynamic> json, List<String> keys) {
@@ -594,6 +605,52 @@ Uri _requiredUriFromJson(Map<String, dynamic> json, List<String> keys) {
     throw VotingConfigDecodeException('Missing required URI: ${keys.first}');
   }
   return uri;
+}
+
+Uri _normalizedServiceEndpointUrl(Uri uri, {required String fieldName}) {
+  if (!uri.hasScheme || uri.host.isEmpty) {
+    throw VotingConfigDecodeException(
+      '$fieldName URL must be an absolute HTTP(S) URL: $uri',
+    );
+  }
+  final scheme = uri.scheme.toLowerCase();
+  if (scheme != 'https' && scheme != 'http') {
+    throw VotingConfigDecodeException(
+      '$fieldName URL has unsupported scheme "$scheme": $uri',
+    );
+  }
+  if (scheme == 'http' && !_allowsPlainHttp(uri.host)) {
+    throw VotingConfigDecodeException(
+      '$fieldName URL must use HTTPS except for localhost/regtest: $uri',
+    );
+  }
+  if (uri.hasQuery || uri.hasFragment) {
+    throw VotingConfigDecodeException(
+      '$fieldName URL must not include query or fragment: $uri',
+    );
+  }
+  if (uri.userInfo.isNotEmpty) {
+    throw VotingConfigDecodeException(
+      '$fieldName URL must not include user info: $uri',
+    );
+  }
+
+  final normalized = uri.normalizePath().replace(
+    scheme: scheme,
+    host: uri.host.toLowerCase(),
+  );
+  return Uri.parse(normalized.toString().replaceFirst(RegExp(r'/+$'), ''));
+}
+
+bool _allowsPlainHttp(String host) {
+  final lower = host.toLowerCase();
+  return lower == 'localhost' ||
+      lower.endsWith('.localhost') ||
+      lower == '127.0.0.1' ||
+      lower == '::1' ||
+      lower == '0.0.0.0' ||
+      lower == 'regtest' ||
+      lower.endsWith('.regtest');
 }
 
 String _stringFromJson(Map<String, dynamic> json, List<String> keys) {
@@ -660,7 +717,10 @@ int? _optionalIntFromJson(Map<String, dynamic> json, List<String> keys) {
   return null;
 }
 
-List<Object?> _optionalListFromJson(Map<String, dynamic> json, List<String> keys) {
+List<Object?> _optionalListFromJson(
+  Map<String, dynamic> json,
+  List<String> keys,
+) {
   for (final key in keys) {
     final value = json[key];
     if (value == null) continue;

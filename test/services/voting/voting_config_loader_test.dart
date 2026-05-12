@@ -64,6 +64,91 @@ void main() {
     ]);
   });
 
+  test('dynamic config normalizes service endpoint base URLs', () async {
+    final staticSource = StaticVotingConfigSource.parse(
+      'https://voting.example/static-voting-config.json',
+    );
+    final loader = VotingConfigLoader(
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          staticSource.uri.toString(): staticConfigJson(),
+          'https://voting.example/dynamic-voting-config.json':
+              dynamicConfigJson(
+                voteServers: [
+                  {'url': ' HTTPS://VOTING.EXAMPLE/base/../api/ '},
+                ],
+                pirEndpoints: [
+                  {'url': 'https://pir.example/snapshot/'},
+                ],
+              ),
+        },
+      ),
+      staticConfigSource: staticSource,
+    );
+
+    final config = await loader.load();
+
+    expect(config.apiBaseUrl.toString(), 'https://voting.example/api');
+    expect(
+      config.pirEndpointUrls.single.toString(),
+      'https://pir.example/snapshot',
+    );
+  });
+
+  test('dynamic config rejects unsafe service endpoint URLs', () async {
+    final staticSource = StaticVotingConfigSource.parse(
+      'https://voting.example/static-voting-config.json',
+    );
+    for (final endpoint in [
+      'ftp://voting.example',
+      'http://voting.example',
+      'https://user@voting.example',
+      'https://voting.example?x=1',
+      'https://voting.example/#frag',
+      '/relative',
+    ]) {
+      final loader = VotingConfigLoader(
+        httpClient: FakeVotingHttpClient(
+          responses: {
+            staticSource.uri.toString(): staticConfigJson(),
+            'https://voting.example/dynamic-voting-config.json':
+                dynamicConfigJson(
+                  voteServers: [
+                    {'url': endpoint},
+                  ],
+                ),
+          },
+        ),
+        staticConfigSource: staticSource,
+      );
+
+      expect(
+        loader.load(),
+        throwsA(isA<VotingConfigDecodeException>()),
+        reason: endpoint,
+      );
+    }
+  });
+
+  test('dynamic config allows plain HTTP only for localhost and regtest', () {
+    for (final endpoint in [
+      'http://localhost:8080',
+      'http://127.0.0.1:8080',
+      'http://regtest:8080',
+      'http://vote.regtest:8080',
+    ]) {
+      final config = VotingConfig.fromJson(
+        dynamicConfigJson(
+          voteServers: [
+            {'url': endpoint},
+          ],
+        ),
+      );
+
+      expect(config.apiBaseUrl.scheme, 'http');
+    }
+  });
+
   test('accepts matching checksum on raw response body', () async {
     final body = jsonEncode(staticConfigJson());
     final checksum = sha256.convert(utf8.encode(body)).toString();
@@ -167,14 +252,18 @@ Map<String, dynamic> staticConfigJson() => {
   ],
 };
 
-Map<String, dynamic> dynamicConfigJson({String voteServerVersion = 'v1'}) => {
-  'config_version': 1,
-  'vote_servers': [
+Map<String, dynamic> dynamicConfigJson({
+  String voteServerVersion = 'v1',
+  List<Map<String, String>> voteServers = const [
     {'url': 'https://voting.example', 'label': 'primary'},
   ],
-  'pir_endpoints': [
+  List<Map<String, String>> pirEndpoints = const [
     {'url': 'https://pir.example', 'label': 'pir'},
   ],
+}) => {
+  'config_version': 1,
+  'vote_servers': voteServers,
+  'pir_endpoints': pirEndpoints,
   'supported_versions': {
     'pir': ['v0'],
     'vote_protocol': 'v0',
