@@ -28,7 +28,9 @@ Swift's C FFI or TCA architecture.
 - Local workflow state uses `zcash_voting::storage::VotingDb`; Vizor does not
   maintain a parallel `voting_round_state` table.
 - PIR endpoint resolution fails closed unless `/root.height` exactly matches
-  the round snapshot height.
+  the round snapshot height. Optional `/root.network_id` and `/root.round_id`
+  fields are not trusted as protocol identity; the round configuration
+  authenticates the snapshot height used for endpoint selection.
 - REST calls remain under `/shielded-vote/v1/*`.
 - Encrypted-share payloads use Swift-compatible snake_case field names:
   `shares_hash`, `proposal_id`, `vote_decision`, `enc_share`,

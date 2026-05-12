@@ -4,6 +4,9 @@ import '../../rust/api/voting.dart' as rust_voting;
 import '../../services/voting/voting_models.dart';
 import '../../providers/voting/voting_state.dart';
 
+const int _minProposalId = 1;
+const int _maxProposalId = 15;
+
 class VotingProposalView {
   const VotingProposalView({
     required this.id,
@@ -99,9 +102,7 @@ VotingProposalView _proposalFromJson(
   Map<String, dynamic> json, {
   required int fallbackId,
 }) {
-  final id =
-      _intFromJson(json, const ['proposal_id', 'proposalId', 'id']) ??
-      fallbackId;
+  final id = _proposalIdFromJson(json);
   final optionsJson = json['options'] ?? json['choices'] ?? const [];
   final options = optionsJson is List
       ? [
@@ -123,6 +124,19 @@ VotingProposalView _proposalFromJson(
           ]
         : options,
   );
+}
+
+int _proposalIdFromJson(Map<String, dynamic> json) {
+  final id = _intFromJson(json, const ['proposal_id', 'proposalId', 'id']);
+  if (id == null) {
+    throw const FormatException('Missing required int: proposal_id');
+  }
+  if (id < _minProposalId || id > _maxProposalId) {
+    throw FormatException(
+      'proposal_id must be $_minProposalId..$_maxProposalId, got $id',
+    );
+  }
+  return id;
 }
 
 VotingOptionView _optionFromJson(Object? value, {required int fallbackIndex}) {
