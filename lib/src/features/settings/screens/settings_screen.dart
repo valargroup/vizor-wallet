@@ -115,6 +115,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 onChangePassword: () =>
                     context.push('/settings/change-password'),
                 onEndpoint: () => context.push('/settings/endpoint'),
+                onVoting: activeAccountIsHardware
+                    ? null
+                    : () => context.push('/voting'),
                 onAccountName: hasActiveAccount
                     ? () => _showModal(_SettingsModalType.accountName)
                     : null,
@@ -197,6 +200,7 @@ class _SettingsPane extends StatelessWidget {
     required this.onSeedPhrase,
     required this.onChangePassword,
     required this.onEndpoint,
+    required this.onVoting,
     required this.onAccountName,
     required this.onProfilePicture,
     required this.onTheme,
@@ -212,6 +216,7 @@ class _SettingsPane extends StatelessWidget {
   final VoidCallback onSeedPhrase;
   final VoidCallback onChangePassword;
   final VoidCallback onEndpoint;
+  final VoidCallback? onVoting;
   final VoidCallback? onAccountName;
   final VoidCallback? onProfilePicture;
   final VoidCallback onTheme;
@@ -256,6 +261,7 @@ class _SettingsPane extends StatelessWidget {
                         onSeedPhrase: onSeedPhrase,
                         onChangePassword: onChangePassword,
                         onEndpoint: onEndpoint,
+                        onVoting: onVoting,
                         onAccountName: onAccountName,
                         onProfilePicture: onProfilePicture,
                         onTheme: onTheme,
@@ -284,6 +290,7 @@ class _SettingsList extends StatelessWidget {
     required this.onSeedPhrase,
     required this.onChangePassword,
     required this.onEndpoint,
+    required this.onVoting,
     required this.onAccountName,
     required this.onProfilePicture,
     required this.onTheme,
@@ -299,6 +306,7 @@ class _SettingsList extends StatelessWidget {
   final VoidCallback onSeedPhrase;
   final VoidCallback onChangePassword;
   final VoidCallback onEndpoint;
+  final VoidCallback? onVoting;
   final VoidCallback? onAccountName;
   final VoidCallback? onProfilePicture;
   final VoidCallback onTheme;
@@ -338,6 +346,20 @@ class _SettingsList extends StatelessWidget {
               label: 'Account Name',
               value: accountName,
               onTap: onAccountName,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.s),
+        _SettingsBlock(
+          title: 'Governance',
+          rows: [
+            _SettingsRow(
+              iconName: AppIcons.scroll,
+              label: 'Coinholder Polling',
+              value: activeAccountIsHardware
+                  ? 'Hardware accounts coming soon'
+                  : 'Open',
+              onTap: onVoting,
             ),
           ],
         ),

@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/voting/voting_resume_plan.dart';
 import '../../rust/api/voting.dart' as rust_voting;
 import '../../services/voting/pir_snapshot_resolver.dart';
+import '../../services/voting/voting_api_client.dart';
 import '../../services/voting/voting_models.dart';
 import 'voting_config_provider.dart';
 import 'voting_service_providers.dart';
@@ -54,10 +57,14 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         _setError('PIR endpoint has not been resolved.');
         return;
       }
+      await _ensureHotkey(context, seedBytes);
 
       final progress = Map<int, VotingSessionProgress>.from(
         current.delegationProgress,
       );
+      final completedBundleIndexes = <int>{};
+      final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+      final rust = ref.read(votingRustApiProvider);
       for (final bundleIndex in plan.pendingDelegationBundleIndexes) {
         state = AsyncData(
           (state.value ?? current).copyWith(
@@ -65,21 +72,21 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             currentBundleIndex: bundleIndex,
           ),
         );
+        rust_voting.ApiSignedDelegation? signedDelegation;
         await for (final event
-            in ref
-                .read(votingRustApiProvider)
-                .buildAndProveDelegationBundleWithProgress(
-                  dbPath: context.dbPath,
-                  lightwalletdUrl: context.lightwalletdUrl,
-                  pirServerUrl: pirEndpoint.toString(),
-                  network: context.network,
-                  roundParams: context.round.toRoundParams(),
-                  roundName: context.round.title,
-                  sessionJson: context.round.sessionJson,
-                  accountUuid: context.accountUuid,
-                  seedBytes: seedBytes,
-                  bundleIndex: bundleIndex,
-                )) {
+            in rust.buildAndProveDelegationBundleWithProgress(
+              dbPath: context.dbPath,
+              lightwalletdUrl: context.lightwalletdUrl,
+              pirServerUrl: pirEndpoint.toString(),
+              network: context.network,
+              roundParams: context.round.toRoundParams(),
+              roundName: context.round.title,
+              sessionJson: context.round.sessionJson,
+              accountUuid: context.accountUuid,
+              seedBytes: seedBytes,
+              bundleIndex: bundleIndex,
+            )) {
+          signedDelegation = event.signedDelegation ?? signedDelegation;
           progress[bundleIndex] = VotingSessionProgress(
             phase: event.phase,
             bundleIndex: bundleIndex,
@@ -89,10 +96,73 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             (state.value ?? current).copyWith(delegationProgress: progress),
           );
         }
+        final submission = signedDelegation;
+        if (submission == null) {
+          throw StateError(
+            'Delegation proof completed without submission payload.',
+          );
+        }
+        final result = await api.submitDelegation(
+          submission: _delegationSubmissionJson(submission),
+        );
+        if (result.code != 0) {
+          throw StateError(
+            result.log.isEmpty
+                ? 'Delegation transaction was rejected.'
+                : result.log,
+          );
+        }
+        await rust.storeDelegationTxHash(
+          dbPath: context.dbPath,
+          walletId: context.accountUuid,
+          roundId: context.round.roundId,
+          bundleIndex: bundleIndex,
+          txHash: result.txHash,
+        );
+        final confirmation = await _awaitTxConfirmation(api, result.txHash);
+        if (confirmation == null) {
+          throw StateError(
+            'Transaction ${result.txHash} was not confirmed in time.',
+          );
+        }
+        if (confirmation.code != 0) {
+          throw StateError(
+            confirmation.log.isEmpty
+                ? 'Delegation transaction failed.'
+                : confirmation.log,
+          );
+        }
+        final leafIndex = int.tryParse(
+          confirmation.event('delegate_vote')?.attribute('leaf_index') ?? '',
+        );
+        if (leafIndex == null) {
+          throw StateError(
+            'Missing delegate_vote leaf_index for bundle $bundleIndex.',
+          );
+        }
+        await rust.storeVanPosition(
+          dbPath: context.dbPath,
+          walletId: context.accountUuid,
+          roundId: context.round.roundId,
+          bundleIndex: bundleIndex,
+          position: leafIndex,
+        );
+        completedBundleIndexes.add(bundleIndex);
+        progress[bundleIndex] = VotingSessionProgress(
+          phase: 'submitted',
+          bundleIndex: bundleIndex,
+          message: result.txHash,
+        );
+        state = AsyncData(
+          (state.value ?? current).copyWith(delegationProgress: progress),
+        );
       }
 
       final refreshedPlan = await _loadResumePlan(context);
-      final nextPhase = refreshedPlan.pendingDelegationBundleIndexes.isEmpty
+      final nextPhase =
+          refreshedPlan.pendingDelegationBundleIndexes
+              .where((index) => !completedBundleIndexes.contains(index))
+              .isEmpty
           ? VotingSessionPhase.delegated
           : VotingSessionPhase.readyToDelegate;
       state = AsyncData(
@@ -116,18 +186,13 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             accountUuid: context.accountUuid,
             roundId: context.round.roundId,
           );
-
-      state = AsyncData(
-        current.copyWith(phase: VotingSessionPhase.syncingVoteTree),
-      );
-      final anchorHeight = await ref
-          .read(votingRustApiProvider)
-          .syncVoteTree(
-            dbPath: context.dbPath,
-            walletId: context.accountUuid,
-            roundId: context.round.roundId,
-            nodeUrl: context.config.apiBaseUrl.toString(),
-          );
+      if (hotkeySeed == null) {
+        _setError(
+          'Voting hotkey is missing. Delegate this round before casting votes.',
+          cause: const VotingHotkeyUnavailable('missing stored hotkey'),
+        );
+        return;
+      }
 
       final progress = Map<VotingVoteKey, VotingSessionProgress>.from(
         current.voteProgress,
@@ -136,51 +201,80 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         current.resumePlan ?? context.resumePlan,
       );
       for (final bundleIndex in pendingBundles) {
-        final witness = await ref
-            .read(votingRustApiProvider)
-            .generateVanWitness(
-              dbPath: context.dbPath,
-              walletId: context.accountUuid,
-              roundId: context.round.roundId,
-              bundleIndex: bundleIndex,
-              anchorHeight: anchorHeight,
-            );
-        state = AsyncData(
-          (state.value ?? current).copyWith(
-            phase: VotingSessionPhase.castingVotes,
-            currentBundleIndex: bundleIndex,
-          ),
-        );
-        await for (final event
-            in ref
-                .read(votingRustApiProvider)
-                .buildVoteCommitmentsWithProgress(
-                  dbPath: context.dbPath,
-                  walletId: context.accountUuid,
-                  network: context.network,
-                  roundId: context.round.roundId,
-                  bundleIndex: bundleIndex,
-                  hotkeySeed: hotkeySeed,
-                  vanWitness: witness,
-                  draftVotes: draftVotes,
-                )) {
-          final proposalId = event.proposalId;
-          if (proposalId != null) {
-            final key = VotingVoteKey(
-              bundleIndex: event.bundleIndex ?? bundleIndex,
-              proposalId: proposalId,
-            );
-            progress[key] = VotingSessionProgress(
-              phase: event.phase,
-              bundleIndex: key.bundleIndex,
-              proposalId: proposalId,
-            );
-            state = AsyncData(
-              (state.value ?? current).copyWith(
-                voteProgress: progress,
-                currentVoteKey: key,
-              ),
-            );
+        for (final draftVote in draftVotes) {
+          state = AsyncData(
+            (state.value ?? current).copyWith(
+              phase: VotingSessionPhase.syncingVoteTree,
+              currentBundleIndex: bundleIndex,
+            ),
+          );
+          final anchorHeight = await ref
+              .read(votingRustApiProvider)
+              .syncVoteTree(
+                dbPath: context.dbPath,
+                walletId: context.accountUuid,
+                roundId: context.round.roundId,
+                nodeUrl: context.config.apiBaseUrl.toString(),
+              );
+
+          final witness = await ref
+              .read(votingRustApiProvider)
+              .generateVanWitness(
+                dbPath: context.dbPath,
+                walletId: context.accountUuid,
+                roundId: context.round.roundId,
+                bundleIndex: bundleIndex,
+                anchorHeight: anchorHeight,
+              );
+          state = AsyncData(
+            (state.value ?? current).copyWith(
+              phase: VotingSessionPhase.castingVotes,
+              currentBundleIndex: bundleIndex,
+            ),
+          );
+          await for (final event
+              in ref
+                  .read(votingRustApiProvider)
+                  .buildVoteCommitmentsWithProgress(
+                    dbPath: context.dbPath,
+                    walletId: context.accountUuid,
+                    network: context.network,
+                    roundId: context.round.roundId,
+                    bundleIndex: bundleIndex,
+                    hotkeySeed: hotkeySeed,
+                    vanWitness: witness,
+                    draftVotes: [draftVote],
+                  )) {
+            final proposalId = event.proposalId;
+            if (proposalId != null) {
+              final key = VotingVoteKey(
+                bundleIndex: event.bundleIndex ?? bundleIndex,
+                proposalId: proposalId,
+              );
+              progress[key] = VotingSessionProgress(
+                phase: event.phase,
+                bundleIndex: key.bundleIndex,
+                proposalId: proposalId,
+              );
+              state = AsyncData(
+                (state.value ?? current).copyWith(
+                  voteProgress: progress,
+                  currentVoteKey: key,
+                ),
+              );
+            }
+            final commitments = event.commitments;
+            if (commitments != null) {
+              final vcTreePositions = await _submitVoteCommitments(
+                context,
+                commitments,
+              );
+              await _submitCommitmentShares(
+                context,
+                commitments,
+                vcTreePositions: vcTreePositions,
+              );
+            }
           }
         }
       }
@@ -196,6 +290,213 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         ),
       );
     });
+  }
+
+  Future<void> _ensureHotkey(
+    _VotingSessionContext context,
+    List<int> seedBytes,
+  ) async {
+    final store = ref.read(votingHotkeyStoreProvider);
+    final existing = await store.readHotkey(
+      accountUuid: context.accountUuid,
+      roundId: context.round.roundId,
+    );
+    if (existing != null && existing.isNotEmpty) return;
+    final hotkey = await ref
+        .read(votingRustApiProvider)
+        .deriveHotkey(
+          seedBytes: seedBytes,
+          roundId: context.round.roundId,
+          accountUuid: context.accountUuid,
+        );
+    await store.writeHotkey(
+      accountUuid: context.accountUuid,
+      roundId: context.round.roundId,
+      hotkey: hotkey,
+    );
+  }
+
+  Future<void> _submitCommitmentShares(
+    _VotingSessionContext context,
+    rust_voting.ApiSignedVoteCommitments commitments, {
+    Map<int, BigInt> vcTreePositions = const {},
+  }) async {
+    final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+    final rust = ref.read(votingRustApiProvider);
+    final serverUrls = context.config.voteServers
+        .map((endpoint) => endpoint.url)
+        .toList(growable: false);
+    if (serverUrls.isEmpty) {
+      throw StateError('No vote servers configured for share submission.');
+    }
+
+    for (final commitment in commitments.commitments) {
+      final vcTreePosition = vcTreePositions[commitment.proposalId];
+      for (final payload in commitment.sharePayloads) {
+        final acceptedServers = <String>[];
+        final body = _sharePayloadJson(payload, vcTreePosition: vcTreePosition);
+        for (final serverUrl in serverUrls) {
+          try {
+            debugPrint(
+              '[zcash] Voting: submitting share '
+              'proposal=${payload.proposalId} share=${payload.encryptedShare.shareIndex} '
+              'server=$serverUrl treePosition=${body['tree_position']}',
+            );
+            await api.submitShare(
+              roundId: context.round.roundId,
+              serverUrl: serverUrl,
+              share: body,
+            );
+            acceptedServers.add(serverUrl.toString());
+            debugPrint(
+              '[zcash] Voting: share accepted '
+              'proposal=${payload.proposalId} share=${payload.encryptedShare.shareIndex} '
+              'server=$serverUrl',
+            );
+          } catch (e) {
+            debugPrint(
+              '[zcash] Voting: share rejected '
+              'proposal=${payload.proposalId} share=${payload.encryptedShare.shareIndex} '
+              'server=$serverUrl error=$e',
+            );
+            // Try every configured helper. A later recovery pass can resubmit
+            // to helpers that did not accept this share.
+          }
+        }
+        if (acceptedServers.isEmpty) {
+          throw StateError(
+            'No vote server accepted share ${payload.encryptedShare.shareIndex} '
+            'for proposal ${payload.proposalId}.',
+          );
+        }
+
+        final nullifierHex = await rust.computeShareNullifierHex(
+          voteCommitment: commitment.voteCommitment,
+          shareIndex: payload.encryptedShare.shareIndex,
+          primaryBlind: payload.primaryBlind,
+        );
+        await rust.recordShareDelegation(
+          dbPath: context.dbPath,
+          walletId: context.accountUuid,
+          roundId: context.round.roundId,
+          bundleIndex: commitments.bundleIndex,
+          proposalId: payload.proposalId,
+          shareIndex: payload.encryptedShare.shareIndex,
+          sentToUrls: acceptedServers,
+          nullifier: _bytesFromHex(nullifierHex),
+          submitAt: BigInt.zero,
+        );
+      }
+    }
+  }
+
+  Future<Map<int, BigInt>> _submitVoteCommitments(
+    _VotingSessionContext context,
+    rust_voting.ApiSignedVoteCommitments commitments,
+  ) async {
+    final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+    final rust = ref.read(votingRustApiProvider);
+    final vcTreePositions = <int, BigInt>{};
+    for (final commitment in commitments.commitments) {
+      debugPrint(
+        '[zcash] Voting: submitting cast-vote '
+        'round=${context.round.roundId} bundle=${commitments.bundleIndex} '
+        'proposal=${commitment.proposalId}',
+      );
+      final result = await api.submitVoteCommitment(
+        commitment: _voteCommitmentSubmissionJson(commitment),
+      );
+      debugPrint(
+        '[zcash] Voting: cast-vote response '
+        'proposal=${commitment.proposalId} txHash=${result.txHash} '
+        'code=${result.code} log=${result.log}',
+      );
+      if (result.code != 0) {
+        throw StateError(
+          result.log.isEmpty
+              ? 'Vote commitment transaction was rejected.'
+              : result.log,
+        );
+      }
+      if (result.txHash.isEmpty) {
+        throw StateError('Vote commitment response did not include tx_hash.');
+      }
+      await rust.storeVoteTxHash(
+        dbPath: context.dbPath,
+        walletId: context.accountUuid,
+        roundId: context.round.roundId,
+        bundleIndex: commitments.bundleIndex,
+        proposalId: commitment.proposalId,
+        txHash: result.txHash,
+      );
+
+      final confirmation = await _awaitTxConfirmation(api, result.txHash);
+      if (confirmation == null) {
+        throw StateError(
+          'Transaction ${result.txHash} was not confirmed in time.',
+        );
+      }
+      if (confirmation.code != 0) {
+        throw StateError(
+          confirmation.log.isEmpty
+              ? 'Vote commitment transaction failed.'
+              : confirmation.log,
+        );
+      }
+
+      final leafPositions = _castVoteLeafPositions(confirmation);
+      debugPrint(
+        '[zcash] Voting: cast-vote confirmed '
+        'proposal=${commitment.proposalId} vanPosition=${leafPositions.vanPosition} '
+        'vcTreePosition=${leafPositions.vcTreePosition}',
+      );
+      await rust.storeVanPosition(
+        dbPath: context.dbPath,
+        walletId: context.accountUuid,
+        roundId: context.round.roundId,
+        bundleIndex: commitments.bundleIndex,
+        position: leafPositions.vanPosition,
+      );
+      await rust.storeCommitmentBundle(
+        dbPath: context.dbPath,
+        walletId: context.accountUuid,
+        roundId: context.round.roundId,
+        bundleIndex: commitments.bundleIndex,
+        proposalId: commitment.proposalId,
+        commitmentBundleJson: commitment.commitmentBundleJson,
+        vcTreePosition: leafPositions.vcTreePosition,
+      );
+      vcTreePositions[commitment.proposalId] = leafPositions.vcTreePosition;
+    }
+    return vcTreePositions;
+  }
+
+  Future<VotingTxConfirmation?> _awaitTxConfirmation(
+    VotingApiClient api,
+    String txHash,
+  ) async {
+    const attempts = 45;
+    const delay = Duration(seconds: 2);
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      final confirmation = await api.getTxConfirmation(txHash);
+      if (confirmation != null) {
+        debugPrint(
+          '[zcash] Voting: tx confirmation found txHash=$txHash '
+          'attempt=${attempt + 1} code=${confirmation.code}',
+        );
+        return confirmation;
+      }
+      if (attempt + 1 < attempts) {
+        if (attempt == 0 || (attempt + 1) % 5 == 0) {
+          debugPrint(
+            '[zcash] Voting: waiting for tx confirmation '
+            'txHash=$txHash attempt=${attempt + 1}/$attempts',
+          );
+        }
+        await Future<void>.delayed(delay);
+      }
+    }
+    return null;
   }
 
   Future<void> submitPendingShares() {
@@ -246,9 +547,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     final next = _operation.then((_) async {
       try {
         await action();
-      } catch (e) {
+      } catch (e, st) {
+        debugPrint('[zcash] Voting: session action failed: $e\n$st');
         _setError('Voting session action failed.', cause: e);
-        rethrow;
       }
     });
     _operation = next.catchError((_) {});
@@ -298,7 +599,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       ),
     );
 
-    await ref
+    final bundleSetup = await ref
         .read(votingRustApiProvider)
         .setupDelegationBundles(
           dbPath: context.dbPath,
@@ -314,6 +615,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       (state.value ?? current).copyWith(
         phase: VotingSessionPhase.readyToDelegate,
         resumePlan: refreshedPlan,
+        eligibleWeightZatoshi: bundleSetup.eligibleWeightZatoshi,
       ),
     );
   }
@@ -404,6 +706,102 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   static String _hexFromBytes(List<int> bytes) {
     return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static List<int> _bytesFromHex(String hex) {
+    final normalized = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return [
+      for (var i = 0; i < normalized.length; i += 2)
+        int.parse(normalized.substring(i, i + 2), radix: 16),
+    ];
+  }
+
+  static Map<String, dynamic> _sharePayloadJson(
+    rust_voting.ApiVoteSharePayload payload, {
+    BigInt? vcTreePosition,
+  }) {
+    return {
+      'shares_hash': base64Encode(payload.sharesHash),
+      'proposal_id': payload.proposalId,
+      'vote_decision': payload.voteDecision,
+      'enc_share': _wireShareJson(payload.encryptedShare),
+      'share_index': payload.encryptedShare.shareIndex,
+      'tree_position': _jsonInt(vcTreePosition ?? payload.treePosition),
+      'all_enc_shares': payload.allEncryptedShares.map(_wireShareJson).toList(),
+      'share_comms': payload.shareComms.map(base64Encode).toList(),
+      'primary_blind': base64Encode(payload.primaryBlind),
+      'submit_at': 0,
+    };
+  }
+
+  static Map<String, dynamic> _voteCommitmentSubmissionJson(
+    rust_voting.ApiSignedVoteCommitment commitment,
+  ) {
+    return {
+      'van_nullifier': base64Encode(commitment.vanNullifier),
+      'vote_authority_note_new': base64Encode(commitment.voteAuthorityNoteNew),
+      'vote_commitment': base64Encode(commitment.voteCommitment),
+      'proposal_id': commitment.proposalId,
+      'proof': base64Encode(commitment.proof),
+      'vote_round_id': base64Encode(_bytesFromHex(commitment.voteRoundId)),
+      'vote_comm_tree_anchor_height': commitment.anchorHeight,
+      'r_vpk': base64Encode(commitment.rVpkBytes),
+      'vote_auth_sig': base64Encode(commitment.voteAuthSig),
+    };
+  }
+
+  static Map<String, dynamic> _delegationSubmissionJson(
+    rust_voting.ApiSignedDelegation submission,
+  ) {
+    return {
+      'rk': base64Encode(submission.rk),
+      'spend_auth_sig': base64Encode(submission.spendAuthSig),
+      'sighash': base64Encode(submission.sighash),
+      'signed_note_nullifier': base64Encode(submission.nfSigned),
+      'cmx_new': base64Encode(submission.cmxNew),
+      'van_cmx': base64Encode(submission.govComm),
+      'gov_nullifiers': submission.govNullifiers.map(base64Encode).toList(),
+      'proof': base64Encode(submission.proof),
+      'vote_round_id': base64Encode(_bytesFromHex(submission.voteRoundId)),
+    };
+  }
+
+  static Map<String, dynamic> _wireShareJson(
+    rust_voting.ApiWireEncryptedShare share,
+  ) {
+    return {
+      'c1': base64Encode(share.ciphertext1),
+      'c2': base64Encode(share.ciphertext2),
+      'share_index': share.shareIndex,
+    };
+  }
+
+  static ({int vanPosition, BigInt vcTreePosition}) _castVoteLeafPositions(
+    VotingTxConfirmation confirmation,
+  ) {
+    final rawLeafIndex = confirmation
+        .event('cast_vote')
+        ?.attribute('leaf_index');
+    if (rawLeafIndex == null) {
+      throw StateError('Missing cast_vote leaf_index.');
+    }
+    final parts = rawLeafIndex.split(',');
+    if (parts.length != 2) {
+      throw StateError('Malformed cast_vote leaf_index: $rawLeafIndex');
+    }
+    final vanPosition = int.tryParse(parts[0].trim());
+    final vcTreePosition = BigInt.tryParse(parts[1].trim());
+    if (vanPosition == null || vcTreePosition == null) {
+      throw StateError('Malformed cast_vote leaf_index: $rawLeafIndex');
+    }
+    return (vanPosition: vanPosition, vcTreePosition: vcTreePosition);
+  }
+
+  static int _jsonInt(BigInt value) {
+    if (value > BigInt.from(0x1fffffffffffff)) {
+      throw StateError('Value is too large to encode as JSON integer: $value');
+    }
+    return value.toInt();
   }
 }
 

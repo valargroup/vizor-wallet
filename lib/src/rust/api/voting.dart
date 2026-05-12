@@ -9,6 +9,20 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `catch`, `selection_result`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
+/// Derive the opaque per-account, per-round voting hotkey bytes.
+///
+/// The seed stays platform-owned; Rust only applies the same zcash_voting
+/// hotkey derivation used by delegation and returns bytes for secure storage.
+Future<Uint8List> deriveVotingHotkey({
+  required List<int> seedBytes,
+  required String roundId,
+  required String accountUuid,
+}) => RustLib.instance.api.crateApiVotingDeriveVotingHotkey(
+  seedBytes: seedBytes,
+  roundId: roundId,
+  accountUuid: accountUuid,
+);
+
 /// Initialize or load a voting round in the local voting database.
 ///
 /// `session_json` is stored with the round when provided and can contain
@@ -150,6 +164,21 @@ Future<void> storeDelegationTxHash({
   roundId: roundId,
   bundleIndex: bundleIndex,
   txHash: txHash,
+);
+
+/// Store the vote-authority-note leaf position emitted by the delegation TX.
+Future<void> storeVanPosition({
+  required String dbPath,
+  required String walletId,
+  required String roundId,
+  required int bundleIndex,
+  required int position,
+}) => RustLib.instance.api.crateApiVotingStoreVanPosition(
+  dbPath: dbPath,
+  walletId: walletId,
+  roundId: roundId,
+  bundleIndex: bundleIndex,
+  position: position,
 );
 
 /// Load the broadcast transaction hash for one delegation bundle, if present.
@@ -346,6 +375,25 @@ Future<String?> getVoteTxHash({
   roundId: roundId,
   bundleIndex: bundleIndex,
   proposalId: proposalId,
+);
+
+/// Store commitment bundle recovery JSON and confirmed vote-tree position for one vote.
+Future<void> storeCommitmentBundle({
+  required String dbPath,
+  required String walletId,
+  required String roundId,
+  required int bundleIndex,
+  required int proposalId,
+  required String commitmentBundleJson,
+  required BigInt vcTreePosition,
+}) => RustLib.instance.api.crateApiVotingStoreCommitmentBundle(
+  dbPath: dbPath,
+  walletId: walletId,
+  roundId: roundId,
+  bundleIndex: bundleIndex,
+  proposalId: proposalId,
+  commitmentBundleJson: commitmentBundleJson,
+  vcTreePosition: vcTreePosition,
 );
 
 /// Load commitment bundle recovery JSON and vote-tree position for one vote.
@@ -686,6 +734,15 @@ class ApiSignedDelegation {
   final String txidHex;
   final String status;
   final String? message;
+  final Uint8List proof;
+  final Uint8List rk;
+  final Uint8List spendAuthSig;
+  final Uint8List sighash;
+  final Uint8List nfSigned;
+  final Uint8List cmxNew;
+  final Uint8List govComm;
+  final List<Uint8List> govNullifiers;
+  final String voteRoundId;
   final BigInt eligibleWeightZatoshi;
   final BigInt delegatedWeightZatoshi;
   final int bundleCount;
@@ -696,6 +753,15 @@ class ApiSignedDelegation {
     required this.txidHex,
     required this.status,
     this.message,
+    required this.proof,
+    required this.rk,
+    required this.spendAuthSig,
+    required this.sighash,
+    required this.nfSigned,
+    required this.cmxNew,
+    required this.govComm,
+    required this.govNullifiers,
+    required this.voteRoundId,
     required this.eligibleWeightZatoshi,
     required this.delegatedWeightZatoshi,
     required this.bundleCount,
@@ -708,6 +774,15 @@ class ApiSignedDelegation {
       txidHex.hashCode ^
       status.hashCode ^
       message.hashCode ^
+      proof.hashCode ^
+      rk.hashCode ^
+      spendAuthSig.hashCode ^
+      sighash.hashCode ^
+      nfSigned.hashCode ^
+      cmxNew.hashCode ^
+      govComm.hashCode ^
+      govNullifiers.hashCode ^
+      voteRoundId.hashCode ^
       eligibleWeightZatoshi.hashCode ^
       delegatedWeightZatoshi.hashCode ^
       bundleCount.hashCode ^
@@ -722,6 +797,15 @@ class ApiSignedDelegation {
           txidHex == other.txidHex &&
           status == other.status &&
           message == other.message &&
+          proof == other.proof &&
+          rk == other.rk &&
+          spendAuthSig == other.spendAuthSig &&
+          sighash == other.sighash &&
+          nfSigned == other.nfSigned &&
+          cmxNew == other.cmxNew &&
+          govComm == other.govComm &&
+          govNullifiers == other.govNullifiers &&
+          voteRoundId == other.voteRoundId &&
           eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
           delegatedWeightZatoshi == other.delegatedWeightZatoshi &&
           bundleCount == other.bundleCount &&
@@ -742,7 +826,9 @@ class ApiSignedVoteCommitment {
   final int anchorHeight;
   final Uint8List sharesHash;
   final List<Uint8List> shareComms;
+  final Uint8List rVpkBytes;
   final Uint8List voteAuthSig;
+  final String commitmentBundleJson;
 
   const ApiSignedVoteCommitment({
     required this.proposalId,
@@ -757,7 +843,9 @@ class ApiSignedVoteCommitment {
     required this.anchorHeight,
     required this.sharesHash,
     required this.shareComms,
+    required this.rVpkBytes,
     required this.voteAuthSig,
+    required this.commitmentBundleJson,
   });
 
   @override
@@ -774,7 +862,9 @@ class ApiSignedVoteCommitment {
       anchorHeight.hashCode ^
       sharesHash.hashCode ^
       shareComms.hashCode ^
-      voteAuthSig.hashCode;
+      rVpkBytes.hashCode ^
+      voteAuthSig.hashCode ^
+      commitmentBundleJson.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -793,7 +883,9 @@ class ApiSignedVoteCommitment {
           anchorHeight == other.anchorHeight &&
           sharesHash == other.sharesHash &&
           shareComms == other.shareComms &&
-          voteAuthSig == other.voteAuthSig;
+          rVpkBytes == other.rVpkBytes &&
+          voteAuthSig == other.voteAuthSig &&
+          commitmentBundleJson == other.commitmentBundleJson;
 }
 
 /// Set of signed vote commitments produced for one bundle index.

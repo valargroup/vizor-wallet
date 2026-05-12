@@ -59,7 +59,9 @@ pub struct SignedVoteCommitment {
     pub anchor_height: u32,
     pub shares_hash: Vec<u8>,
     pub share_comms: Vec<Vec<u8>>,
+    pub r_vpk_bytes: Vec<u8>,
     pub vote_auth_sig: Vec<u8>,
+    pub commitment_bundle_json: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -114,6 +116,11 @@ where
             bundle_index,
         });
         let reporter = zcash_voting::NoopProgressReporter;
+        let proof_start = std::time::Instant::now();
+        eprintln!(
+            "[ZKP2] Starting proof generation: round_id={round_id}, wallet_id={wallet_id}, bundle_index={bundle_index}, proposal_id={}",
+            draft.proposal_id
+        );
         let bundle = voting_db
             .build_vote_commitment(
                 round_id,
@@ -130,6 +137,12 @@ where
                 &reporter,
             )
             .map_err(|e| format!("build_vote_commitment failed: {e}"))?;
+        eprintln!(
+            "[ZKP2] Proof generation: {:.2}s — proof {} bytes (proposal_id={}, bundle_index={bundle_index})",
+            proof_start.elapsed().as_secs_f64(),
+            bundle.proof.len(),
+            draft.proposal_id
+        );
 
         let wire_shares: Vec<zcash_voting::WireEncryptedShare> =
             bundle.enc_shares.iter().map(Into::into).collect();
@@ -194,7 +207,9 @@ where
             anchor_height: bundle.anchor_height,
             shares_hash: bundle.shares_hash,
             share_comms: bundle.share_comms,
+            r_vpk_bytes: bundle.r_vpk_bytes,
             vote_auth_sig: signature.vote_auth_sig,
+            commitment_bundle_json: commitment_json,
         });
     }
 
@@ -462,8 +477,9 @@ mod tests {
     #[test]
     fn get_votes_preserves_bundle_index_and_proposal_keys() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-        let db = zcash_voting::storage::VotingDb::open(db_path.to_str().unwrap()).unwrap();
+        let wallet_db_path = temp_dir.path().join("wallet.sqlite");
+        let voting_db_path = format!("{}.voting", wallet_db_path.to_str().unwrap());
+        let db = zcash_voting::storage::VotingDb::open(&voting_db_path).unwrap();
         db.set_wallet_id("wallet-1");
         db.init_round(&test_round_params(), None).unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
@@ -475,7 +491,7 @@ mod tests {
             .unwrap();
         drop(conn);
 
-        let votes = get_votes(db_path.to_str().unwrap(), "wallet-1", "round-1").unwrap();
+        let votes = get_votes(wallet_db_path.to_str().unwrap(), "wallet-1", "round-1").unwrap();
 
         assert_eq!(votes.len(), 2);
         assert!(votes

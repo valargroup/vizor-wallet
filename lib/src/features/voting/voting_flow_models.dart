@@ -1,0 +1,167 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../rust/api/voting.dart' as rust_voting;
+import '../../services/voting/voting_models.dart';
+import '../../providers/voting/voting_state.dart';
+
+class VotingProposalView {
+  const VotingProposalView({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.options,
+  });
+
+  final int id;
+  final String title;
+  final String description;
+  final List<VotingOptionView> options;
+}
+
+class VotingOptionView {
+  const VotingOptionView({required this.index, required this.label});
+
+  final int index;
+  final String label;
+}
+
+class VotingDraftState {
+  const VotingDraftState({this.choices = const {}});
+
+  final Map<int, int> choices;
+
+  bool get isEmpty => choices.isEmpty;
+
+  VotingDraftState setChoice(int proposalId, int choice) {
+    return VotingDraftState(choices: {...choices, proposalId: choice});
+  }
+
+  List<rust_voting.ApiDraftVote> toDraftVotes(
+    List<VotingProposalView> proposals, {
+    bool singleShare = false,
+  }) {
+    return [
+      for (final proposal in proposals)
+        if (choices[proposal.id] != null)
+          rust_voting.ApiDraftVote(
+            proposalId: proposal.id,
+            choice: choices[proposal.id]!,
+            numOptions: proposal.options.length,
+            vcTreePosition: BigInt.zero,
+            singleShare: singleShare,
+          ),
+    ];
+  }
+}
+
+class VotingDraftNotifier extends Notifier<VotingDraftState> {
+  VotingDraftNotifier(this.roundId);
+
+  final String roundId;
+
+  @override
+  VotingDraftState build() => const VotingDraftState();
+
+  void setChoice(int proposalId, int choice) {
+    state = state.setChoice(proposalId, choice);
+  }
+}
+
+final votingDraftProvider =
+    NotifierProvider.family<VotingDraftNotifier, VotingDraftState, String>(
+      VotingDraftNotifier.new,
+    );
+
+List<VotingProposalView> proposalsFromRound(VotingRoundDetails round) {
+  return proposalsFromJson(round.rawJson);
+}
+
+List<VotingProposalView> proposalsFromJson(Map<String, dynamic> json) {
+  final value =
+      json['proposals'] ?? json['questions'] ?? json['ballot'] ?? const [];
+  final values = value is List ? value : const [];
+  return [
+    for (var i = 0; i < values.length; i++)
+      _proposalFromJson(_objectFromValue(values[i]), fallbackId: i),
+  ];
+}
+
+VotingRoundSummary roundSummaryFromDetails(VotingRoundDetails details) {
+  return VotingRoundSummary(
+    roundId: details.roundId,
+    title: details.title,
+    status: details.status,
+    rawJson: details.rawJson,
+  );
+}
+
+VotingProposalView _proposalFromJson(
+  Map<String, dynamic> json, {
+  required int fallbackId,
+}) {
+  final id =
+      _intFromJson(json, const ['proposal_id', 'proposalId', 'id']) ??
+      fallbackId;
+  final optionsJson = json['options'] ?? json['choices'] ?? const [];
+  final options = optionsJson is List
+      ? [
+          for (var i = 0; i < optionsJson.length; i++)
+            _optionFromJson(optionsJson[i], fallbackIndex: i),
+        ]
+      : const <VotingOptionView>[];
+  return VotingProposalView(
+    id: id,
+    title:
+        _stringFromJson(json, const ['title', 'name', 'question']) ??
+        'Proposal ${fallbackId + 1}',
+    description:
+        _stringFromJson(json, const ['description', 'body', 'summary']) ?? '',
+    options: options.isEmpty
+        ? const [
+            VotingOptionView(index: 0, label: 'Yes'),
+            VotingOptionView(index: 1, label: 'No'),
+          ]
+        : options,
+  );
+}
+
+VotingOptionView _optionFromJson(Object? value, {required int fallbackIndex}) {
+  if (value is String) {
+    return VotingOptionView(index: fallbackIndex, label: value);
+  }
+  final json = _objectFromValue(value);
+  return VotingOptionView(
+    index: _intFromJson(json, const ['index', 'choice', 'id']) ?? fallbackIndex,
+    label:
+        _stringFromJson(json, const ['label', 'title', 'name']) ??
+        'Option ${fallbackIndex + 1}',
+  );
+}
+
+Map<String, dynamic> _objectFromValue(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+  return const {};
+}
+
+String? _stringFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value == null) continue;
+    return value.toString();
+  }
+  return null;
+}
+
+int? _intFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value == null) continue;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+  return null;
+}

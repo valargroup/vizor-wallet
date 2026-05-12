@@ -46,24 +46,47 @@ class VotingApiClient {
 
   /// Fetches one round and unwraps the ZODL-style `{ "round": ... }` envelope.
   Future<VotingRoundStatus> getRoundStatus(String roundId) async {
-    final decoded = await _getJson(_endpoint(['round', roundId]));
+    final decoded = await _getJson(
+      _endpoint(['round', normalizeVotingRoundId(roundId)]),
+    );
     return VotingRoundStatus.fromJson(_unwrapNestedObject(decoded, 'round'));
   }
 
   Future<VotingRoundTally> getRoundTally(String roundId) async {
-    final decoded = await _getJson(_endpoint(['tally-results', roundId]));
+    final decoded = await _getJson(
+      _endpoint(['tally-results', normalizeVotingRoundId(roundId)]),
+    );
     return VotingRoundTally.fromJson(_objectFromValue(decoded));
   }
 
-  Future<VotingRoundStatus> submitDelegationPczt({
-    required String roundId,
-    required String txHex,
+  Future<VotingTxResult> submitDelegation({
+    required Map<String, dynamic> submission,
   }) async {
-    final decoded = await _postJson(_endpoint(['delegate-vote']), {
-      'round_id': roundId,
-      'tx_hex': txHex,
-    });
-    return VotingRoundStatus.fromJson(_objectFromValue(decoded));
+    final decoded = await _postJson(
+      _endpoint(['delegate-vote']),
+      submission,
+      allowStatusCodes: const {422},
+    );
+    return VotingTxResult.fromJson(_objectFromValue(decoded));
+  }
+
+  Future<VotingTxResult> submitVoteCommitment({
+    required Map<String, dynamic> commitment,
+  }) async {
+    final decoded = await _postJson(
+      _endpoint(['cast-vote']),
+      commitment,
+      allowStatusCodes: const {422},
+    );
+    return VotingTxResult.fromJson(_objectFromValue(decoded));
+  }
+
+  Future<VotingTxConfirmation?> getTxConfirmation(String txHash) async {
+    final uri = _endpoint(['tx', txHash]);
+    final response = await _httpClient.get(uri, timeout: _timeout);
+    if (response.statusCode == 404) return null;
+    _throwIfNotSuccess(uri, response, allowStatusCodes: const {422});
+    return VotingTxConfirmation.fromJson(_objectFromValue(jsonDecode(response.bodyText)));
   }
 
   /// Posts one encrypted share directly to a helper server.
@@ -91,7 +114,11 @@ class VotingApiClient {
     required String shareId,
   }) async {
     final decoded = await _getJson(
-      _endpoint(['share-status', roundId, shareId], baseUrl: serverUrl),
+      _endpoint([
+        'share-status',
+        normalizeVotingRoundId(roundId),
+        shareId,
+      ], baseUrl: serverUrl),
     );
     return VotingShareStatus.fromJson(_objectFromValue(decoded));
   }
@@ -136,14 +163,23 @@ class VotingApiClient {
     return jsonDecode(response.bodyText);
   }
 
-  Future<Object?> _postJson(Uri uri, Map<String, dynamic> body) async {
+  Future<Object?> _postJson(
+    Uri uri,
+    Map<String, dynamic> body, {
+    Set<int> allowStatusCodes = const {},
+  }) async {
     final response = await _httpClient.postJson(uri, body, timeout: _timeout);
-    _throwIfNotSuccess(uri, response);
+    _throwIfNotSuccess(uri, response, allowStatusCodes: allowStatusCodes);
     return jsonDecode(response.bodyText);
   }
 
-  static void _throwIfNotSuccess(Uri uri, VotingHttpResponse response) {
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+  static void _throwIfNotSuccess(
+    Uri uri,
+    VotingHttpResponse response, {
+    Set<int> allowStatusCodes = const {},
+  }) {
+    if ((response.statusCode < 200 || response.statusCode >= 300) &&
+        !allowStatusCodes.contains(response.statusCode)) {
       throw VotingHttpException(
         uri: uri,
         statusCode: response.statusCode,

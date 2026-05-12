@@ -7,14 +7,10 @@ use zcash_client_backend::{
     data_api::{Account, WalletRead},
     proto::service::TreeState,
 };
-use zcash_keys::keys::UnifiedSpendingKey;
-use zcash_protocol::consensus::{BlockHeight, NetworkConstants, Parameters};
+use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkConstants, Parameters};
 
 use crate::wallet::{
-    db::with_wallet_db_write_lock,
-    keys::parse_account_uuid,
-    network::WalletNetwork,
-    sync::{open_wallet_db, open_wallet_db_for_read},
+    keys::parse_account_uuid, network::WalletNetwork, sync::open_wallet_db_for_read,
 };
 
 use super::{
@@ -41,6 +37,15 @@ pub struct SignedDelegation {
     pub txid_hex: String,
     pub status: String,
     pub message: Option<String>,
+    pub proof: Vec<u8>,
+    pub rk: Vec<u8>,
+    pub spend_auth_sig: Vec<u8>,
+    pub sighash: Vec<u8>,
+    pub nf_signed: Vec<u8>,
+    pub cmx_new: Vec<u8>,
+    pub gov_comm: Vec<u8>,
+    pub gov_nullifiers: Vec<Vec<u8>>,
+    pub vote_round_id: String,
     pub eligible_weight_zatoshi: u64,
     pub delegated_weight_zatoshi: u64,
     pub bundle_count: u32,
@@ -60,41 +65,13 @@ struct RoundContext {
     round_name: String,
 }
 
-#[derive(Clone, Debug)]
-struct DelegationBroadcastResult {
-    txid_hex: String,
-    status: String,
-    message: Option<String>,
-}
-
-impl DelegationBroadcastResult {
-    const BROADCASTED: &'static str = "broadcasted";
-    const BROADCAST_UNKNOWN: &'static str = "broadcast_unknown";
-    const BROADCASTED_STORAGE_FAILED: &'static str = "broadcasted_storage_failed";
-
-    fn broadcasted(txid_hex: String) -> Self {
-        Self {
-            txid_hex,
-            status: Self::BROADCASTED.to_string(),
-            message: None,
-        }
+fn short_hex(bytes: &[u8]) -> String {
+    let prefix_len = bytes.len().min(8);
+    let mut value = hex::encode(&bytes[..prefix_len]);
+    if bytes.len() > prefix_len {
+        value.push_str("...");
     }
-
-    fn broadcast_unknown(txid_hex: String, message: String) -> Self {
-        Self {
-            txid_hex,
-            status: Self::BROADCAST_UNKNOWN.to_string(),
-            message: Some(message),
-        }
-    }
-
-    fn broadcasted_storage_failed(txid_hex: String, message: String) -> Self {
-        Self {
-            txid_hex,
-            status: Self::BROADCASTED_STORAGE_FAILED.to_string(),
-            message: Some(message),
-        }
-    }
+    value
 }
 
 /// Initialize the local voting database for delegation operations.
@@ -153,7 +130,7 @@ where
     let voting_db = open_voting_db(db_path, account_uuid)?;
     let round_context =
         ensure_round_initialized(&voting_db, &round_params, round_name, session_json)?;
-    let round_id = round_params.vote_round_id.as_str();
+    let round_id = round_params.vote_round_id.clone();
 
     on_progress(ProofEvent::SelectingNotes);
     let selected = select_notes_with_lwd(
@@ -167,19 +144,45 @@ where
     let note_infos = selected.voting_note_infos();
     let selected_weight_zatoshi = voting_power(&selected);
 
-    let bundle_setup = ensure_bundles(&voting_db, round_id, &note_infos)?;
+    let bundle_setup = ensure_bundles(&voting_db, &round_id, &note_infos)?;
     if bundle_setup.bundle_count == 0 {
         return Err("No eligible voting bundles were created for delegation".to_string());
     }
     validate_bundle_index(bundle_setup.bundle_count, bundle_index)?;
     let bundle_note_infos = bundle_notes(&note_infos, bundle_index)?;
     let delegated_weight_zatoshi = bundle_weight_zatoshi(&bundle_note_infos)?;
+    let note_debug = bundle_note_infos
+        .iter()
+        .enumerate()
+        .map(|(idx, note)| {
+            format!(
+                "#{idx}:pos={} value={} cmx={} nf={}",
+                note.position,
+                note.value,
+                short_hex(&note.commitment),
+                short_hex(&note.nullifier)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    log::info!(
+        "voting delegation: preparing bundle \
+         (round_id={}, account_uuid={}, bundle_index={}, bundle_count={}, \
+         note_count={}, delegated_weight_zatoshi={}, notes=[{}])",
+        round_id,
+        account_uuid,
+        bundle_index,
+        bundle_setup.bundle_count,
+        bundle_note_infos.len(),
+        delegated_weight_zatoshi,
+        note_debug
+    );
 
     store_and_generate_witnesses(
         db_path,
         network,
         &voting_db,
-        round_id,
+        &round_id,
         bundle_index,
         &selected,
         &bundle_note_infos,
@@ -188,15 +191,24 @@ where
     on_progress(ProofEvent::BuildingPczt);
     let account = load_account_for_delegation(db_path, network, account_uuid)?;
     let hotkey_raw_address =
-        derive_hotkey_raw_orchard_address(&seed, round_id, account_uuid, network)?;
+        derive_hotkey_raw_orchard_address(&seed, &round_id, account_uuid, network)?;
+    let branch_height = current_chain_height(lightwalletd_url).await?;
+    let branch_id = consensus_branch_id(network, branch_height)?;
+    log::info!(
+        "voting delegation: selected consensus branch \
+         (network={:?}, branch_height={}, branch_id=0x{:08x})",
+        network,
+        branch_height,
+        branch_id
+    );
     let governance_pczt = voting_db
         .build_governance_pczt(
-            round_id,
+            &round_id,
             bundle_index,
             &bundle_note_infos,
             &account.orchard_fvk_bytes,
             &hotkey_raw_address,
-            consensus_branch_id(network),
+            branch_id,
             network.network_type().coin_type(),
             &account.seed_fingerprint,
             account.account_index,
@@ -204,58 +216,104 @@ where
             0,
         )
         .map_err(|e| format!("build_governance_pczt failed: {e}"))?;
-
-    let pir_client = zcash_voting::PirClientBlocking::with_transport(
-        pir_server_url,
-        Arc::new(zcash_voting::HyperTransport::new()),
-    )
-    .map_err(|e| format!("connect to PIR server failed: {e}"))?;
+    log::info!(
+        "voting delegation: built governance PCZT \
+         (round_id={}, account_uuid={}, bundle_index={}, action_index={}, \
+         pczt_bytes={}, sighash={}, nf_signed={}, cmx_new={}, rk={}, alpha={}, \
+         rseed_signed={}, rseed_output={})",
+        round_id,
+        account_uuid,
+        bundle_index,
+        governance_pczt.action_index,
+        governance_pczt.pczt_bytes.len(),
+        short_hex(&governance_pczt.pczt_sighash),
+        short_hex(&governance_pczt.nf_signed),
+        short_hex(&governance_pczt.cmx_new),
+        short_hex(&governance_pczt.rk),
+        short_hex(&governance_pczt.alpha),
+        short_hex(&governance_pczt.rseed_signed),
+        short_hex(&governance_pczt.rseed_output)
+    );
 
     on_progress(ProofEvent::BuildingProof);
-    let reporter = zcash_voting::NoopProgressReporter;
-    voting_db
-        .build_and_prove_delegation(
-            round_id,
-            bundle_index,
-            &bundle_note_infos,
-            &hotkey_raw_address,
-            &pir_client,
-            network.voting_id().into(),
-            &reporter,
+    let proof_db_path = db_path.to_string();
+    let proof_pir_server_url = pir_server_url.to_string();
+    let proof_account_uuid = account_uuid.to_string();
+    let proof_round_id = round_id.clone();
+    let proof_bundle_note_infos = bundle_note_infos.clone();
+    let proof_hotkey_raw_address = hotkey_raw_address.clone();
+    let proof_network_id = network.voting_id().into();
+    log::info!(
+        "voting delegation: starting proof task \
+         (round_id={}, account_uuid={}, bundle_index={}, network_id={}, \
+         hotkey_raw_address={}, expected_nf_signed={}, expected_cmx_new={})",
+        round_id,
+        account_uuid,
+        bundle_index,
+        proof_network_id,
+        short_hex(&hotkey_raw_address),
+        short_hex(&governance_pczt.nf_signed),
+        short_hex(&governance_pczt.cmx_new)
+    );
+    tokio::task::spawn_blocking(move || {
+        let proof_voting_db = open_voting_db(&proof_db_path, &proof_account_uuid)?;
+        let pir_client = zcash_voting::PirClientBlocking::with_transport(
+            &proof_pir_server_url,
+            Arc::new(zcash_voting::HyperTransport::new()),
         )
-        .map_err(|e| format!("build_and_prove_delegation failed: {e}"))?;
-
-    let pczt_with_proofs = add_delegation_proof_to_pczt(&governance_pczt.pczt_bytes)?;
+        .map_err(|e| format!("connect to PIR server failed: {e}"))?;
+        let reporter = zcash_voting::NoopProgressReporter;
+        proof_voting_db
+            .build_and_prove_delegation(
+                &proof_round_id,
+                bundle_index,
+                &proof_bundle_note_infos,
+                &proof_hotkey_raw_address,
+                &pir_client,
+                proof_network_id,
+                &reporter,
+            )
+            .map(|_| ())
+            .map_err(|e| format!("build_and_prove_delegation failed: {e}"))
+    })
+    .await
+    .map_err(|e| format!("delegation proof task failed: {e}"))??;
+    log::info!(
+        "voting delegation: proof task completed \
+         (round_id={}, account_uuid={}, bundle_index={})",
+        round_id,
+        account_uuid,
+        bundle_index
+    );
 
     on_progress(ProofEvent::SigningPczt);
-    let signed_pczt = sign_delegation_pczt(
-        &pczt_with_proofs,
-        &seed,
-        network,
-        account.account_id,
-        governance_pczt.action_index,
-    )?;
-
-    on_progress(ProofEvent::Broadcasting);
-    let mut broadcast =
-        extract_broadcast_store_delegation_pczt(db_path, lightwalletd_url, network, &signed_pczt)
-            .await?;
-
-    if broadcast.status == DelegationBroadcastResult::BROADCASTED
-        || broadcast.status == DelegationBroadcastResult::BROADCASTED_STORAGE_FAILED
-        || broadcast.status == DelegationBroadcastResult::BROADCAST_UNKNOWN
-    {
-        record_delegation_tx_hash(&voting_db, round_id, bundle_index, &mut broadcast);
-    }
+    let submission = voting_db
+        .get_delegation_submission(
+            &round_id,
+            bundle_index,
+            seed.expose_secret(),
+            network.voting_id().into(),
+            account.account_index,
+        )
+        .map_err(|e| format!("get_delegation_submission failed: {e}"))?;
 
     on_progress(ProofEvent::Done {
-        txid_hex: broadcast.txid_hex.clone(),
+        txid_hex: String::new(),
     });
     Ok(SignedDelegation {
-        pczt_bytes: signed_pczt,
-        txid_hex: broadcast.txid_hex,
-        status: broadcast.status,
-        message: broadcast.message,
+        pczt_bytes: governance_pczt.pczt_bytes,
+        txid_hex: String::new(),
+        status: "ready_for_submission".to_string(),
+        message: None,
+        proof: submission.proof,
+        rk: submission.rk,
+        spend_auth_sig: submission.spend_auth_sig,
+        sighash: submission.sighash,
+        nf_signed: submission.nf_signed,
+        cmx_new: submission.cmx_new,
+        gov_comm: submission.gov_comm,
+        gov_nullifiers: submission.gov_nullifiers,
+        vote_round_id: submission.vote_round_id,
         eligible_weight_zatoshi: bundle_setup
             .eligible_weight_zatoshi
             .min(selected_weight_zatoshi),
@@ -405,48 +463,6 @@ pub fn get_delegation_tx_hash(
         .map_err(|e| format!("get_delegation_tx_hash failed: {e}"))
 }
 
-fn record_delegation_tx_hash(
-    voting_db: &zcash_voting::storage::VotingDb,
-    round_id: &str,
-    bundle_index: u32,
-    broadcast: &mut DelegationBroadcastResult,
-) {
-    let storage_result = voting_db
-        .store_delegation_tx_hash(round_id, bundle_index, &broadcast.txid_hex)
-        .map_err(|e| e.to_string())
-        .and_then(|_| {
-            voting_db
-                .get_delegation_tx_hash(round_id, bundle_index)
-                .map_err(|e| e.to_string())
-        })
-        .and_then(|stored| match stored {
-            Some(stored) if stored == broadcast.txid_hex => Ok(()),
-            Some(stored) => Err(format!(
-                "stored tx hash {stored} did not match broadcast txid {}",
-                broadcast.txid_hex
-            )),
-            None => Err(format!(
-                "no delegation bundle row found for bundle_index {bundle_index}"
-            )),
-        });
-
-    if let Err(storage_err) = storage_result {
-        let message = format!(
-            "Delegation broadcast status={} for txid={} but VotingDb hash storage failed: {storage_err}. \
-             Do not retry until sync or recovery confirms the transaction state.",
-            broadcast.status, broadcast.txid_hex
-        );
-        log::error!("{message}");
-        if broadcast.status == DelegationBroadcastResult::BROADCASTED {
-            broadcast.status = DelegationBroadcastResult::BROADCASTED_STORAGE_FAILED.to_string();
-        }
-        broadcast.message = Some(match broadcast.message.take() {
-            Some(existing) => format!("{existing} {message}"),
-            None => message,
-        });
-    }
-}
-
 fn store_and_generate_witnesses(
     db_path: &str,
     network: WalletNetwork,
@@ -558,7 +574,6 @@ fn validate_cached_tree_state_for_round(
 
 #[derive(Clone, Debug)]
 struct DelegationAccount {
-    account_id: zip32::AccountId,
     account_index: u32,
     orchard_fvk_bytes: [u8; 96],
     seed_fingerprint: [u8; 32],
@@ -586,196 +601,27 @@ fn load_account_for_delegation(
         .orchard()
         .ok_or_else(|| "Voting account has no Orchard viewing key".to_string())?;
     Ok(DelegationAccount {
-        account_id: derivation.account_index(),
         account_index: u32::from(derivation.account_index()),
         orchard_fvk_bytes: orchard_fvk.to_bytes(),
         seed_fingerprint: derivation.seed_fingerprint().to_bytes(),
     })
 }
 
-fn add_delegation_proof_to_pczt(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
-    use pczt::roles::prover::Prover;
-
-    let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT: {e:?}"))?;
-    let mut prover = Prover::new(pczt);
-    if prover.requires_orchard_proof() {
-        prover = prover
-            .create_orchard_proof(&orchard::circuit::ProvingKey::build())
-            .map_err(|e| format!("Orchard proof: {e:?}"))?;
-    }
-    if prover.requires_sapling_proofs() {
-        return Err("Delegation PCZT unexpectedly requires Sapling proofs".to_string());
-    }
-    Ok(prover.finish().serialize())
-}
-
-fn sign_delegation_pczt(
-    pczt_bytes: &[u8],
-    seed: &SecretVec<u8>,
-    network: WalletNetwork,
-    account_id: zip32::AccountId,
-    action_index: usize,
-) -> Result<Vec<u8>, String> {
-    use pczt::roles::signer::Signer;
-
-    let usk = UnifiedSpendingKey::from_seed(&network, seed.expose_secret(), account_id)
-        .map_err(|e| format!("USK derivation failed: {e:?}"))?;
-    let ask = orchard::keys::SpendAuthorizingKey::from(usk.orchard());
-    let mut signer = Signer::new(
-        pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT for signing: {e:?}"))?,
-    )
-    .map_err(|e| format!("Create PCZT signer: {e:?}"))?;
-    signer
-        .sign_orchard(action_index, &ask)
-        .map_err(|e| format!("Sign delegation PCZT Orchard action: {e:?}"))?;
-    Ok(signer.finish().serialize())
-}
-
-async fn extract_broadcast_store_delegation_pczt(
-    db_path: &str,
-    lightwalletd_url: &str,
-    network: WalletNetwork,
-    signed_pczt_bytes: &[u8],
-) -> Result<DelegationBroadcastResult, String> {
-    let (tx, tx_bytes, txid) = extract_transaction_from_signed_delegation_pczt(signed_pczt_bytes)?;
-    let store_locally =
-        || store_delegation_pczt_locally(db_path, network, signed_pczt_bytes, &tx, &txid);
-
+async fn current_chain_height(lightwalletd_url: &str) -> Result<u64, String> {
     let mut client = crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url)
         .await
         .map_err(|e| e.to_string())?;
-    let resp = match crate::wallet::sync_engine::send_transaction_with_status(
-        &mut client,
-        &tx_bytes,
-    )
-    .await
-    {
-        Ok(resp) => resp,
-        Err(status) if status.code() == tonic::Code::DeadlineExceeded => {
-            let mut message = format!(
-                "Delegation broadcast response timed out for txid={txid}. The transaction may \
-                 already be on the network. Do not retry until sync or an explorer confirms it."
-            );
-            if let Err(storage_err) = store_locally() {
-                message.push_str(&format!(" Local tracking also failed: {storage_err}."));
-            }
-            return Ok(DelegationBroadcastResult::broadcast_unknown(
-                txid.to_string(),
-                message,
-            ));
-        }
-        Err(status) => return Err(format!("Broadcast delegation transaction: {status}")),
-    };
-
-    finish_delegation_broadcast(
-        &txid.to_string(),
-        resp.error_code,
-        &resp.error_message,
-        store_locally,
-    )
+    let tip = crate::wallet::sync_engine::get_latest_block(&mut client)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(tip.height)
 }
 
-fn finish_delegation_broadcast(
-    txid: &str,
-    error_code: i32,
-    error_message: &str,
-    store_locally: impl FnOnce() -> Result<(), String>,
-) -> Result<DelegationBroadcastResult, String> {
-    if error_code != 0 {
-        return Err(format!(
-            "Delegation broadcast rejected: {error_message} (code {error_code})"
-        ));
-    }
-
-    if let Err(storage_err) = store_locally() {
-        log::error!(
-            "voting delegation: broadcast succeeded but local storage failed \
-             (txid={txid}): {storage_err}"
-        );
-        return Ok(DelegationBroadcastResult::broadcasted_storage_failed(
-            txid.to_string(),
-            format!(
-                "Delegation broadcast succeeded (txid={txid}) but local storage failed. \
-                 {storage_err}. The transaction is on the network; do not retry until sync \
-                 reconciles wallet state."
-            ),
-        ));
-    }
-
-    Ok(DelegationBroadcastResult::broadcasted(txid.to_string()))
-}
-
-fn extract_transaction_from_signed_delegation_pczt(
-    signed_pczt_bytes: &[u8],
-) -> Result<
-    (
-        zcash_primitives::transaction::Transaction,
-        Vec<u8>,
-        zcash_primitives::transaction::TxId,
-    ),
-    String,
-> {
-    use pczt::roles::spend_finalizer::SpendFinalizer;
-    use pczt::roles::tx_extractor::TransactionExtractor;
-
-    let orchard_vk = orchard::circuit::VerifyingKey::build();
-    let finalized = SpendFinalizer::new(
-        pczt::Pczt::parse(signed_pczt_bytes)
-            .map_err(|e| format!("Parse signed delegation PCZT: {e:?}"))?,
-    )
-    .finalize_spends()
-    .map_err(|e| format!("Finalize delegation PCZT spends: {e:?}"))?;
-    let tx = TransactionExtractor::new(finalized)
-        .with_orchard(&orchard_vk)
-        .extract()
-        .map_err(|e| format!("Extract delegation transaction from PCZT: {e:?}"))?;
-    let txid = tx.txid();
-    let mut tx_bytes = Vec::new();
-    tx.write(&mut tx_bytes)
-        .map_err(|e| format!("Serialize delegation transaction: {e}"))?;
-    Ok((tx, tx_bytes, txid))
-}
-
-fn store_delegation_pczt_locally(
-    db_path: &str,
-    network: WalletNetwork,
-    signed_pczt_bytes: &[u8],
-    tx: &zcash_primitives::transaction::Transaction,
-    txid: &zcash_primitives::transaction::TxId,
-) -> Result<(), String> {
-    use zcash_client_backend::data_api::wallet::{
-        decrypt_and_store_transaction, extract_and_store_transaction_from_pczt,
-    };
-
-    let orchard_vk = orchard::circuit::VerifyingKey::build();
-    with_wallet_db_write_lock("voting.delegation.store_pczt", || {
-        let mut db = open_wallet_db(db_path, network)?;
-        match extract_and_store_transaction_from_pczt::<_, zcash_client_sqlite::ReceivedNoteId>(
-            &mut db,
-            pczt::Pczt::parse(signed_pczt_bytes)
-                .map_err(|e| format!("Parse signed delegation PCZT for storage: {e:?}"))?,
-            None,
-            Some(&orchard_vk),
-        ) {
-            Ok(_) => Ok(()),
-            Err(primary_err) => {
-                log::warn!(
-                    "voting delegation: PCZT-aware storage failed (txid={txid}): \
-                     {primary_err}. Falling back to decrypt_and_store_transaction."
-                );
-                decrypt_and_store_transaction(&network, &mut db, tx, None).map_err(|fallback_err| {
-                    format!("Primary: {primary_err}. Fallback: {fallback_err}")
-                })
-            }
-        }
-    })
-}
-
-fn consensus_branch_id(network: WalletNetwork) -> u32 {
-    network
-        .activation_height(zcash_protocol::consensus::NetworkUpgrade::Nu6)
-        .map(|_| 0xC8E7_1055)
-        .unwrap_or(0xC8E7_1055)
+fn consensus_branch_id(network: WalletNetwork, height: u64) -> Result<u32, String> {
+    let height = u32::try_from(height)
+        .map(BlockHeight::from_u32)
+        .map_err(|_| format!("chain height {height} does not fit in u32"))?;
+    Ok(u32::from(BranchId::for_height(&network, height)))
 }
 
 #[cfg(test)]
@@ -926,127 +772,6 @@ mod tests {
     }
 
     #[test]
-    fn record_delegation_tx_hash_persists_successful_broadcast_hash() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-        ensure_voting_round(&voting_db, &params, None).unwrap();
-        ensure_bundles(&voting_db, ROUND_ID, &[test_note_info(42)]).unwrap();
-        let mut broadcast = DelegationBroadcastResult::broadcasted("txid-1".to_string());
-
-        record_delegation_tx_hash(&voting_db, ROUND_ID, 0, &mut broadcast);
-
-        assert_eq!(broadcast.status, DelegationBroadcastResult::BROADCASTED);
-        assert!(broadcast.message.is_none());
-        assert_eq!(
-            voting_db
-                .get_delegation_tx_hash(ROUND_ID, 0)
-                .unwrap()
-                .as_deref(),
-            Some("txid-1")
-        );
-    }
-
-    #[test]
-    fn record_delegation_tx_hash_uses_requested_bundle_index() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-        ensure_voting_round(&voting_db, &params, None).unwrap();
-        let notes: Vec<_> = (0..6).map(test_note_info).collect();
-        ensure_bundles(&voting_db, ROUND_ID, &notes).unwrap();
-        let mut broadcast = DelegationBroadcastResult::broadcasted("txid-2".to_string());
-
-        record_delegation_tx_hash(&voting_db, ROUND_ID, 1, &mut broadcast);
-
-        assert_eq!(broadcast.status, DelegationBroadcastResult::BROADCASTED);
-        assert_eq!(
-            voting_db
-                .get_delegation_tx_hash(ROUND_ID, 1)
-                .unwrap()
-                .as_deref(),
-            Some("txid-2")
-        );
-        assert_eq!(voting_db.get_delegation_tx_hash(ROUND_ID, 0).unwrap(), None);
-    }
-
-    #[test]
-    fn record_delegation_tx_hash_preserves_non_retry_semantics_on_storage_failure() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-        ensure_voting_round(&voting_db, &params, None).unwrap();
-        let mut broadcast = DelegationBroadcastResult::broadcasted("txid-1".to_string());
-
-        record_delegation_tx_hash(&voting_db, ROUND_ID, 0, &mut broadcast);
-
-        assert_eq!(
-            broadcast.status,
-            DelegationBroadcastResult::BROADCASTED_STORAGE_FAILED
-        );
-        assert!(broadcast
-            .message
-            .as_deref()
-            .unwrap()
-            .contains("Do not retry"));
-    }
-
-    #[test]
-    fn delegation_broadcast_result_constructors_set_status_and_message() {
-        let accepted = DelegationBroadcastResult::broadcasted("txid-a".to_string());
-        assert_eq!(accepted.txid_hex, "txid-a");
-        assert_eq!(accepted.status, DelegationBroadcastResult::BROADCASTED);
-        assert!(accepted.message.is_none());
-
-        let unknown =
-            DelegationBroadcastResult::broadcast_unknown("txid-b".to_string(), "timeout".into());
-        assert_eq!(unknown.status, DelegationBroadcastResult::BROADCAST_UNKNOWN);
-        assert_eq!(unknown.message.as_deref(), Some("timeout"));
-
-        let storage_failed = DelegationBroadcastResult::broadcasted_storage_failed(
-            "txid-c".to_string(),
-            "storage failed".into(),
-        );
-        assert_eq!(
-            storage_failed.status,
-            DelegationBroadcastResult::BROADCASTED_STORAGE_FAILED
-        );
-        assert_eq!(storage_failed.message.as_deref(), Some("storage failed"));
-    }
-
-    #[test]
-    fn finish_delegation_broadcast_rejects_before_local_storage() {
-        let store_called = Arc::new(Mutex::new(false));
-        let store_called_for_callback = store_called.clone();
-
-        let err = finish_delegation_broadcast("txid-rejected", 18, "bad-tx", move || {
-            *store_called_for_callback.lock().unwrap() = true;
-            Ok(())
-        })
-        .unwrap_err();
-
-        assert!(err.contains("Delegation broadcast rejected"));
-        assert!(!*store_called.lock().unwrap());
-    }
-
-    #[test]
-    fn finish_delegation_broadcast_reports_storage_failure_after_success() {
-        let result = finish_delegation_broadcast("txid-stored-late", 0, "", || {
-            Err("sqlite busy".to_string())
-        })
-        .unwrap();
-
-        assert_eq!(
-            result.status,
-            DelegationBroadcastResult::BROADCASTED_STORAGE_FAILED
-        );
-        assert!(result.message.unwrap().contains("do not retry"));
-    }
-
-    #[test]
     fn store_and_generate_witnesses_rejects_invalid_cached_tree_state() {
         let temp_dir = tempfile::tempdir().unwrap();
         let wallet_db_path = temp_dir.path().join("wallet.sqlite");
@@ -1082,46 +807,6 @@ mod tests {
     }
 
     #[test]
-    fn pczt_helpers_reject_invalid_bytes_without_side_effects() {
-        let seed = SecretVec::new(vec![7; 32]);
-
-        assert!(add_delegation_proof_to_pczt(b"not a pczt")
-            .unwrap_err()
-            .contains("Parse PCZT"));
-        assert!(sign_delegation_pczt(
-            b"not a pczt",
-            &seed,
-            WalletNetwork::Regtest,
-            zip32::AccountId::ZERO,
-            0,
-        )
-        .unwrap_err()
-        .contains("Parse PCZT for signing"));
-        assert!(
-            extract_transaction_from_signed_delegation_pczt(b"not a pczt")
-                .unwrap_err()
-                .contains("Parse signed delegation PCZT")
-        );
-    }
-
-    #[test]
-    fn broadcast_helper_rejects_invalid_pczt_before_network_or_storage() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("wallet.sqlite");
-        let err = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(extract_broadcast_store_delegation_pczt(
-                db_path.to_str().unwrap(),
-                "http://127.0.0.1:1",
-                WalletNetwork::Regtest,
-                b"not a pczt",
-            ))
-            .unwrap_err();
-
-        assert!(err.contains("Parse signed delegation PCZT"));
-    }
-
-    #[test]
     fn load_account_for_delegation_rejects_uninitialized_wallet_db() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("wallet.sqlite");
@@ -1140,10 +825,23 @@ mod tests {
     }
 
     #[test]
-    fn consensus_branch_id_is_nu6_for_supported_networks() {
-        assert_eq!(consensus_branch_id(WalletNetwork::Main), 0xC8E7_1055);
-        assert_eq!(consensus_branch_id(WalletNetwork::Test), 0xC8E7_1055);
-        assert_eq!(consensus_branch_id(WalletNetwork::Regtest), 0xC8E7_1055);
+    fn consensus_branch_id_follows_network_height() {
+        assert_eq!(
+            consensus_branch_id(WalletNetwork::Main, 3_146_399).unwrap(),
+            0xC8E7_1055
+        );
+        assert_eq!(
+            consensus_branch_id(WalletNetwork::Main, 3_146_400).unwrap(),
+            0x4DEC_4DF0
+        );
+        assert_eq!(
+            consensus_branch_id(WalletNetwork::Test, 3_536_500).unwrap(),
+            0x4DEC_4DF0
+        );
+        assert_eq!(
+            consensus_branch_id(WalletNetwork::Regtest, 1).unwrap(),
+            0x4DEC_4DF0
+        );
     }
 
     #[test]

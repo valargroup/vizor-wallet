@@ -379,6 +379,11 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
           .read(swapActivityStoreProvider)
           .deleteForAccount(accountUuid: uuid);
     } catch (_) {}
+    try {
+      await _storage.deleteVotingHotkeysForAccount(uuid);
+    } catch (e, st) {
+      log('removeAccount: failed to delete voting hotkeys for $uuid: $e\n$st');
+    }
 
     final updated = [
       for (var i = 0; i < remaining.length; i++)
@@ -621,11 +626,13 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   }
 
   Future<void> _deleteExistingDb(String dbPath) async {
-    final file = File(dbPath);
-    if (file.existsSync()) file.deleteSync();
-    for (final suffix in ['-journal', '-wal', '-shm']) {
-      final f = File('$dbPath$suffix');
-      if (f.existsSync()) f.deleteSync();
+    for (final path in [dbPath, votingDbPathForWalletDbPath(dbPath)]) {
+      final file = File(path);
+      if (file.existsSync()) file.deleteSync();
+      for (final suffix in ['-journal', '-wal', '-shm']) {
+        final f = File('$path$suffix');
+        if (f.existsSync()) f.deleteSync();
+      }
     }
   }
 }
