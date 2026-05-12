@@ -1022,11 +1022,21 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       } catch (e, st) {
         debugPrint('[zcash] Voting: session action failed: $e\n$st');
         await _cleanupCurrentSessionState(reason: 'action-failed');
-        _setError('Voting session action failed.', cause: e);
+        _setError(_actionErrorMessage(e), cause: e);
       }
     });
     _operation = next.catchError((_) {});
     return next;
+  }
+
+  static String _actionErrorMessage(Object error) {
+    final text = error.toString().trim();
+    for (final prefix in const ['Exception: ', 'StateError: ', 'Bad state: ']) {
+      if (text.startsWith(prefix)) {
+        return text.substring(prefix.length);
+      }
+    }
+    return text.isEmpty ? 'Voting session action failed.' : text;
   }
 
   Future<void> _prepareDelegationUnlocked() async {

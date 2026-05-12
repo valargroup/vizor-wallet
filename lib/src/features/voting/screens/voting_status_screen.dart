@@ -29,6 +29,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   bool _started = false;
   bool _completedInThisRun = false;
   bool _softwareAccountRequired = false;
+  String? _runErrorMessage;
 
   @override
   void initState() {
@@ -41,46 +42,83 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
 
   Future<void> _run() async {
     if (_started) return;
-    _started = true;
-    final roundId = widget.roundId;
-    final sessionNotifier = ref.read(votingSessionProvider(roundId).notifier);
-    final session = await ref.read(votingSessionProvider(roundId).future);
-    final round = session.round;
-    if (round == null) return;
-    final proposals = proposalsFromRound(round);
-    final draftVotes = ref
-        .read(votingDraftProvider(roundId))
-        .toDraftVotes(proposals);
-    if (draftVotes.isEmpty) return;
-
-    final mnemonic = await ref
-        .read(accountProvider.notifier)
-        .getActiveMnemonic();
-    if (mnemonic == null || mnemonic.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _softwareAccountRequired = true;
-      });
-      return;
-    }
-    final seedBytes = await rust_wallet.deriveSeed(mnemonic: mnemonic);
     try {
-      await sessionNotifier.delegatePendingBundles(seedBytes: seedBytes);
-    } finally {
-      seedBytes.fillRange(0, seedBytes.length, 0);
+      _started = true;
+      if (mounted) {
+        setState(() {
+          _runErrorMessage = null;
+          _softwareAccountRequired = false;
+        });
+      }
+
+      final roundId = widget.roundId;
+      final sessionNotifier = ref.read(votingSessionProvider(roundId).notifier);
+      final session = await ref.read(votingSessionProvider(roundId).future);
+      final round = session.round;
+      if (round == null) {
+        _setRunError(
+          'Voting round details are not available yet. Retry in a moment.',
+        );
+        return;
+      }
+      final proposals = proposalsFromRound(round);
+      final draftVotes = ref
+          .read(votingDraftProvider(roundId))
+          .toDraftVotes(proposals);
+      if (draftVotes.isEmpty) {
+        _setRunError('Choose at least one vote before submitting.');
+        return;
+      }
+
+      final mnemonic = await ref
+          .read(accountProvider.notifier)
+          .getActiveMnemonic();
+      if (mnemonic == null || mnemonic.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _softwareAccountRequired = true;
+        });
+        return;
+      }
+      final seedBytes = await rust_wallet.deriveSeed(mnemonic: mnemonic);
+      try {
+        await sessionNotifier.delegatePendingBundles(seedBytes: seedBytes);
+      } finally {
+        seedBytes.fillRange(0, seedBytes.length, 0);
+      }
+      final afterDelegation = ref.read(votingSessionProvider(roundId)).value;
+      if (afterDelegation?.phase == VotingSessionPhase.error) return;
+      await sessionNotifier.castVotes(draftVotes: draftVotes);
+      final afterVotes = ref.read(votingSessionProvider(roundId)).value;
+      if (afterVotes?.phase == VotingSessionPhase.error) return;
+      await sessionNotifier.submitPendingShares();
+      final done = ref.read(votingSessionProvider(roundId)).value;
+      if (!mounted || done?.phase != VotingSessionPhase.done) return;
+      setState(() {
+        _completedInThisRun = true;
+      });
+      context.go(votingSubmissionConfirmedRoute(roundId));
+    } catch (error) {
+      _setRunError(_messageFromError(error));
     }
-    final afterDelegation = ref.read(votingSessionProvider(roundId)).value;
-    if (afterDelegation?.phase == VotingSessionPhase.error) return;
-    await sessionNotifier.castVotes(draftVotes: draftVotes);
-    final afterVotes = ref.read(votingSessionProvider(roundId)).value;
-    if (afterVotes?.phase == VotingSessionPhase.error) return;
-    await sessionNotifier.submitPendingShares();
-    final done = ref.read(votingSessionProvider(roundId)).value;
-    if (!mounted || done?.phase != VotingSessionPhase.done) return;
+  }
+
+  void _setRunError(String message) {
+    if (!mounted) return;
     setState(() {
-      _completedInThisRun = true;
+      _runErrorMessage = message;
+      _softwareAccountRequired = false;
     });
-    context.go(votingSubmissionConfirmedRoute(roundId));
+  }
+
+  String _messageFromError(Object error) {
+    final text = error.toString().trim();
+    for (final prefix in const ['Exception: ', 'StateError: ', 'Bad state: ']) {
+      if (text.startsWith(prefix)) {
+        return text.substring(prefix.length);
+      }
+    }
+    return text.isEmpty ? 'Voting session action failed.' : text;
   }
 
   @override
@@ -98,15 +136,18 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => _StatusContent(
                 phase: VotingSessionPhase.error,
-                errorMessage: '$error',
+                errorMessage: _runErrorMessage ?? _messageFromError(error),
                 onRetry: _retry,
               ),
               data: (state) {
-                final phase = _displayPhase(state.phase);
+                final localError = _runErrorMessage;
+                final phase = localError == null
+                    ? _displayPhase(state.phase)
+                    : VotingSessionPhase.error;
                 return _StatusContent(
                   phase: phase,
                   softwareAccountRequired: _softwareAccountRequired,
-                  errorMessage: state.error?.message,
+                  errorMessage: localError ?? state.error?.message,
                   onRetry: _retry,
                 );
               },
@@ -128,6 +169,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     _started = false;
     _completedInThisRun = false;
     _softwareAccountRequired = false;
+    _runErrorMessage = null;
     unawaited(_run());
   }
 }
