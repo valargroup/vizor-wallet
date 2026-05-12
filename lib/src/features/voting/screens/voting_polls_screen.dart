@@ -102,15 +102,13 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
   }
 
   void _preSyncVisibleRoundTrees(Iterable<VotingRoundView> rounds) {
-    unawaited(
-      ref
-          .read(votingTreePreSyncProvider)
-          .preSyncRounds(
-            rounds
-                .where((round) => shouldPreSyncVotingTree(round.status))
-                .map((round) => round.roundId),
-          ),
-    );
+    for (final round in rounds) {
+      if (!shouldPreSyncVotingTree(round.status)) continue;
+      unawaited(
+        ref.read(votingTreePreSyncProvider).preSyncRound(round.roundId),
+      );
+      return;
+    }
   }
 
   void _preSyncLoadedRounds() {
