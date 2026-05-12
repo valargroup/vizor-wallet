@@ -255,6 +255,60 @@ void main() {
   });
 
   test(
+    'accepted unconfirmed shares do not block foreground completion',
+    () async {
+      final accepted = share(shareIndex: 0, confirmed: false);
+      final service = VotingRecoveryService(
+        api: FakeVotingRecoveryApi(
+          state: recoveryState(
+            shareDelegations: [accepted],
+            unconfirmedShareDelegations: [accepted],
+          ),
+        ),
+      );
+
+      final plan = await service.loadResumePlan(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        roundId: 'round-1',
+      );
+
+      expect(plan.unconfirmedShareDelegations, [accepted]);
+      expect(plan.hasBlockingShareWork, isFalse);
+      expect(plan.hasPendingWork, isFalse);
+    },
+  );
+
+  test(
+    'unaccepted share recovery still blocks foreground completion',
+    () async {
+      final unaccepted = share(
+        shareIndex: 0,
+        confirmed: false,
+        sentToUrls: const [],
+      );
+      final service = VotingRecoveryService(
+        api: FakeVotingRecoveryApi(
+          state: recoveryState(
+            shareDelegations: [unaccepted],
+            unconfirmedShareDelegations: [unaccepted],
+          ),
+        ),
+      );
+
+      final plan = await service.loadResumePlan(
+        dbPath: 'wallet.db',
+        walletId: 'wallet-1',
+        roundId: 'round-1',
+      );
+
+      expect(plan.unconfirmedShareDelegations, [unaccepted]);
+      expect(plan.hasBlockingShareWork, isTrue);
+      expect(plan.hasPendingWork, isTrue);
+    },
+  );
+
+  test(
     'finalize and abandon clear recovery state but loading does not',
     () async {
       final api = FakeVotingRecoveryApi(state: recoveryState());
@@ -507,13 +561,14 @@ rust_voting.ApiShareDelegationRecord share({
   int proposalId = 1,
   int shareIndex = 0,
   bool confirmed = false,
+  List<String> sentToUrls = const ['https://helper-a.example'],
 }) {
   return rust_voting.ApiShareDelegationRecord(
     roundId: 'round-1',
     bundleIndex: bundleIndex,
     proposalId: proposalId,
     shareIndex: shareIndex,
-    sentToUrls: const ['https://helper-a.example'],
+    sentToUrls: sentToUrls,
     nullifier: Uint8List.fromList(List.filled(32, shareIndex)),
     phase: confirmed
         ? VotingWorkflowPhase.confirmed

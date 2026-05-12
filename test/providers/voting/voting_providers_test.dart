@@ -333,6 +333,45 @@ void main() {
     expect(rust.storedCommitmentBundles, ['0:7:2:{"proposal_id":7}']);
   });
 
+  test('accepted unconfirmed shares do not keep status flow pending', () async {
+    final acceptedShare = rust_voting.ApiShareDelegationRecord(
+      roundId: kRoundId,
+      bundleIndex: 0,
+      proposalId: 7,
+      shareIndex: 0,
+      sentToUrls: const ['https://voting.example'],
+      nullifier: Uint8List.fromList(List.filled(32, 1)),
+      phase: VotingWorkflowPhase.submittedShare,
+      confirmed: false,
+      submitAt: BigInt.zero,
+      createdAt: BigInt.one,
+    );
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(
+        bundleCount: 1,
+        delegationTxHashes: [
+          rust_voting.ApiDelegationTxRecovery(
+            bundleIndex: 0,
+            txHash: 'delegation-0',
+          ),
+        ],
+        shareDelegations: [acceptedShare],
+        unconfirmedShareDelegations: [acceptedShare],
+      ),
+    );
+    final container = _sessionContainer(recoveryApi: recoveryApi);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .submitPendingShares();
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(state.phase, VotingSessionPhase.done);
+    expect(state.resumePlan?.unconfirmedShareDelegations, [acceptedShare]);
+  });
+
   test('session actions are serialized', () async {
     final rust = FakeVotingRustApi(
       setupDelay: const Duration(milliseconds: 10),

@@ -985,7 +985,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         plan.incompleteVoteRecoveryKeys.isNotEmpty) {
       return VotingSessionPhase.readyToVote;
     }
-    if (plan.unconfirmedShareDelegations.isNotEmpty) {
+    if (plan.hasBlockingShareWork) {
       return VotingSessionPhase.submittingShares;
     }
     return VotingSessionPhase.done;
