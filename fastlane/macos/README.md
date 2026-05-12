@@ -17,7 +17,8 @@ bundle exec fastlane mac release
 3. flavor별 `.app` notarize + staple
 4. flavor별 `.zip` / `.dmg` 생성
 5. flavor별 `.dmg` notarize + staple
-6. GitHub Release에 모든 flavor asset 업로드
+6. stable release면 flavor별 Sparkle appcast/delta 생성
+7. GitHub Release에 모든 flavor/Sparkle asset 업로드
 
 Flavor별 앱 이름, bundle id, 기본 네트워크, macOS 앱 아이콘은
 `fastlane/macos/Fastfile`의 `MACOS_RELEASE_FLAVOR_CONFIGS`에서 선택합니다.
@@ -49,6 +50,14 @@ VIZOR_MACOS_FLAVORS=mainnet,testnet bundle exec fastlane mac release
 
 - `RELEASE_TAG`
 
+stable release 태그(`release/v1.2.3`)에서는 아래도 필요합니다. RC 태그
+(`release/v1.2.3-rc.0`)에서는 Sparkle을 건너뛰므로 필요하지 않습니다.
+
+- `SPARKLE_PUBLIC_ED_KEY_MAINNET`
+- `SPARKLE_PUBLIC_ED_KEY_TESTNET`
+- `SPARKLE_PRIVATE_ED_KEY_MAINNET`
+- `SPARKLE_PRIVATE_ED_KEY_TESTNET`
+
 ## Optional environment variables
 
 - `MACOS_KEYCHAIN_NAME`
@@ -59,10 +68,6 @@ VIZOR_MACOS_FLAVORS=mainnet,testnet bundle exec fastlane mac release
 - `VIZOR_MACOS_FLAVOR`
 - `VIZOR_MACOS_FLAVORS`
 - `GITHUB_RELEASE_PRERELEASE`
-- `SPARKLE_PUBLIC_ED_KEY_MAINNET` (currently unused while Sparkle is disabled)
-- `SPARKLE_PUBLIC_ED_KEY_TESTNET` (currently unused while Sparkle is disabled)
-- `SPARKLE_PRIVATE_ED_KEY_MAINNET` (currently unused while Sparkle is disabled)
-- `SPARKLE_PRIVATE_ED_KEY_TESTNET` (currently unused while Sparkle is disabled)
 
 ## Notes
 
@@ -74,9 +79,9 @@ VIZOR_MACOS_FLAVORS=mainnet,testnet bundle exec fastlane mac release
 - release display version은 `RELEASE_TAG`에서 파싱하고, build number는 `RELEASE_BUILD_NUMBER`만 사용합니다. `pubspec.yaml`의 `version`은 macOS release 산출물 버전으로 사용하지 않습니다.
 - GitHub Release asset 파일명에는 버전을 넣지 않습니다. mainnet은 `Vizor-macos.zip` / `Vizor-macos.dmg`, testnet은 `Vizor-Testnet-macos.zip` / `Vizor-Testnet-macos.dmg`를 사용합니다.
 - 랜딩 페이지의 최신 macOS 다운로드 링크는 `https://github.com/chainapsis/vizor-wallet/releases/latest/download/Vizor-macos.dmg`처럼 고정 asset 이름을 가리킵니다.
-- Sparkle은 현재 비활성화되어 stable/prerelease 모두 appcast/delta 업로드를 건너뜁니다.
+- `release/v1.2.3-rc.0` 같은 prerelease 태그는 release build/ZIP/DMG를 만들지만 Sparkle appcast/delta 업로드는 건너뜁니다.
 - `GITHUB_RELEASE_PRERELEASE`가 설정된 경우 태그에서 계산한 prerelease 여부와 일치해야 합니다.
-- `SPARKLE_PUBLIC_ED_KEY_MAINNET` / `SPARKLE_PUBLIC_ED_KEY_TESTNET`은 Sparkle을 다시 켜면 flavor별 앱 `Info.plist`에 주입되는 공개 Ed25519 키입니다.
-- `SPARKLE_PRIVATE_ED_KEY_MAINNET` / `SPARKLE_PRIVATE_ED_KEY_TESTNET`은 Sparkle을 다시 켜면 stable release에서 flavor별 appcast/delta 서명에 쓰는 비밀 Ed25519 키입니다.
+- `SPARKLE_PUBLIC_ED_KEY_MAINNET` / `SPARKLE_PUBLIC_ED_KEY_TESTNET`은 stable release에서 flavor별 앱 `Info.plist`에 주입되는 공개 Ed25519 키입니다.
+- `SPARKLE_PRIVATE_ED_KEY_MAINNET` / `SPARKLE_PRIVATE_ED_KEY_TESTNET`은 stable release에서 flavor별 appcast/delta 서명에 쓰는 비밀 Ed25519 키입니다.
 - mainnet Sparkle feed asset은 `appcast.xml`, testnet Sparkle feed asset은 `appcast-testnet.xml`입니다.
 - 산출물은 repo root의 `dist/macos` 아래에 생성됩니다.
