@@ -72,6 +72,9 @@ previous stable release to the target release commit:
 Review the changes from release/vA.B.C to the current HEAD and create
 release_notes/vX.Y.Z.md following release_notes/README.md.
 
+If GitHub pull requests are available, also review the merged PRs in that range
+for additional user-facing context.
+
 Include only user-facing changes. Exclude internal implementation details,
 refactors, CI/CD changes, Fastlane changes, and dependency bumps unless they
 directly affect users. Omit minor fixes that are unlikely to matter to users.
