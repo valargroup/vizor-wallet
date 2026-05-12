@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,7 @@ import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../providers/voting/voting_session_provider.dart';
+import '../../../providers/voting/voting_tree_sync_provider.dart';
 import '../voting_flow_models.dart';
 import '../voting_formatters.dart';
 import '../voting_resume_plan.dart';
@@ -38,6 +41,11 @@ class VotingProposalDetailScreen extends ConsumerWidget {
               return const _Message(
                 title: 'Poll unavailable',
                 message: 'The selected poll could not be loaded.',
+              );
+            }
+            if (shouldPreSyncVotingTree(round.status)) {
+              unawaited(
+                ref.read(votingTreePreSyncProvider).preSyncRound(round.roundId),
               );
             }
             final proposals = proposalsFromRound(round);

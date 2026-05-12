@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,7 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../providers/voting/voting_rounds_provider.dart';
 import '../../../providers/voting/voting_state.dart';
+import '../../../providers/voting/voting_tree_sync_provider.dart';
 import '../voting_routes.dart';
 
 class VotingPollsScreen extends ConsumerStatefulWidget {
@@ -64,6 +67,7 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
                     );
                   }
                   final sortedItems = _sortRoundsByDate(items);
+                  _preSyncVisibleRoundTrees(sortedItems);
                   return Align(
                     alignment: Alignment.topCenter,
                     child: ConstrainedBox(
@@ -93,6 +97,18 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _preSyncVisibleRoundTrees(Iterable<VotingRoundView> rounds) {
+    unawaited(
+      ref
+          .read(votingTreePreSyncProvider)
+          .preSyncRounds(
+            rounds
+                .where((round) => shouldPreSyncVotingTree(round.status))
+                .map((round) => round.roundId),
+          ),
     );
   }
 }

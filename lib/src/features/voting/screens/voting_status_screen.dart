@@ -159,16 +159,16 @@ class _StatusContent extends StatelessWidget {
               complete: _after(VotingSessionPhase.loadingWitnesses),
             ),
             _StepRow(
-              label: 'Generating delegation proof (ZKP1)',
+              label: 'Delegating voting authority',
               active: phase == VotingSessionPhase.delegating,
               complete: _after(VotingSessionPhase.delegating),
             ),
             _StepRow(
-              label: 'Broadcasting delegation',
+              label: 'Broadcasting',
               complete: _after(VotingSessionPhase.delegated),
             ),
             _StepRow(
-              label: 'Generating vote proof (ZKP2)',
+              label: 'Casting votes',
               active:
                   phase == VotingSessionPhase.castingVotes ||
                   phase == VotingSessionPhase.syncingVoteTree,
