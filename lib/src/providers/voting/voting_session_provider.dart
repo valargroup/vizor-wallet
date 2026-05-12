@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,8 @@ import 'voting_state.dart';
 /// [_enqueue] so repeated button taps cannot overlap Rust wallet mutations.
 class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   VotingSessionNotifier(this._roundId);
+
+  static final Random _submitAtRandom = Random.secure();
 
   Future<void> _operation = Future.value();
   final String _roundId;
@@ -333,6 +336,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final plan = current.resumePlan ?? context.resumePlan;
       final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
       final rust = ref.read(votingRustApiProvider);
+      final effectiveDraftVotes = _applyLastMomentMode(
+        draftVotes,
+        context.round,
+      );
       for (final key in plan.submittedVoteConfirmationKeys) {
         final txHash = plan.voteTxHashFor(key);
         final commitmentBundle = plan.commitmentBundleFor(key);
@@ -369,10 +376,11 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       debugPrint(
         '[zcash] Voting: cast votes start '
         'round=${context.round.roundId} bundles=${pendingBundles.length} '
-        'proposals=${draftVotes.length}',
+        'proposals=${effectiveDraftVotes.length} '
+        'lastMoment=${context.round.isLastMoment()}',
       );
       for (final bundleIndex in pendingBundles) {
-        for (final draftVote in draftVotes) {
+        for (final draftVote in effectiveDraftVotes) {
           final voteTimer = Stopwatch()..start();
           state = AsyncData(
             (state.value ?? current).copyWith(
@@ -554,13 +562,19 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final vcTreePosition = vcTreePositions[commitment.proposalId];
       for (final payload in commitment.sharePayloads) {
         final acceptedServers = <String>[];
-        final body = _sharePayloadJson(payload, vcTreePosition: vcTreePosition);
+        final submitAt = _scheduledShareSubmitAt(context.round);
+        final body = _sharePayloadJson(
+          payload,
+          vcTreePosition: vcTreePosition,
+          submitAt: submitAt,
+        );
         for (final serverUrl in serverUrls) {
           try {
             debugPrint(
               '[zcash] Voting: submitting share '
               'proposal=${payload.proposalId} share=${payload.encryptedShare.shareIndex} '
-              'server=$serverUrl treePosition=${body['tree_position']}',
+              'server=$serverUrl treePosition=${body['tree_position']} '
+              'submitAt=$submitAt',
             );
             await api.submitShare(
               roundId: context.round.roundId,
@@ -604,7 +618,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           shareIndex: payload.encryptedShare.shareIndex,
           sentToUrls: acceptedServers,
           nullifier: _bytesFromHex(nullifierHex),
-          submitAt: BigInt.zero,
+          submitAt: BigInt.from(submitAt),
         );
       }
     }
@@ -1078,6 +1092,38 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return {for (var i = 0; i < bundleCount; i++) i};
   }
 
+  static List<rust_voting.ApiDraftVote> _applyLastMomentMode(
+    List<rust_voting.ApiDraftVote> draftVotes,
+    VotingRoundDetails round,
+  ) {
+    if (!round.isLastMoment()) return draftVotes;
+    return [
+      for (final draft in draftVotes)
+        rust_voting.ApiDraftVote(
+          proposalId: draft.proposalId,
+          choice: draft.choice,
+          numOptions: draft.numOptions,
+          vcTreePosition: draft.vcTreePosition,
+          singleShare: true,
+        ),
+    ];
+  }
+
+  static int _scheduledShareSubmitAt(VotingRoundDetails round) {
+    final end = round.voteEndTime;
+    final buffer = round.lastMomentBuffer;
+    if (end == null || buffer == null || round.isLastMoment()) return 0;
+
+    final now = DateTime.now().toUtc();
+    final deadline = end.subtract(buffer);
+    if (!deadline.isAfter(now)) return 0;
+
+    final windowSeconds = deadline.difference(now).inSeconds;
+    if (windowSeconds <= 0) return 0;
+    final delaySeconds = (_submitAtRandom.nextDouble() * windowSeconds).floor();
+    return now.millisecondsSinceEpoch ~/ 1000 + delaySeconds;
+  }
+
   static String _hexFromBytes(List<int> bytes) {
     return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   }
@@ -1093,6 +1139,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   static Map<String, dynamic> _sharePayloadJson(
     rust_voting.ApiVoteSharePayload payload, {
     BigInt? vcTreePosition,
+    required int submitAt,
   }) {
     return {
       'shares_hash': base64Encode(payload.sharesHash),
@@ -1104,7 +1151,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       'all_enc_shares': payload.allEncryptedShares.map(_wireShareJson).toList(),
       'share_comms': payload.shareComms.map(base64Encode).toList(),
       'primary_blind': base64Encode(payload.primaryBlind),
-      'submit_at': 0,
+      'submit_at': submitAt,
     };
   }
 

@@ -57,8 +57,10 @@ Swift's C FFI or TCA architecture.
   `[UInt8]` fields.
 - A successful helper-server `submitShare` response means the server accepted
   the share even when it does not return a stable `share_id`.
-- `submit_at = 0` is acceptable for the macOS demo path; randomized delayed
-  reveal timing can be added after service behavior is confirmed.
+- Share submission follows the zodl iOS timing model: outside the last-moment
+  buffer, each share samples `submit_at` uniformly before `vote_end_time -
+  last_moment_buffer`; inside the buffer it submits immediately with
+  `submit_at = 0` and single-share vote-commitment mode.
 - The current FRB voting surface's vote commitment builder stores the
   commitment bundle recovery state needed for subsequent share retry.
 - Round status payloads may use `proposals` or `questions`; the Flutter view
