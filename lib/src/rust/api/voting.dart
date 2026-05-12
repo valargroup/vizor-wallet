@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `catch`, `selection_result`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Derive the opaque per-account, per-round voting hotkey bytes.
 ///
@@ -688,15 +688,20 @@ class ApiDelegationPirPrecomputeResult {
 /// phase events only describe local preparation progress.
 class ApiDelegationProofEvent {
   final String phase;
+  final double? proofProgress;
   final ApiSignedDelegationPayload? signedDelegationPayload;
 
   const ApiDelegationProofEvent({
     required this.phase,
+    this.proofProgress,
     this.signedDelegationPayload,
   });
 
   @override
-  int get hashCode => phase.hashCode ^ signedDelegationPayload.hashCode;
+  int get hashCode =>
+      phase.hashCode ^
+      proofProgress.hashCode ^
+      signedDelegationPayload.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -704,6 +709,7 @@ class ApiDelegationProofEvent {
       other is ApiDelegationProofEvent &&
           runtimeType == other.runtimeType &&
           phase == other.phase &&
+          proofProgress == other.proofProgress &&
           signedDelegationPayload == other.signedDelegationPayload;
 }
 
@@ -1162,12 +1168,14 @@ class ApiVoteCommitEvent {
   final String phase;
   final int? proposalId;
   final int? bundleIndex;
+  final double? proofProgress;
   final ApiSignedVoteCommitments? commitments;
 
   const ApiVoteCommitEvent({
     required this.phase,
     this.proposalId,
     this.bundleIndex,
+    this.proofProgress,
     this.commitments,
   });
 
@@ -1176,6 +1184,7 @@ class ApiVoteCommitEvent {
       phase.hashCode ^
       proposalId.hashCode ^
       bundleIndex.hashCode ^
+      proofProgress.hashCode ^
       commitments.hashCode;
 
   @override
@@ -1186,6 +1195,7 @@ class ApiVoteCommitEvent {
           phase == other.phase &&
           proposalId == other.proposalId &&
           bundleIndex == other.bundleIndex &&
+          proofProgress == other.proofProgress &&
           commitments == other.commitments;
 }
 

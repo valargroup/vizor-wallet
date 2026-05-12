@@ -79,12 +79,14 @@ class VotingSessionProgress {
   final String phase;
   final int? bundleIndex;
   final int? proposalId;
+  final double? proofProgress;
   final String? message;
 
   const VotingSessionProgress({
     required this.phase,
     this.bundleIndex,
     this.proposalId,
+    this.proofProgress,
     this.message,
   });
 }

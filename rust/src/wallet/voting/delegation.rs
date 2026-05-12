@@ -21,16 +21,18 @@ use super::{
     bundle::{select_notes_with_lwd, voting_power, SelectedNotes},
     endpoint_validation,
     hotkey::derive_hotkey_raw_orchard_address,
+    progress::{ProofProgressBridge, VotingWorkCancellation},
     state::{ensure_voting_round, open_voting_db},
     workflow,
 };
 
 /// Internal progress phases for preparing a signed delegation payload.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ProofEvent {
     SelectingNotes,
     BuildingPczt,
     BuildingProof,
+    ProofProgress { progress: f64 },
     SigningPayload,
     PayloadReady,
 }
@@ -344,6 +346,7 @@ pub async fn precompute_delegation_pir(
     account_uuid: &str,
     seed: &SecretVec<u8>,
     bundle_index: u32,
+    cancellation: VotingWorkCancellation,
 ) -> Result<DelegationPirPrecomputeResult, String> {
     let started = std::time::Instant::now();
     let voting_db = open_voting_db(db_path, account_uuid)?;
@@ -405,6 +408,7 @@ pub async fn precompute_delegation_pir(
         hotkey_raw_address: hotkey_raw_address.clone(),
     };
     let prepared_epoch = prepared_pczt_epoch(db_path, account_uuid)?;
+    cancellation.check()?;
 
     let proof_db_path = db_path.to_string();
     let proof_account_uuid = account_uuid.to_string();
@@ -412,13 +416,17 @@ pub async fn precompute_delegation_pir(
     let proof_bundle_note_infos = bundle_note_infos.clone();
     let proof_pir_server_url = pir_server_url;
     let proof_network_id = network.voting_id().into();
+    let proof_cancellation = cancellation.clone();
     let precompute = tokio::task::spawn_blocking(move || {
+        proof_cancellation.check()?;
         let proof_voting_db = open_voting_db(&proof_db_path, &proof_account_uuid)?;
+        proof_cancellation.check()?;
         let pir_client = zcash_voting::PirClientBlocking::with_transport(
             &proof_pir_server_url,
             Arc::new(zcash_voting::HyperTransport::new()),
         )
         .map_err(|e| format!("connect to PIR server failed: {e}"))?;
+        proof_cancellation.check()?;
         proof_voting_db
             .precompute_delegation_pir(
                 &proof_round_id,
@@ -432,6 +440,7 @@ pub async fn precompute_delegation_pir(
     .await
     .map_err(|e| format!("delegation PIR precompute task failed: {e}"))??;
 
+    cancellation.check()?;
     if insert_prepared_pczt_if_current(prepared_key, prepared_epoch, governance_pczt)? {
         log::info!(
             "voting delegation: prepared PCZT cached \
@@ -491,10 +500,12 @@ pub async fn build_prove_and_sign_delegation_payload<F>(
     seed: &SecretVec<u8>,
     bundle_index: u32,
     on_progress: F,
+    cancellation: VotingWorkCancellation,
 ) -> Result<SignedDelegationPayload, String>
 where
     F: Fn(ProofEvent) + Send + Sync + 'static,
 {
+    let on_progress = Arc::new(on_progress);
     let voting_db = open_voting_db(db_path, account_uuid)?;
     let round_context =
         ensure_round_initialized(&voting_db, &round_params, round_name, session_json)?;
@@ -502,6 +513,7 @@ where
     let pir_server_url =
         endpoint_validation::validate_pir_endpoint(pir_server_url, network, &round_params).await?;
 
+    cancellation.check()?;
     on_progress(ProofEvent::SelectingNotes);
     let selected = select_notes_with_lwd(
         db_path,
@@ -540,6 +552,7 @@ where
         &bundle_note_infos,
     )?;
 
+    cancellation.check()?;
     on_progress(ProofEvent::BuildingPczt);
     let account = load_account_for_delegation(db_path, network, account_uuid)?;
     let hotkey_raw_address =
@@ -590,6 +603,7 @@ where
         governance_pczt.pczt_bytes.len()
     );
 
+    cancellation.check()?;
     on_progress(ProofEvent::BuildingProof);
     let proof_db_path = db_path.to_string();
     let proof_pir_server_url = pir_server_url;
@@ -598,6 +612,8 @@ where
     let proof_bundle_note_infos = bundle_note_infos.clone();
     let proof_hotkey_raw_address = hotkey_raw_address.clone();
     let proof_network_id = network.voting_id().into();
+    let proof_cancellation = cancellation.clone();
+    let proof_progress = on_progress.clone();
     log::info!(
         "voting delegation: starting proof task \
          (bundle_index={}, network_id={})",
@@ -605,13 +621,18 @@ where
         proof_network_id
     );
     tokio::task::spawn_blocking(move || {
+        proof_cancellation.check()?;
         let proof_voting_db = open_voting_db(&proof_db_path, &proof_account_uuid)?;
+        proof_cancellation.check()?;
         let pir_client = zcash_voting::PirClientBlocking::with_transport(
             &proof_pir_server_url,
             Arc::new(zcash_voting::HyperTransport::new()),
         )
         .map_err(|e| format!("connect to PIR server failed: {e}"))?;
-        let reporter = zcash_voting::NoopProgressReporter;
+        proof_cancellation.check()?;
+        let reporter = ProofProgressBridge::new(proof_cancellation.clone(), move |progress| {
+            proof_progress(ProofEvent::ProofProgress { progress });
+        });
         proof_voting_db
             .build_and_prove_delegation(
                 &proof_round_id,
@@ -627,6 +648,7 @@ where
     })
     .await
     .map_err(|e| format!("delegation proof task failed: {e}"))??;
+    cancellation.check()?;
     log::info!(
         "voting delegation: proof task completed \
          (bundle_index={})",
@@ -1213,6 +1235,12 @@ mod tests {
                 &seed,
                 0,
                 move |event| events_for_callback.lock().unwrap().push(event),
+                VotingWorkCancellation::start(
+                    db_path.to_str().unwrap(),
+                    ACCOUNT_UUID,
+                    Some(ROUND_ID),
+                )
+                .unwrap(),
             ))
             .unwrap_err();
 

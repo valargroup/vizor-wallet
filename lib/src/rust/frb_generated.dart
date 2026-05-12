@@ -5236,12 +5236,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ApiDelegationProofEvent dco_decode_api_delegation_proof_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return ApiDelegationProofEvent(
       phase: dco_decode_String(arr[0]),
+      proofProgress: dco_decode_opt_box_autoadd_f_64(arr[1]),
       signedDelegationPayload:
-          dco_decode_opt_box_autoadd_api_signed_delegation_payload(arr[1]),
+          dco_decode_opt_box_autoadd_api_signed_delegation_payload(arr[2]),
     );
   }
 
@@ -5461,14 +5462,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ApiVoteCommitEvent dco_decode_api_vote_commit_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return ApiVoteCommitEvent(
       phase: dco_decode_String(arr[0]),
       proposalId: dco_decode_opt_box_autoadd_u_32(arr[1]),
       bundleIndex: dco_decode_opt_box_autoadd_u_32(arr[2]),
+      proofProgress: dco_decode_opt_box_autoadd_f_64(arr[3]),
       commitments: dco_decode_opt_box_autoadd_api_signed_vote_commitments(
-        arr[3],
+        arr[4],
       ),
     );
   }
@@ -5666,6 +5668,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_api_voting_round_params(raw);
+  }
+
+  @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
   }
 
   @protected
@@ -5957,6 +5965,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return raw == null
         ? null
         : dco_decode_box_autoadd_api_signed_vote_commitments(raw);
+  }
+
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_f_64(raw);
   }
 
   @protected
@@ -6386,10 +6400,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_phase = sse_decode_String(deserializer);
+    var var_proofProgress = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_signedDelegationPayload =
         sse_decode_opt_box_autoadd_api_signed_delegation_payload(deserializer);
     return ApiDelegationProofEvent(
       phase: var_phase,
+      proofProgress: var_proofProgress,
       signedDelegationPayload: var_signedDelegationPayload,
     );
   }
@@ -6694,12 +6710,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_phase = sse_decode_String(deserializer);
     var var_proposalId = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_bundleIndex = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_proofProgress = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_commitments =
         sse_decode_opt_box_autoadd_api_signed_vote_commitments(deserializer);
     return ApiVoteCommitEvent(
       phase: var_phase,
       proposalId: var_proposalId,
       bundleIndex: var_bundleIndex,
+      proofProgress: var_proofProgress,
       commitments: var_commitments,
     );
   }
@@ -6936,6 +6954,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_api_voting_round_params(deserializer));
+  }
+
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_f_64(deserializer));
   }
 
   @protected
@@ -7395,6 +7419,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_api_signed_vote_commitments(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_f_64(deserializer));
     } else {
       return null;
     }
@@ -7889,6 +7924,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.phase, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.proofProgress, serializer);
     sse_encode_opt_box_autoadd_api_signed_delegation_payload(
       self.signedDelegationPayload,
       serializer,
@@ -8099,6 +8135,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.phase, serializer);
     sse_encode_opt_box_autoadd_u_32(self.proposalId, serializer);
     sse_encode_opt_box_autoadd_u_32(self.bundleIndex, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.proofProgress, serializer);
     sse_encode_opt_box_autoadd_api_signed_vote_commitments(
       self.commitments,
       serializer,
@@ -8286,6 +8323,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_api_voting_round_params(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_64(self, serializer);
   }
 
   @protected
@@ -8689,6 +8732,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_api_signed_vote_commitments(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_f_64(self, serializer);
     }
   }
 
