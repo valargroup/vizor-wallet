@@ -29,6 +29,19 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   @override
   Future<VotingSessionState> build() async {
     final context = await _loadContext(_roundId);
+    final rust = ref.read(votingRustApiProvider);
+    ref.onDispose(() {
+      // Provider disposal is round-scoped: clear abandoned prepared PCZTs but
+      // keep account-wide vote-tree sync state reusable across rounds.
+      _delegationPirPrecomputes.clear();
+      unawaited(
+        _resetVotingSessionState(
+          rust: rust,
+          context: context,
+          reason: 'provider-dispose',
+        ),
+      );
+    });
     return VotingSessionState(
       roundId: _roundId,
       config: context.config,
@@ -809,6 +822,11 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         'round=${context.round.roundId} bundle=$bundleIndex '
         'elapsed=${_formatElapsed(timer.elapsed)} error=$e',
       );
+      await _resetVotingSessionState(
+        rust: ref.read(votingRustApiProvider),
+        context: context,
+        reason: 'pir-precompute-failed',
+      );
     } finally {
       _delegationPirPrecomputes.remove(key);
     }
@@ -845,6 +863,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         await action();
       } catch (e, st) {
         debugPrint('[zcash] Voting: session action failed: $e\n$st');
+        await _cleanupCurrentSessionState(reason: 'action-failed');
         _setError('Voting session action failed.', cause: e);
       }
     });
@@ -973,6 +992,56 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         pirDiagnostics: pirDiagnostics,
       ),
     );
+  }
+
+  /// Clear process-local state for the current round after an action failure.
+  ///
+  /// The context is reloaded so cleanup follows the current account and DB path.
+  /// If that lookup fails, cleanup is skipped because there is no safe key to
+  /// clear.
+  Future<void> _cleanupCurrentSessionState({required String reason}) async {
+    try {
+      final context = await _loadContext(_roundId);
+      await _resetVotingSessionState(
+        rust: ref.read(votingRustApiProvider),
+        context: context,
+        reason: reason,
+      );
+    } catch (e) {
+      debugPrint(
+        '[zcash] Voting: process-local cleanup skipped '
+        'round=$_roundId reason=$reason error=$e',
+      );
+    }
+  }
+
+  /// Clear round-scoped Rust voting caches for this session.
+  ///
+  /// Passing the round ID intentionally preserves the account-wide vote-tree
+  /// sync client while discarding prepared delegation PCZTs for abandoned work.
+  static Future<void> _resetVotingSessionState({
+    required VotingRustApi rust,
+    required _VotingSessionContext context,
+    required String reason,
+  }) async {
+    try {
+      await rust.resetVotingSessionState(
+        dbPath: context.dbPath,
+        walletId: context.accountUuid,
+        roundId: context.round.roundId,
+      );
+      debugPrint(
+        '[zcash] Voting: process-local state reset '
+        'round=${context.round.roundId} account=${context.accountUuid} '
+        'reason=$reason',
+      );
+    } catch (e) {
+      debugPrint(
+        '[zcash] Voting: process-local state reset failed '
+        'round=${context.round.roundId} account=${context.accountUuid} '
+        'reason=$reason error=$e',
+      );
+    }
   }
 
   static VotingSessionPhase _phaseForResumePlan(VotingResumePlan plan) {

@@ -316,6 +316,22 @@ Future<void> resetTreeClient({
   roundId: roundId,
 );
 
+/// Clear process-local voting state for a wallet or round.
+///
+/// Passing a non-empty round ID clears prepared delegation PCZTs only for that
+/// round. Passing `None` or an empty round ID performs account-wide cleanup:
+/// prepared PCZTs for the wallet are cleared and the cached vote-tree client is
+/// dropped.
+Future<void> resetVotingSessionState({
+  required String dbPath,
+  required String walletId,
+  String? roundId,
+}) => RustLib.instance.api.crateApiVotingResetVotingSessionState(
+  dbPath: dbPath,
+  walletId: walletId,
+  roundId: roundId,
+);
+
 /// Build signed ZKP2 vote commitments for one bundle.
 ///
 /// Callers must pass a VAN witness generated for the same round and anchor

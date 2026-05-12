@@ -390,8 +390,21 @@ void main() {
     expect(rust.maxConcurrentSetups, 1);
   });
 
+  test('session dispose clears round-scoped process state', () async {
+    final rust = FakeVotingRustApi();
+    final container = _sessionContainer(rust: rust);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    container.dispose();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(rust.resetVotingSessionStateCalls, ['account-1:$kRoundId']);
+  });
+
   test('hotkey failure moves session into error phase', () async {
+    final rust = FakeVotingRustApi();
     final container = _sessionContainer(
+      rust: rust,
       hotkeyStore: const FailingVotingHotkeyStore(),
       recoveryApi: FakeVotingRecoveryApi(
         state: recoveryState(
@@ -426,6 +439,7 @@ void main() {
 
     expect(state.phase, VotingSessionPhase.error);
     expect(state.error?.cause, isA<VotingHotkeyUnavailable>());
+    expect(rust.resetVotingSessionStateCalls, contains('account-1:$kRoundId'));
   });
 }
 
@@ -761,6 +775,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final recordedShares = <_RecordedShare>[];
   final syncedVoteTrees = <String>[];
   final precomputedDelegationPir = <int>[];
+  final resetVotingSessionStateCalls = <String>[];
 
   @override
   Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
@@ -921,6 +936,15 @@ class FakeVotingRustApi implements VotingRustApi {
       position: bundleIndex,
       anchorHeight: anchorHeight,
     );
+  }
+
+  @override
+  Future<void> resetVotingSessionState({
+    required String dbPath,
+    required String walletId,
+    String? roundId,
+  }) async {
+    resetVotingSessionStateCalls.add('$walletId:${roundId ?? '*'}');
   }
 
   @override

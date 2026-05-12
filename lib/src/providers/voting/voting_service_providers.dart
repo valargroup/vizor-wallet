@@ -243,6 +243,17 @@ abstract interface class VotingRustApi {
     required int anchorHeight,
   });
 
+  /// Clear process-local Rust voting caches for a round or wallet.
+  ///
+  /// A non-null, non-empty `roundId` clears only prepared delegation PCZTs for
+  /// that round. `null` performs account-wide cleanup, including vote-tree sync
+  /// state for `walletId`.
+  Future<void> resetVotingSessionState({
+    required String dbPath,
+    required String walletId,
+    String? roundId,
+  });
+
   Stream<rust_voting.ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
     required String dbPath,
     required String walletId,
@@ -507,6 +518,19 @@ class FrbVotingRustApi implements VotingRustApi {
       roundId: roundId,
       bundleIndex: bundleIndex,
       anchorHeight: anchorHeight,
+    );
+  }
+
+  @override
+  Future<void> resetVotingSessionState({
+    required String dbPath,
+    required String walletId,
+    String? roundId,
+  }) {
+    return rust_voting.resetVotingSessionState(
+      dbPath: dbPath,
+      walletId: walletId,
+      roundId: roundId,
     );
   }
 

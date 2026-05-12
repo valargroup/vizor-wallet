@@ -13,6 +13,7 @@ import '../core/config/network_config.dart';
 import '../core/profile_pictures.dart';
 import '../core/storage/app_secure_store.dart';
 import '../core/storage/wallet_paths.dart';
+import '../rust/api/voting.dart' as rust_voting;
 import '../rust/api/wallet.dart' as rust_wallet;
 import 'account_models.dart';
 import 'app_security_provider.dart';
@@ -272,6 +273,10 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
   /// Switch active account.
   Future<void> switchAccount(String uuid) async {
+    final previousActiveUuid = state.value?.activeAccountUuid;
+    if (previousActiveUuid != null && previousActiveUuid != uuid) {
+      await _resetVotingProcessStateForAccount(previousActiveUuid);
+    }
     await _storage.writeString(_activeAccountKey, uuid);
 
     String? address;
@@ -358,6 +363,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
     final dbPath = await _getDbPath();
     final network = await _getNetwork();
+    await _resetVotingProcessStateForAccount(uuid, dbPath: dbPath);
     final rustDeleteWatch = Stopwatch()..start();
     await rust_wallet.deleteAccount(
       dbPath: dbPath,
@@ -415,6 +421,9 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   /// Delete all wallet data (DB + keychain). Caller must stop sync first.
   Future<void> resetWallet() async {
     final dbPath = await _getDbPath();
+    for (final account in state.value?.accounts ?? const <AccountInfo>[]) {
+      await _resetVotingProcessStateForAccount(account.uuid, dbPath: dbPath);
+    }
     await _deleteExistingDb(dbPath);
     await _storage.deleteAll();
     ref.read(appSecurityProvider.notifier).reset();
@@ -424,6 +433,12 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
   void clearSensitiveStateForLock() {
     final prev = state.value ?? const AccountState();
+    final activeAccountUuid = prev.activeAccountUuid;
+    if (activeAccountUuid != null) {
+      // Lock must drop account-wide Rust voting caches, but should not delay
+      // routing to the unlock screen if cleanup is already racing teardown.
+      unawaited(_resetVotingProcessStateForAccount(activeAccountUuid));
+    }
     state = AsyncData(
       AccountState(
         accounts: prev.accounts,
@@ -431,6 +446,30 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       ),
     );
     log('AccountNotifier: cleared in-memory address state for lock');
+  }
+
+  /// Clear process-local voting caches scoped to an account.
+  ///
+  /// This is best-effort cleanup for lifecycle boundaries where account-scoped
+  /// Rust state must not outlive the account/session. Failures are logged and do
+  /// not block wallet/account mutations.
+  Future<void> _resetVotingProcessStateForAccount(
+    String accountUuid, {
+    String? dbPath,
+  }) async {
+    try {
+      await rust_voting.resetVotingSessionState(
+        dbPath: dbPath ?? await _getDbPath(),
+        walletId: accountUuid,
+        roundId: null,
+      );
+      log('AccountNotifier: reset voting process state for $accountUuid');
+    } catch (e, st) {
+      log(
+        'AccountNotifier: failed to reset voting process state for '
+        '$accountUuid: $e\n$st',
+      );
+    }
   }
 
   Future<void> restoreAfterUnlock() async {

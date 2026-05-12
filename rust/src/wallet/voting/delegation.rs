@@ -1,6 +1,7 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex, OnceLock},
+    time::{Duration, Instant},
 };
 
 use incrementalmerkletree::Position;
@@ -64,12 +65,21 @@ pub struct BundleSetupResult {
     pub eligible_weight_zatoshi: u64,
 }
 
+/// Result of warming delegation PIR proofs and prepared PCZT material.
+///
+/// Counts report PIR rows reused from storage versus fetched during this call.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DelegationPirPrecomputeResult {
     pub cached_count: u32,
     pub fetched_count: u32,
     pub bundle_count: u32,
     pub bundle_index: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct PreparedDelegationSessionKey {
+    db_path: String,
+    account_uuid: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -82,13 +92,187 @@ struct PreparedDelegationKey {
     hotkey_raw_address: Vec<u8>,
 }
 
-static PREPARED_DELEGATION_PCZTS: OnceLock<
-    Mutex<HashMap<PreparedDelegationKey, zcash_voting::GovernancePczt>>,
-> = OnceLock::new();
+struct PreparedDelegationEntry {
+    governance_pczt: zcash_voting::GovernancePczt,
+    inserted_at: Instant,
+}
 
-fn prepared_pczt_cache(
-) -> &'static Mutex<HashMap<PreparedDelegationKey, zcash_voting::GovernancePczt>> {
-    PREPARED_DELEGATION_PCZTS.get_or_init(|| Mutex::new(HashMap::new()))
+struct PreparedDelegationSessionEpoch {
+    epoch: u64,
+    updated_at: Instant,
+}
+
+#[derive(Default)]
+struct PreparedDelegationCache {
+    entries: HashMap<PreparedDelegationKey, PreparedDelegationEntry>,
+    session_epochs: HashMap<PreparedDelegationSessionKey, PreparedDelegationSessionEpoch>,
+}
+
+const PREPARED_DELEGATION_PCZT_TTL: Duration = Duration::from_secs(15 * 60);
+const MAX_PREPARED_DELEGATION_PCZTS: usize = 16;
+const MAX_PREPARED_DELEGATION_SESSIONS: usize = 32;
+
+static PREPARED_DELEGATION_PCZTS: OnceLock<Mutex<PreparedDelegationCache>> = OnceLock::new();
+
+/// Returns the process-local prepared delegation PCZT cache.
+fn prepared_pczt_cache() -> &'static Mutex<PreparedDelegationCache> {
+    PREPARED_DELEGATION_PCZTS.get_or_init(|| Mutex::new(PreparedDelegationCache::default()))
+}
+
+/// Builds the session key used for all account-scoped prepared PCZT state.
+fn prepared_delegation_session_key(
+    db_path: &str,
+    account_uuid: &str,
+) -> PreparedDelegationSessionKey {
+    PreparedDelegationSessionKey {
+        db_path: db_path.to_string(),
+        account_uuid: account_uuid.to_string(),
+    }
+}
+
+/// Returns the current reset epoch for a session while the cache lock is held.
+fn current_prepared_pczt_epoch_locked(
+    cache: &PreparedDelegationCache,
+    session_key: &PreparedDelegationSessionKey,
+) -> u64 {
+    cache
+        .session_epochs
+        .get(session_key)
+        .map(|session| session.epoch)
+        .unwrap_or(0)
+}
+
+/// Enforces TTL and size bounds for prepared PCZT entries and reset epochs.
+fn prune_prepared_pczt_cache_locked(cache: &mut PreparedDelegationCache, now: Instant) {
+    cache
+        .entries
+        .retain(|_, entry| now.duration_since(entry.inserted_at) <= PREPARED_DELEGATION_PCZT_TTL);
+
+    while cache.entries.len() > MAX_PREPARED_DELEGATION_PCZTS {
+        let Some(oldest_key) = cache
+            .entries
+            .iter()
+            .min_by_key(|(_, entry)| entry.inserted_at)
+            .map(|(key, _)| key.clone())
+        else {
+            break;
+        };
+        cache.entries.remove(&oldest_key);
+    }
+
+    let sessions_with_entries = cache
+        .entries
+        .keys()
+        .map(|key| prepared_delegation_session_key(&key.db_path, &key.account_uuid))
+        .collect::<HashSet<_>>();
+
+    cache.session_epochs.retain(|session_key, session| {
+        now.duration_since(session.updated_at) <= PREPARED_DELEGATION_PCZT_TTL
+            || sessions_with_entries.contains(session_key)
+    });
+
+    while cache.session_epochs.len() > MAX_PREPARED_DELEGATION_SESSIONS {
+        let Some(oldest_key) = cache
+            .session_epochs
+            .iter()
+            .filter(|(session_key, _)| !sessions_with_entries.contains(*session_key))
+            .min_by_key(|(_, session)| session.updated_at)
+            .map(|(key, _)| key.clone())
+        else {
+            break;
+        };
+        cache.session_epochs.remove(&oldest_key);
+    }
+}
+
+/// Captures the session reset epoch before starting cancellable precompute work.
+fn prepared_pczt_epoch(db_path: &str, account_uuid: &str) -> Result<u64, String> {
+    let session_key = prepared_delegation_session_key(db_path, account_uuid);
+    let mut cache = prepared_pczt_cache()
+        .lock()
+        .map_err(|e| format!("prepared delegation PCZT cache lock poisoned: {e}"))?;
+    prune_prepared_pczt_cache_locked(&mut cache, Instant::now());
+    Ok(current_prepared_pczt_epoch_locked(&cache, &session_key))
+}
+
+/// Inserts prepared PCZT material only if the session has not been reset.
+///
+/// Returns `false` when the caller finished after a lock/account/session cleanup
+/// advanced the epoch.
+fn insert_prepared_pczt_if_current(
+    key: PreparedDelegationKey,
+    expected_epoch: u64,
+    governance_pczt: zcash_voting::GovernancePczt,
+) -> Result<bool, String> {
+    let session_key = prepared_delegation_session_key(&key.db_path, &key.account_uuid);
+    let now = Instant::now();
+    let mut cache = prepared_pczt_cache()
+        .lock()
+        .map_err(|e| format!("prepared delegation PCZT cache lock poisoned: {e}"))?;
+    prune_prepared_pczt_cache_locked(&mut cache, now);
+    if current_prepared_pczt_epoch_locked(&cache, &session_key) != expected_epoch {
+        return Ok(false);
+    }
+    cache.entries.insert(
+        key,
+        PreparedDelegationEntry {
+            governance_pczt,
+            inserted_at: now,
+        },
+    );
+    prune_prepared_pczt_cache_locked(&mut cache, now);
+    Ok(true)
+}
+
+/// Removes one prepared PCZT from the cache.
+///
+/// This is consume-on-entry for the real delegation flow; replaying the same
+/// precompute result requires running the precompute again.
+fn take_prepared_pczt(
+    key: &PreparedDelegationKey,
+) -> Result<Option<zcash_voting::GovernancePczt>, String> {
+    let mut cache = prepared_pczt_cache()
+        .lock()
+        .map_err(|e| format!("prepared delegation PCZT cache lock poisoned: {e}"))?;
+    prune_prepared_pczt_cache_locked(&mut cache, Instant::now());
+    Ok(cache.entries.remove(key).map(|entry| entry.governance_pczt))
+}
+
+/// Clear prepared delegation PCZTs for one voting session.
+///
+/// When `round_id` is `Some(non_empty)`, only entries for that round are
+/// removed. `None` or `Some("")` removes all prepared PCZTs for the session.
+///
+/// Resetting also advances a per-session epoch, so an in-flight background
+/// precompute that finishes after the reset cannot reinsert stale PCZT state.
+pub fn clear_prepared_delegation_pczt_cache(
+    db_path: &str,
+    account_uuid: &str,
+    round_id: Option<&str>,
+) -> Result<usize, String> {
+    let session_key = prepared_delegation_session_key(db_path, account_uuid);
+    let round_id = round_id.filter(|round_id| !round_id.is_empty());
+    let mut cache = prepared_pczt_cache()
+        .lock()
+        .map_err(|e| format!("prepared delegation PCZT cache lock poisoned: {e}"))?;
+    prune_prepared_pczt_cache_locked(&mut cache, Instant::now());
+    let before = cache.entries.len();
+    cache.entries.retain(|key, _| {
+        key.db_path != db_path
+            || key.account_uuid != account_uuid
+            || round_id.is_some_and(|round_id| key.round_id != round_id)
+    });
+    let session =
+        cache
+            .session_epochs
+            .entry(session_key)
+            .or_insert(PreparedDelegationSessionEpoch {
+                epoch: 0,
+                updated_at: Instant::now(),
+            });
+    session.epoch = session.epoch.saturating_add(1);
+    session.updated_at = Instant::now();
+    Ok(before - cache.entries.len())
 }
 
 #[derive(Clone, Debug)]
@@ -222,10 +406,7 @@ pub async fn precompute_delegation_pir(
         branch_id,
         hotkey_raw_address: hotkey_raw_address.clone(),
     };
-    prepared_pczt_cache()
-        .lock()
-        .map_err(|e| format!("prepared delegation PCZT cache lock poisoned: {e}"))?
-        .insert(prepared_key, governance_pczt);
+    let prepared_epoch = prepared_pczt_epoch(db_path, account_uuid)?;
 
     let proof_db_path = db_path.to_string();
     let proof_account_uuid = account_uuid.to_string();
@@ -252,6 +433,24 @@ pub async fn precompute_delegation_pir(
     })
     .await
     .map_err(|e| format!("delegation PIR precompute task failed: {e}"))??;
+
+    if insert_prepared_pczt_if_current(prepared_key, prepared_epoch, governance_pczt)? {
+        log::info!(
+            "voting delegation: prepared PCZT cached \
+             (round_id={}, account_uuid={}, bundle_index={})",
+            round_id,
+            account_uuid,
+            bundle_index
+        );
+    } else {
+        log::info!(
+            "voting delegation: prepared PCZT discarded after session reset \
+             (round_id={}, account_uuid={}, bundle_index={})",
+            round_id,
+            account_uuid,
+            bundle_index
+        );
+    }
 
     log::info!(
         "voting delegation: PIR precompute completed \
@@ -364,10 +563,7 @@ where
         branch_id,
         hotkey_raw_address: hotkey_raw_address.clone(),
     };
-    let prepared_governance_pczt = prepared_pczt_cache()
-        .lock()
-        .map_err(|e| format!("prepared delegation PCZT cache lock poisoned: {e}"))?
-        .remove(&prepared_key);
+    let prepared_governance_pczt = take_prepared_pczt(&prepared_key)?;
     let governance_pczt = if let Some(governance_pczt) = prepared_governance_pczt {
         log::info!(
             "voting delegation: using precomputed governance PCZT \
@@ -934,6 +1130,68 @@ mod tests {
     }
 
     #[test]
+    fn prepared_delegation_pczt_cache_is_consume_on_entry() {
+        clear_prepared_delegation_pczt_cache("/tmp/voting-pczt.sqlite", ACCOUNT_UUID, None)
+            .unwrap();
+        let key = test_prepared_key("/tmp/voting-pczt.sqlite", ACCOUNT_UUID, ROUND_ID, 0);
+        let epoch = prepared_pczt_epoch("/tmp/voting-pczt.sqlite", ACCOUNT_UUID).unwrap();
+
+        assert!(
+            insert_prepared_pczt_if_current(key.clone(), epoch, test_governance_pczt()).unwrap()
+        );
+        assert!(take_prepared_pczt(&key).unwrap().is_some());
+        assert!(take_prepared_pczt(&key).unwrap().is_none());
+    }
+
+    #[test]
+    fn prepared_delegation_pczt_reset_blocks_late_precompute_insert() {
+        clear_prepared_delegation_pczt_cache("/tmp/voting-late.sqlite", ACCOUNT_UUID, None)
+            .unwrap();
+        let key = test_prepared_key("/tmp/voting-late.sqlite", ACCOUNT_UUID, ROUND_ID, 0);
+        let stale_epoch = prepared_pczt_epoch("/tmp/voting-late.sqlite", ACCOUNT_UUID).unwrap();
+
+        clear_prepared_delegation_pczt_cache("/tmp/voting-late.sqlite", ACCOUNT_UUID, None)
+            .unwrap();
+
+        assert!(
+            !insert_prepared_pczt_if_current(key.clone(), stale_epoch, test_governance_pczt())
+                .unwrap()
+        );
+        assert!(take_prepared_pczt(&key).unwrap().is_none());
+    }
+
+    #[test]
+    fn clear_prepared_delegation_pczt_cache_can_target_round() {
+        clear_prepared_delegation_pczt_cache("/tmp/voting-round-clear.sqlite", ACCOUNT_UUID, None)
+            .unwrap();
+        let first_key =
+            test_prepared_key("/tmp/voting-round-clear.sqlite", ACCOUNT_UUID, ROUND_ID, 0);
+        let second_round = "0000000000000000000000000000000000000000000000000000000000000002";
+        let second_key = test_prepared_key(
+            "/tmp/voting-round-clear.sqlite",
+            ACCOUNT_UUID,
+            second_round,
+            0,
+        );
+        let epoch = prepared_pczt_epoch("/tmp/voting-round-clear.sqlite", ACCOUNT_UUID).unwrap();
+        insert_prepared_pczt_if_current(first_key.clone(), epoch, test_governance_pczt()).unwrap();
+        insert_prepared_pczt_if_current(second_key.clone(), epoch, test_governance_pczt()).unwrap();
+
+        assert_eq!(
+            clear_prepared_delegation_pczt_cache(
+                "/tmp/voting-round-clear.sqlite",
+                ACCOUNT_UUID,
+                Some(ROUND_ID),
+            )
+            .unwrap(),
+            1
+        );
+
+        assert!(take_prepared_pczt(&first_key).unwrap().is_none());
+        assert!(take_prepared_pczt(&second_key).unwrap().is_some());
+    }
+
+    #[test]
     fn build_and_prove_delegation_bundle_rejects_invalid_round_params_before_progress() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("zcash_wallet.db");
@@ -1192,6 +1450,44 @@ mod tests {
                 .unwrap_err()
                 .contains("snapshot_height")
         );
+    }
+
+    fn test_prepared_key(
+        db_path: &str,
+        account_uuid: &str,
+        round_id: &str,
+        bundle_index: u32,
+    ) -> PreparedDelegationKey {
+        PreparedDelegationKey {
+            db_path: db_path.to_string(),
+            account_uuid: account_uuid.to_string(),
+            round_id: round_id.to_string(),
+            bundle_index,
+            branch_id: 0x1234,
+            hotkey_raw_address: vec![7; 32],
+        }
+    }
+
+    fn test_governance_pczt() -> zcash_voting::GovernancePczt {
+        zcash_voting::GovernancePczt {
+            pczt_bytes: vec![1, 2, 3],
+            rk: vec![0; 32],
+            alpha: vec![0; 32],
+            nf_signed: vec![0; 32],
+            cmx_new: vec![0; 32],
+            gov_nullifiers: vec![vec![0; 32]; 5],
+            van: vec![0; 32],
+            van_comm_rand: vec![0; 32],
+            dummy_nullifiers: vec![vec![0; 32]; 5],
+            rho_signed: vec![0; 32],
+            padded_cmx: vec![vec![0; 32]; 5],
+            rseed_signed: vec![0; 32],
+            rseed_output: vec![0; 32],
+            action_bytes: vec![0; 32],
+            action_index: 0,
+            padded_note_secrets: vec![(vec![0; 32], vec![0; 32]); 5],
+            pczt_sighash: vec![0; 32],
+        }
     }
 
     fn test_round_params() -> zcash_voting::VotingRoundParams {
