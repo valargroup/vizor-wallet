@@ -778,7 +778,7 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
                           tone: addressTone,
                           focusNode: _addressFocusNode,
                           controller: _addressController,
-                          hintText: 'zCash Address',
+                          hintText: 'Zcash address',
                           leading: AppIcon(
                             AppIcons.users,
                             size: 20,
