@@ -1,5 +1,7 @@
 use crate::wallet::network::WalletNetwork;
 
+use secrecy::{ExposeSecret, SecretVec};
+
 use super::{state::open_voting_db, tree_sync::VanWitness};
 
 const VAN_AUTH_PATH_LEN: usize = 24;
@@ -97,7 +99,7 @@ pub fn build_vote_commitments<F>(
     network: WalletNetwork,
     round_id: &str,
     bundle_index: u32,
-    hotkey_seed: &[u8],
+    hotkey_seed: &SecretVec<u8>,
     van_witness: VanWitness,
     draft_votes: Vec<DraftVote>,
     on_progress: F,
@@ -118,15 +120,15 @@ where
         });
         let reporter = zcash_voting::NoopProgressReporter;
         let proof_start = std::time::Instant::now();
-        eprintln!(
-            "[ZKP2] Starting proof generation: round_id={round_id}, wallet_id={wallet_id}, bundle_index={bundle_index}, proposal_id={}",
+        log::info!(
+            "voting vote: starting proof generation (bundle_index={bundle_index}, proposal_id={})",
             draft.proposal_id
         );
         let bundle = voting_db
             .build_vote_commitment(
                 round_id,
                 bundle_index,
-                hotkey_seed,
+                hotkey_seed.expose_secret(),
                 network.voting_id().into(),
                 draft.proposal_id,
                 draft.choice,
@@ -138,11 +140,11 @@ where
                 &reporter,
             )
             .map_err(|e| format!("build_vote_commitment failed: {e}"))?;
-        eprintln!(
-            "[ZKP2] Proof generation: {:.2}s — proof {} bytes (proposal_id={}, bundle_index={bundle_index})",
+        log::info!(
+            "voting vote: proof generation completed \
+             (bundle_index={bundle_index}, proposal_id={}, elapsed={:.2}s)",
+            draft.proposal_id,
             proof_start.elapsed().as_secs_f64(),
-            bundle.proof.len(),
-            draft.proposal_id
         );
 
         let wire_shares: Vec<zcash_voting::WireEncryptedShare> =
@@ -163,10 +165,11 @@ where
                 draft.single_share,
             )
             .map_err(|e| format!("build_share_payloads failed: {e}"))?;
-        eprintln!(
-            "[ZKP2] Share payloads: {:.2}s (proposal_id={}, bundle_index={bundle_index})",
+        log::info!(
+            "voting vote: share payloads built \
+             (bundle_index={bundle_index}, proposal_id={}, elapsed={:.2}s)",
+            draft.proposal_id,
             payload_start.elapsed().as_secs_f64(),
-            draft.proposal_id
         );
 
         let commitment_json = public_commitment_json(&bundle, &wire_shares, &share_payloads)?;
@@ -186,7 +189,7 @@ where
         });
         let signing_start = std::time::Instant::now();
         let signature = zcash_voting::vote_commitment::sign_cast_vote(
-            hotkey_seed,
+            hotkey_seed.expose_secret(),
             network.voting_id().into(),
             &bundle.vote_round_id,
             &bundle.r_vpk_bytes,
@@ -198,10 +201,11 @@ where
             &bundle.alpha_v,
         )
         .map_err(|e| format!("sign_cast_vote failed: {e}"))?;
-        eprintln!(
-            "[ZKP2] Signing: {:.2}s (proposal_id={}, bundle_index={bundle_index})",
+        log::info!(
+            "voting vote: commitment signed \
+             (bundle_index={bundle_index}, proposal_id={}, elapsed={:.2}s)",
+            draft.proposal_id,
             signing_start.elapsed().as_secs_f64(),
-            draft.proposal_id
         );
 
         commitments.push(SignedVoteCommitment {
@@ -224,10 +228,11 @@ where
             vote_auth_sig: signature.vote_auth_sig,
             commitment_bundle_json: commitment_json,
         });
-        eprintln!(
-            "[ZKP2] TOTAL: {:.2}s (proposal_id={}, bundle_index={bundle_index})",
+        log::info!(
+            "voting vote: commitment completed \
+             (bundle_index={bundle_index}, proposal_id={}, elapsed={:.2}s)",
+            draft.proposal_id,
             total_start.elapsed().as_secs_f64(),
-            draft.proposal_id
         );
     }
 

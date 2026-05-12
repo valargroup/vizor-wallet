@@ -14,8 +14,9 @@ pub fn derive_hotkey(
     seed: &SecretVec<u8>,
     round_id: &str,
     account_uuid: &str,
-) -> Result<Vec<u8>, String> {
-    generate_contextual_hotkey(seed, round_id, account_uuid).map(|hotkey| hotkey.secret_key)
+) -> Result<SecretVec<u8>, String> {
+    generate_contextual_hotkey(seed, round_id, account_uuid)
+        .map(|hotkey| SecretVec::new(hotkey.secret_key))
 }
 
 /// Derives the Orchard raw address used as the governance PCZT output target.
@@ -106,8 +107,10 @@ mod tests {
 
         for _ in 0..100 {
             assert_eq!(
-                derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID).unwrap(),
-                expected
+                derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID)
+                    .unwrap()
+                    .expose_secret(),
+                expected.expose_secret()
             );
         }
     }
@@ -117,8 +120,12 @@ mod tests {
         let seed = test_seed();
 
         assert_ne!(
-            derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID).unwrap(),
-            derive_hotkey(&seed, OTHER_ROUND_ID, ACCOUNT_UUID).unwrap()
+            derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID)
+                .unwrap()
+                .expose_secret(),
+            derive_hotkey(&seed, OTHER_ROUND_ID, ACCOUNT_UUID)
+                .unwrap()
+                .expose_secret()
         );
     }
 
@@ -127,8 +134,12 @@ mod tests {
         let seed = test_seed();
 
         assert_ne!(
-            derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID).unwrap(),
-            derive_hotkey(&seed, ROUND_ID, OTHER_ACCOUNT_UUID).unwrap()
+            derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID)
+                .unwrap()
+                .expose_secret(),
+            derive_hotkey(&seed, ROUND_ID, OTHER_ACCOUNT_UUID)
+                .unwrap()
+                .expose_secret()
         );
     }
 

@@ -95,15 +95,6 @@ struct RoundContext {
     round_name: String,
 }
 
-fn short_hex(bytes: &[u8]) -> String {
-    let prefix_len = bytes.len().min(8);
-    let mut value = hex::encode(&bytes[..prefix_len]);
-    if bytes.len() > prefix_len {
-        value.push_str("...");
-    }
-    value
-}
-
 /// Initialize the local voting database for delegation operations.
 pub fn prepare_delegation(db_path: &str, wallet_id: &str) -> Result<(), String> {
     open_voting_db(db_path, wallet_id).map(|_| ())
@@ -145,11 +136,10 @@ pub async fn precompute_delegation_pir(
     round_name: &str,
     session_json: Option<&str>,
     account_uuid: &str,
-    seed_bytes: &[u8],
+    seed: &SecretVec<u8>,
     bundle_index: u32,
 ) -> Result<DelegationPirPrecomputeResult, String> {
     let started = std::time::Instant::now();
-    let seed = SecretVec::new(seed_bytes.to_vec());
     let voting_db = open_voting_db(db_path, account_uuid)?;
     let round_context =
         ensure_round_initialized(&voting_db, &round_params, round_name, session_json)?;
@@ -185,13 +175,12 @@ pub async fn precompute_delegation_pir(
 
     let account = load_account_for_delegation(db_path, network, account_uuid)?;
     let hotkey_raw_address =
-        derive_hotkey_raw_orchard_address(&seed, &round_id, account_uuid, network)?;
+        derive_hotkey_raw_orchard_address(seed, &round_id, account_uuid, network)?;
     let branch_height = current_chain_height(lightwalletd_url).await?;
     let branch_id = consensus_branch_id(network, branch_height)?;
     let governance_pczt = build_paired_governance_pczt(
         &voting_db,
         &round_id,
-        account_uuid,
         bundle_index,
         &bundle_note_infos,
         &account,
@@ -241,9 +230,7 @@ pub async fn precompute_delegation_pir(
 
     log::info!(
         "voting delegation: PIR precompute completed \
-         (round_id={}, account_uuid={}, bundle_index={}, cached={}, fetched={}, elapsed={:.2}s)",
-        round_id,
-        account_uuid,
+         (bundle_index={}, cached={}, fetched={}, elapsed={:.2}s)",
         bundle_index,
         precompute.cached_count,
         precompute.fetched_count,
@@ -272,14 +259,13 @@ pub async fn build_and_prove_delegation_bundle<F>(
     round_name: &str,
     session_json: Option<&str>,
     account_uuid: &str,
-    seed_bytes: &[u8],
+    seed: &SecretVec<u8>,
     bundle_index: u32,
     on_progress: F,
 ) -> Result<SignedDelegation, String>
 where
     F: Fn(ProofEvent) + Send + Sync + 'static,
 {
-    let seed = SecretVec::new(seed_bytes.to_vec());
     let voting_db = open_voting_db(db_path, account_uuid)?;
     let round_context =
         ensure_round_initialized(&voting_db, &round_params, round_name, session_json)?;
@@ -306,31 +292,13 @@ where
     validate_bundle_index(bundle_setup.bundle_count, bundle_index)?;
     let bundle_note_infos = bundle_notes(&note_infos, bundle_index)?;
     let delegated_weight_zatoshi = bundle_weight_zatoshi(&bundle_note_infos)?;
-    let note_debug = bundle_note_infos
-        .iter()
-        .enumerate()
-        .map(|(idx, note)| {
-            format!(
-                "#{idx}:pos={} value={} cmx={} nf={}",
-                note.position,
-                note.value,
-                short_hex(&note.commitment),
-                short_hex(&note.nullifier)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
     log::info!(
         "voting delegation: preparing bundle \
-         (round_id={}, account_uuid={}, bundle_index={}, bundle_count={}, \
-         note_count={}, delegated_weight_zatoshi={}, notes=[{}])",
-        round_id,
-        account_uuid,
+         (bundle_index={}, bundle_count={}, note_count={}, delegated_weight_zatoshi={})",
         bundle_index,
         bundle_setup.bundle_count,
         bundle_note_infos.len(),
-        delegated_weight_zatoshi,
-        note_debug
+        delegated_weight_zatoshi
     );
 
     store_and_generate_witnesses(
@@ -346,7 +314,7 @@ where
     on_progress(ProofEvent::BuildingPczt);
     let account = load_account_for_delegation(db_path, network, account_uuid)?;
     let hotkey_raw_address =
-        derive_hotkey_raw_orchard_address(&seed, &round_id, account_uuid, network)?;
+        derive_hotkey_raw_orchard_address(seed, &round_id, account_uuid, network)?;
     let branch_height = current_chain_height(lightwalletd_url).await?;
     let branch_id = consensus_branch_id(network, branch_height)?;
     log::info!(
@@ -370,9 +338,7 @@ where
     let governance_pczt = if let Some(governance_pczt) = prepared_governance_pczt {
         log::info!(
             "voting delegation: using precomputed governance PCZT \
-             (round_id={}, account_uuid={}, bundle_index={})",
-            round_id,
-            account_uuid,
+             (bundle_index={})",
             bundle_index
         );
         governance_pczt
@@ -380,7 +346,6 @@ where
         build_paired_governance_pczt(
             &voting_db,
             &round_id,
-            account_uuid,
             bundle_index,
             &bundle_note_infos,
             &account,
@@ -392,21 +357,10 @@ where
     };
     log::info!(
         "voting delegation: built governance PCZT \
-         (round_id={}, account_uuid={}, bundle_index={}, action_index={}, \
-         pczt_bytes={}, sighash={}, nf_signed={}, cmx_new={}, rk={}, alpha={}, \
-         rseed_signed={}, rseed_output={})",
-        round_id,
-        account_uuid,
+         (bundle_index={}, action_index={}, pczt_bytes={})",
         bundle_index,
         governance_pczt.action_index,
-        governance_pczt.pczt_bytes.len(),
-        short_hex(&governance_pczt.pczt_sighash),
-        short_hex(&governance_pczt.nf_signed),
-        short_hex(&governance_pczt.cmx_new),
-        short_hex(&governance_pczt.rk),
-        short_hex(&governance_pczt.alpha),
-        short_hex(&governance_pczt.rseed_signed),
-        short_hex(&governance_pczt.rseed_output)
+        governance_pczt.pczt_bytes.len()
     );
 
     on_progress(ProofEvent::BuildingProof);
@@ -419,15 +373,9 @@ where
     let proof_network_id = network.voting_id().into();
     log::info!(
         "voting delegation: starting proof task \
-         (round_id={}, account_uuid={}, bundle_index={}, network_id={}, \
-         hotkey_raw_address={}, expected_nf_signed={}, expected_cmx_new={})",
-        round_id,
-        account_uuid,
+         (bundle_index={}, network_id={})",
         bundle_index,
-        proof_network_id,
-        short_hex(&hotkey_raw_address),
-        short_hex(&governance_pczt.nf_signed),
-        short_hex(&governance_pczt.cmx_new)
+        proof_network_id
     );
     tokio::task::spawn_blocking(move || {
         let proof_voting_db = open_voting_db(&proof_db_path, &proof_account_uuid)?;
@@ -454,9 +402,7 @@ where
     .map_err(|e| format!("delegation proof task failed: {e}"))??;
     log::info!(
         "voting delegation: proof task completed \
-         (round_id={}, account_uuid={}, bundle_index={})",
-        round_id,
-        account_uuid,
+         (bundle_index={})",
         bundle_index
     );
 
@@ -593,7 +539,6 @@ fn governance_pczt_output_paired_with_signed_action(
 fn build_paired_governance_pczt(
     voting_db: &zcash_voting::storage::VotingDb,
     round_id: &str,
-    account_uuid: &str,
     bundle_index: u32,
     bundle_note_infos: &[zcash_voting::NoteInfo],
     account: &DelegationAccount,
@@ -623,9 +568,7 @@ fn build_paired_governance_pczt(
             if attempt > 1 {
                 log::info!(
                     "voting delegation: rebuilt governance PCZT after unpaired action layout \
-                     (round_id={}, account_uuid={}, bundle_index={}, attempts={})",
-                    round_id,
-                    account_uuid,
+                     (bundle_index={}, attempts={})",
                     bundle_index,
                     attempt
                 );
@@ -897,6 +840,7 @@ mod tests {
     fn build_and_prove_delegation_bundle_rejects_invalid_round_params_before_progress() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("zcash_wallet.db");
+        let seed = SecretVec::new(vec![7; 32]);
         let events = Arc::new(Mutex::new(Vec::new()));
         let events_for_callback = events.clone();
         let err = tokio::runtime::Runtime::new()
@@ -916,7 +860,7 @@ mod tests {
                 "Demo",
                 None,
                 ACCOUNT_UUID,
-                &[7; 32],
+                &seed,
                 0,
                 move |event| events_for_callback.lock().unwrap().push(event),
             ))

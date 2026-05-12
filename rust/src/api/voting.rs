@@ -11,6 +11,7 @@ use crate::wallet::{
         hotkey, recovery, state, tree_sync, vote,
     },
 };
+use secrecy::ExposeSecret;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// FRB-safe voting round parameters loaded from the coordinator/session.
@@ -254,6 +255,7 @@ pub fn derive_voting_hotkey(
     catch(|| {
         let seed = secrecy::SecretVec::new(seed_bytes);
         hotkey::derive_hotkey(&seed, &round_id, &account_uuid)
+            .map(|hotkey| hotkey.expose_secret().to_vec())
     })
 }
 
@@ -727,6 +729,7 @@ pub async fn precompute_delegation_pir(
     bundle_index: u32,
 ) -> Result<ApiDelegationPirPrecomputeResult, String> {
     let network = keys::parse_network(&network)?;
+    let seed = secrecy::SecretVec::new(seed_bytes);
     delegation::precompute_delegation_pir(
         &db_path,
         &lightwalletd_url,
@@ -736,7 +739,7 @@ pub async fn precompute_delegation_pir(
         &round_name,
         session_json.as_deref(),
         &account_uuid,
-        &seed_bytes,
+        &seed,
         bundle_index,
     )
     .await
@@ -761,6 +764,7 @@ pub async fn build_and_prove_delegation_bundle(
     bundle_index: u32,
 ) -> Result<ApiSignedDelegation, String> {
     let network = keys::parse_network(&network)?;
+    let seed = secrecy::SecretVec::new(seed_bytes);
     delegation::build_and_prove_delegation_bundle(
         &db_path,
         &lightwalletd_url,
@@ -770,7 +774,7 @@ pub async fn build_and_prove_delegation_bundle(
         &round_name,
         session_json.as_deref(),
         &account_uuid,
-        &seed_bytes,
+        &seed,
         bundle_index,
         |_| {},
     )
@@ -798,6 +802,7 @@ pub async fn build_and_prove_delegation_bundle_with_progress(
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
+    let seed = secrecy::SecretVec::new(seed_bytes);
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let signed = delegation::build_and_prove_delegation_bundle(
@@ -809,7 +814,7 @@ pub async fn build_and_prove_delegation_bundle_with_progress(
         &round_name,
         session_json.as_deref(),
         &account_uuid,
-        &seed_bytes,
+        &seed,
         bundle_index,
         move |event| {
             if progress_sink.add(event.into()).is_err() {
@@ -958,6 +963,7 @@ pub fn build_vote_commitments(
     draft_votes: Vec<ApiDraftVote>,
 ) -> Result<ApiSignedVoteCommitments, String> {
     let network = keys::parse_network(&network)?;
+    let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
     vote::build_vote_commitments(
         &db_path,
         &wallet_id,
@@ -989,6 +995,7 @@ pub fn build_vote_commitments_with_progress(
     sink: StreamSink<ApiVoteCommitEvent>,
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
+    let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let commitments = vote::build_vote_commitments(
