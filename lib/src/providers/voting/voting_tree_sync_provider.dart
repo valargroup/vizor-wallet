@@ -8,15 +8,10 @@ final votingTreePreSyncProvider = Provider<VotingTreePreSyncService>((ref) {
   return VotingTreePreSyncService(ref);
 });
 
+const _activeVotingRoundStatus = '1';
+
 bool shouldPreSyncVotingTree(String status) {
-  switch (status.toLowerCase()) {
-    case 'active':
-    case 'open':
-    case 'voting':
-      return true;
-    default:
-      return false;
-  }
+  return status.trim() == _activeVotingRoundStatus;
 }
 
 class VotingTreePreSyncService {
