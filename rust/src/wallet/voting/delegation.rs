@@ -88,8 +88,31 @@ struct PreparedDelegationKey {
     account_uuid: String,
     round_id: String,
     bundle_index: u32,
-    branch_id: u32,
+    pczt_inputs: PreparedDelegationPcztInputs,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct PreparedDelegationPcztInputs {
+    bundle_notes: Vec<PreparedDelegationNoteInput>,
+    orchard_fvk_bytes: [u8; 96],
     hotkey_raw_address: Vec<u8>,
+    branch_id: u32,
+    coin_type: u32,
+    seed_fingerprint: [u8; 32],
+    account_index: u32,
+    round_name: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct PreparedDelegationNoteInput {
+    commitment: Vec<u8>,
+    nullifier: Vec<u8>,
+    value: u64,
+    position: u64,
+    diversifier: Vec<u8>,
+    rho: Vec<u8>,
+    rseed: Vec<u8>,
+    scope: u32,
 }
 
 struct PreparedDelegationEntry {
@@ -127,6 +150,53 @@ fn prepared_delegation_session_key(
     PreparedDelegationSessionKey {
         db_path: db_path.to_string(),
         account_uuid: account_uuid.to_string(),
+    }
+}
+
+/// Builds the complete immutable input key for cached governance PCZT material.
+///
+/// The cache is process-local and short-lived, but reuse must still prove that
+/// the precomputed PCZT was built from the same tuple that the live delegation
+/// path would pass to `build_governance_pczt`.
+fn prepared_delegation_key(
+    db_path: &str,
+    account_uuid: &str,
+    round_id: &str,
+    bundle_index: u32,
+    bundle_note_infos: &[zcash_voting::NoteInfo],
+    account: &DelegationAccount,
+    hotkey_raw_address: &[u8],
+    branch_id: u32,
+    network: WalletNetwork,
+    round_name: &str,
+) -> PreparedDelegationKey {
+    PreparedDelegationKey {
+        db_path: db_path.to_string(),
+        account_uuid: account_uuid.to_string(),
+        round_id: round_id.to_string(),
+        bundle_index,
+        pczt_inputs: PreparedDelegationPcztInputs {
+            bundle_notes: bundle_note_infos
+                .iter()
+                .map(|note| PreparedDelegationNoteInput {
+                    commitment: note.commitment.clone(),
+                    nullifier: note.nullifier.clone(),
+                    value: note.value,
+                    position: note.position,
+                    diversifier: note.diversifier.clone(),
+                    rho: note.rho.clone(),
+                    rseed: note.rseed.clone(),
+                    scope: note.scope,
+                })
+                .collect(),
+            orchard_fvk_bytes: account.orchard_fvk_bytes,
+            hotkey_raw_address: hotkey_raw_address.to_vec(),
+            branch_id,
+            coin_type: network.network_type().coin_type(),
+            seed_fingerprint: account.seed_fingerprint,
+            account_index: account.account_index,
+            round_name: round_name.to_string(),
+        },
     }
 }
 
@@ -399,14 +469,18 @@ pub async fn precompute_delegation_pir(
         &round_context.round_name,
     )?;
 
-    let prepared_key = PreparedDelegationKey {
-        db_path: db_path.to_string(),
-        account_uuid: account_uuid.to_string(),
-        round_id: round_id.clone(),
+    let prepared_key = prepared_delegation_key(
+        db_path,
+        account_uuid,
+        &round_id,
         bundle_index,
+        &bundle_note_infos,
+        &account,
+        &hotkey_raw_address,
         branch_id,
-        hotkey_raw_address: hotkey_raw_address.clone(),
-    };
+        network,
+        &round_context.round_name,
+    );
     let prepared_epoch = prepared_pczt_epoch(db_path, account_uuid)?;
     cancellation.check()?;
 
@@ -566,14 +640,18 @@ where
         branch_height,
         branch_id
     );
-    let prepared_key = PreparedDelegationKey {
-        db_path: db_path.to_string(),
-        account_uuid: account_uuid.to_string(),
-        round_id: round_id.clone(),
+    let prepared_key = prepared_delegation_key(
+        db_path,
+        account_uuid,
+        &round_id,
         bundle_index,
+        &bundle_note_infos,
+        &account,
+        &hotkey_raw_address,
         branch_id,
-        hotkey_raw_address: hotkey_raw_address.clone(),
-    };
+        network,
+        &round_context.round_name,
+    );
     let prepared_governance_pczt = take_prepared_pczt(&prepared_key)?;
     let governance_pczt = if let Some(governance_pczt) = prepared_governance_pczt {
         log::info!(
@@ -1161,6 +1239,30 @@ mod tests {
     }
 
     #[test]
+    fn prepared_delegation_pczt_cache_key_binds_full_pczt_inputs() {
+        clear_prepared_delegation_pczt_cache("/tmp/voting-input-key.sqlite", ACCOUNT_UUID, None)
+            .unwrap();
+        let key = test_prepared_key("/tmp/voting-input-key.sqlite", ACCOUNT_UUID, ROUND_ID, 0);
+        let epoch = prepared_pczt_epoch("/tmp/voting-input-key.sqlite", ACCOUNT_UUID).unwrap();
+        insert_prepared_pczt_if_current(key.clone(), epoch, test_governance_pczt()).unwrap();
+
+        let mut different_round_name = key.clone();
+        different_round_name.pczt_inputs.round_name = "Different Round".to_string();
+        assert!(take_prepared_pczt(&different_round_name).unwrap().is_none());
+
+        let mut different_bundle_note = key.clone();
+        different_bundle_note.pczt_inputs.bundle_notes[0].nullifier[0] ^= 0x01;
+        assert!(take_prepared_pczt(&different_bundle_note)
+            .unwrap()
+            .is_none());
+
+        let mut different_account = key.clone();
+        different_account.pczt_inputs.seed_fingerprint[0] ^= 0x01;
+        assert!(take_prepared_pczt(&different_account).unwrap().is_none());
+        assert!(take_prepared_pczt(&key).unwrap().is_some());
+    }
+
+    #[test]
     fn prepared_delegation_pczt_reset_blocks_late_precompute_insert() {
         clear_prepared_delegation_pczt_cache("/tmp/voting-late.sqlite", ACCOUNT_UUID, None)
             .unwrap();
@@ -1481,13 +1583,25 @@ mod tests {
         round_id: &str,
         bundle_index: u32,
     ) -> PreparedDelegationKey {
-        PreparedDelegationKey {
-            db_path: db_path.to_string(),
-            account_uuid: account_uuid.to_string(),
-            round_id: round_id.to_string(),
+        prepared_delegation_key(
+            db_path,
+            account_uuid,
+            round_id,
             bundle_index,
-            branch_id: 0x1234,
-            hotkey_raw_address: vec![7; 32],
+            &[test_note_info(42)],
+            &test_delegation_account(),
+            &[7; 32],
+            0x1234,
+            WalletNetwork::Regtest,
+            "Demo Round",
+        )
+    }
+
+    fn test_delegation_account() -> DelegationAccount {
+        DelegationAccount {
+            account_index: 0,
+            orchard_fvk_bytes: [8; 96],
+            seed_fingerprint: [9; 32],
         }
     }
 
