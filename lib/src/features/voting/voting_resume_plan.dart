@@ -113,13 +113,19 @@ class VotingResumePlan {
 
   int get bundleCount => recoveryState.bundleCount;
 
+  /// Shares already accepted by at least one helper are tracked for later
+  /// confirmation, but they should not keep the foreground submission screen
+  /// blocked.
+  bool get hasBlockingShareWork =>
+      unconfirmedShareDelegations.any((record) => record.sentToUrls.isEmpty);
+
   /// True when there is still user-visible network or confirmation work.
   bool get hasPendingWork =>
       pendingDelegationBundleIndexes.isNotEmpty ||
       pendingVoteSubmissionKeys.isNotEmpty ||
       submittedDelegationBundleIndexes.isNotEmpty ||
       submittedVoteConfirmationKeys.isNotEmpty ||
-      unconfirmedShareDelegations.isNotEmpty;
+      hasBlockingShareWork;
 
   rust_voting.ApiCommitmentBundleRecovery? commitmentBundleFor(
     VotingVoteKey key,
