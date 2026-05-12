@@ -91,7 +91,7 @@ class _AnimatedKeystoneQrState extends State<_AnimatedKeystoneQr> {
   void _startTimer() {
     _timer?.cancel();
     if (widget.urParts.length <= 1) return;
-    _timer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (!mounted) return;
       setState(() {
         _index = (_index + 1) % widget.urParts.length;

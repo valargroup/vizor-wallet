@@ -28,6 +28,8 @@ abstract final class AppIcons {
   static const block = 'block';
   static const book = 'book';
   static const calendar = 'calendar';
+  static const camera = 'camera';
+  static const cameraDenied = 'camera_denied';
   static const check = 'check';
   static const checkCircle = 'check_circle';
   static const chevronBackward = 'chevron_backward';
