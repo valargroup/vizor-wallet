@@ -149,4 +149,4 @@ flutter_rust_bridge_codegen generate
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).
