@@ -149,6 +149,9 @@ pub fn store_vote_tx_hash(
     voting_db
         .store_vote_tx_hash(round_id, bundle_index, proposal_id, tx_hash)
         .map_err(|e| format!("store_vote_tx_hash failed: {e}"))?;
+    voting_db
+        .mark_vote_submitted(round_id, bundle_index, proposal_id)
+        .map_err(|e| format!("mark_vote_submitted failed: {e}"))?;
     match voting_db
         .get_vote_tx_hash(round_id, bundle_index, proposal_id)
         .map_err(|e| format!("get_vote_tx_hash failed after store: {e}"))?
@@ -517,6 +520,20 @@ mod tests {
         assert_eq!(state.commitment_bundles[0].vc_tree_position, 77);
         assert_eq!(state.share_delegations.len(), 1);
         assert_eq!(state.unconfirmed_share_delegations.len(), 1);
+    }
+
+    #[test]
+    fn store_vote_tx_hash_marks_vote_submitted() {
+        let fixture = RecoveryFixture::new();
+        fixture.insert_vote(0, 1, 0, b"vote-0-1");
+
+        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
+
+        let votes = fixture.db.get_votes(ROUND_ID).unwrap();
+        assert_eq!(votes.len(), 1);
+        assert_eq!(votes[0].proposal_id, 1);
+        assert_eq!(votes[0].bundle_index, 0);
+        assert!(votes[0].submitted);
     }
 
     #[test]

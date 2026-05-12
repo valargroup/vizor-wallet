@@ -77,8 +77,22 @@ pub fn sync_commitment_tree(
     round_id: &str,
     node_url: &str,
 ) -> Result<u32, String> {
+    let started = std::time::Instant::now();
+    log::info!(
+        "voting tree: sync start (round_id={}, wallet_id={})",
+        round_id,
+        wallet_id
+    );
     let db = state::open_voting_db(db_path, wallet_id)?;
-    sync_commitment_tree_with_db(db_path, wallet_id, &db, round_id, node_url)
+    let height = sync_commitment_tree_with_db(db_path, wallet_id, &db, round_id, node_url)?;
+    log::info!(
+        "voting tree: sync completed (round_id={}, wallet_id={}, height={}, elapsed={:.2}s)",
+        round_id,
+        wallet_id,
+        height,
+        started.elapsed().as_secs_f64()
+    );
+    Ok(height)
 }
 
 /// Sync the vote commitment tree using an already-open voting database.
@@ -107,15 +121,34 @@ pub fn generate_van_witness(
     bundle_index: u32,
     anchor_height: u32,
 ) -> Result<VanWitness, String> {
+    let started = std::time::Instant::now();
+    log::info!(
+        "voting tree: VAN witness start \
+         (round_id={}, wallet_id={}, bundle_index={}, anchor_height={})",
+        round_id,
+        wallet_id,
+        bundle_index,
+        anchor_height
+    );
     let db = state::open_voting_db(db_path, wallet_id)?;
-    generate_van_witness_with_db(
+    let witness = generate_van_witness_with_db(
         db_path,
         wallet_id,
         &db,
         round_id,
         bundle_index,
         anchor_height,
-    )
+    )?;
+    log::info!(
+        "voting tree: VAN witness completed \
+         (round_id={}, wallet_id={}, bundle_index={}, position={}, elapsed={:.2}s)",
+        round_id,
+        wallet_id,
+        bundle_index,
+        witness.position,
+        started.elapsed().as_secs_f64()
+    );
+    Ok(witness)
 }
 
 /// Generate a VAN Merkle witness using an already-open voting database.
