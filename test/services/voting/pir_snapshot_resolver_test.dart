@@ -32,6 +32,87 @@ void main() {
     expect(result.diagnostics.single.status, PirSnapshotEndpointStatus.matched);
   });
 
+  test('ignores guessed height aliases', () async {
+    final endpoint = Uri.parse('https://pir.example/snapshot');
+    final resolver = PirSnapshotResolver(
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          'https://pir.example/snapshot/root': {
+            'root_height': 100,
+            'rootHeight': 100,
+            'snapshot_height': 100,
+            'snapshotHeight': 100,
+          },
+        },
+      ),
+    );
+
+    try {
+      await resolver.resolve(
+        endpoints: [endpoint],
+        expectedSnapshotHeight: 100,
+      );
+      fail('expected no matching endpoint');
+    } on PirSnapshotNoMatchingEndpoint catch (e) {
+      expect(
+        e.diagnostics.single.status,
+        PirSnapshotEndpointStatus.missingHeight,
+      );
+    }
+  });
+
+  test('non-height fields do not conflict with canonical height', () async {
+    final endpoint = Uri.parse('https://pir.example/snapshot');
+    final resolver = PirSnapshotResolver(
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          'https://pir.example/snapshot/root': {
+            'height': 100,
+            'snapshot_height': 101,
+          },
+        },
+      ),
+    );
+
+    final result = await resolver.resolve(
+      endpoints: [endpoint],
+      expectedSnapshotHeight: 100,
+    );
+
+    expect(result.endpoint, endpoint);
+    expect(result.diagnostics.single.status, PirSnapshotEndpointStatus.matched);
+  });
+
+  test('non-integer height values are treated as malformed', () async {
+    final endpoints = [
+      Uri.parse('https://pir.example/fractional'),
+      Uri.parse('https://pir.example/negative'),
+      Uri.parse('https://pir.example/too-large'),
+    ];
+    final resolver = PirSnapshotResolver(
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          'https://pir.example/fractional/root': {'height': 100.5},
+          'https://pir.example/negative/root': {'height': -1},
+          'https://pir.example/too-large/root': {
+            'height': '18446744073709551616',
+          },
+        },
+      ),
+    );
+
+    try {
+      await resolver.resolve(endpoints: endpoints, expectedSnapshotHeight: 100);
+      fail('expected no matching endpoint');
+    } on PirSnapshotNoMatchingEndpoint catch (e) {
+      expect(e.diagnostics.map((diagnostic) => diagnostic.status), [
+        PirSnapshotEndpointStatus.malformedJson,
+        PirSnapshotEndpointStatus.malformedJson,
+        PirSnapshotEndpointStatus.malformedJson,
+      ]);
+    }
+  });
+
   test(
     'excludes behind ahead missing malformed non-200 and timeout endpoints',
     () async {
