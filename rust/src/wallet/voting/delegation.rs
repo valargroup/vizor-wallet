@@ -25,22 +25,20 @@ use super::{
     workflow,
 };
 
-/// Internal progress phases for delegation PCZT build/prove/sign/broadcast.
+/// Internal progress phases for preparing a signed delegation payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProofEvent {
     SelectingNotes,
     BuildingPczt,
     BuildingProof,
-    SigningPczt,
-    Broadcasting,
-    Done { txid_hex: String },
+    SigningPayload,
+    PayloadReady,
 }
 
-/// Completed delegation bundle plus broadcast/storage status.
+/// Signed delegation payload ready for Dart-side submission.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SignedDelegation {
+pub struct SignedDelegationPayload {
     pub pczt_bytes: Vec<u8>,
-    pub txid_hex: String,
     pub status: String,
     pub message: Option<String>,
     pub proof: Vec<u8>,
@@ -469,10 +467,10 @@ pub async fn precompute_delegation_pir(
     })
 }
 
-/// Build, prove, sign, broadcast, and locally store one delegation bundle.
+/// Build, prove, and sign one delegation payload.
 ///
 /// Emits progress phases through `on_progress`. The returned value is a signed
-/// delegation payload ready for submission; `bundle_index` must identify an
+/// delegation payload ready for Dart-side submission; `bundle_index` must identify an
 /// eligible persisted bundle for this round.
 ///
 /// # Errors
@@ -481,7 +479,7 @@ pub async fn precompute_delegation_pir(
 /// generation, PCZT construction, PIR proof generation, or delegation signing
 /// fails.
 #[allow(clippy::too_many_arguments)]
-pub async fn build_and_prove_delegation_bundle<F>(
+pub async fn build_prove_and_sign_delegation_payload<F>(
     db_path: &str,
     lightwalletd_url: &str,
     pir_server_url: &str,
@@ -493,7 +491,7 @@ pub async fn build_and_prove_delegation_bundle<F>(
     seed: &SecretVec<u8>,
     bundle_index: u32,
     on_progress: F,
-) -> Result<SignedDelegation, String>
+) -> Result<SignedDelegationPayload, String>
 where
     F: Fn(ProofEvent) + Send + Sync + 'static,
 {
@@ -635,7 +633,7 @@ where
         bundle_index
     );
 
-    on_progress(ProofEvent::SigningPczt);
+    on_progress(ProofEvent::SigningPayload);
     let submission = voting_db
         .get_delegation_submission(
             &round_id,
@@ -646,12 +644,9 @@ where
         )
         .map_err(|e| format!("get_delegation_submission failed: {e}"))?;
 
-    on_progress(ProofEvent::Done {
-        txid_hex: String::new(),
-    });
-    Ok(SignedDelegation {
+    on_progress(ProofEvent::PayloadReady);
+    Ok(SignedDelegationPayload {
         pczt_bytes: governance_pczt.pczt_bytes,
-        txid_hex: String::new(),
         status: "ready_for_submission".to_string(),
         message: None,
         proof: submission.proof,
@@ -1192,7 +1187,7 @@ mod tests {
     }
 
     #[test]
-    fn build_and_prove_delegation_bundle_rejects_invalid_round_params_before_progress() {
+    fn build_prove_and_sign_delegation_payload_rejects_invalid_round_params_before_progress() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("zcash_wallet.db");
         let seed = SecretVec::new(vec![7; 32]);
@@ -1200,7 +1195,7 @@ mod tests {
         let events_for_callback = events.clone();
         let err = tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(build_and_prove_delegation_bundle(
+            .block_on(build_prove_and_sign_delegation_payload(
                 db_path.to_str().unwrap(),
                 "http://127.0.0.1:1",
                 "http://127.0.0.1:2",

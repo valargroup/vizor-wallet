@@ -804,7 +804,7 @@ class FakeVotingRustApi implements VotingRustApi {
 
   @override
   Stream<rust_voting.ApiDelegationProofEvent>
-  buildAndProveDelegationBundleWithProgress({
+  buildProveAndSignDelegationPayloadWithProgress({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -819,10 +819,8 @@ class FakeVotingRustApi implements VotingRustApi {
     delegationBundleCalls.add(bundleIndex);
     yield rust_voting.ApiDelegationProofEvent(
       phase: 'result',
-      txidHex: null,
-      signedDelegation: rust_voting.ApiSignedDelegation(
+      signedDelegationPayload: rust_voting.ApiSignedDelegationPayload(
         pcztBytes: Uint8List.fromList(const []),
-        txidHex: '',
         status: 'ready_for_submission',
         message: null,
         proof: Uint8List.fromList(const [1]),

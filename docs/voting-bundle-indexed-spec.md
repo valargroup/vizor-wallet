@@ -15,14 +15,16 @@ Delegation must preserve the Swift SDK's explicit bundle model:
 3. Run `setup_delegation_bundles` to persist bundles and return
    `bundle_count` plus total eligible weight.
 4. For each selected `bundle_index`, call
-   `build_and_prove_delegation_bundle`.
+   `build_prove_and_sign_delegation_payload`.
 5. Store/read recovery state by `round_id + bundle_index`.
 6. If only a prefix is processed, call `delete_skipped_bundles` and surface
    partial delegation honestly.
 
-`build_and_prove_delegation_bundle` must use only the selected bundle's notes
-for witness generation, governance PCZT construction, PIR/proof generation,
-delegated weight calculation, and tx-hash recovery.
+`build_prove_and_sign_delegation_payload` must use only the selected bundle's
+notes for witness generation, governance PCZT construction, PIR/proof
+generation, delegated weight calculation, and signed payload construction.
+Submission happens in Dart; tx-hash recovery starts only after a successful
+submission response is recorded.
 
 ## Coverage Matrix
 
@@ -34,7 +36,7 @@ delegated weight calculation, and tx-hash recovery.
 | `get_delegation_tx_hash` | Happy path in `rust/src/api/voting.rs` tests | N/A |
 | `delete_skipped_bundles` | Happy path in `rust/src/api/voting.rs` and storage wrapper tests | N/A |
 | `setup_delegation_bundles` | Invalid-network preflight in `rust/src/api/voting.rs`; bundling happy path in `rust/src/wallet/voting/delegation.rs` via `ensure_bundles` | Requires live lightwalletd tree state and wallet note fixtures |
-| `build_and_prove_delegation_bundle` | Invalid-network preflight, invalid round params, bundle-index validation, per-bundle note/weight tests | Requires live lightwalletd, PIR server, proof generation, signing, broadcast, and local wallet storage |
+| `build_prove_and_sign_delegation_payload` | Invalid-network preflight, invalid round params, bundle-index validation, per-bundle note/weight tests | Requires live lightwalletd, PIR server, proof generation, signing, Dart submission, and local tx-hash storage |
 
 ## Live Happy Path Requirements
 

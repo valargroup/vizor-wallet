@@ -182,7 +182,7 @@ abstract interface class VotingRustApi {
   });
 
   Stream<rust_voting.ApiDelegationProofEvent>
-  buildAndProveDelegationBundleWithProgress({
+  buildProveAndSignDelegationPayloadWithProgress({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -393,7 +393,7 @@ class FrbVotingRustApi implements VotingRustApi {
 
   @override
   Stream<rust_voting.ApiDelegationProofEvent>
-  buildAndProveDelegationBundleWithProgress({
+  buildProveAndSignDelegationPayloadWithProgress({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -405,7 +405,7 @@ class FrbVotingRustApi implements VotingRustApi {
     required List<int> seedBytes,
     required int bundleIndex,
   }) {
-    return rust_voting.buildAndProveDelegationBundleWithProgress(
+    return rust_voting.buildProveAndSignDelegationPayloadWithProgress(
       dbPath: dbPath,
       lightwalletdUrl: lightwalletdUrl,
       pirServerUrl: pirServerUrl,
