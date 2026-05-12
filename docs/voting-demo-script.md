@@ -32,7 +32,7 @@ fvm flutter run -d macos
 9. Select `Submit Votes`.
 10. Keep the app foregrounded while the status screen progresses through:
     `Selecting notes`, `Generating delegation proof (ZKP1)`,
-    `Broadcasting delegation`, `Generating vote proof (ZKP2)`, and
+    `Submitting delegation`, `Generating vote proof (ZKP2)`, and
     `Submitting shares`.
 11. Verify the app routes to results after completion.
 12. Refresh the vote server tally externally, then reload the results screen.

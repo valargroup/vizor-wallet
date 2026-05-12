@@ -118,11 +118,11 @@ Future<ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
   bundleIndex: bundleIndex,
 );
 
-/// Build, prove, sign, broadcast, and locally store one delegation bundle.
+/// Build, prove, and sign one delegation payload.
 ///
 /// This non-streaming variant drops intermediate proof progress and returns the
-/// final signed delegation result directly.
-Future<ApiSignedDelegation> buildAndProveDelegationBundle({
+/// final signed payload directly. Submission and tx-hash storage happen in Dart.
+Future<ApiSignedDelegationPayload> buildProveAndSignDelegationPayload({
   required String dbPath,
   required String lightwalletdUrl,
   required String pirServerUrl,
@@ -133,7 +133,7 @@ Future<ApiSignedDelegation> buildAndProveDelegationBundle({
   required String accountUuid,
   required List<int> seedBytes,
   required int bundleIndex,
-}) => RustLib.instance.api.crateApiVotingBuildAndProveDelegationBundle(
+}) => RustLib.instance.api.crateApiVotingBuildProveAndSignDelegationPayload(
   dbPath: dbPath,
   lightwalletdUrl: lightwalletdUrl,
   pirServerUrl: pirServerUrl,
@@ -146,12 +146,12 @@ Future<ApiSignedDelegation> buildAndProveDelegationBundle({
   bundleIndex: bundleIndex,
 );
 
-/// Streaming variant of `build_and_prove_delegation_bundle`.
+/// Streaming variant of `build_prove_and_sign_delegation_payload`.
 ///
-/// Emits phase events while work progresses, then emits a final `"result"` event
-/// containing `ApiSignedDelegation`. The function returns `Ok(())` after the
-/// terminal event is queued.
-Stream<ApiDelegationProofEvent> buildAndProveDelegationBundleWithProgress({
+/// Emits local preparation phase events while work progresses, then emits a
+/// final `"result"` event containing `ApiSignedDelegationPayload`. The function
+/// returns `Ok(())` after the terminal event is queued.
+Stream<ApiDelegationProofEvent> buildProveAndSignDelegationPayloadWithProgress({
   required String dbPath,
   required String lightwalletdUrl,
   required String pirServerUrl,
@@ -163,7 +163,7 @@ Stream<ApiDelegationProofEvent> buildAndProveDelegationBundleWithProgress({
   required List<int> seedBytes,
   required int bundleIndex,
 }) => RustLib.instance.api
-    .crateApiVotingBuildAndProveDelegationBundleWithProgress(
+    .crateApiVotingBuildProveAndSignDelegationPayloadWithProgress(
       dbPath: dbPath,
       lightwalletdUrl: lightwalletdUrl,
       pirServerUrl: pirServerUrl,
@@ -682,24 +682,21 @@ class ApiDelegationPirPrecomputeResult {
           bundleIndex == other.bundleIndex;
 }
 
-/// Progress event emitted while building, proving, signing, and broadcasting delegation PCZT.
+/// Progress event emitted while building, proving, and signing a delegation payload.
 ///
-/// A terminal `"result"` event carries `signed_delegation`; earlier phase events
-/// only describe progress and may carry a `txid_hex` once broadcast finishes.
+/// A terminal `"result"` event carries `signed_delegation_payload`; earlier
+/// phase events only describe local preparation progress.
 class ApiDelegationProofEvent {
   final String phase;
-  final String? txidHex;
-  final ApiSignedDelegation? signedDelegation;
+  final ApiSignedDelegationPayload? signedDelegationPayload;
 
   const ApiDelegationProofEvent({
     required this.phase,
-    this.txidHex,
-    this.signedDelegation,
+    this.signedDelegationPayload,
   });
 
   @override
-  int get hashCode =>
-      phase.hashCode ^ txidHex.hashCode ^ signedDelegation.hashCode;
+  int get hashCode => phase.hashCode ^ signedDelegationPayload.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -707,8 +704,7 @@ class ApiDelegationProofEvent {
       other is ApiDelegationProofEvent &&
           runtimeType == other.runtimeType &&
           phase == other.phase &&
-          txidHex == other.txidHex &&
-          signedDelegation == other.signedDelegation;
+          signedDelegationPayload == other.signedDelegationPayload;
 }
 
 /// Stored delegation transaction hash for one bundle.
@@ -950,10 +946,9 @@ class ApiShareWorkflowRecovery {
           phase == other.phase;
 }
 
-/// Signed delegation bundle result plus broadcast/storage status.
-class ApiSignedDelegation {
+/// Signed delegation payload ready for Dart-side submission.
+class ApiSignedDelegationPayload {
   final Uint8List pcztBytes;
-  final String txidHex;
   final String status;
   final String? message;
   final Uint8List proof;
@@ -970,9 +965,8 @@ class ApiSignedDelegation {
   final int bundleCount;
   final int bundleIndex;
 
-  const ApiSignedDelegation({
+  const ApiSignedDelegationPayload({
     required this.pcztBytes,
-    required this.txidHex,
     required this.status,
     this.message,
     required this.proof,
@@ -993,7 +987,6 @@ class ApiSignedDelegation {
   @override
   int get hashCode =>
       pcztBytes.hashCode ^
-      txidHex.hashCode ^
       status.hashCode ^
       message.hashCode ^
       proof.hashCode ^
@@ -1013,10 +1006,9 @@ class ApiSignedDelegation {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ApiSignedDelegation &&
+      other is ApiSignedDelegationPayload &&
           runtimeType == other.runtimeType &&
           pcztBytes == other.pcztBytes &&
-          txidHex == other.txidHex &&
           status == other.status &&
           message == other.message &&
           proof == other.proof &&

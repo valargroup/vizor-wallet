@@ -164,7 +164,7 @@ class _StatusContent extends StatelessWidget {
               complete: _after(VotingSessionPhase.delegating),
             ),
             _StepRow(
-              label: 'Broadcasting',
+              label: 'Submitting delegation',
               complete: _after(VotingSessionPhase.delegated),
             ),
             _StepRow(

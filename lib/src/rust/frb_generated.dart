@@ -72,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 1272614601;
+  int get rustContentHash => -1015422063;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -107,7 +107,8 @@ abstract class RustLibApi extends BaseApi {
     required List<String> newUrls,
   });
 
-  Future<ApiSignedDelegation> crateApiVotingBuildAndProveDelegationBundle({
+  Future<ApiSignedDelegationPayload>
+  crateApiVotingBuildProveAndSignDelegationPayload({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -121,7 +122,7 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Stream<ApiDelegationProofEvent>
-  crateApiVotingBuildAndProveDelegationBundleWithProgress({
+  crateApiVotingBuildProveAndSignDelegationPayloadWithProgress({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -911,7 +912,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<ApiSignedDelegation> crateApiVotingBuildAndProveDelegationBundle({
+  Future<ApiSignedDelegationPayload>
+  crateApiVotingBuildProveAndSignDelegationPayload({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -948,10 +950,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_signed_delegation,
+          decodeSuccessData: sse_decode_api_signed_delegation_payload,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiVotingBuildAndProveDelegationBundleConstMeta,
+        constMeta: kCrateApiVotingBuildProveAndSignDelegationPayloadConstMeta,
         argValues: [
           dbPath,
           lightwalletdUrl,
@@ -969,9 +971,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta get kCrateApiVotingBuildAndProveDelegationBundleConstMeta =>
+  TaskConstMeta
+  get kCrateApiVotingBuildProveAndSignDelegationPayloadConstMeta =>
       const TaskConstMeta(
-        debugName: "build_and_prove_delegation_bundle",
+        debugName: "build_prove_and_sign_delegation_payload",
         argNames: [
           "dbPath",
           "lightwalletdUrl",
@@ -988,7 +991,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Stream<ApiDelegationProofEvent>
-  crateApiVotingBuildAndProveDelegationBundleWithProgress({
+  crateApiVotingBuildProveAndSignDelegationPayloadWithProgress({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -1035,7 +1038,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             decodeErrorData: sse_decode_String,
           ),
           constMeta:
-              kCrateApiVotingBuildAndProveDelegationBundleWithProgressConstMeta,
+              kCrateApiVotingBuildProveAndSignDelegationPayloadWithProgressConstMeta,
           argValues: [
             dbPath,
             lightwalletdUrl,
@@ -1057,9 +1060,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   TaskConstMeta
-  get kCrateApiVotingBuildAndProveDelegationBundleWithProgressConstMeta =>
+  get kCrateApiVotingBuildProveAndSignDelegationPayloadWithProgressConstMeta =>
       const TaskConstMeta(
-        debugName: "build_and_prove_delegation_bundle_with_progress",
+        debugName: "build_prove_and_sign_delegation_payload_with_progress",
         argNames: [
           "dbPath",
           "lightwalletdUrl",
@@ -5233,14 +5236,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ApiDelegationProofEvent dco_decode_api_delegation_proof_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return ApiDelegationProofEvent(
       phase: dco_decode_String(arr[0]),
-      txidHex: dco_decode_opt_String(arr[1]),
-      signedDelegation: dco_decode_opt_box_autoadd_api_signed_delegation(
-        arr[2],
-      ),
+      signedDelegationPayload:
+          dco_decode_opt_box_autoadd_api_signed_delegation_payload(arr[1]),
     );
   }
 
@@ -5360,29 +5361,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegation dco_decode_api_signed_delegation(dynamic raw) {
+  ApiSignedDelegationPayload dco_decode_api_signed_delegation_payload(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 17)
-      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
-    return ApiSignedDelegation(
+    if (arr.length != 16)
+      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
+    return ApiSignedDelegationPayload(
       pcztBytes: dco_decode_list_prim_u_8_strict(arr[0]),
-      txidHex: dco_decode_String(arr[1]),
-      status: dco_decode_String(arr[2]),
-      message: dco_decode_opt_String(arr[3]),
-      proof: dco_decode_list_prim_u_8_strict(arr[4]),
-      rk: dco_decode_list_prim_u_8_strict(arr[5]),
-      spendAuthSig: dco_decode_list_prim_u_8_strict(arr[6]),
-      sighash: dco_decode_list_prim_u_8_strict(arr[7]),
-      nfSigned: dco_decode_list_prim_u_8_strict(arr[8]),
-      cmxNew: dco_decode_list_prim_u_8_strict(arr[9]),
-      govComm: dco_decode_list_prim_u_8_strict(arr[10]),
-      govNullifiers: dco_decode_list_list_prim_u_8_strict(arr[11]),
-      voteRoundId: dco_decode_String(arr[12]),
-      eligibleWeightZatoshi: dco_decode_u_64(arr[13]),
-      delegatedWeightZatoshi: dco_decode_u_64(arr[14]),
-      bundleCount: dco_decode_u_32(arr[15]),
-      bundleIndex: dco_decode_u_32(arr[16]),
+      status: dco_decode_String(arr[1]),
+      message: dco_decode_opt_String(arr[2]),
+      proof: dco_decode_list_prim_u_8_strict(arr[3]),
+      rk: dco_decode_list_prim_u_8_strict(arr[4]),
+      spendAuthSig: dco_decode_list_prim_u_8_strict(arr[5]),
+      sighash: dco_decode_list_prim_u_8_strict(arr[6]),
+      nfSigned: dco_decode_list_prim_u_8_strict(arr[7]),
+      cmxNew: dco_decode_list_prim_u_8_strict(arr[8]),
+      govComm: dco_decode_list_prim_u_8_strict(arr[9]),
+      govNullifiers: dco_decode_list_list_prim_u_8_strict(arr[10]),
+      voteRoundId: dco_decode_String(arr[11]),
+      eligibleWeightZatoshi: dco_decode_u_64(arr[12]),
+      delegatedWeightZatoshi: dco_decode_u_64(arr[13]),
+      bundleCount: dco_decode_u_32(arr[14]),
+      bundleIndex: dco_decode_u_32(arr[15]),
     );
   }
 
@@ -5638,11 +5640,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegation dco_decode_box_autoadd_api_signed_delegation(
-    dynamic raw,
-  ) {
+  ApiSignedDelegationPayload
+  dco_decode_box_autoadd_api_signed_delegation_payload(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_api_signed_delegation(raw);
+    return dco_decode_api_signed_delegation_payload(raw);
   }
 
   @protected
@@ -5941,13 +5942,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegation? dco_decode_opt_box_autoadd_api_signed_delegation(
-    dynamic raw,
-  ) {
+  ApiSignedDelegationPayload?
+  dco_decode_opt_box_autoadd_api_signed_delegation_payload(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null
         ? null
-        : dco_decode_box_autoadd_api_signed_delegation(raw);
+        : dco_decode_box_autoadd_api_signed_delegation_payload(raw);
   }
 
   @protected
@@ -6386,14 +6386,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_phase = sse_decode_String(deserializer);
-    var var_txidHex = sse_decode_opt_String(deserializer);
-    var var_signedDelegation = sse_decode_opt_box_autoadd_api_signed_delegation(
-      deserializer,
-    );
+    var var_signedDelegationPayload =
+        sse_decode_opt_box_autoadd_api_signed_delegation_payload(deserializer);
     return ApiDelegationProofEvent(
       phase: var_phase,
-      txidHex: var_txidHex,
-      signedDelegation: var_signedDelegation,
+      signedDelegationPayload: var_signedDelegationPayload,
     );
   }
 
@@ -6549,12 +6546,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegation sse_decode_api_signed_delegation(
+  ApiSignedDelegationPayload sse_decode_api_signed_delegation_payload(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_pcztBytes = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_txidHex = sse_decode_String(deserializer);
     var var_status = sse_decode_String(deserializer);
     var var_message = sse_decode_opt_String(deserializer);
     var var_proof = sse_decode_list_prim_u_8_strict(deserializer);
@@ -6570,9 +6566,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_delegatedWeightZatoshi = sse_decode_u_64(deserializer);
     var var_bundleCount = sse_decode_u_32(deserializer);
     var var_bundleIndex = sse_decode_u_32(deserializer);
-    return ApiSignedDelegation(
+    return ApiSignedDelegationPayload(
       pcztBytes: var_pcztBytes,
-      txidHex: var_txidHex,
       status: var_status,
       message: var_message,
       proof: var_proof,
@@ -6911,11 +6906,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegation sse_decode_box_autoadd_api_signed_delegation(
+  ApiSignedDelegationPayload
+  sse_decode_box_autoadd_api_signed_delegation_payload(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_api_signed_delegation(deserializer));
+    return (sse_decode_api_signed_delegation_payload(deserializer));
   }
 
   @protected
@@ -7375,13 +7371,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegation? sse_decode_opt_box_autoadd_api_signed_delegation(
+  ApiSignedDelegationPayload?
+  sse_decode_opt_box_autoadd_api_signed_delegation_payload(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_api_signed_delegation(deserializer));
+      return (sse_decode_box_autoadd_api_signed_delegation_payload(
+        deserializer,
+      ));
     } else {
       return null;
     }
@@ -7890,9 +7889,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.phase, serializer);
-    sse_encode_opt_String(self.txidHex, serializer);
-    sse_encode_opt_box_autoadd_api_signed_delegation(
-      self.signedDelegation,
+    sse_encode_opt_box_autoadd_api_signed_delegation_payload(
+      self.signedDelegationPayload,
       serializer,
     );
   }
@@ -8008,13 +8006,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_api_signed_delegation(
-    ApiSignedDelegation self,
+  void sse_encode_api_signed_delegation_payload(
+    ApiSignedDelegationPayload self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(self.pcztBytes, serializer);
-    sse_encode_String(self.txidHex, serializer);
     sse_encode_String(self.status, serializer);
     sse_encode_opt_String(self.message, serializer);
     sse_encode_list_prim_u_8_strict(self.proof, serializer);
@@ -8256,12 +8253,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_api_signed_delegation(
-    ApiSignedDelegation self,
+  void sse_encode_box_autoadd_api_signed_delegation_payload(
+    ApiSignedDelegationPayload self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_api_signed_delegation(self, serializer);
+    sse_encode_api_signed_delegation_payload(self, serializer);
   }
 
   @protected
@@ -8670,15 +8667,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_api_signed_delegation(
-    ApiSignedDelegation? self,
+  void sse_encode_opt_box_autoadd_api_signed_delegation_payload(
+    ApiSignedDelegationPayload? self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
-      sse_encode_box_autoadd_api_signed_delegation(self, serializer);
+      sse_encode_box_autoadd_api_signed_delegation_payload(self, serializer);
     }
   }
 

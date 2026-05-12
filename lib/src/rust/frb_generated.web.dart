@@ -93,7 +93,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ApiShareWorkflowRecovery dco_decode_api_share_workflow_recovery(dynamic raw);
 
   @protected
-  ApiSignedDelegation dco_decode_api_signed_delegation(dynamic raw);
+  ApiSignedDelegationPayload dco_decode_api_signed_delegation_payload(
+    dynamic raw,
+  );
 
   @protected
   ApiSignedVoteCommitment dco_decode_api_signed_vote_commitment(dynamic raw);
@@ -152,7 +154,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   dco_decode_box_autoadd_api_commitment_bundle_recovery(dynamic raw);
 
   @protected
-  ApiSignedDelegation dco_decode_box_autoadd_api_signed_delegation(dynamic raw);
+  ApiSignedDelegationPayload
+  dco_decode_box_autoadd_api_signed_delegation_payload(dynamic raw);
 
   @protected
   ApiSignedVoteCommitments dco_decode_box_autoadd_api_signed_vote_commitments(
@@ -289,9 +292,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   dco_decode_opt_box_autoadd_api_commitment_bundle_recovery(dynamic raw);
 
   @protected
-  ApiSignedDelegation? dco_decode_opt_box_autoadd_api_signed_delegation(
-    dynamic raw,
-  );
+  ApiSignedDelegationPayload?
+  dco_decode_opt_box_autoadd_api_signed_delegation_payload(dynamic raw);
 
   @protected
   ApiSignedVoteCommitments?
@@ -464,7 +466,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  ApiSignedDelegation sse_decode_api_signed_delegation(
+  ApiSignedDelegationPayload sse_decode_api_signed_delegation_payload(
     SseDeserializer deserializer,
   );
 
@@ -545,7 +547,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  ApiSignedDelegation sse_decode_box_autoadd_api_signed_delegation(
+  ApiSignedDelegationPayload
+  sse_decode_box_autoadd_api_signed_delegation_payload(
     SseDeserializer deserializer,
   );
 
@@ -716,7 +719,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  ApiSignedDelegation? sse_decode_opt_box_autoadd_api_signed_delegation(
+  ApiSignedDelegationPayload?
+  sse_decode_opt_box_autoadd_api_signed_delegation_payload(
     SseDeserializer deserializer,
   );
 
@@ -927,8 +931,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_api_signed_delegation(
-    ApiSignedDelegation self,
+  void sse_encode_api_signed_delegation_payload(
+    ApiSignedDelegationPayload self,
     SseSerializer serializer,
   );
 
@@ -1023,8 +1027,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_box_autoadd_api_signed_delegation(
-    ApiSignedDelegation self,
+  void sse_encode_box_autoadd_api_signed_delegation_payload(
+    ApiSignedDelegationPayload self,
     SseSerializer serializer,
   );
 
@@ -1230,8 +1234,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_opt_box_autoadd_api_signed_delegation(
-    ApiSignedDelegation? self,
+  void sse_encode_opt_box_autoadd_api_signed_delegation_payload(
+    ApiSignedDelegationPayload? self,
     SseSerializer serializer,
   );
 

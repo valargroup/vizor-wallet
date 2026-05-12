@@ -164,9 +164,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             currentBundleIndex: bundleIndex,
           ),
         );
-        rust_voting.ApiSignedDelegation? signedDelegation;
+        rust_voting.ApiSignedDelegationPayload? signedDelegationPayload;
         await for (final event
-            in rust.buildAndProveDelegationBundleWithProgress(
+            in rust.buildProveAndSignDelegationPayloadWithProgress(
               dbPath: context.dbPath,
               lightwalletdUrl: context.lightwalletdUrl,
               pirServerUrl: pirEndpoint.toString(),
@@ -178,11 +178,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               seedBytes: seedBytes,
               bundleIndex: bundleIndex,
             )) {
-          signedDelegation = event.signedDelegation ?? signedDelegation;
+          signedDelegationPayload =
+              event.signedDelegationPayload ?? signedDelegationPayload;
           progress[bundleIndex] = VotingSessionProgress(
             phase: event.phase,
             bundleIndex: bundleIndex,
-            message: event.txidHex,
+            message: null,
           );
           state = AsyncData(
             (state.value ?? current).copyWith(delegationProgress: progress),
@@ -193,7 +194,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           'round=${context.round.roundId} bundle=$bundleIndex '
           'elapsed=${_formatElapsed(bundleTimer.elapsed)}',
         );
-        final submission = signedDelegation;
+        final submission = signedDelegationPayload;
         if (submission == null) {
           throw StateError(
             'Delegation proof completed without submission payload.',
@@ -1122,7 +1123,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   static Map<String, dynamic> _delegationSubmissionJson(
-    rust_voting.ApiSignedDelegation submission,
+    rust_voting.ApiSignedDelegationPayload submission,
   ) {
     return {
       'rk': base64Encode(submission.rk),

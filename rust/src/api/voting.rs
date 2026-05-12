@@ -7,7 +7,7 @@ use crate::wallet::{
         bundle::{self, SelectedNotes},
         delegation,
         delegation::{
-            BundleSetupResult, DelegationPirPrecomputeResult, ProofEvent, SignedDelegation,
+            BundleSetupResult, DelegationPirPrecomputeResult, ProofEvent, SignedDelegationPayload,
         },
         hotkey, recovery, state, tree_sync,
         tree_sync::VanWitness,
@@ -66,10 +66,9 @@ pub struct ApiDelegationPirPrecomputeResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// Signed delegation bundle result plus broadcast/storage status.
-pub struct ApiSignedDelegation {
+/// Signed delegation payload ready for Dart-side submission.
+pub struct ApiSignedDelegationPayload {
     pub pczt_bytes: Vec<u8>,
-    pub txid_hex: String,
     pub status: String,
     pub message: Option<String>,
     pub proof: Vec<u8>,
@@ -88,14 +87,13 @@ pub struct ApiSignedDelegation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// Progress event emitted while building, proving, signing, and broadcasting delegation PCZT.
+/// Progress event emitted while building, proving, and signing a delegation payload.
 ///
-/// A terminal `"result"` event carries `signed_delegation`; earlier phase events
-/// only describe progress and may carry a `txid_hex` once broadcast finishes.
+/// A terminal `"result"` event carries `signed_delegation_payload`; earlier
+/// phase events only describe local preparation progress.
 pub struct ApiDelegationProofEvent {
     pub phase: String,
-    pub txid_hex: Option<String>,
-    pub signed_delegation: Option<ApiSignedDelegation>,
+    pub signed_delegation_payload: Option<ApiSignedDelegationPayload>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -339,11 +337,10 @@ impl From<DelegationPirPrecomputeResult> for ApiDelegationPirPrecomputeResult {
     }
 }
 
-impl From<SignedDelegation> for ApiSignedDelegation {
-    fn from(result: SignedDelegation) -> Self {
+impl From<SignedDelegationPayload> for ApiSignedDelegationPayload {
+    fn from(result: SignedDelegationPayload) -> Self {
         Self {
             pczt_bytes: result.pczt_bytes,
-            txid_hex: result.txid_hex,
             status: result.status,
             message: result.message,
             proof: result.proof,
@@ -368,33 +365,23 @@ impl From<ProofEvent> for ApiDelegationProofEvent {
         match event {
             ProofEvent::SelectingNotes => Self {
                 phase: "selecting_notes".to_string(),
-                txid_hex: None,
-                signed_delegation: None,
+                signed_delegation_payload: None,
             },
             ProofEvent::BuildingPczt => Self {
                 phase: "building_pczt".to_string(),
-                txid_hex: None,
-                signed_delegation: None,
+                signed_delegation_payload: None,
             },
             ProofEvent::BuildingProof => Self {
                 phase: "building_proof".to_string(),
-                txid_hex: None,
-                signed_delegation: None,
+                signed_delegation_payload: None,
             },
-            ProofEvent::SigningPczt => Self {
-                phase: "signing_pczt".to_string(),
-                txid_hex: None,
-                signed_delegation: None,
+            ProofEvent::SigningPayload => Self {
+                phase: "signing_payload".to_string(),
+                signed_delegation_payload: None,
             },
-            ProofEvent::Broadcasting => Self {
-                phase: "broadcasting".to_string(),
-                txid_hex: None,
-                signed_delegation: None,
-            },
-            ProofEvent::Done { txid_hex } => Self {
-                phase: "done".to_string(),
-                txid_hex: Some(txid_hex),
-                signed_delegation: None,
+            ProofEvent::PayloadReady => Self {
+                phase: "payload_ready".to_string(),
+                signed_delegation_payload: None,
             },
         }
     }
@@ -823,11 +810,11 @@ pub async fn precompute_delegation_pir(
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Build, prove, sign, broadcast, and locally store one delegation bundle.
+/// Build, prove, and sign one delegation payload.
 ///
 /// This non-streaming variant drops intermediate proof progress and returns the
-/// final signed delegation result directly.
-pub async fn build_and_prove_delegation_bundle(
+/// final signed payload directly. Submission and tx-hash storage happen in Dart.
+pub async fn build_prove_and_sign_delegation_payload(
     db_path: String,
     lightwalletd_url: String,
     pir_server_url: String,
@@ -838,10 +825,10 @@ pub async fn build_and_prove_delegation_bundle(
     account_uuid: String,
     seed_bytes: Vec<u8>,
     bundle_index: u32,
-) -> Result<ApiSignedDelegation, String> {
+) -> Result<ApiSignedDelegationPayload, String> {
     let network = keys::parse_network(&network)?;
     let seed = secrecy::SecretVec::new(seed_bytes);
-    delegation::build_and_prove_delegation_bundle(
+    delegation::build_prove_and_sign_delegation_payload(
         &db_path,
         &lightwalletd_url,
         &pir_server_url,
@@ -859,12 +846,12 @@ pub async fn build_and_prove_delegation_bundle(
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Streaming variant of `build_and_prove_delegation_bundle`.
+/// Streaming variant of `build_prove_and_sign_delegation_payload`.
 ///
-/// Emits phase events while work progresses, then emits a final `"result"` event
-/// containing `ApiSignedDelegation`. The function returns `Ok(())` after the
-/// terminal event is queued.
-pub async fn build_and_prove_delegation_bundle_with_progress(
+/// Emits local preparation phase events while work progresses, then emits a
+/// final `"result"` event containing `ApiSignedDelegationPayload`. The function
+/// returns `Ok(())` after the terminal event is queued.
+pub async fn build_prove_and_sign_delegation_payload_with_progress(
     db_path: String,
     lightwalletd_url: String,
     pir_server_url: String,
@@ -881,7 +868,7 @@ pub async fn build_and_prove_delegation_bundle_with_progress(
     let seed = secrecy::SecretVec::new(seed_bytes);
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
-    let signed = delegation::build_and_prove_delegation_bundle(
+    let signed = delegation::build_prove_and_sign_delegation_payload(
         &db_path,
         &lightwalletd_url,
         &pir_server_url,
@@ -899,13 +886,12 @@ pub async fn build_and_prove_delegation_bundle_with_progress(
         },
     )
     .await
-    .map(ApiSignedDelegation::from)?;
+    .map(ApiSignedDelegationPayload::from)?;
 
     if sink
         .add(ApiDelegationProofEvent {
             phase: "result".to_string(),
-            txid_hex: Some(signed.txid_hex.clone()),
-            signed_delegation: Some(signed),
+            signed_delegation_payload: Some(signed),
         })
         .is_err()
     {
@@ -1475,11 +1461,10 @@ mod tests {
     }
 
     #[test]
-    fn api_signed_delegation_preserves_core_fields() {
-        let api = ApiSignedDelegation::from(SignedDelegation {
+    fn api_signed_delegation_payload_preserves_core_fields() {
+        let api = ApiSignedDelegationPayload::from(SignedDelegationPayload {
             pczt_bytes: vec![1, 2, 3],
-            txid_hex: "abc".to_string(),
-            status: "broadcasted".to_string(),
+            status: "ready_for_submission".to_string(),
             message: Some("ok".to_string()),
             proof: vec![4],
             rk: vec![5],
@@ -1497,8 +1482,7 @@ mod tests {
         });
 
         assert_eq!(api.pczt_bytes, vec![1, 2, 3]);
-        assert_eq!(api.txid_hex, "abc");
-        assert_eq!(api.status, "broadcasted");
+        assert_eq!(api.status, "ready_for_submission");
         assert_eq!(api.message.as_deref(), Some("ok"));
         assert_eq!(api.proof, vec![4]);
         assert_eq!(api.vote_round_id, "round");
@@ -1527,19 +1511,19 @@ mod tests {
             ApiDelegationProofEvent::from(ProofEvent::SelectingNotes).phase,
             "selecting_notes"
         );
-        let done = ApiDelegationProofEvent::from(ProofEvent::Done {
-            txid_hex: "txid".to_string(),
-        });
-        assert_eq!(done.phase, "done");
-        assert_eq!(done.txid_hex.as_deref(), Some("txid"));
+        assert_eq!(
+            ApiDelegationProofEvent::from(ProofEvent::SigningPayload).phase,
+            "signing_payload"
+        );
+        let ready = ApiDelegationProofEvent::from(ProofEvent::PayloadReady);
+        assert_eq!(ready.phase, "payload_ready");
+        assert!(ready.signed_delegation_payload.is_none());
 
         let result = ApiDelegationProofEvent {
             phase: "result".to_string(),
-            txid_hex: Some("txid".to_string()),
-            signed_delegation: Some(ApiSignedDelegation {
+            signed_delegation_payload: Some(ApiSignedDelegationPayload {
                 pczt_bytes: vec![1],
-                txid_hex: "txid".to_string(),
-                status: "broadcasted".to_string(),
+                status: "ready_for_submission".to_string(),
                 message: None,
                 proof: vec![1],
                 rk: vec![2],
@@ -1558,8 +1542,8 @@ mod tests {
         };
         assert_eq!(result.phase, "result");
         assert_eq!(
-            result.signed_delegation.as_ref().unwrap().status,
-            "broadcasted"
+            result.signed_delegation_payload.as_ref().unwrap().status,
+            "ready_for_submission"
         );
     }
 
@@ -2144,12 +2128,12 @@ mod tests {
     }
 
     #[test]
-    fn build_and_prove_delegation_bundle_rejects_invalid_network_before_network_io() {
+    fn build_prove_and_sign_delegation_payload_rejects_invalid_network_before_network_io() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let err = tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(build_and_prove_delegation_bundle(
+            .block_on(build_prove_and_sign_delegation_payload(
                 db_path.to_str().unwrap().to_string(),
                 "http://127.0.0.1:1".to_string(),
                 "http://127.0.0.1:2".to_string(),
