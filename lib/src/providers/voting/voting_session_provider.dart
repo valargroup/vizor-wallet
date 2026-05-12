@@ -183,6 +183,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           progress[bundleIndex] = VotingSessionProgress(
             phase: event.phase,
             bundleIndex: bundleIndex,
+            proofProgress: event.proofProgress,
             message: null,
           );
           state = AsyncData(
@@ -455,6 +456,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                 phase: event.phase,
                 bundleIndex: key.bundleIndex,
                 proposalId: proposalId,
+                proofProgress: event.proofProgress,
               );
               state = AsyncData(
                 (state.value ?? current).copyWith(

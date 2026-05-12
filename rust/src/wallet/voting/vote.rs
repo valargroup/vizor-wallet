@@ -2,16 +2,35 @@ use crate::wallet::network::WalletNetwork;
 
 use secrecy::{ExposeSecret, SecretVec};
 
-use super::{state::open_voting_db, tree_sync::VanWitness, workflow};
+use super::{
+    progress::{ProofProgressBridge, VotingWorkCancellation},
+    state::open_voting_db,
+    tree_sync::VanWitness,
+    workflow,
+};
 
 const VAN_AUTH_PATH_LEN: usize = 24;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 /// Internal progress phases for ZKP2 vote commitment generation.
 pub enum VoteCommitEvent {
-    BuildingProof { proposal_id: u32, bundle_index: u32 },
-    BuildingSharePayloads { proposal_id: u32, bundle_index: u32 },
-    Signing { proposal_id: u32, bundle_index: u32 },
+    BuildingProof {
+        proposal_id: u32,
+        bundle_index: u32,
+    },
+    ProofProgress {
+        proposal_id: u32,
+        bundle_index: u32,
+        progress: f64,
+    },
+    BuildingSharePayloads {
+        proposal_id: u32,
+        bundle_index: u32,
+    },
+    Signing {
+        proposal_id: u32,
+        bundle_index: u32,
+    },
     Done,
 }
 
@@ -103,22 +122,34 @@ pub fn build_vote_commitments<F>(
     van_witness: VanWitness,
     draft_votes: Vec<DraftVote>,
     on_progress: F,
+    cancellation: VotingWorkCancellation,
 ) -> Result<SignedVoteCommitments, String>
 where
-    F: Fn(VoteCommitEvent),
+    F: Fn(VoteCommitEvent) + Send + Sync + 'static,
 {
     validate_draft_votes(&draft_votes)?;
+    let on_progress = std::sync::Arc::new(on_progress);
     let van_auth_path = van_auth_path_array(&van_witness)?;
     let voting_db = open_voting_db(db_path, wallet_id)?;
     let mut commitments = Vec::with_capacity(draft_votes.len());
 
     for draft in draft_votes {
         let total_start = std::time::Instant::now();
+        cancellation.check()?;
         on_progress(VoteCommitEvent::BuildingProof {
             proposal_id: draft.proposal_id,
             bundle_index,
         });
-        let reporter = zcash_voting::NoopProgressReporter;
+        let progress_cancellation = cancellation.clone();
+        let proof_progress = on_progress.clone();
+        let proposal_id = draft.proposal_id;
+        let reporter = ProofProgressBridge::new(progress_cancellation, move |progress| {
+            proof_progress(VoteCommitEvent::ProofProgress {
+                proposal_id,
+                bundle_index,
+                progress,
+            });
+        });
         let proof_start = std::time::Instant::now();
         log::info!(
             "voting vote: starting proof generation (bundle_index={bundle_index}, proposal_id={})",
@@ -140,6 +171,7 @@ where
                 &reporter,
             )
             .map_err(|e| format!("build_vote_commitment failed: {e}"))?;
+        cancellation.check()?;
         log::info!(
             "voting vote: proof generation completed \
              (bundle_index={bundle_index}, proposal_id={}, elapsed={:.2}s)",
@@ -147,6 +179,7 @@ where
             proof_start.elapsed().as_secs_f64(),
         );
 
+        cancellation.check()?;
         let wire_shares: Vec<zcash_voting::WireEncryptedShare> =
             bundle.enc_shares.iter().map(Into::into).collect();
 
@@ -174,6 +207,7 @@ where
 
         let commitment_json = public_commitment_json(&bundle, &wire_shares, &share_payloads)?;
 
+        cancellation.check()?;
         on_progress(VoteCommitEvent::Signing {
             proposal_id: draft.proposal_id,
             bundle_index,

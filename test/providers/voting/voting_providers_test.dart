@@ -819,6 +819,7 @@ class FakeVotingRustApi implements VotingRustApi {
     delegationBundleCalls.add(bundleIndex);
     yield rust_voting.ApiDelegationProofEvent(
       phase: 'result',
+      proofProgress: null,
       signedDelegationPayload: rust_voting.ApiSignedDelegationPayload(
         pcztBytes: Uint8List.fromList(const []),
         status: 'ready_for_submission',
@@ -962,6 +963,7 @@ class FakeVotingRustApi implements VotingRustApi {
         phase: 'result',
         proposalId: draft.proposalId,
         bundleIndex: bundleIndex,
+        proofProgress: null,
         commitments: emitCommitments
             ? _commitments(
                 roundId: roundId,

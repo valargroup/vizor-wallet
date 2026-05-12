@@ -9,7 +9,9 @@ use crate::wallet::{
         delegation::{
             BundleSetupResult, DelegationPirPrecomputeResult, ProofEvent, SignedDelegationPayload,
         },
-        hotkey, recovery, state, tree_sync,
+        hotkey,
+        progress::{cancel_voting_work, VotingWorkCancellation},
+        recovery, state, tree_sync,
         tree_sync::VanWitness,
         vote,
     },
@@ -86,13 +88,14 @@ pub struct ApiSignedDelegationPayload {
     pub bundle_index: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 /// Progress event emitted while building, proving, and signing a delegation payload.
 ///
 /// A terminal `"result"` event carries `signed_delegation_payload`; earlier
 /// phase events only describe local preparation progress.
 pub struct ApiDelegationProofEvent {
     pub phase: String,
+    pub proof_progress: Option<f64>,
     pub signed_delegation_payload: Option<ApiSignedDelegationPayload>,
 }
 
@@ -106,7 +109,7 @@ pub struct ApiVanWitness {
     pub anchor_height: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 /// Progress event emitted while building ZKP2 vote commitments.
 ///
 /// A terminal `"result"` event carries the completed commitment set; earlier
@@ -115,6 +118,7 @@ pub struct ApiVoteCommitEvent {
     pub phase: String,
     pub proposal_id: Option<u32>,
     pub bundle_index: Option<u32>,
+    pub proof_progress: Option<f64>,
     pub commitments: Option<ApiSignedVoteCommitments>,
 }
 
@@ -365,22 +369,32 @@ impl From<ProofEvent> for ApiDelegationProofEvent {
         match event {
             ProofEvent::SelectingNotes => Self {
                 phase: "selecting_notes".to_string(),
+                proof_progress: None,
                 signed_delegation_payload: None,
             },
             ProofEvent::BuildingPczt => Self {
                 phase: "building_pczt".to_string(),
+                proof_progress: None,
                 signed_delegation_payload: None,
             },
             ProofEvent::BuildingProof => Self {
                 phase: "building_proof".to_string(),
+                proof_progress: Some(0.0),
+                signed_delegation_payload: None,
+            },
+            ProofEvent::ProofProgress { progress } => Self {
+                phase: "proof_progress".to_string(),
+                proof_progress: Some(progress),
                 signed_delegation_payload: None,
             },
             ProofEvent::SigningPayload => Self {
                 phase: "signing_payload".to_string(),
+                proof_progress: Some(1.0),
                 signed_delegation_payload: None,
             },
             ProofEvent::PayloadReady => Self {
                 phase: "payload_ready".to_string(),
+                proof_progress: None,
                 signed_delegation_payload: None,
             },
         }
@@ -429,6 +443,18 @@ impl From<vote::VoteCommitEvent> for ApiVoteCommitEvent {
                 phase: "building_proof".to_string(),
                 proposal_id: Some(proposal_id),
                 bundle_index: Some(bundle_index),
+                proof_progress: Some(0.0),
+                commitments: None,
+            },
+            vote::VoteCommitEvent::ProofProgress {
+                proposal_id,
+                bundle_index,
+                progress,
+            } => Self {
+                phase: "proof_progress".to_string(),
+                proposal_id: Some(proposal_id),
+                bundle_index: Some(bundle_index),
+                proof_progress: Some(progress),
                 commitments: None,
             },
             vote::VoteCommitEvent::BuildingSharePayloads {
@@ -438,6 +464,7 @@ impl From<vote::VoteCommitEvent> for ApiVoteCommitEvent {
                 phase: "building_share_payloads".to_string(),
                 proposal_id: Some(proposal_id),
                 bundle_index: Some(bundle_index),
+                proof_progress: Some(1.0),
                 commitments: None,
             },
             vote::VoteCommitEvent::Signing {
@@ -447,12 +474,14 @@ impl From<vote::VoteCommitEvent> for ApiVoteCommitEvent {
                 phase: "signing".to_string(),
                 proposal_id: Some(proposal_id),
                 bundle_index: Some(bundle_index),
+                proof_progress: None,
                 commitments: None,
             },
             vote::VoteCommitEvent::Done => Self {
                 phase: "done".to_string(),
                 proposal_id: None,
                 bundle_index: None,
+                proof_progress: None,
                 commitments: None,
             },
         }
@@ -792,7 +821,9 @@ pub async fn precompute_delegation_pir(
     bundle_index: u32,
 ) -> Result<ApiDelegationPirPrecomputeResult, String> {
     let network = keys::parse_network(&network)?;
+    let round_id = round_params.vote_round_id.clone();
     let seed = secrecy::SecretVec::new(seed_bytes);
+    let cancellation = VotingWorkCancellation::start(&db_path, &account_uuid, Some(&round_id))?;
     delegation::precompute_delegation_pir(
         &db_path,
         &lightwalletd_url,
@@ -804,6 +835,7 @@ pub async fn precompute_delegation_pir(
         &account_uuid,
         &seed,
         bundle_index,
+        cancellation,
     )
     .await
     .map(Into::into)
@@ -827,7 +859,9 @@ pub async fn build_prove_and_sign_delegation_payload(
     bundle_index: u32,
 ) -> Result<ApiSignedDelegationPayload, String> {
     let network = keys::parse_network(&network)?;
+    let round_id = round_params.vote_round_id.clone();
     let seed = secrecy::SecretVec::new(seed_bytes);
+    let cancellation = VotingWorkCancellation::start(&db_path, &account_uuid, Some(&round_id))?;
     delegation::build_prove_and_sign_delegation_payload(
         &db_path,
         &lightwalletd_url,
@@ -840,6 +874,7 @@ pub async fn build_prove_and_sign_delegation_payload(
         &seed,
         bundle_index,
         |_| {},
+        cancellation,
     )
     .await
     .map(Into::into)
@@ -865,9 +900,12 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
+    let round_id = round_params.vote_round_id.clone();
     let seed = secrecy::SecretVec::new(seed_bytes);
+    let cancellation = VotingWorkCancellation::start(&db_path, &account_uuid, Some(&round_id))?;
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
+    let progress_cancellation = cancellation.clone();
     let signed = delegation::build_prove_and_sign_delegation_payload(
         &db_path,
         &lightwalletd_url,
@@ -881,9 +919,11 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
         bundle_index,
         move |event| {
             if progress_sink.add(event.into()).is_err() {
+                progress_cancellation.cancel_local();
                 log::warn!("voting delegation: StreamSink closed, progress not delivered");
             }
         },
+        cancellation,
     )
     .await
     .map(ApiSignedDelegationPayload::from)?;
@@ -891,6 +931,7 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     if sink
         .add(ApiDelegationProofEvent {
             phase: "result".to_string(),
+            proof_progress: None,
             signed_delegation_payload: Some(signed),
         })
         .is_err()
@@ -1058,6 +1099,7 @@ pub fn reset_voting_session_state(
     round_id: Option<String>,
 ) -> Result<(), String> {
     catch(|| {
+        cancel_voting_work(&db_path, &wallet_id, round_id.as_deref())?;
         let account_wide = round_id.as_deref().map(str::is_empty).unwrap_or(true);
         let tree_count = if account_wide {
             tree_sync::clear_tree_sync_session(&db_path, &wallet_id)?
@@ -1099,6 +1141,7 @@ pub fn build_vote_commitments(
 ) -> Result<ApiSignedVoteCommitments, String> {
     let network = keys::parse_network(&network)?;
     let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
+    let cancellation = VotingWorkCancellation::start(&db_path, &wallet_id, Some(&round_id))?;
     vote::build_vote_commitments(
         &db_path,
         &wallet_id,
@@ -1109,6 +1152,7 @@ pub fn build_vote_commitments(
         van_witness.into(),
         draft_votes.into_iter().map(Into::into).collect(),
         |_| {},
+        cancellation,
     )
     .map(Into::into)
 }
@@ -1118,7 +1162,7 @@ pub fn build_vote_commitments(
 ///
 /// Emits per-proposal progress events, then a terminal `"result"` event carrying
 /// `ApiSignedVoteCommitments`.
-pub fn build_vote_commitments_with_progress(
+pub async fn build_vote_commitments_with_progress(
     db_path: String,
     wallet_id: String,
     network: String,
@@ -1131,23 +1175,31 @@ pub fn build_vote_commitments_with_progress(
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
     let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
+    let cancellation = VotingWorkCancellation::start(&db_path, &wallet_id, Some(&round_id))?;
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
-    let commitments = vote::build_vote_commitments(
-        &db_path,
-        &wallet_id,
-        network,
-        &round_id,
-        bundle_index,
-        &hotkey_seed,
-        van_witness.into(),
-        draft_votes.into_iter().map(Into::into).collect(),
-        move |event| {
-            if progress_sink.add(event.into()).is_err() {
-                log::warn!("voting vote: StreamSink closed, progress not delivered");
-            }
-        },
-    )
+    let progress_cancellation = cancellation.clone();
+    let commitments = tokio::task::spawn_blocking(move || {
+        vote::build_vote_commitments(
+            &db_path,
+            &wallet_id,
+            network,
+            &round_id,
+            bundle_index,
+            &hotkey_seed,
+            van_witness.into(),
+            draft_votes.into_iter().map(Into::into).collect(),
+            move |event| {
+                if progress_sink.add(event.into()).is_err() {
+                    progress_cancellation.cancel_local();
+                    log::warn!("voting vote: StreamSink closed, progress not delivered");
+                }
+            },
+            cancellation,
+        )
+    })
+    .await
+    .map_err(|e| format!("vote commitment task failed: {e}"))?
     .map(ApiSignedVoteCommitments::from)?;
 
     if sink
@@ -1155,6 +1207,7 @@ pub fn build_vote_commitments_with_progress(
             phase: "result".to_string(),
             proposal_id: None,
             bundle_index: Some(commitments.bundle_index),
+            proof_progress: None,
             commitments: Some(commitments),
         })
         .is_err()
@@ -1517,10 +1570,16 @@ mod tests {
         );
         let ready = ApiDelegationProofEvent::from(ProofEvent::PayloadReady);
         assert_eq!(ready.phase, "payload_ready");
+        assert_eq!(ready.proof_progress, None);
         assert!(ready.signed_delegation_payload.is_none());
+
+        let proof = ApiDelegationProofEvent::from(ProofEvent::ProofProgress { progress: 0.5 });
+        assert_eq!(proof.phase, "proof_progress");
+        assert_eq!(proof.proof_progress, Some(0.5));
 
         let result = ApiDelegationProofEvent {
             phase: "result".to_string(),
+            proof_progress: None,
             signed_delegation_payload: Some(ApiSignedDelegationPayload {
                 pczt_bytes: vec![1],
                 status: "ready_for_submission".to_string(),
@@ -1557,6 +1616,14 @@ mod tests {
         assert_eq!(event.phase, "building_proof");
         assert_eq!(event.proposal_id, Some(1));
         assert_eq!(event.bundle_index, Some(2));
+        assert_eq!(event.proof_progress, Some(0.0));
+        let proof = ApiVoteCommitEvent::from(vote::VoteCommitEvent::ProofProgress {
+            proposal_id: 1,
+            bundle_index: 2,
+            progress: 0.5,
+        });
+        assert_eq!(proof.phase, "proof_progress");
+        assert_eq!(proof.proof_progress, Some(0.5));
         assert_eq!(
             ApiVoteCommitEvent::from(vote::VoteCommitEvent::Done).phase,
             "done"
@@ -1566,6 +1633,7 @@ mod tests {
             phase: "result".to_string(),
             proposal_id: None,
             bundle_index: Some(2),
+            proof_progress: None,
             commitments: Some(ApiSignedVoteCommitments {
                 bundle_index: 2,
                 commitments: vec![],

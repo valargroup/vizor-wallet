@@ -4,6 +4,7 @@ pub mod bundle;
 pub mod delegation;
 pub mod endpoint_validation;
 pub mod hotkey;
+pub mod progress;
 pub mod recovery;
 pub mod state;
 pub mod tree_sync;
