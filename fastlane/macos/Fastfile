@@ -122,6 +122,8 @@ def release_metadata(flavor: "mainnet")
   dist_dir = File.join(workspace_root, "dist", "macos")
   sparkle_dir = File.join(dist_dir, "sparkle", flavor)
   app_path = File.join(workspace_root, "build", "macos", "Build", "Products", "Release", "#{app_name}.app")
+  zip_asset_name = "#{artifact_name}-macos.zip"
+  dmg_asset_name = "#{artifact_name}-macos.dmg"
 
   {
     flavor: flavor,
@@ -141,11 +143,11 @@ def release_metadata(flavor: "mainnet")
     dist_dir: dist_dir,
     sparkle_dir: sparkle_dir,
     app_path: app_path,
-    zip_path: File.join(dist_dir, "#{artifact_name}-#{asset_version}-macos.zip"),
-    dmg_path: File.join(dist_dir, "#{artifact_name}-#{asset_version}-macos.dmg"),
+    zip_path: File.join(dist_dir, zip_asset_name),
+    dmg_path: File.join(dist_dir, dmg_asset_name),
     appcast_path: File.join(sparkle_dir, flavor_config.fetch(:sparkle_feed_asset_name)),
     sparkle_feed_url: "https://github.com/#{ENV.fetch("RELEASE_REPOSITORY")}/releases/latest/download/#{flavor_config.fetch(:sparkle_feed_asset_name)}",
-    sparkle_release_notes_path: File.join(sparkle_dir, "#{artifact_name}-#{asset_version}-macos.md"),
+    sparkle_release_notes_path: File.join(sparkle_dir, "#{artifact_name}-macos.md"),
     sparkle_public_key_env: flavor_config.fetch(:sparkle_public_key_env),
     sparkle_private_key_env: flavor_config.fetch(:sparkle_private_key_env)
   }
@@ -256,14 +258,18 @@ end
 
 def previous_release_zip_assets(metadata, limit: 5)
   releases = github_api_json("https://api.github.com/repos/#{ENV.fetch("RELEASE_REPOSITORY")}/releases?per_page=100")
-  zip_asset_pattern = /\A#{Regexp.escape(metadata.fetch(:artifact_name))}-\d+\.\d+\.\d+-macos\.zip\z/
+  zip_asset_name = "#{metadata.fetch(:artifact_name)}-macos.zip"
+  legacy_zip_asset_pattern = /\A#{Regexp.escape(metadata.fetch(:artifact_name))}-\d+\.\d+\.\d+-macos\.zip\z/
 
   releases.filter_map do |release|
     tag_name = release["tag_name"].to_s
     next if release["draft"] || release["prerelease"] || tag_name == metadata[:tag]
     next unless tag_name.match?(/\Arelease\/v\d+\.\d+\.\d+\z/)
 
-    asset = Array(release["assets"]).find { |candidate| candidate["name"].to_s.match?(zip_asset_pattern) }
+    asset = Array(release["assets"]).find do |candidate|
+      name = candidate["name"].to_s
+      name == zip_asset_name || name.match?(legacy_zip_asset_pattern)
+    end
     next unless asset
 
     {
@@ -274,9 +280,14 @@ def previous_release_zip_assets(metadata, limit: 5)
   end.first(limit)
 end
 
+def previous_release_archive_filename(metadata, tag_name)
+  tag_info = release_tag_info(tag_name)
+  "#{metadata.fetch(:artifact_name)}-#{tag_info.fetch(:asset_version)}-macos.zip"
+end
+
 def download_previous_release_archives!(archives_dir, metadata)
   previous_release_zip_assets(metadata).each do |asset|
-    destination_path = File.join(archives_dir, asset.fetch(:name))
+    destination_path = File.join(archives_dir, previous_release_archive_filename(metadata, asset.fetch(:tag)))
     next if File.exist?(destination_path)
 
     UI.message("Downloading prior Sparkle archive #{asset.fetch(:name)} from #{asset.fetch(:tag)}")

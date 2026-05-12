@@ -77,13 +77,13 @@ The DMG packaging script must run on macOS in a GUI session.
 Check the hash:
 
 ```bash
-shasum -a 256 Vizor-X.Y.Z-macos.dmg
+shasum -a 256 Vizor-macos.dmg
 ```
 
 Then verify Apple signing and notarization:
 
 ```bash
-DMG="Vizor-X.Y.Z-macos.dmg"
+DMG="Vizor-macos.dmg"
 
 spctl --assess --type open --context context:primary-signature -vv "$DMG"
 xcrun stapler validate "$DMG"

@@ -24,7 +24,7 @@ usage() {
   cat <<USAGE
 Usage: scripts/package-macos-release-dmg.sh \\
   --app-path <path/to/Vizor.app> \\
-  --output <path/to/Vizor-x.y.z-macos.dmg> \\
+  --output <path/to/Vizor-macos.dmg> \\
   [--app-name Vizor] \\
   [--volume-name "Install Vizor Wallet"] \\
   [--background macos/Packaging/DMG/background@2x.png]

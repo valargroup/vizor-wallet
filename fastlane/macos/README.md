@@ -72,6 +72,8 @@ VIZOR_MACOS_FLAVORS=mainnet,testnet bundle exec fastlane mac release
 - `MATCH_READONLY=false`로 돌리면 fastlane은 `match` write 모드로 동작합니다. 이때는 `APP_STORE_CONNECT_API_KEY_JSON`이 준비돼 있어야 하며, git commit identity는 deployment workflow가 설정합니다.
 - `MATCH_READONLY=false`일 때 testnet Bundle ID(`com.keplr.vizor.testnet`)가 없으면 fastlane이 App Store Connect API로 먼저 생성한 뒤 Developer ID provisioning profile을 생성합니다.
 - release display version은 `RELEASE_TAG`에서 파싱하고, build number는 `RELEASE_BUILD_NUMBER`만 사용합니다. `pubspec.yaml`의 `version`은 macOS release 산출물 버전으로 사용하지 않습니다.
+- GitHub Release asset 파일명에는 버전을 넣지 않습니다. mainnet은 `Vizor-macos.zip` / `Vizor-macos.dmg`, testnet은 `Vizor-Testnet-macos.zip` / `Vizor-Testnet-macos.dmg`를 사용합니다.
+- 랜딩 페이지의 최신 macOS 다운로드 링크는 `https://github.com/chainapsis/vizor-wallet/releases/latest/download/Vizor-macos.dmg`처럼 고정 asset 이름을 가리킵니다.
 - Sparkle은 현재 비활성화되어 stable/prerelease 모두 appcast/delta 업로드를 건너뜁니다.
 - `GITHUB_RELEASE_PRERELEASE`가 설정된 경우 태그에서 계산한 prerelease 여부와 일치해야 합니다.
 - `SPARKLE_PUBLIC_ED_KEY_MAINNET` / `SPARKLE_PUBLIC_ED_KEY_TESTNET`은 Sparkle을 다시 켜면 flavor별 앱 `Info.plist`에 주입되는 공개 Ed25519 키입니다.
