@@ -60,9 +60,14 @@ pub async fn validate_pir_endpoint(
         ],
     )
     .ok_or_else(|| "PIR endpoint validation failed: /root did not include height".to_string())?;
-    if reported_height != expected_height {
+    if reported_height < expected_height {
         return Err(format!(
-            "PIR endpoint validation failed: /root height {reported_height} does not match round snapshot_height {expected_height}"
+            "PIR endpoint validation failed: /root height {reported_height} is behind round snapshot_height {expected_height}"
+        ));
+    }
+    if reported_height > expected_height {
+        return Err(format!(
+            "PIR endpoint validation failed: /root height {reported_height} is ahead of round snapshot_height {expected_height}"
         ));
     }
 
@@ -72,6 +77,7 @@ pub async fn validate_pir_endpoint(
 #[derive(Clone, Debug)]
 struct ParsedEndpoint {
     normalized_base_url: String,
+    url: url::Url,
 }
 
 impl ParsedEndpoint {
@@ -82,42 +88,63 @@ impl ParsedEndpoint {
         if trimmed.is_empty() {
             return Err(format!("{kind} endpoint validation failed: URL is empty"));
         }
-        let (scheme, rest) = trimmed
-            .split_once("://")
-            .ok_or_else(|| format!("{kind} endpoint validation failed: URL has no scheme"))?;
-        if scheme != "https" && scheme != "http" {
+        let mut url = url::Url::parse(trimmed)
+            .map_err(|e| format!("{kind} endpoint validation failed: malformed URL: {e}"))?;
+        if url.cannot_be_a_base() {
             return Err(format!(
-                "{kind} endpoint validation failed: unsupported URL scheme {scheme:?}"
+                "{kind} endpoint validation failed: URL must be a base URL"
             ));
         }
-        if rest.contains('#') || rest.contains('?') {
+        if url.scheme() != "https" && url.scheme() != "http" {
+            return Err(format!(
+                "{kind} endpoint validation failed: unsupported URL scheme {:?}",
+                url.scheme()
+            ));
+        }
+        if url.query().is_some() || url.fragment().is_some() {
             return Err(format!(
                 "{kind} endpoint validation failed: URL must not include query or fragment"
             ));
         }
-
-        let authority_end = rest.find('/').unwrap_or(rest.len());
-        let authority = &rest[..authority_end];
-        if authority.is_empty() {
+        if url.host_str().is_none() {
             return Err(format!(
                 "{kind} endpoint validation failed: URL has no host"
             ));
         }
-        if authority.contains('@') {
+        if !url.username().is_empty() || url.password().is_some() {
             return Err(format!(
                 "{kind} endpoint validation failed: URL must not include user info"
             ));
         }
-
-        let normalized_base_url = trimmed.trim_end_matches('/').to_string();
+        {
+            let mut segments = url
+                .path_segments_mut()
+                .map_err(|_| format!("{kind} endpoint validation failed: URL path is invalid"))?;
+            segments.pop_if_empty();
+        }
+        let normalized_base_url = normalized_base_url(&url);
         Ok(Self {
             normalized_base_url,
+            url,
         })
     }
 
     fn child_url(&self, child: &str) -> String {
-        format!("{}/{}", self.normalized_base_url, child)
+        let mut url = self.url.clone();
+        {
+            let mut segments = url
+                .path_segments_mut()
+                .expect("validated HTTP(S) endpoint URLs can be path bases");
+            segments.pop_if_empty();
+            segments.push(child);
+        }
+        url.to_string()
     }
+}
+
+fn normalized_base_url(url: &url::Url) -> String {
+    let value = url.to_string();
+    value.trim_end_matches('/').to_string()
 }
 
 /// Round IDs are path material for tree/PIR endpoints, so validate them before
@@ -154,9 +181,32 @@ mod tests {
     #[test]
     fn tree_endpoint_validation_rejects_unsafe_urls() {
         assert!(validate_tree_base_endpoint("https://node.example", ROUND_ID).is_ok());
+        assert!(validate_tree_base_endpoint("", ROUND_ID).is_err());
         assert!(validate_tree_base_endpoint("ftp://node.example", ROUND_ID).is_err());
         assert!(validate_tree_base_endpoint("https://user@node.example", ROUND_ID).is_err());
         assert!(validate_tree_base_endpoint("https://node.example?x=1", ROUND_ID).is_err());
+        assert!(validate_tree_base_endpoint("https://node.example/#frag", ROUND_ID).is_err());
+    }
+
+    #[test]
+    fn tree_endpoint_validation_rejects_invalid_round_id() {
+        assert!(validate_tree_base_endpoint("https://node.example", "not-a-round-id").is_err());
+    }
+
+    #[test]
+    fn tree_endpoint_validation_normalizes_base_urls() {
+        assert_eq!(
+            validate_tree_base_endpoint(" HTTPS://NODE.EXAMPLE/base/ ", ROUND_ID).unwrap(),
+            "https://node.example/base"
+        );
+        assert_eq!(
+            validate_tree_base_endpoint("https://node.example/", ROUND_ID).unwrap(),
+            "https://node.example"
+        );
+        assert_eq!(
+            validate_tree_base_endpoint("https://node.example/a/../b/", ROUND_ID).unwrap(),
+            "https://node.example/b"
+        );
     }
 
     #[tokio::test]
@@ -177,6 +227,19 @@ mod tests {
 
         assert_eq!(result.unwrap(), server_url);
         assert_eq!(request_path.join().unwrap(), "/root");
+    }
+
+    #[tokio::test]
+    async fn pir_endpoint_validation_appends_root_to_normalized_base_path() {
+        let (server_url, request_path) =
+            start_root_server(200, serde_json::json!({ "height": 100 }).to_string());
+        let endpoint = format!("{server_url}/pir/");
+
+        let result =
+            validate_pir_endpoint(&endpoint, WalletNetwork::Test, &test_round_params()).await;
+
+        assert_eq!(result.unwrap(), format!("{server_url}/pir"));
+        assert_eq!(request_path.join().unwrap(), "/pir/root");
     }
 
     #[tokio::test]
@@ -208,7 +271,68 @@ mod tests {
             .unwrap_err();
 
         assert!(err.contains("height 99"));
+        assert!(err.contains("behind"));
         assert!(err.contains("snapshot_height 100"));
+        assert_eq!(request_path.join().unwrap(), "/root");
+    }
+
+    #[tokio::test]
+    async fn pir_endpoint_validation_rejects_ahead_snapshot_height() {
+        let (server_url, request_path) = start_root_server(
+            200,
+            serde_json::json!({
+                "height": 101,
+                "network_id": 0,
+                "round_id": ROUND_ID,
+            })
+            .to_string(),
+        );
+
+        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("height 101"));
+        assert!(err.contains("ahead"));
+        assert!(err.contains("snapshot_height 100"));
+        assert_eq!(request_path.join().unwrap(), "/root");
+    }
+
+    #[tokio::test]
+    async fn pir_endpoint_validation_rejects_non_success_status() {
+        let (server_url, request_path) =
+            start_root_server(503, serde_json::json!({ "height": 100 }).to_string());
+
+        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("HTTP 503"));
+        assert_eq!(request_path.join().unwrap(), "/root");
+    }
+
+    #[tokio::test]
+    async fn pir_endpoint_validation_rejects_malformed_root_json() {
+        let (server_url, request_path) = start_root_server(200, "{".to_string());
+
+        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("malformed /root JSON"));
+        assert_eq!(request_path.join().unwrap(), "/root");
+    }
+
+    #[tokio::test]
+    async fn pir_endpoint_validation_rejects_missing_root_height() {
+        let (server_url, request_path) =
+            start_root_server(200, serde_json::json!({ "root29": "unused" }).to_string());
+
+        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("did not include height"));
         assert_eq!(request_path.join().unwrap(), "/root");
     }
 
