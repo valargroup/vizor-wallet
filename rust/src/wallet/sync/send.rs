@@ -1185,6 +1185,61 @@ mod tests {
     }
 
     #[test]
+    fn conservative_zip317_fee_rule_clamps_known_transparent_inputs_to_p2pkh_size() {
+        let network = WalletNetwork::Regtest;
+        let height = BlockHeight::from_u32(1_000);
+        let undersized_inputs = vec![
+            TransparentInputSize::Known(P2PKH_STANDARD_INPUT_SIZE - 50),
+            TransparentInputSize::Known(P2PKH_STANDARD_INPUT_SIZE - 50),
+            TransparentInputSize::Known(P2PKH_STANDARD_INPUT_SIZE - 50),
+        ];
+        let standard_inputs = vec![
+            TransparentInputSize::Known(P2PKH_STANDARD_INPUT_SIZE),
+            TransparentInputSize::Known(P2PKH_STANDARD_INPUT_SIZE),
+            TransparentInputSize::Known(P2PKH_STANDARD_INPUT_SIZE),
+        ];
+
+        let conservative_fee = ConservativeZip317FeeRule
+            .fee_required(
+                &network,
+                height,
+                undersized_inputs.clone(),
+                std::iter::empty::<usize>(),
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+        let standard_p2pkh_fee = StandardFeeRule::Zip317
+            .fee_required(
+                &network,
+                height,
+                standard_inputs,
+                std::iter::empty::<usize>(),
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+        let standard_undersized_fee = StandardFeeRule::Zip317
+            .fee_required(
+                &network,
+                height,
+                undersized_inputs,
+                std::iter::empty::<usize>(),
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        assert_eq!(conservative_fee, standard_p2pkh_fee);
+        assert_eq!(u64::from(conservative_fee), 15_000);
+        assert_eq!(u64::from(standard_undersized_fee), 10_000);
+    }
+
+    #[test]
+    #[ignore = "slow librustzcash transaction-construction regression (~100s); run explicitly when touching shielding transaction construction"]
     fn many_utxo_shielding_builds_with_conservative_zip317_fee() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("wallet.db");
