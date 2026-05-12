@@ -50,6 +50,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     });
     return VotingSessionState(
       roundId: _roundId,
+      accountUuid: context.accountUuid,
       config: context.config,
       round: context.round,
       resumePlan: context.resumePlan,

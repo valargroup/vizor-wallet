@@ -68,7 +68,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container.read(votingDraftProvider(_roundId).notifier).setChoice(1, 0);
+    container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
 
     await tester.pumpWidget(
       UncontrolledProviderScope(container: container, child: _statusHarness()),
@@ -190,7 +190,7 @@ void main() {
       hotkeyStore: const _FakeVotingHotkeyStore([9, 9, 9]),
     );
     addTearDown(container.dispose);
-    container.read(votingDraftProvider(_roundId).notifier).setChoice(1, 0);
+    container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
 
     await tester.pumpWidget(
       UncontrolledProviderScope(container: container, child: _statusHarness()),
@@ -320,6 +320,7 @@ Map<String, Object> _votingHttpResponses() => {
 
 const _roundId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _draftKey = VotingSessionKey(roundId: _roundId, accountUuid: 'account-1');
 const _hex32 =
     '0101010101010101010101010101010101010101010101010101010101010101';
 
@@ -399,6 +400,9 @@ class _NoMnemonicAccountNotifier extends AccountNotifier {
 
   @override
   Future<String?> getActiveMnemonic() async => null;
+
+  @override
+  Future<String?> getMnemonicForAccount(String uuid) async => null;
 }
 
 class _MnemonicAccountNotifier extends AccountNotifier {
@@ -407,6 +411,11 @@ class _MnemonicAccountNotifier extends AccountNotifier {
 
   @override
   Future<String?> getActiveMnemonic() async => 'abandon abandon abandon';
+
+  @override
+  Future<String?> getMnemonicForAccount(String uuid) async {
+    return uuid == 'account-1' ? 'abandon abandon abandon' : null;
+  }
 }
 
 class _FakeVotingRecoveryApi implements VotingRecoveryApi {

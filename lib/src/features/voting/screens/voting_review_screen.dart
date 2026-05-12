@@ -40,9 +40,14 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
     if (_precomputeStarted) return;
     _precomputeStarted = true;
     try {
+      final session = await ref.read(
+        votingSessionProvider(widget.roundId).future,
+      );
+      final accountUuid = session.accountUuid;
+      if (accountUuid == null) return;
       final mnemonic = await ref
           .read(accountProvider.notifier)
-          .getActiveMnemonic();
+          .getMnemonicForAccount(accountUuid);
       if (mnemonic == null || mnemonic.isEmpty) return;
       final seedBytes = await rust_wallet.deriveSeed(mnemonic: mnemonic);
       try {
@@ -60,7 +65,6 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(votingSessionProvider(widget.roundId));
-    final draft = ref.watch(votingDraftProvider(widget.roundId));
     return AppDesktopShell(
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
@@ -73,6 +77,17 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
             final proposals = round == null
                 ? <VotingProposalView>[]
                 : proposalsFromRound(round);
+            final accountUuid = state.accountUuid;
+            final draft = accountUuid == null
+                ? const VotingDraftState()
+                : ref.watch(
+                    votingDraftProvider(
+                      VotingSessionKey(
+                        roundId: widget.roundId,
+                        accountUuid: accountUuid,
+                      ),
+                    ),
+                  );
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

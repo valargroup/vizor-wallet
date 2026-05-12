@@ -62,8 +62,17 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         return;
       }
       final proposals = proposalsFromRound(round);
+      final accountUuid = session.accountUuid;
+      if (accountUuid == null) {
+        _setRunError('No active account for voting session.');
+        return;
+      }
       final draftVotes = ref
-          .read(votingDraftProvider(roundId))
+          .read(
+            votingDraftProvider(
+              VotingSessionKey(roundId: roundId, accountUuid: accountUuid),
+            ),
+          )
           .toDraftVotes(proposals);
       if (draftVotes.isEmpty) {
         _setRunError('Choose at least one vote before submitting.');
@@ -72,7 +81,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
 
       final mnemonic = await ref
           .read(accountProvider.notifier)
-          .getActiveMnemonic();
+          .getMnemonicForAccount(accountUuid);
       if (mnemonic == null || mnemonic.isEmpty) {
         if (!mounted) return;
         setState(() {

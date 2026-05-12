@@ -26,7 +26,6 @@ class VotingProposalDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(votingSessionProvider(roundId));
-    final draft = ref.watch(votingDraftProvider(roundId));
     return AppDesktopShell(
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
@@ -48,6 +47,13 @@ class VotingProposalDetailScreen extends ConsumerWidget {
                 ref.read(votingTreePreSyncProvider).preSyncRound(round.roundId),
               );
             }
+            final accountUuid = state.accountUuid;
+            final draftKey = accountUuid == null
+                ? null
+                : VotingSessionKey(roundId: roundId, accountUuid: accountUuid);
+            final draft = draftKey == null
+                ? const VotingDraftState()
+                : ref.watch(votingDraftProvider(draftKey));
             final proposals = proposalsFromRound(round);
             final completedVote = _CompletedVote.fromPlan(
               state.resumePlan,
@@ -92,9 +98,11 @@ class VotingProposalDetailScreen extends ConsumerWidget {
               votingPower: formatVotingPower(state.eligibleWeightZatoshi),
               proposals: proposals,
               draft: draft,
-              onChoice: (proposalId, choice) => ref
-                  .read(votingDraftProvider(roundId).notifier)
-                  .setChoice(proposalId, choice),
+              onChoice: draftKey == null
+                  ? (_, _) {}
+                  : (proposalId, choice) => ref
+                        .read(votingDraftProvider(draftKey).notifier)
+                        .setChoice(proposalId, choice),
             );
           },
         ),
