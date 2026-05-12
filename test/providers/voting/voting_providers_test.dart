@@ -240,6 +240,43 @@ void main() {
     expect(rust.delegationBundleCalls, isEmpty);
   });
 
+  test('submitted delegation timeout surfaces resumable tx context', () async {
+    final httpResponses = votingHttpResponses()
+      ..['/shielded-vote/v1/tx/submitted-delegation-tx'] = jsonResponse({
+        'error': 'not found',
+      }, statusCode: 404);
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(
+        bundleCount: 1,
+        delegationWorkflows: [
+          rust_voting.ApiDelegationWorkflowRecovery(
+            bundleIndex: 0,
+            phase: VotingWorkflowPhase.submittedDelegation,
+            txHash: 'submitted-delegation-tx',
+            vanLeafPosition: null,
+          ),
+        ],
+      ),
+    );
+    final container = _sessionContainer(
+      http: FakeVotingHttpClient(responses: httpResponses),
+      recoveryApi: recoveryApi,
+      txConfirmationPolling: _fastTxConfirmationPolling,
+    );
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(state.phase, VotingSessionPhase.error);
+    expect(state.error?.message, contains('submitted-delegation-tx'));
+    expect(state.error?.message, contains('bundle 0'));
+    expect(state.error?.message, contains('Retry to resume confirmation'));
+  });
+
   test('delegation submits chain payload and stores recovery state', () async {
     final rust = FakeVotingRustApi();
     final container = _sessionContainer(rust: rust);
@@ -352,6 +389,64 @@ void main() {
       const VotingVoteKey(bundleIndex: 1, proposalId: 7),
     });
     expect(rust.voteCommitBundleCalls, [0, 1]);
+  });
+
+  test('submitted vote timeout surfaces resumable tx context', () async {
+    final httpResponses = votingHttpResponses()
+      ..['/shielded-vote/v1/tx/submitted-vote-tx'] = jsonResponse({
+        'error': 'not found',
+      }, statusCode: 404);
+    final rust = FakeVotingRustApi();
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(
+        bundleCount: 1,
+        votes: [vote(bundleIndex: 0, proposalId: 7)],
+        voteWorkflows: [
+          rust_voting.ApiVoteWorkflowRecovery(
+            bundleIndex: 0,
+            proposalId: 7,
+            phase: VotingWorkflowPhase.submittedVote,
+            txHash: 'submitted-vote-tx',
+            vcTreePosition: null,
+            hasCommitmentBundle: true,
+          ),
+        ],
+        voteTxHashes: [
+          rust_voting.ApiVoteTxRecovery(
+            bundleIndex: 0,
+            proposalId: 7,
+            txHash: 'submitted-vote-tx',
+          ),
+        ],
+        commitmentBundles: [
+          rust_voting.ApiCommitmentBundleRecovery(
+            bundleIndex: 0,
+            proposalId: 7,
+            commitmentBundleJson: '{"proposal_id":7}',
+            vcTreePosition: BigInt.zero,
+          ),
+        ],
+      ),
+    );
+    final container = _sessionContainer(
+      http: FakeVotingHttpClient(responses: httpResponses),
+      rust: rust,
+      recoveryApi: recoveryApi,
+      txConfirmationPolling: _fastTxConfirmationPolling,
+    );
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .castVotes(draftVotes: const []);
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(state.phase, VotingSessionPhase.error);
+    expect(state.error?.message, contains('submitted-vote-tx'));
+    expect(state.error?.message, contains('bundle 0, proposal 7'));
+    expect(state.error?.message, contains('Retry to resume confirmation'));
+    expect(rust.voteCommitBundleCalls, isEmpty);
   });
 
   test('vote tree pre-sync dedupes warmup for the same round', () async {
@@ -762,6 +857,7 @@ ProviderContainer _sessionContainer({
   PirSnapshotResolver? pirResolver,
   VotingHotkeyStore hotkeyStore = const FakeVotingHotkeyStore([9, 9, 9]),
   Future<String?> Function()? activeAccountUuid,
+  VotingTxConfirmationPolling? txConfirmationPolling,
 }) {
   final effectiveHttp =
       http ?? FakeVotingHttpClient(responses: votingHttpResponses());
@@ -808,6 +904,10 @@ ProviderContainer _sessionContainer({
       ),
       votingRustApiProvider.overrideWithValue(rust ?? FakeVotingRustApi()),
       votingHotkeyStoreProvider.overrideWithValue(hotkeyStore),
+      if (txConfirmationPolling != null)
+        votingTxConfirmationPollingProvider.overrideWithValue(
+          txConfirmationPolling,
+        ),
     ],
   );
 }
@@ -871,6 +971,10 @@ const kEncodedRoundIdHex =
     '125e5475f653b074d5f4c36730852695f356416c2b6c3042516a912e5bffdd11';
 const _hex32 =
     '0101010101010101010101010101010101010101010101010101010101010101';
+const _fastTxConfirmationPolling = VotingTxConfirmationPolling(
+  attempts: 1,
+  delay: Duration.zero,
+);
 
 Map<String, dynamic> staticConfigJson() => {
   'static_config_version': 1,
