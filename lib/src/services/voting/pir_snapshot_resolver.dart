@@ -199,16 +199,30 @@ class PirSnapshotResolver {
     return endpoint.replace(pathSegments: [...pathSegments, 'root']);
   }
 
+  static final _unsignedIntegerPattern = RegExp(r'^\d+$');
+  static final _maxU64 = BigInt.parse('18446744073709551615');
+
+  /// Returns `/root.height`, or null when the canonical height field is absent.
+  /// Throws [FormatException] when `height` is present but malformed.
   static int? _heightFromRoot(Map<dynamic, dynamic> root) {
-    final value =
-        root['height'] ??
-        root['root_height'] ??
-        root['rootHeight'] ??
-        root['snapshot_height'] ??
-        root['snapshotHeight'];
-    if (value == null) return null;
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse(value.toString());
+    if (!root.containsKey('height')) return null;
+    return _parseRootHeightField(root['height']);
+  }
+
+  /// Parses `/root.height` as a JSON integer or decimal string in the unsigned
+  /// 64-bit range.
+  static int _parseRootHeightField(Object? value) {
+    if (value is int && value >= 0 && BigInt.from(value) <= _maxU64) {
+      return value;
+    }
+    if (value is String && _unsignedIntegerPattern.hasMatch(value)) {
+      final height = BigInt.parse(value);
+      if (height <= _maxU64) {
+        return int.parse(value);
+      }
+    }
+    throw const FormatException(
+      '/root field "height" is not a valid u64 height',
+    );
   }
 }
