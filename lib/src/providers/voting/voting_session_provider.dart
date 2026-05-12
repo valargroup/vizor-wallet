@@ -249,56 +249,58 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         'proposals=${draftVotes.length}',
       );
       for (final bundleIndex in pendingBundles) {
+        if (draftVotes.isEmpty) continue;
+        state = AsyncData(
+          (state.value ?? current).copyWith(
+            phase: VotingSessionPhase.syncingVoteTree,
+            currentBundleIndex: bundleIndex,
+          ),
+        );
+        debugPrint(
+          '[zcash] Voting: vote tree sync start '
+          'round=${context.round.roundId} bundle=$bundleIndex '
+          'proposals=${draftVotes.length}',
+        );
+        final syncTimer = Stopwatch()..start();
+        final anchorHeight = await ref
+            .read(votingRustApiProvider)
+            .syncVoteTree(
+              dbPath: context.dbPath,
+              walletId: context.accountUuid,
+              roundId: context.round.roundId,
+              nodeUrl: context.config.apiBaseUrl.toString(),
+            );
+        debugPrint(
+          '[zcash] Voting: vote tree sync completed '
+          'round=${context.round.roundId} bundle=$bundleIndex '
+          'proposals=${draftVotes.length} anchorHeight=$anchorHeight '
+          'elapsed=${_formatElapsed(syncTimer.elapsed)}',
+        );
+
+        final witnessTimer = Stopwatch()..start();
+        debugPrint(
+          '[zcash] Voting: VAN witness generation start '
+          'round=${context.round.roundId} bundle=$bundleIndex '
+          'anchorHeight=$anchorHeight',
+        );
+        final witness = await ref
+            .read(votingRustApiProvider)
+            .generateVanWitness(
+              dbPath: context.dbPath,
+              walletId: context.accountUuid,
+              roundId: context.round.roundId,
+              bundleIndex: bundleIndex,
+              anchorHeight: anchorHeight,
+            );
+        debugPrint(
+          '[zcash] Voting: VAN witness generation completed '
+          'round=${context.round.roundId} bundle=$bundleIndex '
+          'position=${witness.position} '
+          'elapsed=${_formatElapsed(witnessTimer.elapsed)}',
+        );
+
         for (final draftVote in draftVotes) {
           final voteTimer = Stopwatch()..start();
-          state = AsyncData(
-            (state.value ?? current).copyWith(
-              phase: VotingSessionPhase.syncingVoteTree,
-              currentBundleIndex: bundleIndex,
-            ),
-          );
-          debugPrint(
-            '[zcash] Voting: vote tree sync start '
-            'round=${context.round.roundId} bundle=$bundleIndex '
-            'proposal=${draftVote.proposalId}',
-          );
-          final syncTimer = Stopwatch()..start();
-          final anchorHeight = await ref
-              .read(votingRustApiProvider)
-              .syncVoteTree(
-                dbPath: context.dbPath,
-                walletId: context.accountUuid,
-                roundId: context.round.roundId,
-                nodeUrl: context.config.apiBaseUrl.toString(),
-              );
-          debugPrint(
-            '[zcash] Voting: vote tree sync completed '
-            'round=${context.round.roundId} bundle=$bundleIndex '
-            'proposal=${draftVote.proposalId} anchorHeight=$anchorHeight '
-            'elapsed=${_formatElapsed(syncTimer.elapsed)}',
-          );
-
-          final witnessTimer = Stopwatch()..start();
-          debugPrint(
-            '[zcash] Voting: VAN witness generation start '
-            'round=${context.round.roundId} bundle=$bundleIndex '
-            'proposal=${draftVote.proposalId} anchorHeight=$anchorHeight',
-          );
-          final witness = await ref
-              .read(votingRustApiProvider)
-              .generateVanWitness(
-                dbPath: context.dbPath,
-                walletId: context.accountUuid,
-                roundId: context.round.roundId,
-                bundleIndex: bundleIndex,
-                anchorHeight: anchorHeight,
-              );
-          debugPrint(
-            '[zcash] Voting: VAN witness generation completed '
-            'round=${context.round.roundId} bundle=$bundleIndex '
-            'proposal=${draftVote.proposalId} position=${witness.position} '
-            'elapsed=${_formatElapsed(witnessTimer.elapsed)}',
-          );
           state = AsyncData(
             (state.value ?? current).copyWith(
               phase: VotingSessionPhase.castingVotes,
