@@ -1060,6 +1060,41 @@ pub fn reset_tree_client(
     catch(|| tree_sync::reset_tree_client(&db_path, &wallet_id, round_id.as_deref()))
 }
 
+/// Clear process-local voting state for a wallet or round.
+///
+/// Passing a non-empty round ID clears prepared delegation PCZTs only for that
+/// round. Passing `None` or an empty round ID performs account-wide cleanup:
+/// prepared PCZTs for the wallet are cleared and the cached vote-tree client is
+/// dropped.
+pub fn reset_voting_session_state(
+    db_path: String,
+    wallet_id: String,
+    round_id: Option<String>,
+) -> Result<(), String> {
+    catch(|| {
+        let account_wide = round_id.as_deref().map(str::is_empty).unwrap_or(true);
+        let tree_count = if account_wide {
+            tree_sync::clear_tree_sync_session(&db_path, &wallet_id)?
+        } else {
+            0
+        };
+        let pczt_count = delegation::clear_prepared_delegation_pczt_cache(
+            &db_path,
+            &wallet_id,
+            round_id.as_deref(),
+        )?;
+        log::info!(
+            "voting: reset process-local session state \
+             (wallet_id={}, round_id={:?}, tree_entries={}, prepared_pczts={})",
+            wallet_id,
+            round_id,
+            tree_count,
+            pczt_count
+        );
+        Ok(())
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 /// Build signed ZKP2 vote commitments for one bundle.
 ///
@@ -1795,6 +1830,80 @@ mod tests {
             None,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn reset_voting_session_state_with_round_preserves_tree_sync() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("voting.sqlite");
+        let wallet_id = "wallet-api-round-reset";
+        let db = state::open_voting_db(db_path.to_str().unwrap(), wallet_id).unwrap();
+        state::init_voting_round(&db, &test_api_round_params().into(), None).unwrap();
+        db.setup_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
+        db.store_van_position(ROUND_ID, 0, 0).unwrap();
+        let server = start_tree_server(1, vec![fp_one_base64()], 3);
+
+        let height = sync_vote_tree(
+            db_path.to_str().unwrap().to_string(),
+            wallet_id.to_string(),
+            ROUND_ID.to_string(),
+            server,
+        )
+        .unwrap();
+
+        reset_voting_session_state(
+            db_path.to_str().unwrap().to_string(),
+            wallet_id.to_string(),
+            Some(ROUND_ID.to_string()),
+        )
+        .unwrap();
+
+        let witness = generate_van_witness(
+            db_path.to_str().unwrap().to_string(),
+            wallet_id.to_string(),
+            ROUND_ID.to_string(),
+            0,
+            height,
+        )
+        .unwrap();
+        assert_eq!(witness.position, 0);
+    }
+
+    #[test]
+    fn reset_voting_session_state_without_round_drops_tree_sync() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("voting.sqlite");
+        let wallet_id = "wallet-api-account-reset";
+        let db = state::open_voting_db(db_path.to_str().unwrap(), wallet_id).unwrap();
+        state::init_voting_round(&db, &test_api_round_params().into(), None).unwrap();
+        db.setup_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
+        db.store_van_position(ROUND_ID, 0, 0).unwrap();
+        let server = start_tree_server(1, vec![fp_one_base64()], 3);
+
+        let height = sync_vote_tree(
+            db_path.to_str().unwrap().to_string(),
+            wallet_id.to_string(),
+            ROUND_ID.to_string(),
+            server,
+        )
+        .unwrap();
+
+        reset_voting_session_state(
+            db_path.to_str().unwrap().to_string(),
+            wallet_id.to_string(),
+            None,
+        )
+        .unwrap();
+
+        let err = generate_van_witness(
+            db_path.to_str().unwrap().to_string(),
+            wallet_id.to_string(),
+            ROUND_ID.to_string(),
+            0,
+            height,
+        )
+        .unwrap_err();
+        assert!(!err.is_empty());
     }
 
     #[test]

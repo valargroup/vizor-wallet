@@ -56,7 +56,8 @@ fn registry_key(db_path: &str, wallet_id: &str) -> RegistryKey {
 ///
 /// Vizor opens `VotingDb` per operation, but upstream `VoteTreeSync` keeps
 /// in-memory `TreeClient` state that must be shared between sync and witness
-/// generation calls. This registry bridges those two lifetime models.
+/// generation calls. This registry bridges those two lifetime models and is
+/// cleared only by explicit account-wide lifecycle cleanup.
 fn tree_sync_for(db_path: &str, wallet_id: &str) -> Result<Arc<VoteTreeSync>, String> {
     ensure_rustls_provider();
 
@@ -192,6 +193,19 @@ pub fn reset_tree_client(
         .map_err(|e| format!("reset_tree_client failed: {e}"))
 }
 
+/// Drop the process-local vote-tree sync client for a voting session.
+///
+/// Use this for account-wide lifecycle boundaries such as lock, account switch,
+/// account removal, or wallet reset. Round-scoped cleanup should keep this
+/// client because `VoteTreeSync` can serve multiple rounds for the same wallet.
+pub fn clear_tree_sync_session(db_path: &str, wallet_id: &str) -> Result<usize, String> {
+    let key = registry_key(db_path, wallet_id);
+    let mut guard = registry()
+        .lock()
+        .map_err(|e| format!("VoteTreeSync registry lock poisoned: {e}"))?;
+    Ok(usize::from(guard.remove(&key).is_some()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +227,23 @@ mod tests {
         assert!(Arc::ptr_eq(&first, &second));
         assert!(!Arc::ptr_eq(&first, &other_wallet));
         assert!(!Arc::ptr_eq(&first, &other_db));
+    }
+
+    #[test]
+    fn clear_tree_sync_session_drops_registry_entry() {
+        let first = tree_sync_for("/tmp/voting-clear.sqlite", "wallet-1").unwrap();
+
+        assert_eq!(
+            clear_tree_sync_session("/tmp/voting-clear.sqlite", "wallet-1").unwrap(),
+            1
+        );
+        assert_eq!(
+            clear_tree_sync_session("/tmp/voting-clear.sqlite", "wallet-1").unwrap(),
+            0
+        );
+        let second = tree_sync_for("/tmp/voting-clear.sqlite", "wallet-1").unwrap();
+
+        assert!(!Arc::ptr_eq(&first, &second));
     }
 
     #[test]
