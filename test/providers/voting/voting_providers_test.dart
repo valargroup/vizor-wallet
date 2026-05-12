@@ -724,14 +724,19 @@ void main() {
     },
   );
 
-  test('accepted unconfirmed shares do not keep status flow pending', () async {
+  test('accepted unconfirmed shares confirm from any accepted helper', () async {
+    final shareNullifier = Uint8List.fromList(List.filled(32, 1));
+    final shareId = _hexFromBytes(shareNullifier);
     final acceptedShare = rust_voting.ApiShareDelegationRecord(
       roundId: kRoundId,
       bundleIndex: 0,
       proposalId: 7,
       shareIndex: 0,
-      sentToUrls: const ['https://voting.example'],
-      nullifier: Uint8List.fromList(List.filled(32, 1)),
+      sentToUrls: const [
+        'https://helper-a.example',
+        'https://helper-b.example',
+      ],
+      nullifier: shareNullifier,
       phase: VotingWorkflowPhase.submittedShare,
       confirmed: false,
       submitAt: BigInt.zero,
@@ -750,7 +755,27 @@ void main() {
         unconfirmedShareDelegations: [acceptedShare],
       ),
     );
-    final container = _sessionContainer(recoveryApi: recoveryApi);
+    final rust = FakeVotingRustApi();
+    final container = _sessionContainer(
+      http: FakeVotingHttpClient(
+        responses:
+            votingHttpResponses(
+              dynamicConfig: dynamicConfigJson(
+                voteServers: const [
+                  {'url': 'https://helper-a.example', 'label': 'helper-a'},
+                  {'url': 'https://helper-b.example', 'label': 'helper-b'},
+                ],
+              ),
+            )..addAll({
+              'https://helper-a.example/shielded-vote/v1/share-status/$kRoundId/$shareId':
+                  {'status': 'pending'},
+              'https://helper-b.example/shielded-vote/v1/share-status/$kRoundId/$shareId':
+                  {'status': 'confirmed'},
+            }),
+      ),
+      rust: rust,
+      recoveryApi: recoveryApi,
+    );
     addTearDown(container.dispose);
 
     await container.read(votingSessionProvider(kRoundId).future);
@@ -761,6 +786,85 @@ void main() {
 
     expect(state.phase, VotingSessionPhase.done);
     expect(state.resumePlan?.unconfirmedShareDelegations, [acceptedShare]);
+    expect(rust.confirmedShares, ['0:7:0']);
+  });
+
+  test('pending share recovery resubmits helpers missed initially', () async {
+    final shareNullifier = Uint8List.fromList(List.filled(32, 2));
+    final shareId = _hexFromBytes(shareNullifier);
+    final pendingShare = rust_voting.ApiShareDelegationRecord(
+      roundId: kRoundId,
+      bundleIndex: 0,
+      proposalId: 7,
+      shareIndex: 0,
+      sentToUrls: const ['https://helper-a.example'],
+      nullifier: shareNullifier,
+      phase: VotingWorkflowPhase.submittedShare,
+      confirmed: false,
+      submitAt: BigInt.from(123),
+      createdAt: BigInt.one,
+    );
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(
+        bundleCount: 1,
+        delegationTxHashes: [
+          rust_voting.ApiDelegationTxRecovery(
+            bundleIndex: 0,
+            txHash: 'delegation-0',
+          ),
+        ],
+        commitmentBundles: [
+          rust_voting.ApiCommitmentBundleRecovery(
+            bundleIndex: 0,
+            proposalId: 7,
+            commitmentBundleJson: commitmentBundleRecoveryJson(),
+            vcTreePosition: BigInt.from(42),
+          ),
+        ],
+        shareDelegations: [pendingShare],
+        unconfirmedShareDelegations: [pendingShare],
+      ),
+    );
+    final http = FakeVotingHttpClient(
+      responses:
+          votingHttpResponses(
+            dynamicConfig: dynamicConfigJson(
+              voteServers: const [
+                {'url': 'https://helper-a.example', 'label': 'helper-a'},
+                {'url': 'https://helper-b.example', 'label': 'helper-b'},
+              ],
+            ),
+          )..addAll({
+            'https://helper-a.example/shielded-vote/v1/share-status/$kRoundId/$shareId':
+                {'status': 'pending'},
+            'https://helper-b.example/shielded-vote/v1/share-status/$kRoundId/$shareId':
+                {'status': 'pending'},
+          }),
+    );
+    final container = _sessionContainer(http: http, recoveryApi: recoveryApi);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .submitPendingShares();
+
+    final helperBPost = http.requests.singleWhere(
+      (request) =>
+          request.method == 'POST' && request.uri.host == 'helper-b.example',
+    );
+    expect(helperBPost.uri.path, '/shielded-vote/v1/shares');
+    expect(helperBPost.body?['vote_round_id'], kRoundId);
+    expect(helperBPost.body?['tree_position'], 42);
+    expect(helperBPost.body?['submit_at'], 123);
+    expect(helperBPost.body?['enc_share'], {
+      'c1': base64Encode([8]),
+      'c2': base64Encode([9]),
+      'share_index': 0,
+    });
+    expect(recoveryApi.addedSentServers, [
+      _AddedSentServers(0, 7, 0, const ['https://helper-b.example']),
+    ]);
   });
 
   test('session actions are serialized', () async {
@@ -960,9 +1064,11 @@ Map<String, dynamic> _postBody(FakeVotingHttpClient http, String path) {
 
 Map<String, Object> votingHttpResponses({
   Map<String, dynamic>? roundStatus,
+  Map<String, dynamic>? dynamicConfig,
 }) => {
   'https://voting.example/static-voting-config.json': staticConfigJson(),
-  'https://voting.example/dynamic-voting-config.json': dynamicConfigJson(),
+  'https://voting.example/dynamic-voting-config.json':
+      dynamicConfig ?? dynamicConfigJson(),
   '/shielded-vote/v1/round/$kRoundId': {
     'round': roundStatus ?? roundStatusJson(roundId: kRoundId),
   },
@@ -1023,11 +1129,13 @@ Map<String, dynamic> staticConfigJson() => {
   ],
 };
 
-Map<String, dynamic> dynamicConfigJson() => {
-  'config_version': 1,
-  'vote_servers': [
+Map<String, dynamic> dynamicConfigJson({
+  List<Map<String, String>> voteServers = const [
     {'url': 'https://voting.example', 'label': 'primary'},
   ],
+}) => {
+  'config_version': 1,
+  'vote_servers': voteServers,
   'pir_endpoints': [
     {'url': 'https://pir.example', 'label': 'pir'},
   ],
@@ -1106,9 +1214,42 @@ rust_voting.ApiVoteRecord vote({
   );
 }
 
+String commitmentBundleRecoveryJson({int proposalId = 7, int shareIndex = 0}) {
+  return jsonEncode({
+    'format': 'vizor_vote_commitment_bundle_recovery_v1',
+    'share_payloads': [
+      {
+        'shares_hash': _hexFromBytes(List.filled(32, 7)),
+        'proposal_id': proposalId,
+        'vote_decision': 1,
+        'enc_share': {
+          'c1': _hexFromBytes([8]),
+          'c2': _hexFromBytes([9]),
+          'share_index': shareIndex,
+        },
+        'tree_position': 2,
+        'all_enc_shares': [
+          {
+            'c1': _hexFromBytes([8]),
+            'c2': _hexFromBytes([9]),
+            'share_index': shareIndex,
+          },
+        ],
+        'share_comms': [_hexFromBytes(List.filled(32, 10))],
+        'primary_blind': _hexFromBytes(List.filled(32, 11)),
+      },
+    ],
+  });
+}
+
+String _hexFromBytes(List<int> bytes) {
+  return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+}
+
 class FakeVotingRecoveryApi implements VotingRecoveryApi {
   rust_voting.ApiRoundRecoveryState state;
   final walletIds = <String>[];
+  final addedSentServers = <_AddedSentServers>[];
 
   FakeVotingRecoveryApi({required this.state});
 
@@ -1121,7 +1262,11 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
     required int proposalId,
     required int shareIndex,
     required List<String> newUrls,
-  }) async {}
+  }) async {
+    addedSentServers.add(
+      _AddedSentServers(bundleIndex, proposalId, shareIndex, newUrls),
+    );
+  }
 
   @override
   Future<void> clearRecoveryState({
@@ -1139,6 +1284,43 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
     walletIds.add(walletId);
     return state;
   }
+}
+
+class _AddedSentServers {
+  const _AddedSentServers(
+    this.bundleIndex,
+    this.proposalId,
+    this.shareIndex,
+    this.newUrls,
+  );
+
+  final int bundleIndex;
+  final int proposalId;
+  final int shareIndex;
+  final List<String> newUrls;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _AddedSentServers &&
+      other.bundleIndex == bundleIndex &&
+      other.proposalId == proposalId &&
+      other.shareIndex == shareIndex &&
+      _listEquals(other.newUrls, newUrls);
+
+  @override
+  int get hashCode => Object.hash(bundleIndex, proposalId, shareIndex, newUrls);
+
+  @override
+  String toString() =>
+      '_AddedSentServers($bundleIndex, $proposalId, $shareIndex, $newUrls)';
+}
+
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 class _MutableActiveAccount {
@@ -1248,6 +1430,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final resetVotingSessionStateCalls = <String>[];
   final draftSingleShareValues = <bool>[];
   final accountUuids = <String>[];
+  final confirmedShares = <String>[];
 
   @override
   Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
@@ -1554,7 +1737,9 @@ class FakeVotingRustApi implements VotingRustApi {
     required int bundleIndex,
     required int proposalId,
     required int shareIndex,
-  }) async {}
+  }) async {
+    confirmedShares.add('$bundleIndex:$proposalId:$shareIndex');
+  }
 
   @override
   Future<String> computeShareNullifierHex({

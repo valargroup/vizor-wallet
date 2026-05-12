@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 
@@ -762,16 +763,47 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         current.copyWith(phase: VotingSessionPhase.submittingShares),
       );
 
+      final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+      final configuredServerUrls = context.config.voteServers
+          .map((endpoint) => endpoint.url.toString())
+          .toList(growable: false);
       for (final share in plan.unconfirmedShareDelegations) {
-        if (share.sentToUrls.isEmpty) continue;
-        final status = await ref
-            .read(votingApiClientProvider(context.config.apiBaseUrl))
-            .getShareStatus(
-              roundId: share.roundId,
-              serverUrl: Uri.parse(share.sentToUrls.first),
-              shareId: _hexFromBytes(share.nullifier),
-            );
-        if (status.status == 'confirmed') {
+        // A share is recoverable once any helper accepted it, but every
+        // configured helper should eventually receive it for redundancy.
+        final acceptedUrls = LinkedHashSet<String>.of(share.sentToUrls);
+        final missingUrls = configuredServerUrls
+            .where((serverUrl) => !acceptedUrls.contains(serverUrl))
+            .toList(growable: false);
+        if (missingUrls.isNotEmpty) {
+          final newUrls = await _resubmitShareToMissingHelpers(
+            api: api,
+            context: context,
+            plan: plan,
+            share: share,
+            serverUrls: missingUrls,
+          );
+          if (newUrls.isNotEmpty) {
+            await ref
+                .read(votingRecoveryServiceProvider)
+                .addSentServersForShare(
+                  dbPath: context.dbPath,
+                  walletId: context.accountUuid,
+                  share: share,
+                  newUrls: newUrls,
+                );
+            acceptedUrls.addAll(newUrls);
+          }
+        }
+
+        if (acceptedUrls.isEmpty) continue;
+        // Helpers can reveal at slightly different times. Confirmation by any
+        // helper is enough to advance the local workflow for this share.
+        final confirmed = await _shareConfirmedByAnyHelper(
+          api: api,
+          share: share,
+          serverUrls: acceptedUrls,
+        );
+        if (confirmed) {
           await ref
               .read(votingRustApiProvider)
               .markShareConfirmed(
@@ -795,6 +827,100 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         ),
       );
     });
+  }
+
+  /// Retries an already-generated share against helpers missing from
+  /// `sent_to_urls` and returns only the helpers that accepted the retry.
+  Future<List<String>> _resubmitShareToMissingHelpers({
+    required VotingApiClient api,
+    required _VotingSessionContext context,
+    required VotingResumePlan plan,
+    required rust_voting.ApiShareDelegationRecord share,
+    required List<String> serverUrls,
+  }) async {
+    final key = VotingVoteKey(
+      bundleIndex: share.bundleIndex,
+      proposalId: share.proposalId,
+    );
+    final commitmentBundle = plan.commitmentBundleFor(key);
+    if (commitmentBundle == null) {
+      debugPrint(
+        '[zcash] Voting: share resubmit skipped; missing commitment bundle '
+        'round=${share.roundId} bundle=${share.bundleIndex} '
+        'proposal=${share.proposalId} share=${share.shareIndex}',
+      );
+      return const [];
+    }
+    final Map<String, dynamic> body;
+    try {
+      body = _sharePayloadJsonFromRecovery(
+        commitmentBundle.commitmentBundleJson,
+        proposalId: share.proposalId,
+        shareIndex: share.shareIndex,
+        vcTreePosition: commitmentBundle.vcTreePosition,
+        submitAt: share.submitAt,
+      );
+    } catch (e) {
+      debugPrint(
+        '[zcash] Voting: share resubmit skipped; invalid recovery payload '
+        'round=${share.roundId} bundle=${share.bundleIndex} '
+        'proposal=${share.proposalId} share=${share.shareIndex} error=$e',
+      );
+      return const [];
+    }
+    final shareId = _hexFromBytes(share.nullifier);
+    final acceptedUrls = <String>[];
+    for (final serverUrl in serverUrls) {
+      try {
+        await api.resubmitShare(
+          roundId: context.round.roundId,
+          serverUrl: Uri.parse(serverUrl),
+          shareId: shareId,
+          share: body,
+        );
+        acceptedUrls.add(serverUrl);
+        debugPrint(
+          '[zcash] Voting: share resubmitted '
+          'round=${share.roundId} bundle=${share.bundleIndex} '
+          'proposal=${share.proposalId} share=${share.shareIndex} '
+          'server=$serverUrl',
+        );
+      } catch (e) {
+        debugPrint(
+          '[zcash] Voting: share resubmit failed '
+          'round=${share.roundId} bundle=${share.bundleIndex} '
+          'proposal=${share.proposalId} share=${share.shareIndex} '
+          'server=$serverUrl error=$e',
+        );
+      }
+    }
+    return acceptedUrls;
+  }
+
+  Future<bool> _shareConfirmedByAnyHelper({
+    required VotingApiClient api,
+    required rust_voting.ApiShareDelegationRecord share,
+    required Iterable<String> serverUrls,
+  }) async {
+    final shareId = _hexFromBytes(share.nullifier);
+    for (final serverUrl in serverUrls) {
+      try {
+        final status = await api.getShareStatus(
+          roundId: share.roundId,
+          serverUrl: Uri.parse(serverUrl),
+          shareId: shareId,
+        );
+        if (status.status == 'confirmed') return true;
+      } catch (e) {
+        debugPrint(
+          '[zcash] Voting: share status check failed '
+          'round=${share.roundId} bundle=${share.bundleIndex} '
+          'proposal=${share.proposalId} share=${share.shareIndex} '
+          'server=$serverUrl error=$e',
+        );
+      }
+    }
+    return false;
   }
 
   Future<Uri?> _resolvePirEndpoint(_VotingSessionContext context) async {
@@ -1179,6 +1305,61 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     };
   }
 
+  static Map<String, dynamic> _sharePayloadJsonFromRecovery(
+    String commitmentBundleJson, {
+    required int proposalId,
+    required int shareIndex,
+    required BigInt vcTreePosition,
+    required BigInt submitAt,
+  }) {
+    // Rust stores recovery payloads as hex JSON because the blob also contains
+    // local-only recovery material. Helper APIs expect the public share fields
+    // in the same base64 wire shape used during initial foreground submission.
+    final decoded = jsonDecode(commitmentBundleJson);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException(
+        'Commitment bundle recovery JSON is not an object.',
+      );
+    }
+    final payloads = decoded['share_payloads'];
+    if (payloads is! List) {
+      throw const FormatException(
+        'Commitment bundle recovery JSON has no share_payloads list.',
+      );
+    }
+    for (final payload in payloads) {
+      if (payload is! Map) continue;
+      final object = payload.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+      final encShare = object['enc_share'];
+      if (object['proposal_id'] == proposalId &&
+          encShare is Map &&
+          encShare['share_index'] == shareIndex) {
+        return {
+          'shares_hash': _base64FromHexField(object, 'shares_hash'),
+          'proposal_id': proposalId,
+          'vote_decision': object['vote_decision'],
+          'enc_share': _wireShareJsonFromRecovery(encShare),
+          'share_index': shareIndex,
+          'tree_position': _jsonInt(vcTreePosition),
+          'all_enc_shares': _wireSharesJsonFromRecovery(
+            object['all_enc_shares'],
+          ),
+          'share_comms': _hexListField(
+            object,
+            'share_comms',
+          ).map((hex) => base64Encode(_bytesFromHex(hex))).toList(),
+          'primary_blind': _base64FromHexField(object, 'primary_blind'),
+          'submit_at': _jsonInt(submitAt),
+        };
+      }
+    }
+    throw StateError(
+      'No stored share payload for proposal $proposalId share $shareIndex.',
+    );
+  }
+
   static Map<String, dynamic> _voteCommitmentSubmissionJson(
     rust_voting.ApiSignedVoteCommitment commitment,
   ) {
@@ -1219,6 +1400,48 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       'c2': base64Encode(share.ciphertext2),
       'share_index': share.shareIndex,
     };
+  }
+
+  static Map<String, dynamic> _wireShareJsonFromRecovery(
+    Map<dynamic, dynamic> share,
+  ) {
+    return {
+      'c1': _base64FromHexField(share, 'c1'),
+      'c2': _base64FromHexField(share, 'c2'),
+      'share_index': share['share_index'],
+    };
+  }
+
+  static List<Map<String, dynamic>> _wireSharesJsonFromRecovery(Object? value) {
+    if (value is! List) {
+      throw const FormatException(
+        'Stored share payload has no all_enc_shares list.',
+      );
+    }
+    return value
+        .whereType<Map>()
+        .map(_wireShareJsonFromRecovery)
+        .toList(growable: false);
+  }
+
+  static String _base64FromHexField(Map<dynamic, dynamic> object, String key) {
+    final value = object[key];
+    if (value is! String) {
+      throw FormatException(
+        'Stored share payload field $key is not a hex string.',
+      );
+    }
+    return base64Encode(_bytesFromHex(value));
+  }
+
+  static List<String> _hexListField(Map<dynamic, dynamic> object, String key) {
+    final value = object[key];
+    if (value is! List || value.any((entry) => entry is! String)) {
+      throw FormatException(
+        'Stored share payload field $key is not a hex string list.',
+      );
+    }
+    return value.cast<String>();
   }
 
   static ({int vanPosition, BigInt vcTreePosition}) _castVoteLeafPositions(
