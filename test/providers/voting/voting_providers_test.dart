@@ -98,6 +98,62 @@ void main() {
     expect(details.toRoundParams().voteRoundId, kEncodedRoundIdHex);
   });
 
+  test('round details expose last-moment scheduling window', () {
+    final details = VotingRoundDetails.fromStatus(
+      VotingRoundStatus.fromJson(
+        roundStatusJson(roundId: kRoundId, ceremonyStart: 1000, voteEnd: 1600),
+      ),
+    );
+
+    expect(
+      details.ceremonyStart,
+      DateTime.fromMillisecondsSinceEpoch(1000000, isUtc: true),
+    );
+    expect(
+      details.voteEndTime,
+      DateTime.fromMillisecondsSinceEpoch(1600000, isUtc: true),
+    );
+    expect(details.lastMomentBuffer, const Duration(seconds: 240));
+    expect(
+      details.isLastMoment(
+        DateTime.fromMillisecondsSinceEpoch(1359000, isUtc: true),
+      ),
+      isFalse,
+    );
+    expect(
+      details.isLastMoment(
+        DateTime.fromMillisecondsSinceEpoch(1360000, isUtc: true),
+      ),
+      isTrue,
+    );
+  });
+
+  test('round details cap last-moment buffer and reject invalid timing', () {
+    final capped = VotingRoundDetails.fromStatus(
+      VotingRoundStatus.fromJson(
+        roundStatusJson(
+          roundId: kRoundId,
+          ceremonyStart: 1000,
+          voteEnd: 100000,
+        ),
+      ),
+    );
+    final invalid = VotingRoundDetails.fromStatus(
+      VotingRoundStatus.fromJson(
+        roundStatusJson(roundId: kRoundId, ceremonyStart: 2000, voteEnd: 1000),
+      ),
+    );
+
+    expect(capped.lastMomentBuffer, const Duration(hours: 6));
+    expect(invalid.lastMomentBuffer, isNull);
+    expect(
+      invalid.isLastMoment(
+        DateTime.fromMillisecondsSinceEpoch(1500000, isUtc: true),
+      ),
+      isFalse,
+    );
+  });
+
   test('PIR mismatch fails before Rust delegation work is called', () async {
     final rust = FakeVotingRustApi();
     final pir = FakePirResolver(
@@ -358,9 +414,123 @@ void main() {
     expect(rust.recordedShares, hasLength(1));
     expect(rust.recordedShares.single.bundleIndex, 0);
     expect(rust.recordedShares.single.proposalId, 7);
+    expect(rust.recordedShares.single.submitAt, BigInt.zero);
     expect(rust.storedVoteTxHashes, ['0:7:vote-tx']);
     expect(rust.storedCommitmentBundles, ['0:7:2:{"proposal_id":7}']);
   });
+
+  test(
+    'share submission schedules submit_at before last-moment buffer',
+    () async {
+      final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final voteEnd = nowSeconds + 1000;
+      final ceremonyStart = nowSeconds - 100;
+      final deadline = voteEnd - ((voteEnd - ceremonyStart) * 0.4).round();
+      final http = FakeVotingHttpClient(
+        responses: votingHttpResponses(
+          roundStatus: roundStatusJson(
+            roundId: kRoundId,
+            ceremonyStart: ceremonyStart,
+            voteEnd: voteEnd,
+          ),
+        ),
+      );
+      final rust = FakeVotingRustApi(emitCommitments: true);
+      final recoveryApi = FakeVotingRecoveryApi(
+        state: recoveryState(
+          bundleCount: 1,
+          delegationTxHashes: [
+            rust_voting.ApiDelegationTxRecovery(
+              bundleIndex: 0,
+              txHash: 'delegation-0',
+            ),
+          ],
+          votes: [vote(bundleIndex: 0, proposalId: 7)],
+        ),
+      );
+      final container = _sessionContainer(
+        http: http,
+        rust: rust,
+        recoveryApi: recoveryApi,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      await container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .castVotes(
+            draftVotes: [
+              rust_voting.ApiDraftVote(
+                proposalId: 7,
+                choice: 1,
+                numOptions: 2,
+                vcTreePosition: BigInt.zero,
+                singleShare: false,
+              ),
+            ],
+          );
+
+      final submitAt = _postBody(http, '/shielded-vote/v1/shares')['submit_at'];
+      expect(submitAt, isA<int>());
+      expect(submitAt as int, greaterThanOrEqualTo(nowSeconds));
+      expect(submitAt, lessThan(deadline));
+      expect(rust.recordedShares.single.submitAt, BigInt.from(submitAt));
+    },
+  );
+
+  test(
+    'last-moment vote uses single-share mode and immediate submit_at',
+    () async {
+      final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final http = FakeVotingHttpClient(
+        responses: votingHttpResponses(
+          roundStatus: roundStatusJson(
+            roundId: kRoundId,
+            ceremonyStart: nowSeconds - 1000,
+            voteEnd: nowSeconds + 100,
+          ),
+        ),
+      );
+      final rust = FakeVotingRustApi(emitCommitments: true);
+      final recoveryApi = FakeVotingRecoveryApi(
+        state: recoveryState(
+          bundleCount: 1,
+          delegationTxHashes: [
+            rust_voting.ApiDelegationTxRecovery(
+              bundleIndex: 0,
+              txHash: 'delegation-0',
+            ),
+          ],
+          votes: [vote(bundleIndex: 0, proposalId: 7)],
+        ),
+      );
+      final container = _sessionContainer(
+        http: http,
+        rust: rust,
+        recoveryApi: recoveryApi,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      await container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .castVotes(
+            draftVotes: [
+              rust_voting.ApiDraftVote(
+                proposalId: 7,
+                choice: 1,
+                numOptions: 2,
+                vcTreePosition: BigInt.zero,
+                singleShare: false,
+              ),
+            ],
+          );
+
+      expect(rust.draftSingleShareValues, [true]);
+      expect(_postBody(http, '/shielded-vote/v1/shares')['submit_at'], 0);
+      expect(rust.recordedShares.single.submitAt, BigInt.zero);
+    },
+  );
 
   test(
     'vote and share submissions match Swift SDK snake case wire shapes',
@@ -627,11 +797,13 @@ Map<String, dynamic> _postBody(FakeVotingHttpClient http, String path) {
   return request.body!;
 }
 
-Map<String, Object> votingHttpResponses() => {
+Map<String, Object> votingHttpResponses({
+  Map<String, dynamic>? roundStatus,
+}) => {
   'https://voting.example/static-voting-config.json': staticConfigJson(),
   'https://voting.example/dynamic-voting-config.json': dynamicConfigJson(),
   '/shielded-vote/v1/round/$kRoundId': {
-    'round': roundStatusJson(roundId: kRoundId),
+    'round': roundStatus ?? roundStatusJson(roundId: kRoundId),
   },
   '/shielded-vote/v1/delegate-vote': {
     'tx_hash': 'delegation-tx',
@@ -711,7 +883,11 @@ Map<String, dynamic> dynamicConfigJson() => {
   },
 };
 
-Map<String, dynamic> roundStatusJson({required String roundId}) => {
+Map<String, dynamic> roundStatusJson({
+  required String roundId,
+  int? ceremonyStart,
+  int? voteEnd,
+}) => {
   'vote_round_id': roundId,
   'round_id': roundId,
   'title': 'Poll',
@@ -720,6 +896,8 @@ Map<String, dynamic> roundStatusJson({required String roundId}) => {
   'ea_pk': _hex32,
   'nc_root': _hex32,
   'nullifier_imt_root': _hex32,
+  if (ceremonyStart != null) 'ceremony_phase_start': ceremonyStart,
+  if (voteEnd != null) 'vote_end_time': voteEnd,
 };
 
 rust_voting.ApiRoundRecoveryState recoveryState({
@@ -886,6 +1064,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final syncedVoteTrees = <String>[];
   final precomputedDelegationPir = <int>[];
   final resetVotingSessionStateCalls = <String>[];
+  final draftSingleShareValues = <bool>[];
 
   @override
   Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
@@ -1069,6 +1248,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }) async* {
     voteCommitBundleCalls.add(bundleIndex);
     for (final draft in draftVotes) {
+      draftSingleShareValues.add(draft.singleShare);
       yield rust_voting.ApiVoteCommitEvent(
         phase: 'result',
         proposalId: draft.proposalId,
@@ -1161,6 +1341,7 @@ class FakeVotingRustApi implements VotingRustApi {
         bundleIndex: bundleIndex,
         proposalId: proposalId,
         shareIndex: shareIndex,
+        submitAt: submitAt,
       ),
     );
   }
@@ -1208,11 +1389,13 @@ class _RecordedShare {
     required this.bundleIndex,
     required this.proposalId,
     required this.shareIndex,
+    required this.submitAt,
   });
 
   final int bundleIndex;
   final int proposalId;
   final int shareIndex;
+  final BigInt submitAt;
 }
 
 rust_voting.ApiSignedVoteCommitments _commitments({

@@ -175,7 +175,26 @@ confirmed --conflicting tx_hash, position, or commitment JSON--> error
 
 `workflow::record_share_delegation` records helper-server share submission in
 `share_delegations`. It wraps the upstream write in a SQLite transaction and
-checks that a repeated share key does not change the share nullifier.
+checks that a repeated share key does not change the share nullifier. The
+`submit_at` value stored with the row is the Unix-second reveal time sent to the
+helper server for that encrypted share.
+
+Dart computes `submit_at` from the round timing metadata before calling this
+Rust transition:
+
+- The last-moment buffer is `40%` of the round duration from
+  `ceremony_phase_start` to `vote_end_time`, capped at six hours.
+- Before that buffer starts, each share samples a randomized `submit_at`
+  uniformly in `[now, vote_end_time - buffer)`.
+- Inside the last-moment buffer, the vote commitment uses single-share mode and
+  shares use `submit_at = 0`, meaning immediate helper submission.
+- If round timing is missing or invalid, Vizor also uses `submit_at = 0` rather
+  than guessing a schedule.
+
+Recovery treats stored share rows as already accepted by at least one helper.
+Retry/resubmission paths may submit immediately with `submit_at = 0`; the
+original scheduled value remains part of the durable audit/recovery record for
+the first accepted submission.
 
 Transition:
 

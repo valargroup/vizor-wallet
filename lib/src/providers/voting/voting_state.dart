@@ -112,6 +112,9 @@ class VotingSessionError {
 /// Dynamic config authenticates round metadata, while the vote server returns
 /// the chain-bound round details such as snapshot height and tree roots.
 class VotingRoundDetails {
+  static const double _lastMomentBufferFraction = 0.4;
+  static const Duration _lastMomentBufferMax = Duration(hours: 6);
+
   final String roundId;
   final String title;
   final String status;
@@ -161,6 +164,47 @@ class VotingRoundDetails {
   }
 
   String get sessionJson => jsonEncode(rawJson);
+
+  DateTime? get voteEndTime => _dateFromJson(rawJson, const [
+    'vote_end_time',
+    'voteEndTime',
+    'end_time',
+    'endTime',
+    'ends_at',
+    'endsAt',
+    'deadline',
+  ]);
+
+  DateTime? get ceremonyStart => _dateFromJson(rawJson, const [
+    'ceremony_phase_start',
+    'ceremonyPhaseStart',
+    'start_time',
+    'startTime',
+    'starts_at',
+    'startsAt',
+  ]);
+
+  Duration? get lastMomentBuffer {
+    final start = ceremonyStart;
+    final end = voteEndTime;
+    if (start == null || end == null) return null;
+    final duration = end.difference(start);
+    if (duration <= Duration.zero) return null;
+    final buffer = Duration(
+      milliseconds: (duration.inMilliseconds * _lastMomentBufferFraction)
+          .round(),
+    );
+    return buffer < _lastMomentBufferMax ? buffer : _lastMomentBufferMax;
+  }
+
+  bool isLastMoment([DateTime? now]) {
+    final end = voteEndTime;
+    final buffer = lastMomentBuffer;
+    if (end == null || buffer == null) return false;
+    final threshold = end.subtract(buffer);
+    final current = (now ?? DateTime.now()).toUtc();
+    return current.isAfter(threshold) || current.isAtSameMomentAs(threshold);
+  }
 }
 
 /// Immutable state for a single `votingSessionProvider(roundId)` instance.
@@ -301,6 +345,46 @@ Uint8List _bytesFromJson(Map<String, dynamic> json, List<String> keys) {
     ]);
   }
   return Uint8List.fromList(base64Decode(value));
+}
+
+DateTime? _dateFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = _valueFromJson(json, key);
+    final date = _parseDate(value);
+    if (date != null) return date.toUtc();
+  }
+  return null;
+}
+
+Object? _valueFromJson(Object? value, String key) {
+  if (value is! Map) return null;
+  if (value.containsKey(key)) return value[key];
+  for (final entry in value.entries) {
+    if (entry.key.toString() == key) return entry.value;
+  }
+  for (final entry in value.entries) {
+    final nested = entry.value;
+    if (nested is Map) {
+      final match = _valueFromJson(nested, key);
+      if (match != null) return match;
+    }
+  }
+  return null;
+}
+
+DateTime? _parseDate(Object? value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  if (value is num) {
+    final milliseconds = value > 100000000000
+        ? value.toInt()
+        : (value * 1000).toInt();
+    return DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
+  }
+  final text = value.toString().trim();
+  final numeric = num.tryParse(text);
+  if (numeric != null) return _parseDate(numeric);
+  return DateTime.tryParse(text);
 }
 
 bool _isHexRoundId(String value) {
