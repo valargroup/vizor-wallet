@@ -47,7 +47,8 @@ integration boundary is shared:
 - Rich persisted/submitted payloads preserve the Swift SDK `VotingTypes.swift`
   JSON field names where they cross app or service boundaries.
 - PIR endpoint selection fails closed unless the server's `/root.height`
-  exactly matches the round snapshot height.
+  exactly matches the round snapshot height. `/root.network_id` and
+  `/root.round_id` are optional diagnostics, not trusted endpoint identity.
 - ElGamal share-encryption wire format remains compatible.
 
 Intentional Vizor divergences:

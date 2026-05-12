@@ -354,7 +354,7 @@ pub async fn precompute_delegation_pir(
         ensure_round_initialized(&voting_db, &round_params, round_name, session_json)?;
     let round_id = round_params.vote_round_id.clone();
     let pir_server_url =
-        endpoint_validation::validate_pir_endpoint(pir_server_url, network, &round_params).await?;
+        endpoint_validation::validate_pir_endpoint(pir_server_url, &round_params).await?;
 
     let selected = select_notes_with_lwd(
         db_path,
@@ -511,7 +511,7 @@ where
         ensure_round_initialized(&voting_db, &round_params, round_name, session_json)?;
     let round_id = round_params.vote_round_id.clone();
     let pir_server_url =
-        endpoint_validation::validate_pir_endpoint(pir_server_url, network, &round_params).await?;
+        endpoint_validation::validate_pir_endpoint(pir_server_url, &round_params).await?;
 
     cancellation.check()?;
     on_progress(ProofEvent::SelectingNotes);

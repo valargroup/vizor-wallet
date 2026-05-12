@@ -72,7 +72,9 @@ class PirSnapshotNoMatchingEndpoint implements Exception {
 ///
 /// Exact matching is deliberate. A behind endpoint cannot answer for the round's
 /// required snapshot, and an ahead endpoint may reveal a different anonymity set
-/// than the one authenticated by the voting round configuration.
+/// than the one authenticated by the voting round configuration. Optional
+/// `/root` identity fields such as `network_id` or `round_id` are not used for
+/// selection; the voting round configuration authenticates the expected height.
 class PirSnapshotResolver {
   PirSnapshotResolver({
     required VotingHttpClient httpClient,

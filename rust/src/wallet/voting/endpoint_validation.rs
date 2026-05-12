@@ -1,7 +1,5 @@
 use zcash_voting::Transport;
 
-use crate::wallet::network::WalletNetwork;
-
 static RUSTLS_PROVIDER: std::sync::OnceLock<()> = std::sync::OnceLock::new();
 
 /// Install the Rustls crypto provider for direct Hyper/Rustls validation probes.
@@ -24,12 +22,13 @@ pub fn validate_tree_base_endpoint(base_url: &str, round_id: &str) -> Result<Str
 /// Validate a PIR endpoint before any private proof queries are sent.
 ///
 /// This fails closed unless `/root.height` exactly matches the round snapshot.
+/// The voting round configuration authenticates the expected snapshot height;
+/// optional `/root` identity fields such as `network_id` or `round_id` are
+/// diagnostics only and are intentionally not part of the protocol check.
 pub async fn validate_pir_endpoint(
     pir_server_url: &str,
-    _network: WalletNetwork,
     round_params: &zcash_voting::VotingRoundParams,
 ) -> Result<String, String> {
-    validate_round_id(&round_params.vote_round_id)?;
     let endpoint = ParsedEndpoint::parse("PIR", pir_server_url)?;
     let root_url = endpoint.child_url("root");
     let expected_height = round_params.snapshot_height;
@@ -147,8 +146,8 @@ fn normalized_base_url(url: &url::Url) -> String {
     value.trim_end_matches('/').to_string()
 }
 
-/// Round IDs are path material for tree/PIR endpoints, so validate them before
-/// constructing any upstream request.
+/// Round IDs are path material for tree endpoints, so validate them before
+/// constructing any upstream tree request.
 fn validate_round_id(round_id: &str) -> Result<(), String> {
     if round_id.len() == 64 && round_id.bytes().all(|b| b.is_ascii_hexdigit()) {
         Ok(())
@@ -183,6 +182,7 @@ mod tests {
         assert!(validate_tree_base_endpoint("https://node.example", ROUND_ID).is_ok());
         assert!(validate_tree_base_endpoint("", ROUND_ID).is_err());
         assert!(validate_tree_base_endpoint("ftp://node.example", ROUND_ID).is_err());
+        assert!(validate_tree_base_endpoint("http://node.example", ROUND_ID).is_ok());
         assert!(validate_tree_base_endpoint("https://user@node.example", ROUND_ID).is_err());
         assert!(validate_tree_base_endpoint("https://node.example?x=1", ROUND_ID).is_err());
         assert!(validate_tree_base_endpoint("https://node.example/#frag", ROUND_ID).is_err());
@@ -222,11 +222,19 @@ mod tests {
             .to_string(),
         );
 
-        let result =
-            validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params()).await;
+        let result = validate_pir_endpoint(&server_url, &test_round_params()).await;
 
         assert_eq!(result.unwrap(), server_url);
         assert_eq!(request_path.join().unwrap(), "/root");
+    }
+
+    #[tokio::test]
+    async fn pir_endpoint_validation_rejects_unsupported_scheme() {
+        let err = validate_pir_endpoint("ftp://pir.example", &test_round_params())
+            .await
+            .unwrap_err();
+
+        assert!(err.contains("unsupported URL scheme"));
     }
 
     #[tokio::test]
@@ -235,20 +243,18 @@ mod tests {
             start_root_server(200, serde_json::json!({ "height": 100 }).to_string());
         let endpoint = format!("{server_url}/pir/");
 
-        let result =
-            validate_pir_endpoint(&endpoint, WalletNetwork::Test, &test_round_params()).await;
+        let result = validate_pir_endpoint(&endpoint, &test_round_params()).await;
 
         assert_eq!(result.unwrap(), format!("{server_url}/pir"));
         assert_eq!(request_path.join().unwrap(), "/pir/root");
     }
 
     #[tokio::test]
-    async fn pir_endpoint_validation_accepts_matching_root_without_identity() {
+    async fn pir_endpoint_validation_accepts_height_only_root_metadata() {
         let (server_url, request_path) =
             start_root_server(200, serde_json::json!({ "height": 100 }).to_string());
 
-        let result =
-            validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params()).await;
+        let result = validate_pir_endpoint(&server_url, &test_round_params()).await;
 
         assert_eq!(result.unwrap(), server_url);
         assert_eq!(request_path.join().unwrap(), "/root");
@@ -266,7 +272,7 @@ mod tests {
             .to_string(),
         );
 
-        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+        let err = validate_pir_endpoint(&server_url, &test_round_params())
             .await
             .unwrap_err();
 
@@ -288,7 +294,7 @@ mod tests {
             .to_string(),
         );
 
-        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+        let err = validate_pir_endpoint(&server_url, &test_round_params())
             .await
             .unwrap_err();
 
@@ -303,7 +309,7 @@ mod tests {
         let (server_url, request_path) =
             start_root_server(503, serde_json::json!({ "height": 100 }).to_string());
 
-        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+        let err = validate_pir_endpoint(&server_url, &test_round_params())
             .await
             .unwrap_err();
 
@@ -315,7 +321,7 @@ mod tests {
     async fn pir_endpoint_validation_rejects_malformed_root_json() {
         let (server_url, request_path) = start_root_server(200, "{".to_string());
 
-        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+        let err = validate_pir_endpoint(&server_url, &test_round_params())
             .await
             .unwrap_err();
 
@@ -328,7 +334,7 @@ mod tests {
         let (server_url, request_path) =
             start_root_server(200, serde_json::json!({ "root29": "unused" }).to_string());
 
-        let err = validate_pir_endpoint(&server_url, WalletNetwork::Test, &test_round_params())
+        let err = validate_pir_endpoint(&server_url, &test_round_params())
             .await
             .unwrap_err();
 
