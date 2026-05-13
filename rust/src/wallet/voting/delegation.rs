@@ -454,17 +454,21 @@ pub async fn precompute_delegation_pir(
         derive_hotkey_raw_orchard_address(seed, &round_id, account_uuid, network)?;
     let branch_height = current_chain_height(lightwalletd_url).await?;
     let branch_id = consensus_branch_id(network, branch_height)?;
-    let governance_pczt = build_paired_governance_pczt(
-        &voting_db,
-        &round_id,
-        bundle_index,
-        &bundle_note_infos,
-        &account,
-        &hotkey_raw_address,
-        branch_id,
-        network,
-        &round_context.round_name,
-    )?;
+    let governance_pczt = voting_db
+        .build_governance_pczt(
+            &round_id,
+            bundle_index,
+            &bundle_note_infos,
+            &account.orchard_fvk_bytes,
+            &hotkey_raw_address,
+            branch_id,
+            network.network_type().coin_type(),
+            &account.seed_fingerprint,
+            account.account_index,
+            &round_context.round_name,
+            0,
+        )
+        .map_err(|e| format!("build_governance_pczt failed: {e}"))?;
 
     let prepared_key = prepared_delegation_key(
         db_path,
@@ -656,17 +660,21 @@ where
         );
         governance_pczt
     } else {
-        build_paired_governance_pczt(
-            &voting_db,
-            &round_id,
-            bundle_index,
-            &bundle_note_infos,
-            &account,
-            &hotkey_raw_address,
-            branch_id,
-            network,
-            &round_context.round_name,
-        )?
+        voting_db
+            .build_governance_pczt(
+                &round_id,
+                bundle_index,
+                &bundle_note_infos,
+                &account.orchard_fvk_bytes,
+                &hotkey_raw_address,
+                branch_id,
+                network.network_type().coin_type(),
+                &account.seed_fingerprint,
+                account.account_index,
+                &round_context.round_name,
+                0,
+            )
+            .map_err(|e| format!("build_governance_pczt failed: {e}"))?
     };
     log::info!(
         "voting delegation: built governance PCZT \
@@ -868,84 +876,6 @@ fn bundle_weight_zatoshi(notes: &[zcash_voting::NoteInfo]) -> Result<u64, String
     })?;
     Ok((total / zcash_voting::governance::BALLOT_DIVISOR)
         * zcash_voting::governance::BALLOT_DIVISOR)
-}
-
-/// Checks whether the PCZT action index points at the governance output.
-fn governance_pczt_output_paired_with_signed_action(
-    governance_pczt: &zcash_voting::GovernancePczt,
-) -> Result<bool, String> {
-    let pczt = pczt::Pczt::parse(&governance_pczt.pczt_bytes)
-        .map_err(|e| format!("failed to parse governance PCZT: {e:?}"))?;
-    let action = pczt
-        .orchard()
-        .actions()
-        .get(governance_pczt.action_index)
-        .ok_or_else(|| {
-            format!(
-                "governance PCZT action_index {} is out of range for {} actions",
-                governance_pczt.action_index,
-                pczt.orchard().actions().len()
-            )
-        })?;
-
-    Ok(action.output().cmx().as_slice() == governance_pczt.cmx_new.as_slice())
-}
-
-/// Builds a governance PCZT whose signed action is paired with its output.
-///
-/// Retries randomized PCZT construction to avoid an action/output layout that
-/// would make downstream submission ambiguous.
-#[allow(clippy::too_many_arguments)]
-fn build_paired_governance_pczt(
-    voting_db: &zcash_voting::storage::VotingDb,
-    round_id: &str,
-    bundle_index: u32,
-    bundle_note_infos: &[zcash_voting::NoteInfo],
-    account: &DelegationAccount,
-    hotkey_raw_address: &[u8],
-    branch_id: u32,
-    network: WalletNetwork,
-    round_name: &str,
-) -> Result<zcash_voting::GovernancePczt, String> {
-    let mut last_unpaired = None;
-    for attempt in 1..=16 {
-        let candidate = voting_db
-            .build_governance_pczt(
-                round_id,
-                bundle_index,
-                bundle_note_infos,
-                &account.orchard_fvk_bytes,
-                hotkey_raw_address,
-                branch_id,
-                network.network_type().coin_type(),
-                &account.seed_fingerprint,
-                account.account_index,
-                round_name,
-                0,
-            )
-            .map_err(|e| format!("build_governance_pczt failed: {e}"))?;
-        if governance_pczt_output_paired_with_signed_action(&candidate)? {
-            if attempt > 1 {
-                log::info!(
-                    "voting delegation: rebuilt governance PCZT after unpaired action layout \
-                     (bundle_index={}, attempts={})",
-                    bundle_index,
-                    attempt
-                );
-            }
-            return Ok(candidate);
-        }
-        last_unpaired = Some(candidate);
-    }
-
-    let action_index = last_unpaired
-        .as_ref()
-        .map(|pczt| pczt.action_index.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
-    Err(format!(
-        "build_governance_pczt produced unpaired governance output after 16 attempts \
-         (last action_index={action_index})"
-    ))
 }
 
 /// Returns the stored bundle count for `round_id`.
