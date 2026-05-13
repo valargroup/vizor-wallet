@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -582,6 +583,23 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }
 
   @override
+  Future<String> delegationSubmissionWireJson({
+    required rust_voting.ApiSignedDelegationPayload submission,
+  }) async {
+    return jsonEncode({
+      'rk': base64Encode(submission.rk),
+      'spend_auth_sig': base64Encode(submission.spendAuthSig),
+      'sighash': base64Encode(submission.sighash),
+      'signed_note_nullifier': base64Encode(submission.nfSigned),
+      'cmx_new': base64Encode(submission.cmxNew),
+      'van_cmx': base64Encode(submission.govComm),
+      'gov_nullifiers': submission.govNullifiers.map(base64Encode).toList(),
+      'proof': base64Encode(submission.proof),
+      'vote_round_id': base64Encode(_bytesFromHex(submission.voteRoundId)),
+    });
+  }
+
+  @override
   Future<void> markDelegationSubmitted({
     required String dbPath,
     required String walletId,
@@ -662,6 +680,54 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }
 
   @override
+  Future<String> voteCommitmentWireJson({
+    required rust_voting.ApiSignedVoteCommitment commitment,
+  }) async {
+    return jsonEncode({
+      'van_nullifier': base64Encode(commitment.vanNullifier),
+      'vote_authority_note_new': base64Encode(commitment.voteAuthorityNoteNew),
+      'vote_commitment': base64Encode(commitment.voteCommitment),
+      'proposal_id': commitment.proposalId,
+      'proof': base64Encode(commitment.proof),
+      'vote_round_id': base64Encode(_bytesFromHex(commitment.voteRoundId)),
+      'vote_comm_tree_anchor_height': commitment.anchorHeight,
+      'r_vpk': base64Encode(commitment.rVpkBytes),
+      'vote_auth_sig': base64Encode(commitment.voteAuthSig),
+    });
+  }
+
+  @override
+  Future<String> voteShareWireJson({
+    required rust_voting.ApiVoteSharePayload payload,
+    BigInt? vcTreePosition,
+    required BigInt submitAt,
+  }) async {
+    return jsonEncode({
+      'shares_hash': base64Encode(payload.sharesHash),
+      'proposal_id': payload.proposalId,
+      'vote_decision': payload.voteDecision,
+      'enc_share': _wireShare(payload.encryptedShare),
+      'share_index': payload.encryptedShare.shareIndex,
+      'tree_position': (vcTreePosition ?? payload.treePosition).toInt(),
+      'all_enc_shares': payload.allEncryptedShares.map(_wireShare).toList(),
+      'share_comms': payload.shareComms.map(base64Encode).toList(),
+      'primary_blind': base64Encode(payload.primaryBlind),
+      'submit_at': submitAt.toInt(),
+    });
+  }
+
+  @override
+  Future<String> recoveredVoteShareWireJson({
+    required String commitmentBundleJson,
+    required int proposalId,
+    required int shareIndex,
+    required BigInt vcTreePosition,
+    required BigInt submitAt,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> markVoteSubmitted({
     required String dbPath,
     required String walletId,
@@ -724,6 +790,21 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
       shareIndex,
     ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   }
+}
+
+Map<String, dynamic> _wireShare(rust_voting.ApiWireEncryptedShare share) {
+  return {
+    'c1': base64Encode(share.ciphertext1),
+    'c2': base64Encode(share.ciphertext2),
+    'share_index': share.shareIndex,
+  };
+}
+
+List<int> _bytesFromHex(String hex) {
+  return [
+    for (var i = 0; i < hex.length; i += 2)
+      int.parse(hex.substring(i, i + 2), radix: 16),
+  ];
 }
 
 rust_voting.ApiSignedVoteCommitments _commitments({

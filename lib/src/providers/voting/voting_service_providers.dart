@@ -195,6 +195,10 @@ abstract interface class VotingRustApi {
     required int bundleIndex,
   });
 
+  Future<String> delegationSubmissionWireJson({
+    required rust_voting.ApiSignedDelegationPayload submission,
+  });
+
   Future<void> storeDelegationTxHash({
     required String dbPath,
     required String walletId,
@@ -263,6 +267,24 @@ abstract interface class VotingRustApi {
     required List<int> hotkeySeed,
     required rust_voting.ApiVanWitness vanWitness,
     required List<rust_voting.ApiDraftVote> draftVotes,
+  });
+
+  Future<String> voteCommitmentWireJson({
+    required rust_voting.ApiSignedVoteCommitment commitment,
+  });
+
+  Future<String> voteShareWireJson({
+    required rust_voting.ApiVoteSharePayload payload,
+    BigInt? vcTreePosition,
+    required BigInt submitAt,
+  });
+
+  Future<String> recoveredVoteShareWireJson({
+    required String commitmentBundleJson,
+    required int proposalId,
+    required int shareIndex,
+    required BigInt vcTreePosition,
+    required BigInt submitAt,
   });
 
   Future<void> storeVoteTxHash({
@@ -420,6 +442,13 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
+  Future<String> delegationSubmissionWireJson({
+    required rust_voting.ApiSignedDelegationPayload submission,
+  }) {
+    return rust_voting.delegationSubmissionWireJson(submission: submission);
+  }
+
+  @override
   Future<void> storeDelegationTxHash({
     required String dbPath,
     required String walletId,
@@ -554,6 +583,43 @@ class FrbVotingRustApi implements VotingRustApi {
       hotkeySeed: hotkeySeed,
       vanWitness: vanWitness,
       draftVotes: draftVotes,
+    );
+  }
+
+  @override
+  Future<String> voteCommitmentWireJson({
+    required rust_voting.ApiSignedVoteCommitment commitment,
+  }) {
+    return rust_voting.voteCommitmentWireJson(commitment: commitment);
+  }
+
+  @override
+  Future<String> voteShareWireJson({
+    required rust_voting.ApiVoteSharePayload payload,
+    BigInt? vcTreePosition,
+    required BigInt submitAt,
+  }) {
+    return rust_voting.voteShareWireJson(
+      payload: payload,
+      vcTreePosition: vcTreePosition,
+      submitAt: submitAt,
+    );
+  }
+
+  @override
+  Future<String> recoveredVoteShareWireJson({
+    required String commitmentBundleJson,
+    required int proposalId,
+    required int shareIndex,
+    required BigInt vcTreePosition,
+    required BigInt submitAt,
+  }) {
+    return rust_voting.recoveredVoteShareWireJson(
+      commitmentBundleJson: commitmentBundleJson,
+      proposalId: proposalId,
+      shareIndex: shareIndex,
+      vcTreePosition: vcTreePosition,
+      submitAt: submitAt,
     );
   }
 

@@ -226,7 +226,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           'round=${context.round.roundId} bundle=$bundleIndex',
         );
         final result = await api.submitDelegation(
-          submission: _delegationSubmissionJson(submission),
+          submission: await _wireJsonMap(
+            rust.delegationSubmissionWireJson(submission: submission),
+          ),
         );
         debugPrint(
           '[zcash] Voting: delegation submit response '
@@ -591,10 +593,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           context.round,
           randomDouble: _submitAtRandom.nextDouble,
         );
-        final body = _sharePayloadJson(
-          payload,
-          vcTreePosition: vcTreePosition,
-          submitAt: submitAt,
+        final body = await _wireJsonMap(
+          rust.voteShareWireJson(
+            payload: payload,
+            vcTreePosition: vcTreePosition,
+            submitAt: BigInt.from(submitAt),
+          ),
         );
         for (final serverUrl in serverUrls) {
           try {
@@ -666,7 +670,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         'proposal=${commitment.proposalId}',
       );
       final result = await api.submitVoteCommitment(
-        commitment: _voteCommitmentSubmissionJson(commitment),
+        commitment: await _wireJsonMap(
+          rust.voteCommitmentWireJson(commitment: commitment),
+        ),
       );
       debugPrint(
         '[zcash] Voting: cast-vote response '
@@ -876,6 +882,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     required rust_voting.ApiShareDelegationRecord share,
     required List<String> serverUrls,
   }) async {
+    final rust = ref.read(votingRustApiProvider);
     final key = VotingVoteKey(
       bundleIndex: share.bundleIndex,
       proposalId: share.proposalId,
@@ -891,12 +898,14 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     }
     final Map<String, dynamic> body;
     try {
-      body = _sharePayloadJsonFromRecovery(
-        commitmentBundle.commitmentBundleJson,
-        proposalId: share.proposalId,
-        shareIndex: share.shareIndex,
-        vcTreePosition: commitmentBundle.vcTreePosition,
-        submitAt: BigInt.zero,
+      body = await _wireJsonMap(
+        rust.recoveredVoteShareWireJson(
+          commitmentBundleJson: commitmentBundle.commitmentBundleJson,
+          proposalId: share.proposalId,
+          shareIndex: share.shareIndex,
+          vcTreePosition: commitmentBundle.vcTreePosition,
+          submitAt: BigInt.zero,
+        ),
       );
     } catch (e) {
       debugPrint(
@@ -1327,162 +1336,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     ];
   }
 
-  static Map<String, dynamic> _sharePayloadJson(
-    rust_voting.ApiVoteSharePayload payload, {
-    BigInt? vcTreePosition,
-    required int submitAt,
-  }) {
-    return {
-      'shares_hash': base64Encode(payload.sharesHash),
-      'proposal_id': payload.proposalId,
-      'vote_decision': payload.voteDecision,
-      'enc_share': _wireShareJson(payload.encryptedShare),
-      'share_index': payload.encryptedShare.shareIndex,
-      'tree_position': _jsonInt(vcTreePosition ?? payload.treePosition),
-      'all_enc_shares': payload.allEncryptedShares.map(_wireShareJson).toList(),
-      'share_comms': payload.shareComms.map(base64Encode).toList(),
-      'primary_blind': base64Encode(payload.primaryBlind),
-      'submit_at': submitAt,
-    };
-  }
-
-  static Map<String, dynamic> _sharePayloadJsonFromRecovery(
-    String commitmentBundleJson, {
-    required int proposalId,
-    required int shareIndex,
-    required BigInt vcTreePosition,
-    required BigInt submitAt,
-  }) {
-    // Rust stores recovery payloads as hex JSON because the blob also contains
-    // local-only recovery material. Helper APIs expect the public share fields
-    // in the same base64 wire shape used during initial foreground submission.
-    final decoded = jsonDecode(commitmentBundleJson);
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException(
-        'Commitment bundle recovery JSON is not an object.',
-      );
-    }
-    final payloads = decoded['share_payloads'];
-    if (payloads is! List) {
-      throw const FormatException(
-        'Commitment bundle recovery JSON has no share_payloads list.',
-      );
-    }
-    for (final payload in payloads) {
-      if (payload is! Map) continue;
-      final object = payload.map(
-        (key, value) => MapEntry(key.toString(), value),
-      );
-      final encShare = object['enc_share'];
-      if (object['proposal_id'] == proposalId &&
-          encShare is Map &&
-          encShare['share_index'] == shareIndex) {
-        return {
-          'shares_hash': _base64FromHexField(object, 'shares_hash'),
-          'proposal_id': proposalId,
-          'vote_decision': object['vote_decision'],
-          'enc_share': _wireShareJsonFromRecovery(encShare),
-          'share_index': shareIndex,
-          'tree_position': _jsonInt(vcTreePosition),
-          'all_enc_shares': _wireSharesJsonFromRecovery(
-            object['all_enc_shares'],
-          ),
-          'share_comms': _hexListField(
-            object,
-            'share_comms',
-          ).map((hex) => base64Encode(_bytesFromHex(hex))).toList(),
-          'primary_blind': _base64FromHexField(object, 'primary_blind'),
-          'submit_at': _jsonInt(submitAt),
-        };
-      }
-    }
-    throw StateError(
-      'No stored share payload for proposal $proposalId share $shareIndex.',
-    );
-  }
-
-  static Map<String, dynamic> _voteCommitmentSubmissionJson(
-    rust_voting.ApiSignedVoteCommitment commitment,
-  ) {
-    return {
-      'van_nullifier': base64Encode(commitment.vanNullifier),
-      'vote_authority_note_new': base64Encode(commitment.voteAuthorityNoteNew),
-      'vote_commitment': base64Encode(commitment.voteCommitment),
-      'proposal_id': commitment.proposalId,
-      'proof': base64Encode(commitment.proof),
-      'vote_round_id': base64Encode(_bytesFromHex(commitment.voteRoundId)),
-      'vote_comm_tree_anchor_height': commitment.anchorHeight,
-      'r_vpk': base64Encode(commitment.rVpkBytes),
-      'vote_auth_sig': base64Encode(commitment.voteAuthSig),
-    };
-  }
-
-  static Map<String, dynamic> _delegationSubmissionJson(
-    rust_voting.ApiSignedDelegationPayload submission,
-  ) {
-    return {
-      'rk': base64Encode(submission.rk),
-      'spend_auth_sig': base64Encode(submission.spendAuthSig),
-      'sighash': base64Encode(submission.sighash),
-      'signed_note_nullifier': base64Encode(submission.nfSigned),
-      'cmx_new': base64Encode(submission.cmxNew),
-      'van_cmx': base64Encode(submission.govComm),
-      'gov_nullifiers': submission.govNullifiers.map(base64Encode).toList(),
-      'proof': base64Encode(submission.proof),
-      'vote_round_id': base64Encode(_bytesFromHex(submission.voteRoundId)),
-    };
-  }
-
-  static Map<String, dynamic> _wireShareJson(
-    rust_voting.ApiWireEncryptedShare share,
-  ) {
-    return {
-      'c1': base64Encode(share.ciphertext1),
-      'c2': base64Encode(share.ciphertext2),
-      'share_index': share.shareIndex,
-    };
-  }
-
-  static Map<String, dynamic> _wireShareJsonFromRecovery(
-    Map<dynamic, dynamic> share,
-  ) {
-    return {
-      'c1': _base64FromHexField(share, 'c1'),
-      'c2': _base64FromHexField(share, 'c2'),
-      'share_index': share['share_index'],
-    };
-  }
-
-  static List<Map<String, dynamic>> _wireSharesJsonFromRecovery(Object? value) {
-    if (value is! List) {
-      throw const FormatException(
-        'Stored share payload has no all_enc_shares list.',
-      );
-    }
-    return value
-        .whereType<Map>()
-        .map(_wireShareJsonFromRecovery)
-        .toList(growable: false);
-  }
-
-  static String _base64FromHexField(Map<dynamic, dynamic> object, String key) {
-    final value = object[key];
-    if (value is! String) {
-      throw FormatException(
-        'Stored share payload field $key is not a hex string.',
-      );
-    }
-    return base64Encode(_bytesFromHex(value));
-  }
-
-  static List<String> _hexListField(Map<dynamic, dynamic> object, String key) {
-    final value = object[key];
-    if (value is! List || value.any((entry) => entry is! String)) {
-      throw FormatException(
-        'Stored share payload field $key is not a hex string list.',
-      );
-    }
-    return value.cast<String>();
+  static Future<Map<String, dynamic>> _wireJsonMap(
+    Future<String> wireJson,
+  ) async {
+    final decoded = jsonDecode(await wireJson);
+    if (decoded is Map<String, dynamic>) return decoded;
+    throw const FormatException('Rust voting wire JSON is not an object.');
   }
 
   static ({int vanPosition, BigInt vcTreePosition}) _castVoteLeafPositions(
@@ -1504,13 +1363,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       throw StateError('Malformed cast_vote leaf_index: $rawLeafIndex');
     }
     return (vanPosition: vanPosition, vcTreePosition: vcTreePosition);
-  }
-
-  static int _jsonInt(BigInt value) {
-    if (value > BigInt.from(0x1fffffffffffff)) {
-      throw StateError('Value is too large to encode as JSON integer: $value');
-    }
-    return value.toInt();
   }
 
   static String _formatElapsed(Duration duration) {
