@@ -94,13 +94,11 @@ security-framework = { version = "3.7", features = ["OSX_10_15"] }
 tempfile = "3"
 hex = "0.4"
 
-# [patch.crates-io]
-# zcash_voting = { path = "../../librustvoting/zcash_voting" }
-
 # Flutter debug builds use Cargokit + Cargo's dev profile (`cargo build`
-# without `--release`). Keep debug assertions and symbols, but compile the app
-# crate and crypto-heavy dependencies with release-like optimization so
-# Halo2/Zcash proof generation is usable during local voting development.
+# without `--release`). Rust crypto and voting flows are slow and can
+# under the default debug opt-level=0, so keep debug assertions and
+# symbols while making local Flutter/debug voting builds usable. Release builds
+# are unaffected by this profile.
 [profile.dev]
 opt-level = 3
 
