@@ -1416,6 +1416,13 @@ String _hexFromBytes(List<int> bytes) {
   return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }
 
+List<int> _bytesFromHex(String hex) {
+  return [
+    for (var i = 0; i < hex.length; i += 2)
+      int.parse(hex.substring(i, i + 2), radix: 16),
+  ];
+}
+
 class FakeVotingRecoveryApi implements VotingRecoveryApi {
   rust_voting.ApiRoundRecoveryState state;
   final walletIds = <String>[];
@@ -1671,6 +1678,23 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
+  Future<String> delegationSubmissionWireJson({
+    required rust_voting.ApiSignedDelegationPayload submission,
+  }) async {
+    return jsonEncode({
+      'rk': base64Encode(submission.rk),
+      'spend_auth_sig': base64Encode(submission.spendAuthSig),
+      'sighash': base64Encode(submission.sighash),
+      'signed_note_nullifier': base64Encode(submission.nfSigned),
+      'cmx_new': base64Encode(submission.cmxNew),
+      'van_cmx': base64Encode(submission.govComm),
+      'gov_nullifiers': submission.govNullifiers.map(base64Encode).toList(),
+      'proof': base64Encode(submission.proof),
+      'vote_round_id': base64Encode(_bytesFromHex(submission.voteRoundId)),
+    });
+  }
+
+  @override
   Future<rust_voting.ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
     required String dbPath,
     required String lightwalletdUrl,
@@ -1817,6 +1841,96 @@ class FakeVotingRustApi implements VotingRustApi {
             : null,
       );
     }
+  }
+
+  @override
+  Future<String> voteCommitmentWireJson({
+    required rust_voting.ApiSignedVoteCommitment commitment,
+  }) async {
+    return jsonEncode({
+      'van_nullifier': base64Encode(commitment.vanNullifier),
+      'vote_authority_note_new': base64Encode(commitment.voteAuthorityNoteNew),
+      'vote_commitment': base64Encode(commitment.voteCommitment),
+      'proposal_id': commitment.proposalId,
+      'proof': base64Encode(commitment.proof),
+      'vote_round_id': base64Encode(_bytesFromHex(commitment.voteRoundId)),
+      'vote_comm_tree_anchor_height': commitment.anchorHeight,
+      'r_vpk': base64Encode(commitment.rVpkBytes),
+      'vote_auth_sig': base64Encode(commitment.voteAuthSig),
+    });
+  }
+
+  @override
+  Future<String> voteShareWireJson({
+    required rust_voting.ApiVoteSharePayload payload,
+    BigInt? vcTreePosition,
+    required BigInt submitAt,
+  }) async {
+    return jsonEncode(
+      _shareWireMap(
+        sharesHash: payload.sharesHash,
+        proposalId: payload.proposalId,
+        voteDecision: payload.voteDecision,
+        encryptedShare: payload.encryptedShare,
+        treePosition: vcTreePosition ?? payload.treePosition,
+        allEncryptedShares: payload.allEncryptedShares,
+        shareComms: payload.shareComms,
+        primaryBlind: payload.primaryBlind,
+        submitAt: submitAt,
+      ),
+    );
+  }
+
+  @override
+  Future<String> recoveredVoteShareWireJson({
+    required String commitmentBundleJson,
+    required int proposalId,
+    required int shareIndex,
+    required BigInt vcTreePosition,
+    required BigInt submitAt,
+  }) async {
+    final decoded = jsonDecode(commitmentBundleJson) as Map<String, dynamic>;
+    final payloads = decoded['share_payloads'] as List<dynamic>;
+    final payload = payloads.cast<Map<String, dynamic>>().singleWhere((
+      payload,
+    ) {
+      final encShare = payload['enc_share'] as Map<String, dynamic>;
+      return payload['proposal_id'] == proposalId &&
+          encShare['share_index'] == shareIndex;
+    });
+    final encShare = payload['enc_share'] as Map<String, dynamic>;
+    return jsonEncode({
+      'shares_hash': base64Encode(
+        _bytesFromHex(payload['shares_hash'] as String),
+      ),
+      'proposal_id': proposalId,
+      'vote_decision': payload['vote_decision'],
+      'enc_share': {
+        'c1': base64Encode(_bytesFromHex(encShare['c1'] as String)),
+        'c2': base64Encode(_bytesFromHex(encShare['c2'] as String)),
+        'share_index': shareIndex,
+      },
+      'share_index': shareIndex,
+      'tree_position': vcTreePosition.toInt(),
+      'all_enc_shares': (payload['all_enc_shares'] as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+          .map(
+            (share) => {
+              'c1': base64Encode(_bytesFromHex(share['c1'] as String)),
+              'c2': base64Encode(_bytesFromHex(share['c2'] as String)),
+              'share_index': share['share_index'],
+            },
+          )
+          .toList(),
+      'share_comms': (payload['share_comms'] as List<dynamic>)
+          .cast<String>()
+          .map((hex) => base64Encode(_bytesFromHex(hex)))
+          .toList(),
+      'primary_blind': base64Encode(
+        _bytesFromHex(payload['primary_blind'] as String),
+      ),
+      'submit_at': submitAt.toInt(),
+    });
   }
 
   @override
@@ -1997,4 +2111,37 @@ rust_voting.ApiSignedVoteCommitments _commitments({
       ),
     ],
   );
+}
+
+Map<String, dynamic> _shareWireMap({
+  required List<int> sharesHash,
+  required int proposalId,
+  required int voteDecision,
+  required rust_voting.ApiWireEncryptedShare encryptedShare,
+  required BigInt treePosition,
+  required List<rust_voting.ApiWireEncryptedShare> allEncryptedShares,
+  required List<List<int>> shareComms,
+  required List<int> primaryBlind,
+  required BigInt submitAt,
+}) {
+  Map<String, dynamic> wireShare(rust_voting.ApiWireEncryptedShare share) {
+    return {
+      'c1': base64Encode(share.ciphertext1),
+      'c2': base64Encode(share.ciphertext2),
+      'share_index': share.shareIndex,
+    };
+  }
+
+  return {
+    'shares_hash': base64Encode(sharesHash),
+    'proposal_id': proposalId,
+    'vote_decision': voteDecision,
+    'enc_share': wireShare(encryptedShare),
+    'share_index': encryptedShare.shareIndex,
+    'tree_position': treePosition.toInt(),
+    'all_enc_shares': allEncryptedShares.map(wireShare).toList(),
+    'share_comms': shareComms.map(base64Encode).toList(),
+    'primary_blind': base64Encode(primaryBlind),
+    'submit_at': submitAt.toInt(),
+  };
 }

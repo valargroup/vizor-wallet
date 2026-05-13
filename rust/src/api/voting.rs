@@ -16,6 +16,7 @@ use crate::wallet::{
         vote,
     },
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use secrecy::ExposeSecret;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -276,6 +277,56 @@ pub struct ApiRoundRecoveryState {
     pub share_workflows: Vec<ApiShareWorkflowRecovery>,
     pub share_delegations: Vec<ApiShareDelegationRecord>,
     pub unconfirmed_share_delegations: Vec<ApiShareDelegationRecord>,
+}
+
+/// Returns the vote-chain delegation submission body as validated wire JSON.
+///
+/// Binary fields are base64-encoded here so Dart does not duplicate protocol
+/// field names or byte encoding rules.
+pub fn delegation_submission_wire_json(
+    submission: ApiSignedDelegationPayload,
+) -> Result<String, String> {
+    catch(|| delegation_submission_wire_json_inner(&submission))
+}
+
+/// Returns the vote-chain cast-vote submission body as validated wire JSON.
+pub fn vote_commitment_wire_json(commitment: ApiSignedVoteCommitment) -> Result<String, String> {
+    catch(|| vote_commitment_wire_json_inner(&commitment))
+}
+
+/// Returns the helper-server encrypted-share submission body as wire JSON.
+///
+/// `vc_tree_position` overrides the draft payload tree position after the
+/// vote-chain cast-vote transaction confirms.
+pub fn vote_share_wire_json(
+    payload: ApiVoteSharePayload,
+    vc_tree_position: Option<u64>,
+    submit_at: u64,
+) -> Result<String, String> {
+    catch(|| vote_share_wire_json_inner(&payload, vc_tree_position, submit_at))
+}
+
+/// Extract and validate one helper-share payload from stored recovery JSON.
+///
+/// The stored recovery blob is hex-encoded and also contains local-only
+/// recovery material. This helper emits only the public base64 wire shape that
+/// helper servers accept.
+pub fn recovered_vote_share_wire_json(
+    commitment_bundle_json: String,
+    proposal_id: u32,
+    share_index: u32,
+    vc_tree_position: u64,
+    submit_at: u64,
+) -> Result<String, String> {
+    catch(|| {
+        recovered_vote_share_wire_json_inner(
+            &commitment_bundle_json,
+            proposal_id,
+            share_index,
+            vc_tree_position,
+            submit_at,
+        )
+    })
 }
 
 /// Derive the opaque per-account, per-round voting hotkey bytes.
@@ -693,6 +744,229 @@ impl From<recovery::RoundRecoveryState> for ApiRoundRecoveryState {
                 .collect(),
         }
     }
+}
+
+fn b64(bytes: impl AsRef<[u8]>) -> String {
+    BASE64_STANDARD.encode(bytes.as_ref())
+}
+
+const MAX_SAFE_JSON_INTEGER: u64 = 0x1f_ffff_ffff_ffff;
+
+fn json_safe_u64(value: u64, field: &str) -> Result<u64, String> {
+    if value > MAX_SAFE_JSON_INTEGER {
+        return Err(format!(
+            "field {field} is too large to encode as JSON integer"
+        ));
+    }
+    Ok(value)
+}
+
+fn b64_hex(hex_value: &str, field: &str) -> Result<String, String> {
+    let normalized = hex_value.strip_prefix("0x").unwrap_or(hex_value);
+    hex::decode(normalized)
+        .map(b64)
+        .map_err(|e| format!("{field} is not valid hex: {e}"))
+}
+
+fn wire_share_json(share: &ApiWireEncryptedShare) -> serde_json::Value {
+    serde_json::json!({
+        "c1": b64(&share.ciphertext1),
+        "c2": b64(&share.ciphertext2),
+        "share_index": share.share_index,
+    })
+}
+
+fn delegation_submission_wire_json_inner(
+    submission: &ApiSignedDelegationPayload,
+) -> Result<String, String> {
+    serde_json::to_string(&serde_json::json!({
+        "rk": b64(&submission.rk),
+        "spend_auth_sig": b64(&submission.spend_auth_sig),
+        "sighash": b64(&submission.sighash),
+        "signed_note_nullifier": b64(&submission.nf_signed),
+        "cmx_new": b64(&submission.cmx_new),
+        "van_cmx": b64(&submission.gov_comm),
+        "gov_nullifiers": submission.gov_nullifiers.iter().map(b64).collect::<Vec<_>>(),
+        "proof": b64(&submission.proof),
+        "vote_round_id": b64_hex(&submission.vote_round_id, "vote_round_id")?,
+    }))
+    .map_err(|e| format!("serialize delegation wire JSON failed: {e}"))
+}
+
+fn vote_commitment_wire_json_inner(commitment: &ApiSignedVoteCommitment) -> Result<String, String> {
+    serde_json::to_string(&serde_json::json!({
+        "van_nullifier": b64(&commitment.van_nullifier),
+        "vote_authority_note_new": b64(&commitment.vote_authority_note_new),
+        "vote_commitment": b64(&commitment.vote_commitment),
+        "proposal_id": commitment.proposal_id,
+        "proof": b64(&commitment.proof),
+        "vote_round_id": b64_hex(&commitment.vote_round_id, "vote_round_id")?,
+        "vote_comm_tree_anchor_height": commitment.anchor_height,
+        "r_vpk": b64(&commitment.r_vpk_bytes),
+        "vote_auth_sig": b64(&commitment.vote_auth_sig),
+    }))
+    .map_err(|e| format!("serialize vote commitment wire JSON failed: {e}"))
+}
+
+fn vote_share_wire_json_inner(
+    payload: &ApiVoteSharePayload,
+    vc_tree_position: Option<u64>,
+    submit_at: u64,
+) -> Result<String, String> {
+    serde_json::to_string(&serde_json::json!({
+        "shares_hash": b64(&payload.shares_hash),
+        "proposal_id": payload.proposal_id,
+        "vote_decision": payload.vote_decision,
+        "enc_share": wire_share_json(&payload.encrypted_share),
+        "share_index": payload.encrypted_share.share_index,
+        "tree_position": json_safe_u64(
+            vc_tree_position.unwrap_or(payload.tree_position),
+            "tree_position",
+        )?,
+        "all_enc_shares": payload
+            .all_encrypted_shares
+            .iter()
+            .map(wire_share_json)
+            .collect::<Vec<_>>(),
+        "share_comms": payload.share_comms.iter().map(b64).collect::<Vec<_>>(),
+        "primary_blind": b64(&payload.primary_blind),
+        "submit_at": json_safe_u64(submit_at, "submit_at")?,
+    }))
+    .map_err(|e| format!("serialize vote share wire JSON failed: {e}"))
+}
+
+fn recovered_vote_share_wire_json_inner(
+    commitment_bundle_json: &str,
+    proposal_id: u32,
+    share_index: u32,
+    vc_tree_position: u64,
+    submit_at: u64,
+) -> Result<String, String> {
+    let decoded: serde_json::Value = serde_json::from_str(commitment_bundle_json)
+        .map_err(|e| format!("commitment bundle recovery JSON is malformed: {e}"))?;
+    let object = decoded
+        .as_object()
+        .ok_or_else(|| "commitment bundle recovery JSON is not an object".to_string())?;
+    let format = object
+        .get("format")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "commitment bundle recovery JSON has no format".to_string())?;
+    if format != "vizor_vote_commitment_bundle_recovery_v1" {
+        return Err(format!(
+            "unsupported commitment bundle recovery format: {format}"
+        ));
+    }
+    let payloads = object
+        .get("share_payloads")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "commitment bundle recovery JSON has no share_payloads list".to_string())?;
+    let payload = payloads
+        .iter()
+        .find(|payload| {
+            payload
+                .get("proposal_id")
+                .and_then(serde_json::Value::as_u64)
+                == Some(u64::from(proposal_id))
+                && payload
+                    .get("enc_share")
+                    .and_then(|share| share.get("share_index"))
+                    .and_then(serde_json::Value::as_u64)
+                    == Some(u64::from(share_index))
+        })
+        .ok_or_else(|| {
+            format!("no stored share payload for proposal {proposal_id} share {share_index}")
+        })?;
+
+    recovered_share_payload_json(
+        payload,
+        proposal_id,
+        share_index,
+        vc_tree_position,
+        submit_at,
+    )
+}
+
+fn recovered_share_payload_json(
+    payload: &serde_json::Value,
+    proposal_id: u32,
+    share_index: u32,
+    vc_tree_position: u64,
+    submit_at: u64,
+) -> Result<String, String> {
+    serde_json::to_string(&serde_json::json!({
+        "shares_hash": b64_hex_field(payload, "shares_hash")?,
+        "proposal_id": proposal_id,
+        "vote_decision": u32_field(payload, "vote_decision")?,
+        "enc_share": recovered_wire_share_json(
+            payload
+                .get("enc_share")
+                .ok_or_else(|| "stored share payload has no enc_share".to_string())?,
+        )?,
+        "share_index": share_index,
+        "tree_position": json_safe_u64(vc_tree_position, "tree_position")?,
+        "all_enc_shares": recovered_wire_shares_json(
+            payload
+                .get("all_enc_shares")
+                .ok_or_else(|| "stored share payload has no all_enc_shares list".to_string())?,
+        )?,
+        "share_comms": hex_list_field(payload, "share_comms")?
+            .into_iter()
+            .map(|hex| b64_hex(&hex, "share_comms entry"))
+            .collect::<Result<Vec<_>, _>>()?,
+        "primary_blind": b64_hex_field(payload, "primary_blind")?,
+        "submit_at": json_safe_u64(submit_at, "submit_at")?,
+    }))
+    .map_err(|e| format!("serialize recovered vote share wire JSON failed: {e}"))
+}
+
+fn recovered_wire_share_json(share: &serde_json::Value) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "c1": b64_hex_field(share, "c1")?,
+        "c2": b64_hex_field(share, "c2")?,
+        "share_index": u32_field(share, "share_index")?,
+    }))
+}
+
+fn recovered_wire_shares_json(
+    shares: &serde_json::Value,
+) -> Result<Vec<serde_json::Value>, String> {
+    let shares = shares
+        .as_array()
+        .ok_or_else(|| "stored share payload all_enc_shares is not a list".to_string())?;
+    shares.iter().map(recovered_wire_share_json).collect()
+}
+
+fn b64_hex_field(object: &serde_json::Value, key: &str) -> Result<String, String> {
+    let value = object
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| format!("stored share payload field {key} is not a hex string"))?;
+    b64_hex(value, key)
+}
+
+fn hex_list_field(object: &serde_json::Value, key: &str) -> Result<Vec<String>, String> {
+    let values = object
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| format!("stored share payload field {key} is not a hex string list"))?;
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_string)
+                .ok_or_else(|| format!("stored share payload field {key} is not a hex string list"))
+        })
+        .collect()
+}
+
+fn u32_field(object: &serde_json::Value, key: &str) -> Result<u32, String> {
+    let value = object
+        .get(key)
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| format!("stored share payload field {key} is not an unsigned integer"))?;
+    u32::try_from(value)
+        .map_err(|_| format!("stored share payload field {key} does not fit in u32"))
 }
 
 fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result<T, String> {
@@ -1550,6 +1824,178 @@ mod tests {
     }
 
     #[test]
+    fn delegation_wire_json_matches_vote_chain_shape() {
+        let wire = delegation_submission_wire_json(ApiSignedDelegationPayload {
+            pczt_bytes: vec![],
+            status: "ready".to_string(),
+            message: None,
+            proof: vec![8],
+            rk: vec![1],
+            spend_auth_sig: vec![2],
+            sighash: vec![3],
+            nf_signed: vec![4],
+            cmx_new: vec![5],
+            gov_comm: vec![6],
+            gov_nullifiers: vec![vec![7], vec![9]],
+            vote_round_id: "00010203".to_string(),
+            eligible_weight_zatoshi: 0,
+            delegated_weight_zatoshi: 0,
+            bundle_count: 1,
+            bundle_index: 0,
+        })
+        .unwrap();
+
+        let actual: serde_json::Value = serde_json::from_str(&wire).unwrap();
+        assert_eq!(
+            actual,
+            serde_json::json!({
+                "rk": "AQ==",
+                "spend_auth_sig": "Ag==",
+                "sighash": "Aw==",
+                "signed_note_nullifier": "BA==",
+                "cmx_new": "BQ==",
+                "van_cmx": "Bg==",
+                "gov_nullifiers": ["Bw==", "CQ=="],
+                "proof": "CA==",
+                "vote_round_id": "AAECAw==",
+            })
+        );
+    }
+
+    #[test]
+    fn cast_vote_wire_json_matches_vote_chain_shape() {
+        let wire = vote_commitment_wire_json(ApiSignedVoteCommitment {
+            proposal_id: 42,
+            choice: 1,
+            vote_round_id: "00010203".to_string(),
+            van_nullifier: vec![1],
+            vote_authority_note_new: vec![2],
+            vote_commitment: vec![3],
+            proof: vec![4],
+            encrypted_shares: vec![],
+            share_payloads: vec![],
+            anchor_height: 77,
+            shares_hash: vec![],
+            share_comms: vec![],
+            r_vpk_bytes: vec![5],
+            vote_auth_sig: vec![6],
+            commitment_bundle_json: String::new(),
+        })
+        .unwrap();
+
+        let actual: serde_json::Value = serde_json::from_str(&wire).unwrap();
+        assert_eq!(
+            actual,
+            serde_json::json!({
+                "van_nullifier": "AQ==",
+                "vote_authority_note_new": "Ag==",
+                "vote_commitment": "Aw==",
+                "proposal_id": 42,
+                "proof": "BA==",
+                "vote_round_id": "AAECAw==",
+                "vote_comm_tree_anchor_height": 77,
+                "r_vpk": "BQ==",
+                "vote_auth_sig": "Bg==",
+            })
+        );
+    }
+
+    #[test]
+    fn share_wire_json_matches_helper_shape_for_live_and_recovery_payloads() {
+        let payload = ApiVoteSharePayload {
+            shares_hash: vec![1],
+            proposal_id: 42,
+            vote_decision: 2,
+            encrypted_share: ApiWireEncryptedShare {
+                ciphertext1: vec![3],
+                ciphertext2: vec![4],
+                share_index: 1,
+            },
+            tree_position: 55,
+            all_encrypted_shares: vec![
+                ApiWireEncryptedShare {
+                    ciphertext1: vec![3],
+                    ciphertext2: vec![4],
+                    share_index: 1,
+                },
+                ApiWireEncryptedShare {
+                    ciphertext1: vec![5],
+                    ciphertext2: vec![6],
+                    share_index: 2,
+                },
+            ],
+            share_comms: vec![vec![7], vec![8]],
+            primary_blind: vec![9],
+        };
+        let live: serde_json::Value =
+            serde_json::from_str(&vote_share_wire_json(payload, Some(99), 123).unwrap()).unwrap();
+
+        let expected = serde_json::json!({
+            "shares_hash": "AQ==",
+            "proposal_id": 42,
+            "vote_decision": 2,
+            "enc_share": {"c1": "Aw==", "c2": "BA==", "share_index": 1},
+            "share_index": 1,
+            "tree_position": 99,
+            "all_enc_shares": [
+                {"c1": "Aw==", "c2": "BA==", "share_index": 1},
+                {"c1": "BQ==", "c2": "Bg==", "share_index": 2}
+            ],
+            "share_comms": ["Bw==", "CA=="],
+            "primary_blind": "CQ==",
+            "submit_at": 123,
+        });
+        assert_eq!(live, expected);
+
+        let recovery_json = serde_json::json!({
+            "format": "vizor_vote_commitment_bundle_recovery_v1",
+            "share_payloads": [{
+                "shares_hash": "01",
+                "proposal_id": 42,
+                "vote_decision": 2,
+                "enc_share": {"c1": "03", "c2": "04", "share_index": 1},
+                "tree_position": 55,
+                "all_enc_shares": [
+                    {"c1": "03", "c2": "04", "share_index": 1},
+                    {"c1": "05", "c2": "06", "share_index": 2}
+                ],
+                "share_comms": ["07", "08"],
+                "primary_blind": "09"
+            }]
+        })
+        .to_string();
+        let recovered: serde_json::Value = serde_json::from_str(
+            &recovered_vote_share_wire_json(recovery_json, 42, 1, 99, 0).unwrap(),
+        )
+        .unwrap();
+
+        let mut expected_recovered = expected;
+        expected_recovered["submit_at"] = serde_json::json!(0);
+        assert_eq!(recovered, expected_recovered);
+    }
+
+    #[test]
+    fn share_wire_json_rejects_json_unsafe_integer_fields() {
+        let payload = ApiVoteSharePayload {
+            shares_hash: vec![1],
+            proposal_id: 42,
+            vote_decision: 2,
+            encrypted_share: ApiWireEncryptedShare {
+                ciphertext1: vec![3],
+                ciphertext2: vec![4],
+                share_index: 1,
+            },
+            tree_position: MAX_SAFE_JSON_INTEGER + 1,
+            all_encrypted_shares: vec![],
+            share_comms: vec![],
+            primary_blind: vec![9],
+        };
+
+        let err = vote_share_wire_json(payload, None, 123).unwrap_err();
+        assert!(err.contains("tree_position"));
+    }
+
+    #[test]
     fn api_van_witness_preserves_core_fields() {
         let api = ApiVanWitness::from(VanWitness {
             auth_path: vec![vec![1; 32], vec![2; 32]],
@@ -2004,9 +2450,13 @@ mod tests {
     }
 
     #[test]
-    fn build_vote_commitments_rejects_invalid_witness_before_db_work() {
+    fn build_vote_commitments_rejects_invalid_witness_before_vote_work() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
+        let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-1").unwrap();
+        state::init_voting_round(&db, &test_api_round_params().into(), None).unwrap();
+        let notes: Vec<_> = (0..6).map(test_note_info).collect();
+        db.setup_bundles(ROUND_ID, &notes).unwrap();
         let err = build_vote_commitments(
             db_path.to_str().unwrap().to_string(),
             "wallet-1".to_string(),

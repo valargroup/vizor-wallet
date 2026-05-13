@@ -6,13 +6,64 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `catch`, `selection_result`
+// These functions are ignored because they are not marked as `pub`: `b64_hex_field`, `b64_hex`, `b64`, `catch`, `delegation_submission_wire_json_inner`, `hex_list_field`, `json_safe_u64`, `recovered_share_payload_json`, `recovered_vote_share_wire_json_inner`, `recovered_wire_share_json`, `recovered_wire_shares_json`, `selection_result`, `u32_field`, `vote_commitment_wire_json_inner`, `vote_share_wire_json_inner`, `wire_share_json`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+
+/// Returns the vote-chain delegation submission body as validated wire JSON.
+///
+/// Binary fields are base64-encoded here so Dart does not duplicate protocol
+/// field names or byte encoding rules.
+Future<String> delegationSubmissionWireJson({
+  required ApiSignedDelegationPayload submission,
+}) => RustLib.instance.api.crateApiVotingDelegationSubmissionWireJson(
+  submission: submission,
+);
+
+/// Returns the vote-chain cast-vote submission body as validated wire JSON.
+Future<String> voteCommitmentWireJson({
+  required ApiSignedVoteCommitment commitment,
+}) => RustLib.instance.api.crateApiVotingVoteCommitmentWireJson(
+  commitment: commitment,
+);
+
+/// Returns the helper-server encrypted-share submission body as wire JSON.
+///
+/// `vc_tree_position` overrides the draft payload tree position after the
+/// vote-chain cast-vote transaction confirms.
+Future<String> voteShareWireJson({
+  required ApiVoteSharePayload payload,
+  BigInt? vcTreePosition,
+  required BigInt submitAt,
+}) => RustLib.instance.api.crateApiVotingVoteShareWireJson(
+  payload: payload,
+  vcTreePosition: vcTreePosition,
+  submitAt: submitAt,
+);
+
+/// Extract and validate one helper-share payload from stored recovery JSON.
+///
+/// The stored recovery blob is hex-encoded and also contains local-only
+/// recovery material. This helper emits only the public base64 wire shape that
+/// helper servers accept.
+Future<String> recoveredVoteShareWireJson({
+  required String commitmentBundleJson,
+  required int proposalId,
+  required int shareIndex,
+  required BigInt vcTreePosition,
+  required BigInt submitAt,
+}) => RustLib.instance.api.crateApiVotingRecoveredVoteShareWireJson(
+  commitmentBundleJson: commitmentBundleJson,
+  proposalId: proposalId,
+  shareIndex: shareIndex,
+  vcTreePosition: vcTreePosition,
+  submitAt: submitAt,
+);
 
 /// Derive the opaque per-account, per-round voting hotkey bytes.
 ///
 /// The seed stays platform-owned; Rust only applies the same zcash_voting
 /// hotkey derivation used by delegation and returns bytes for secure storage.
+/// The returned `Vec<u8>` is an unavoidable FRB copy boundary
 Future<Uint8List> deriveVotingHotkey({
   required List<int> seedBytes,
   required String roundId,

@@ -158,12 +158,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   dco_decode_box_autoadd_api_signed_delegation_payload(dynamic raw);
 
   @protected
+  ApiSignedVoteCommitment dco_decode_box_autoadd_api_signed_vote_commitment(
+    dynamic raw,
+  );
+
+  @protected
   ApiSignedVoteCommitments dco_decode_box_autoadd_api_signed_vote_commitments(
     dynamic raw,
   );
 
   @protected
   ApiVanWitness dco_decode_box_autoadd_api_van_witness(dynamic raw);
+
+  @protected
+  ApiVoteSharePayload dco_decode_box_autoadd_api_vote_share_payload(
+    dynamic raw,
+  );
 
   @protected
   ApiVotingRoundParams dco_decode_box_autoadd_api_voting_round_params(
@@ -559,12 +569,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ApiSignedVoteCommitment sse_decode_box_autoadd_api_signed_vote_commitment(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ApiSignedVoteCommitments sse_decode_box_autoadd_api_signed_vote_commitments(
     SseDeserializer deserializer,
   );
 
   @protected
   ApiVanWitness sse_decode_box_autoadd_api_van_witness(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ApiVoteSharePayload sse_decode_box_autoadd_api_vote_share_payload(
     SseDeserializer deserializer,
   );
 
@@ -1045,6 +1065,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_api_signed_vote_commitment(
+    ApiSignedVoteCommitment self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_api_signed_vote_commitments(
     ApiSignedVoteCommitments self,
     SseSerializer serializer,
@@ -1053,6 +1079,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_api_van_witness(
     ApiVanWitness self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_api_vote_share_payload(
+    ApiVoteSharePayload self,
     SseSerializer serializer,
   );
 
