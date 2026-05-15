@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -2113253313;
+  int get rustContentHash => -1336561005;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -457,6 +457,26 @@ abstract class RustLibApi extends BaseApi {
     required String accountUuid,
     required String transparentAddress,
     required List<int> seed,
+  });
+
+  Future<ShieldTransparentResult>
+  crateApiSyncShieldTransparentAddressWithMacosStoredMnemonic({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required String accountUuid,
+    required String transparentAddress,
+    required String password,
+  });
+
+  Future<ShieldTransparentResult>
+  crateApiSyncShieldTransparentAddressWithMnemonicBytes({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required String accountUuid,
+    required String transparentAddress,
+    required List<int> mnemonicBytes,
   });
 
   Future<ShieldTransparentResult> crateApiSyncShieldTransparentBalance({
@@ -3021,6 +3041,126 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<ShieldTransparentResult>
+  crateApiSyncShieldTransparentAddressWithMacosStoredMnemonic({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required String accountUuid,
+    required String transparentAddress,
+    required String password,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(lightwalletdUrl, serializer);
+          sse_encode_String(network, serializer);
+          sse_encode_String(accountUuid, serializer);
+          sse_encode_String(transparentAddress, serializer);
+          sse_encode_String(password, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 68,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_shield_transparent_result,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta:
+            kCrateApiSyncShieldTransparentAddressWithMacosStoredMnemonicConstMeta,
+        argValues: [
+          dbPath,
+          lightwalletdUrl,
+          network,
+          accountUuid,
+          transparentAddress,
+          password,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiSyncShieldTransparentAddressWithMacosStoredMnemonicConstMeta =>
+      const TaskConstMeta(
+        debugName: "shield_transparent_address_with_macos_stored_mnemonic",
+        argNames: [
+          "dbPath",
+          "lightwalletdUrl",
+          "network",
+          "accountUuid",
+          "transparentAddress",
+          "password",
+        ],
+      );
+
+  @override
+  Future<ShieldTransparentResult>
+  crateApiSyncShieldTransparentAddressWithMnemonicBytes({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required String accountUuid,
+    required String transparentAddress,
+    required List<int> mnemonicBytes,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(lightwalletdUrl, serializer);
+          sse_encode_String(network, serializer);
+          sse_encode_String(accountUuid, serializer);
+          sse_encode_String(transparentAddress, serializer);
+          sse_encode_list_prim_u_8_loose(mnemonicBytes, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 69,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_shield_transparent_result,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta:
+            kCrateApiSyncShieldTransparentAddressWithMnemonicBytesConstMeta,
+        argValues: [
+          dbPath,
+          lightwalletdUrl,
+          network,
+          accountUuid,
+          transparentAddress,
+          mnemonicBytes,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiSyncShieldTransparentAddressWithMnemonicBytesConstMeta =>
+      const TaskConstMeta(
+        debugName: "shield_transparent_address_with_mnemonic_bytes",
+        argNames: [
+          "dbPath",
+          "lightwalletdUrl",
+          "network",
+          "accountUuid",
+          "transparentAddress",
+          "mnemonicBytes",
+        ],
+      );
+
+  @override
   Future<ShieldTransparentResult> crateApiSyncShieldTransparentBalance({
     required String dbPath,
     required String lightwalletdUrl,
@@ -3040,7 +3180,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 68,
+            funcId: 70,
             port: port_,
           );
         },
@@ -3094,7 +3234,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 69,
+            funcId: 71,
             port: port_,
           );
         },
@@ -3144,7 +3284,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 70,
+              funcId: 72,
               port: port_,
             );
           },
@@ -3185,7 +3325,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 71,
+              funcId: 73,
               port: port_,
             );
           },
@@ -3214,7 +3354,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 74)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -3244,7 +3384,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 73,
+            funcId: 75,
             port: port_,
           );
         },
@@ -3281,7 +3421,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 74,
+            funcId: 76,
             port: port_,
           );
         },
@@ -3313,7 +3453,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 75,
+            funcId: 77,
             port: port_,
           );
         },
@@ -3338,7 +3478,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(mnemonic, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 78)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -3364,7 +3504,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 77)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -3394,7 +3534,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 78,
+            funcId: 80,
             port: port_,
           );
         },
