@@ -1,6 +1,8 @@
 use std::panic;
 
 use crate::wallet::{keys, network::WalletNetwork};
+use secrecy::ExposeSecret;
+use zeroize::Zeroizing;
 
 /// Result of wallet creation, containing the mnemonic, unified address, and account UUID.
 pub struct WalletCreationResult {
@@ -264,6 +266,17 @@ pub fn ensure_wallet_db_migrated(db_path: String, network: String) -> Result<(),
 #[flutter_rust_bridge::frb(sync)]
 pub fn validate_mnemonic(mnemonic: String) -> bool {
     keys::mnemonic_to_seed(&mnemonic).is_ok()
+}
+
+/// Derive the ZIP-39 seed bytes for callers that must pass seed material to
+/// voting APIs. The mnemonic input buffer is zeroized after derivation; callers
+/// are still responsible for zeroizing the returned seed bytes.
+pub fn derive_seed(mnemonic: String) -> Result<Vec<u8>, String> {
+    catch(|| {
+        let mnemonic = Zeroizing::new(mnemonic.into_bytes());
+        let seed = keys::mnemonic_bytes_to_seed(mnemonic.as_slice())?;
+        Ok(seed.expose_secret().to_vec())
+    })
 }
 
 /// Get the transparent address for a specific account (or first account if uuid is None).
