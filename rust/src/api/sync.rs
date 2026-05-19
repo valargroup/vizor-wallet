@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
-use secrecy::SecretVec;
 use zeroize::Zeroizing;
 
 use crate::frb_generated::StreamSink;
@@ -814,53 +813,6 @@ pub fn create_shield_transparent_pczt(
     })
 }
 
-/// Create a PCZT for shielding one transparent staging address on a hardware account.
-pub fn create_shield_transparent_address_pczt(
-    db_path: String,
-    network: String,
-    account_uuid: String,
-    transparent_address: String,
-) -> Result<ShieldTransparentPcztResult, String> {
-    catch(|| {
-        let network = keys::parse_network(&network)?;
-        let r = wallet_sync::create_shield_transparent_address_pczt(
-            &db_path,
-            network,
-            &account_uuid,
-            &transparent_address,
-        )?;
-        Ok(ShieldTransparentPcztResult {
-            pczt_bytes: r.pczt_bytes,
-            fee_zatoshi: r.fee_zatoshi,
-            shielded_zatoshi: r.shielded_zatoshi,
-            needs_sapling_params: r.needs_sapling_params,
-        })
-    })
-}
-
-pub fn get_shield_transparent_address_status(
-    db_path: String,
-    network: String,
-    account_uuid: String,
-    transparent_address: String,
-) -> Result<ShieldTransparentStatus, String> {
-    catch(|| {
-        let network = keys::parse_network(&network)?;
-        let r = wallet_sync::get_shield_transparent_address_status(
-            &db_path,
-            network,
-            &account_uuid,
-            &transparent_address,
-        )?;
-        Ok(ShieldTransparentStatus {
-            can_shield: r.can_shield,
-            fee_zatoshi: r.fee_zatoshi,
-            shielded_zatoshi: r.shielded_zatoshi,
-            reason: r.reason,
-        })
-    })
-}
-
 /// Shield spendable transparent funds into the account's shielded balance.
 /// Software-account only; hardware shielding uses `create_shield_transparent_pczt`
 /// followed by the PCZT QR signing flow.
@@ -926,98 +878,6 @@ pub fn shield_transparent_balance_with_macos_stored_mnemonic(
             broadcasted_count: r.broadcasted_count,
             total_count: r.total_count,
             message: r.message,
-            fee_zatoshi: r.fee_zatoshi,
-            shielded_zatoshi: r.shielded_zatoshi,
-        })
-    })
-}
-
-pub fn shield_transparent_address(
-    db_path: String,
-    lightwalletd_url: String,
-    network: String,
-    account_uuid: String,
-    transparent_address: String,
-    seed: Vec<u8>,
-) -> Result<ShieldTransparentResult, String> {
-    catch(|| {
-        let network = keys::parse_network(&network)?;
-        let seed = SecretVec::new(seed);
-        let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
-        let r = rt.block_on(wallet_sync::shield_transparent_address(
-            &db_path,
-            &lightwalletd_url,
-            network,
-            &account_uuid,
-            &transparent_address,
-            seed,
-        ))?;
-        Ok(ShieldTransparentResult {
-            txids: r.txids,
-            fee_zatoshi: r.fee_zatoshi,
-            shielded_zatoshi: r.shielded_zatoshi,
-        })
-    })
-}
-
-pub fn shield_transparent_address_with_mnemonic_bytes(
-    db_path: String,
-    lightwalletd_url: String,
-    network: String,
-    account_uuid: String,
-    transparent_address: String,
-    mnemonic_bytes: Vec<u8>,
-) -> Result<ShieldTransparentResult, String> {
-    catch(|| {
-        let network = keys::parse_network(&network)?;
-        let mnemonic_bytes = Zeroizing::new(mnemonic_bytes);
-        let seed = keys::mnemonic_bytes_to_seed(mnemonic_bytes.as_slice())?;
-        drop(mnemonic_bytes);
-
-        let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
-        let r = rt.block_on(wallet_sync::shield_transparent_address(
-            &db_path,
-            &lightwalletd_url,
-            network,
-            &account_uuid,
-            &transparent_address,
-            seed,
-        ))?;
-        Ok(ShieldTransparentResult {
-            txids: r.txids,
-            fee_zatoshi: r.fee_zatoshi,
-            shielded_zatoshi: r.shielded_zatoshi,
-        })
-    })
-}
-
-/// macOS-only software transparent shielding path for one transparent staging
-/// address. Rust reads and decrypts the stored mnemonic, derives the seed, and
-/// zeroizes intermediate material.
-pub fn shield_transparent_address_with_macos_stored_mnemonic(
-    db_path: String,
-    lightwalletd_url: String,
-    network: String,
-    account_uuid: String,
-    transparent_address: String,
-    password: String,
-) -> Result<ShieldTransparentResult, String> {
-    catch(|| {
-        let network = keys::parse_network(&network)?;
-        let password = Zeroizing::new(password.into_bytes());
-        let seed = secret_store::seed_from_macos_stored_mnemonic(network, &account_uuid, password)?;
-
-        let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
-        let r = rt.block_on(wallet_sync::shield_transparent_address(
-            &db_path,
-            &lightwalletd_url,
-            network,
-            &account_uuid,
-            &transparent_address,
-            seed,
-        ))?;
-        Ok(ShieldTransparentResult {
-            txids: r.txids,
             fee_zatoshi: r.fee_zatoshi,
             shielded_zatoshi: r.shielded_zatoshi,
         })

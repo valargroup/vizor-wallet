@@ -314,31 +314,6 @@ Future<ShieldTransparentPcztResult> createShieldTransparentPczt({
   accountUuid: accountUuid,
 );
 
-/// Create a PCZT for shielding one transparent staging address on a hardware account.
-Future<ShieldTransparentPcztResult> createShieldTransparentAddressPczt({
-  required String dbPath,
-  required String network,
-  required String accountUuid,
-  required String transparentAddress,
-}) => RustLib.instance.api.crateApiSyncCreateShieldTransparentAddressPczt(
-  dbPath: dbPath,
-  network: network,
-  accountUuid: accountUuid,
-  transparentAddress: transparentAddress,
-);
-
-Future<ShieldTransparentStatus> getShieldTransparentAddressStatus({
-  required String dbPath,
-  required String network,
-  required String accountUuid,
-  required String transparentAddress,
-}) => RustLib.instance.api.crateApiSyncGetShieldTransparentAddressStatus(
-  dbPath: dbPath,
-  network: network,
-  accountUuid: accountUuid,
-  transparentAddress: transparentAddress,
-);
-
 /// Shield spendable transparent funds into the account's shielded balance.
 /// Software-account only; hardware shielding uses `create_shield_transparent_pczt`
 /// followed by the PCZT QR signing flow.
@@ -372,60 +347,6 @@ shieldTransparentBalanceWithMacosStoredMnemonic({
       lightwalletdUrl: lightwalletdUrl,
       network: network,
       accountUuid: accountUuid,
-      password: password,
-    );
-
-Future<ShieldTransparentResult> shieldTransparentAddress({
-  required String dbPath,
-  required String lightwalletdUrl,
-  required String network,
-  required String accountUuid,
-  required String transparentAddress,
-  required List<int> seed,
-}) => RustLib.instance.api.crateApiSyncShieldTransparentAddress(
-  dbPath: dbPath,
-  lightwalletdUrl: lightwalletdUrl,
-  network: network,
-  accountUuid: accountUuid,
-  transparentAddress: transparentAddress,
-  seed: seed,
-);
-
-Future<ShieldTransparentResult> shieldTransparentAddressWithMnemonicBytes({
-  required String dbPath,
-  required String lightwalletdUrl,
-  required String network,
-  required String accountUuid,
-  required String transparentAddress,
-  required List<int> mnemonicBytes,
-}) =>
-    RustLib.instance.api.crateApiSyncShieldTransparentAddressWithMnemonicBytes(
-      dbPath: dbPath,
-      lightwalletdUrl: lightwalletdUrl,
-      network: network,
-      accountUuid: accountUuid,
-      transparentAddress: transparentAddress,
-      mnemonicBytes: mnemonicBytes,
-    );
-
-/// macOS-only software transparent shielding path for one transparent staging
-/// address. Rust reads and decrypts the stored mnemonic, derives the seed, and
-/// zeroizes intermediate material.
-Future<ShieldTransparentResult>
-shieldTransparentAddressWithMacosStoredMnemonic({
-  required String dbPath,
-  required String lightwalletdUrl,
-  required String network,
-  required String accountUuid,
-  required String transparentAddress,
-  required String password,
-}) => RustLib.instance.api
-    .crateApiSyncShieldTransparentAddressWithMacosStoredMnemonic(
-      dbPath: dbPath,
-      lightwalletdUrl: lightwalletdUrl,
-      network: network,
-      accountUuid: accountUuid,
-      transparentAddress: transparentAddress,
       password: password,
     );
 
