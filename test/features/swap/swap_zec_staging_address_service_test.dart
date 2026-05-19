@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/swap/domain/swap_address_plan.dart';
 import 'package:zcash_wallet/src/features/swap/domain/swap_contract.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_zec_staging_address_service.dart';
 
@@ -34,12 +33,6 @@ void main() {
 
     expect(shieldedLoads, 1);
     expect(staging.address, 'u1fresh-shielded-refund');
-    expect(
-      staging.stagingAddressPolicy,
-      SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
-    );
-    expect(staging.shieldingPolicy, SwapZecShieldingPolicy.notRequired);
-
     final plan = staging.toAddressPlan(
       direction: SwapDirection.zecToExternal,
       externalAsset: SwapAsset.usdc,
@@ -64,12 +57,6 @@ void main() {
 
     expect(shieldedLoads, 1);
     expect(staging.address, 'u1fresh-shielded-recipient');
-    expect(
-      staging.stagingAddressPolicy,
-      SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
-    );
-    expect(staging.shieldingPolicy, SwapZecShieldingPolicy.notRequired);
-
     final plan = staging.toAddressPlan(
       direction: SwapDirection.externalToZec,
       externalAsset: SwapAsset.usdc,

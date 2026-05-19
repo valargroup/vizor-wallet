@@ -13,8 +13,6 @@ import '../../send/widgets/sapling_params_prompt.dart';
 import '../models/swap_prototype_models.dart';
 import '../providers/swap_hardware_signing_service.dart';
 
-enum SwapKeystoneSigningKind { zecDeposit, shieldReceive }
-
 class SwapKeystoneBroadcastResult {
   const SwapKeystoneBroadcastResult({
     required this.txHash,
@@ -31,23 +29,15 @@ class SwapKeystoneBroadcastResult {
 
 class SwapKeystoneSigningOverlay extends ConsumerStatefulWidget {
   const SwapKeystoneSigningOverlay({
-    required this.kind,
     required this.intent,
     required this.onCancel,
     required this.onDepositBroadcast,
-    required this.onShieldBroadcast,
     super.key,
   });
 
-  final SwapKeystoneSigningKind kind;
   final SwapPrototypeIntent intent;
   final VoidCallback onCancel;
   final ValueChanged<SwapKeystoneBroadcastResult> onDepositBroadcast;
-  final void Function({
-    required SwapKeystoneBroadcastResult result,
-    required BigInt feeZatoshi,
-  })
-  onShieldBroadcast;
 
   @override
   ConsumerState<SwapKeystoneSigningOverlay> createState() =>
@@ -94,17 +84,10 @@ class _SwapKeystoneSigningOverlayState
       }
 
       final service = ref.read(swapHardwareSigningServiceProvider);
-      final draft = switch (widget.kind) {
-        SwapKeystoneSigningKind.zecDeposit =>
-          await service.createZecDepositPczt(
-            accountUuid: accountUuid,
-            intent: widget.intent,
-          ),
-        SwapKeystoneSigningKind.shieldReceive => await service.createShieldPczt(
-          accountUuid: accountUuid,
-          transparentAddress: _shieldingAddress(widget.intent),
-        ),
-      };
+      final draft = await service.createZecDepositPczt(
+        accountUuid: accountUuid,
+        intent: widget.intent,
+      );
 
       SaplingParamsStatus? saplingParams;
       if (draft.needsSaplingParams) {
@@ -219,7 +202,7 @@ class _SwapKeystoneSigningOverlayState
                 : null,
           );
       log(
-        'SwapKeystoneSigning: broadcast complete kind=${widget.kind.name} '
+        'SwapKeystoneSigning: broadcast complete kind=zecDeposit '
         'tx=${_shortSwapValue(result.txid)} status=${result.status}',
       );
       if (!_hasBroadcastTxid(result)) {
@@ -243,14 +226,7 @@ class _SwapKeystoneSigningOverlayState
         status: result.status,
         message: result.message,
       );
-      if (widget.kind == SwapKeystoneSigningKind.zecDeposit) {
-        widget.onDepositBroadcast(broadcast);
-      } else {
-        widget.onShieldBroadcast(
-          result: broadcast,
-          feeZatoshi: draft.feeZatoshi,
-        );
-      }
+      widget.onDepositBroadcast(broadcast);
     } catch (e, st) {
       log('SwapKeystoneSigning._broadcast: ERROR: $e\n$st');
       if (!mounted) return;
@@ -284,9 +260,7 @@ class _SwapKeystoneSigningOverlayState
       _SwapKeystonePhase.broadcasting => KeystoneSigningModalPhase.preparing,
     };
     final isBroadcasting = _phase == _SwapKeystonePhase.broadcasting;
-    final action = widget.kind == SwapKeystoneSigningKind.zecDeposit
-        ? 'ZEC deposit'
-        : 'shield transaction';
+    const action = 'ZEC deposit';
 
     return Stack(
       fit: StackFit.expand,
@@ -338,14 +312,6 @@ class _SwapKeystoneSigningOverlayState
     );
   }
 
-  String _shieldingAddress(SwapPrototypeIntent intent) {
-    final address = intent.oneClickRecipient ?? intent.depositAddress;
-    if (address == null || address.trim().isEmpty) {
-      throw StateError('Swap staging address is missing.');
-    }
-    return address;
-  }
-
   String _friendlyError(Object error) {
     final lower = error.toString().toLowerCase();
     if (lower.contains('sapling') || lower.contains('download')) {
@@ -354,20 +320,13 @@ class _SwapKeystoneSigningOverlayState
     if (lower.contains('proposal not found')) {
       return 'Transaction expired before it could be signed.';
     }
-    if (lower.contains('no transparent funds') ||
-        lower.contains('too small') ||
-        lower.contains('threshold')) {
-      return 'The staging address is not ready to shield yet.';
-    }
     if (lower.contains('broadcast') || lower.contains('sendtransaction')) {
       return 'Transaction could not be broadcast.';
     }
     if (lower.contains('pczt') || lower.contains('signature')) {
       return 'Keystone signature could not be applied.';
     }
-    return widget.kind == SwapKeystoneSigningKind.zecDeposit
-        ? 'ZEC deposit signing could not be completed.'
-        : 'Shield signing could not be completed.';
+    return 'ZEC deposit signing could not be completed.';
   }
 }
 

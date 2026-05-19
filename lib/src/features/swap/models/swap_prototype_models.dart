@@ -150,7 +150,6 @@ class SwapPrototypeIntent {
     this.depositAddress,
     this.depositMemo,
     this.depositTxHash,
-    this.shieldTxHash,
     this.providerQuoteId,
     this.providerSignature,
     this.providerStatusRaw,
@@ -180,7 +179,6 @@ class SwapPrototypeIntent {
   final String? depositAddress;
   final String? depositMemo;
   final String? depositTxHash;
-  final String? shieldTxHash;
   final String? providerQuoteId;
   final String? providerSignature;
   final String? providerStatusRaw;
@@ -212,7 +210,6 @@ class SwapPrototypeIntent {
     String? depositAddress,
     String? depositMemo,
     String? depositTxHash,
-    String? shieldTxHash,
     String? providerQuoteId,
     String? providerSignature,
     String? providerStatusRaw,
@@ -243,7 +240,6 @@ class SwapPrototypeIntent {
       depositAddress: depositAddress ?? this.depositAddress,
       depositMemo: depositMemo ?? this.depositMemo,
       depositTxHash: depositTxHash ?? this.depositTxHash,
-      shieldTxHash: shieldTxHash ?? this.shieldTxHash,
       providerQuoteId: providerQuoteId ?? this.providerQuoteId,
       providerSignature: providerSignature ?? this.providerSignature,
       providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
@@ -381,9 +377,6 @@ class SwapPrototypeState {
       externalAsset: externalAsset,
       userExternalAddress: destinationText,
       walletZecAddress: walletZecPreviewAddress,
-      zecStagingAddressPolicy:
-          SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
-      zecShieldingPolicy: SwapZecShieldingPolicy.notRequired,
     );
   }
 
@@ -458,7 +451,7 @@ class SwapPrototypeState {
               : '${externalAsset.symbol} refunds return to entered address',
         ),
         SwapPrototypeField(
-          label: 'Transparent window',
+          label: 'Source-chain visibility',
           value: hasQuote
               ? 'external deposit is public on source chain'
               : 'not open yet',
@@ -678,8 +671,8 @@ const previewSwapIntents = <SwapPrototypeIntent>[
     sellAmount: '2.4000 ZEC',
     receiveEstimate: '~168.42 USDC',
     provider: 'NEAR Intents',
-    status: SwapIntentStatus.shieldingPending,
-    nextAction: 'Wait for shielding confirmation',
+    status: SwapIntentStatus.processing,
+    nextAction: 'Swap is processing',
     steps: [
       SwapPrototypeStep(
         label: 'Quote locked',
@@ -702,14 +695,14 @@ const previewSwapIntents = <SwapPrototypeIntent>[
         evidence: 'USDC tx pending finality',
       ),
       SwapPrototypeStep(
-        label: 'Shielding pending',
+        label: 'Swap processing',
         state: SwapPrototypeStepState.active,
-        evidence: 'Transparent residue window is open',
+        evidence: 'Provider is preparing delivery',
       ),
       SwapPrototypeStep(
         label: 'Receipt sealed',
         state: SwapPrototypeStepState.pending,
-        evidence: 'Waiting on shield tx',
+        evidence: 'Waiting on provider completion',
       ),
     ],
     exposure: [
@@ -718,10 +711,6 @@ const previewSwapIntents = <SwapPrototypeIntent>[
         value: 'one-time transparent address',
       ),
       SwapPrototypeField(label: 'Address reuse', value: '0 previous uses'),
-      SwapPrototypeField(
-        label: 'Transparent window',
-        value: 'open until shielding completes',
-      ),
       SwapPrototypeField(
         label: 'Third-party data',
         value: 'solver sees deposit tx and route',
@@ -910,7 +899,10 @@ const previewSwapIntents = <SwapPrototypeIntent>[
       ),
     ],
     exposure: [
-      SwapPrototypeField(label: 'Transparent window', value: 'never opened'),
+      SwapPrototypeField(
+        label: 'Source-chain visibility',
+        value: 'deposit not observed',
+      ),
       SwapPrototypeField(label: 'Third-party data', value: 'failed quote id'),
     ],
     receipt: [
@@ -950,9 +942,9 @@ const previewSwapIntents = <SwapPrototypeIntent>[
         evidence: 'NEAR tx final',
       ),
       SwapPrototypeStep(
-        label: 'Shielding completed',
+        label: 'Delivery completed',
         state: SwapPrototypeStepState.done,
-        evidence: 'No transparent residue',
+        evidence: 'Provider route final',
       ),
     ],
     exposure: [

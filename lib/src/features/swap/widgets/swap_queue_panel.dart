@@ -662,8 +662,7 @@ Color _statusColor(BuildContext context, SwapIntentStatus status) {
     SwapIntentStatus.expired ||
     SwapIntentStatus.refunded => colors.text.destructive,
     SwapIntentStatus.providerStatusUnknown ||
-    SwapIntentStatus.incompleteDeposit ||
-    SwapIntentStatus.shieldingFailed => colors.text.warning,
+    SwapIntentStatus.incompleteDeposit => colors.text.warning,
     _ => colors.text.accent,
   };
 }
@@ -676,7 +675,6 @@ bool _isQueueAttentionStatus(SwapIntentStatus status) {
   return switch (status) {
     SwapIntentStatus.providerStatusUnknown ||
     SwapIntentStatus.incompleteDeposit ||
-    SwapIntentStatus.shieldingFailed ||
     SwapIntentStatus.refunded ||
     SwapIntentStatus.expired ||
     SwapIntentStatus.failed => true,
@@ -689,9 +687,7 @@ bool _isLiveStatus(SwapIntentStatus status) {
     SwapIntentStatus.awaitingDeposit ||
     SwapIntentStatus.awaitingExternalDeposit ||
     SwapIntentStatus.depositObserved ||
-    SwapIntentStatus.processing ||
-    SwapIntentStatus.shieldingPending ||
-    SwapIntentStatus.shieldingConfirming => true,
+    SwapIntentStatus.processing => true,
     _ => false,
   };
 }
@@ -731,9 +727,6 @@ String _queueStatusIcon(SwapIntentStatus status) {
     SwapIntentStatus.processing => AppIcons.renew,
     SwapIntentStatus.providerStatusUnknown => AppIcons.warning,
     SwapIntentStatus.incompleteDeposit => AppIcons.warning,
-    SwapIntentStatus.shieldingPending ||
-    SwapIntentStatus.shieldingConfirming => AppIcons.shieldKeyhole,
-    SwapIntentStatus.shieldingFailed => AppIcons.warning,
     SwapIntentStatus.complete => AppIcons.check,
     SwapIntentStatus.refunded => AppIcons.arrowBack,
     SwapIntentStatus.expired || SwapIntentStatus.failed => AppIcons.block,
@@ -777,19 +770,6 @@ List<_QueueSegmentState> _queueSegmentStates(SwapPrototypeIntent intent) {
       _QueueSegmentState.pending,
       _QueueSegmentState.pending,
       _QueueSegmentState.pending,
-    ],
-    SwapIntentStatus.shieldingPending ||
-    SwapIntentStatus.shieldingConfirming => const [
-      _QueueSegmentState.success,
-      _QueueSegmentState.success,
-      _QueueSegmentState.success,
-      _QueueSegmentState.active,
-    ],
-    SwapIntentStatus.shieldingFailed => const [
-      _QueueSegmentState.success,
-      _QueueSegmentState.success,
-      _QueueSegmentState.success,
-      _QueueSegmentState.warning,
     ],
     SwapIntentStatus.complete => const [
       _QueueSegmentState.success,
@@ -838,8 +818,6 @@ bool _queueCanAnimateProgress(SwapIntentStatus status) {
     SwapIntentStatus.awaitingExternalDeposit ||
     SwapIntentStatus.depositObserved ||
     SwapIntentStatus.processing ||
-    SwapIntentStatus.shieldingPending ||
-    SwapIntentStatus.shieldingConfirming ||
     SwapIntentStatus.complete => true,
     _ => false,
   };
@@ -851,13 +829,10 @@ int _queueProgressIndex(SwapPrototypeIntent intent) {
     SwapIntentStatus.awaitingDeposit ||
     SwapIntentStatus.awaitingExternalDeposit => _hasDepositTx(intent) ? 1 : 0,
     SwapIntentStatus.depositObserved || SwapIntentStatus.processing => 2,
-    SwapIntentStatus.shieldingPending ||
-    SwapIntentStatus.shieldingConfirming => 3,
     SwapIntentStatus.complete => 4,
     SwapIntentStatus.providerStatusUnknown ||
     SwapIntentStatus.refunded ||
     SwapIntentStatus.incompleteDeposit => 1,
-    SwapIntentStatus.shieldingFailed => 3,
     SwapIntentStatus.expired || SwapIntentStatus.failed => 0,
   };
 }
@@ -893,9 +868,6 @@ String _queueActionLabel(SwapPrototypeIntent intent) {
     SwapIntentStatus.processing => 'Swapping through provider',
     SwapIntentStatus.providerStatusUnknown => 'Check provider status',
     SwapIntentStatus.incompleteDeposit => 'Check deposit amount',
-    SwapIntentStatus.shieldingPending ||
-    SwapIntentStatus.shieldingConfirming => 'Shielding in wallet',
-    SwapIntentStatus.shieldingFailed => 'Shielding needs retry',
     SwapIntentStatus.complete => 'Swap delivered',
     SwapIntentStatus.refunded => 'Refund sent back',
     SwapIntentStatus.expired => 'Quote expired',

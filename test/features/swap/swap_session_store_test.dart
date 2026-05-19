@@ -53,7 +53,6 @@ void main() {
       depositAddress: 't1deposit',
       depositMemo: 'memo-7',
       depositTxHash: 'zec-txid',
-      shieldTxHash: 'shield-txid',
       providerQuoteId: 'quote-1',
       providerSignature: 'quote-signature',
       providerStatusRaw: 'PROCESSING',
@@ -79,7 +78,6 @@ void main() {
     expect(restored.single.depositAddress, 't1deposit');
     expect(restored.single.depositMemo, 'memo-7');
     expect(restored.single.depositTxHash, 'zec-txid');
-    expect(restored.single.shieldTxHash, 'shield-txid');
     expect(restored.single.providerQuoteId, 'quote-1');
     expect(restored.single.providerSignature, 'quote-signature');
     expect(restored.single.providerStatusRaw, 'PROCESSING');
@@ -170,93 +168,6 @@ void main() {
       expect(restored.slippageBps, 150);
     },
   );
-
-  test('round-trips shielding failure recovery state', () async {
-    const intent = SwapPrototypeIntent(
-      id: '0xshieldfail',
-      title: 'USDC to ZEC',
-      pair: 'USDC -> ZEC',
-      sellAmount: '140.350000 USDC',
-      receiveEstimate: '~2.0000 ZEC',
-      provider: 'NEAR Intents',
-      status: SwapIntentStatus.shieldingFailed,
-      nextAction: 'Retry shielding from the staging address',
-      steps: [
-        SwapPrototypeStep(
-          label: 'Shielding failed',
-          state: SwapPrototypeStepState.warning,
-          evidence: 'Retry wallet shielding',
-        ),
-      ],
-      exposure: [
-        SwapPrototypeField(
-          label: 'Recovery',
-          value: 'retry shield; do not resend external deposit',
-        ),
-      ],
-      receipt: [
-        SwapPrototypeField(label: 'Receive address', value: 't1staging'),
-      ],
-      direction: SwapDirection.externalToZec,
-      externalAsset: SwapAsset.usdc,
-      depositAddress: '0xshieldfail',
-      depositMemo: 'memo-7',
-      providerQuoteId: 'quote-1',
-      providerSignature: 'quote-signature',
-      oneClickRecipient: 't1staging',
-      oneClickRefundTo: '0xrefund',
-    );
-
-    await store.saveIntents(accountUuid: 'account-1', intents: [intent]);
-
-    final restored = await store.loadIntents(accountUuid: 'account-1');
-
-    expect(restored.single.status, SwapIntentStatus.shieldingFailed);
-    expect(restored.single.oneClickRecipient, 't1staging');
-    expect(restored.single.oneClickRefundTo, '0xrefund');
-    expect(restored.single.steps.single.label, 'Shielding failed');
-  });
-
-  test('round-trips shield confirmation tracking state', () async {
-    const intent = SwapPrototypeIntent(
-      id: '0xshieldconfirm',
-      title: 'USDC to ZEC',
-      pair: 'USDC -> ZEC',
-      sellAmount: '140.350000 USDC',
-      receiveEstimate: '~2.0000 ZEC',
-      provider: 'NEAR Intents',
-      status: SwapIntentStatus.shieldingConfirming,
-      nextAction: 'Waiting for shield transaction confirmation.',
-      steps: [
-        SwapPrototypeStep(
-          label: 'Shielding confirming',
-          state: SwapPrototypeStepState.active,
-          evidence: 'Waiting for shield transaction confirmation.',
-        ),
-      ],
-      exposure: [
-        SwapPrototypeField(label: 'ZEC destination', value: 't1staging'),
-      ],
-      receipt: [SwapPrototypeField(label: 'Shield tx', value: 'shield-txid')],
-      direction: SwapDirection.externalToZec,
-      externalAsset: SwapAsset.usdc,
-      depositAddress: '0xshieldconfirm',
-      depositMemo: 'memo-7',
-      shieldTxHash: 'shield-txid',
-      providerQuoteId: 'quote-1',
-      providerSignature: 'quote-signature',
-      oneClickRecipient: 't1staging',
-      oneClickRefundTo: '0xrefund',
-    );
-
-    await store.saveIntents(accountUuid: 'account-1', intents: [intent]);
-
-    final restored = await store.loadIntents(accountUuid: 'account-1');
-
-    expect(restored.single.status, SwapIntentStatus.shieldingConfirming);
-    expect(restored.single.shieldTxHash, 'shield-txid');
-    expect(restored.single.receipt.single.value, 'shield-txid');
-  });
 }
 
 SwapPrototypeIntent _minimalIntent({

@@ -1,17 +1,11 @@
 import 'swap_contract.dart';
 
-enum SwapZecStagingAddressPolicy { rotatingWalletUnifiedAddress }
-
-enum SwapZecShieldingPolicy { notRequired }
-
 class SwapAddressPlan {
   const SwapAddressPlan({
     required this.direction,
     required this.externalAsset,
     required this.userExternalAddress,
     required this.walletZecAddress,
-    required this.zecStagingAddressPolicy,
-    required this.zecShieldingPolicy,
     required this.oneClickRecipient,
     required this.oneClickRefundTo,
   });
@@ -21,10 +15,6 @@ class SwapAddressPlan {
     required SwapAsset externalAsset,
     required String userExternalAddress,
     required String walletZecAddress,
-    SwapZecStagingAddressPolicy zecStagingAddressPolicy =
-        SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
-    SwapZecShieldingPolicy zecShieldingPolicy =
-        SwapZecShieldingPolicy.notRequired,
   }) {
     final external = userExternalAddress.trim();
     final walletZec = walletZecAddress.trim();
@@ -48,8 +38,6 @@ class SwapAddressPlan {
       externalAsset: externalAsset,
       userExternalAddress: external,
       walletZecAddress: walletZec,
-      zecStagingAddressPolicy: zecStagingAddressPolicy,
-      zecShieldingPolicy: zecShieldingPolicy,
       oneClickRecipient: direction.sendsZec ? external : walletZec,
       oneClickRefundTo: direction.sendsZec ? walletZec : external,
     );
@@ -59,14 +47,10 @@ class SwapAddressPlan {
   final SwapAsset externalAsset;
   final String userExternalAddress;
   final String walletZecAddress;
-  final SwapZecStagingAddressPolicy zecStagingAddressPolicy;
-  final SwapZecShieldingPolicy zecShieldingPolicy;
   final String oneClickRecipient;
   final String oneClickRefundTo;
 
-  bool get zecDeliveryIsDirectShielded =>
-      !direction.sendsZec &&
-      zecShieldingPolicy == SwapZecShieldingPolicy.notRequired;
+  bool get zecDeliveryIsDirectShielded => !direction.sendsZec;
 
   String get userInputLabel => direction.sendsZec
       ? 'Destination'

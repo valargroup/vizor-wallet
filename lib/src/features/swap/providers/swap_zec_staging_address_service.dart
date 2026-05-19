@@ -51,15 +51,9 @@ bool _isSaplingReceiverUnsupported(Object error) {
 }
 
 class SwapZecStagingAddress {
-  const SwapZecStagingAddress({
-    required this.address,
-    required this.stagingAddressPolicy,
-    required this.shieldingPolicy,
-  });
+  const SwapZecStagingAddress({required this.address});
 
   final String address;
-  final SwapZecStagingAddressPolicy stagingAddressPolicy;
-  final SwapZecShieldingPolicy shieldingPolicy;
 
   SwapAddressPlan toAddressPlan({
     required SwapDirection direction,
@@ -71,8 +65,6 @@ class SwapZecStagingAddress {
       externalAsset: externalAsset,
       userExternalAddress: userExternalAddress,
       walletZecAddress: address,
-      zecStagingAddressPolicy: stagingAddressPolicy,
-      zecShieldingPolicy: shieldingPolicy,
     );
   }
 }
@@ -107,12 +99,7 @@ class SwapZecStagingAddressService {
   ) async {
     try {
       final address = await _loadShieldedAddress(accountUuid: accountUuid);
-      return SwapZecStagingAddress(
-        address: address,
-        stagingAddressPolicy:
-            SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
-        shieldingPolicy: SwapZecShieldingPolicy.notRequired,
-      );
+      return SwapZecStagingAddress(address: address);
     } catch (e) {
       log(
         'SwapZecStagingAddressService: shielded receive address preparation '

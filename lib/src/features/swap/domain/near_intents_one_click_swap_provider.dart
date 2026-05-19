@@ -962,10 +962,6 @@ String _nextAction(SwapIntentStatus status, SwapQuote quote) {
     SwapIntentStatus.providerStatusUnknown =>
       'Provider returned a status this wallet does not recognize',
     SwapIntentStatus.incompleteDeposit => 'Deposit is below the quoted amount',
-    SwapIntentStatus.shieldingPending => 'Shield received ZEC into this wallet',
-    SwapIntentStatus.shieldingConfirming =>
-      'Wait for shield transaction confirmation',
-    SwapIntentStatus.shieldingFailed => 'Retry wallet shielding',
     SwapIntentStatus.complete => 'Swap complete',
     SwapIntentStatus.refunded => 'Refund sent to the refund address',
     SwapIntentStatus.expired => 'Start a fresh quote',

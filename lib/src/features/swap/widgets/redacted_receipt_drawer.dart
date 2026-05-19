@@ -150,13 +150,6 @@ List<SwapPrototypeField> _supportDetailRows(
     return null;
   }
 
-  final showShieldStagingAddress = switch (intent.status) {
-    SwapIntentStatus.shieldingPending ||
-    SwapIntentStatus.shieldingConfirming ||
-    SwapIntentStatus.shieldingFailed => true,
-    _ => false,
-  };
-
   add(
     'Provider quote',
     intent.providerQuoteId ?? receiptValue('Provider quote'),
@@ -176,14 +169,6 @@ List<SwapPrototypeField> _supportDetailRows(
   add('Deposit address', intent.depositAddress);
   add('Deposit memo', intent.depositMemo ?? receiptValue('Memo'));
   add('Deposit tx', intent.depositTxHash ?? receiptValue('Deposit tx'));
-  if (showShieldStagingAddress) {
-    add(
-      'Shield staging address',
-      intent.oneClickRecipient ?? receiptValue('Receive address'),
-    );
-  }
-  add('Shield tx', intent.shieldTxHash ?? receiptValue('Shield tx'));
-  add('Shield fee', receiptValue('Shield fee'));
   add('Intent hash', intent.nearIntentHash);
 
   return fields;
@@ -233,18 +218,6 @@ List<SwapPrototypeField> _safeSupportSummaryRows(
       'Deposit',
       parts.isEmpty
           ? 'Tracking fields available'
-          : '${parts.join(', ')} recorded',
-    );
-  }
-  if (hasLabel('shield')) {
-    final parts = <String>[];
-    if (hasLabel('shield staging')) parts.add('staging address');
-    if (hasLabel('shield tx')) parts.add('transaction');
-    if (hasLabel('shield fee')) parts.add('fee');
-    add(
-      'Shielding',
-      parts.isEmpty
-          ? 'Wallet shielding fields available'
           : '${parts.join(', ')} recorded',
     );
   }

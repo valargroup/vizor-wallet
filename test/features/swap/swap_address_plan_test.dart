@@ -15,11 +15,6 @@ void main() {
 
       expect(plan.oneClickRecipient, '0xrecipient');
       expect(plan.oneClickRefundTo, 'u1wallet-refund');
-      expect(
-        plan.zecStagingAddressPolicy,
-        SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
-      );
-      expect(plan.zecShieldingPolicy, SwapZecShieldingPolicy.notRequired);
       expect(plan.userInputLabel, 'Destination');
       expect(plan.userInputHint, 'External USDC address or account');
       expect(

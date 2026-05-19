@@ -17,7 +17,6 @@ import 'package:zcash_wallet/src/features/swap/providers/swap_hardware_signing_s
 import 'package:zcash_wallet/src/features/swap/providers/swap_prototype_provider.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_deposit_sender.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_max_amount_estimator.dart';
-import 'package:zcash_wallet/src/features/swap/providers/swap_shielding_service.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_session_store.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_zec_staging_address_service.dart';
 import 'package:zcash_wallet/src/features/swap/screens/swap_screen.dart';
@@ -1020,7 +1019,7 @@ void main() {
       find.byKey(const ValueKey('swap_activity_detail_modal')),
       findsNothing,
     );
-    expect(find.text('Shielding in wallet'), findsOneWidget);
+    expect(find.text('Swapping through provider'), findsOneWidget);
     expect(find.text('You pay'), findsNothing);
     expect(find.text('Privacy check'), findsNothing);
 
@@ -1060,11 +1059,8 @@ void main() {
       find.byKey(const ValueKey('swap_activity_status_plan')),
       findsOneWidget,
     );
-    expect(find.text('Making ZEC spendable'), findsOneWidget);
-    expect(
-      find.text('Shielding received ZEC into your spendable balance.'),
-      findsOneWidget,
-    );
+    expect(find.text('USDC delivery in progress'), findsOneWidget);
+    expect(find.text('No new approval is needed.'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('swap_activity_route_tracker')),
       findsOneWidget,
@@ -1086,14 +1082,14 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('swap_activity_route_segment_blink_3')),
+      find.byKey(const ValueKey('swap_activity_route_segment_blink_2')),
       findsOneWidget,
     );
     expect(find.text('Now'), findsOneWidget);
     expect(find.text('Send ZEC'), findsWidgets);
     expect(find.text('Confirm'), findsWidgets);
     expect(find.text('Swap'), findsWidgets);
-    expect(find.text('Make spendable'), findsWidgets);
+    expect(find.text('Deliver'), findsWidgets);
     expect(find.byKey(const ValueKey('swap_queue_title')), findsOneWidget);
     expect(find.text('Technical details'), findsNothing);
     expect(find.text('Status timeline'), findsNothing);
@@ -1973,7 +1969,7 @@ void main() {
 
     expect(find.text('Open'), findsOneWidget);
     expect(find.text('Closed'), findsOneWidget);
-    expect(find.text('Shielding in wallet'), findsOneWidget);
+    expect(find.text('Swapping through provider'), findsOneWidget);
 
     await _openActivityDetail(tester, 'swap-2a11');
 
@@ -2047,12 +2043,6 @@ void main() {
               nextAction: 'Start a fresh quote',
             ),
             _persistedIntent(
-              id: 'shielding-failed-swap',
-              txHash: 'shielding-failed-tx',
-              status: SwapIntentStatus.shieldingFailed,
-              nextAction: 'Retry wallet shielding',
-            ),
-            _persistedIntent(
               id: 'unknown-status-swap',
               txHash: 'unknown-status-tx',
               status: SwapIntentStatus.providerStatusUnknown,
@@ -2087,17 +2077,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Attention'), findsOneWidget);
-    expect(find.text('Attention 5'), findsOneWidget);
+    expect(find.text('Attention 4'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('swap_queue_row_failed-swap')),
       findsOneWidget,
     );
     expect(
       find.byKey(const ValueKey('swap_queue_row_expired-swap')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('swap_queue_row_shielding-failed-swap')),
       findsOneWidget,
     );
     expect(
@@ -2174,8 +2160,8 @@ void main() {
             _persistedIntent(
               id: 'jump-swap',
               txHash: 'jump-tx',
-              status: SwapIntentStatus.shieldingPending,
-              nextAction: 'Shielding in wallet',
+              status: SwapIntentStatus.processing,
+              nextAction: 'Processing',
             ),
           ],
         ),
@@ -2185,7 +2171,7 @@ void main() {
 
     expect(
       find.byKey(
-        const ValueKey('swap_queue_progress_segment_blink_shieldingPending_1'),
+        const ValueKey('swap_queue_progress_segment_blink_processing_1'),
       ),
       findsOneWidget,
     );
@@ -2193,15 +2179,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 430));
     expect(
       find.byKey(
-        const ValueKey('swap_queue_progress_segment_blink_shieldingPending_2'),
-      ),
-      findsOneWidget,
-    );
-
-    await tester.pump(const Duration(milliseconds: 430));
-    expect(
-      find.byKey(
-        const ValueKey('swap_queue_progress_segment_blink_shieldingPending_3'),
+        const ValueKey('swap_queue_progress_segment_blink_processing_2'),
       ),
       findsOneWidget,
     );
@@ -2544,13 +2522,6 @@ void main() {
     (tester) async {
       await _setDesktopViewport(tester);
       final swapProvider = _CompletingExternalStatusSwapProvider();
-      final shieldingService = _FakeSwapShieldingService.success(
-        SwapShieldingResult(
-          txids: 'should-not-shield',
-          feeZatoshi: BigInt.from(10000),
-          shieldedZatoshi: BigInt.from(200000000),
-        ),
-      );
       final sessionStore = _FakeSwapSessionStore(
         initialIntents: [
           _persistedExternalToZecIntent(
@@ -2569,7 +2540,6 @@ void main() {
             ],
           ),
           swapProvider: swapProvider,
-          shieldingService: shieldingService,
           sessionStore: sessionStore,
         ),
       );
@@ -2579,7 +2549,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(swapProvider.statusRequests, hasLength(1));
-      expect(shieldingService.requests, isEmpty);
       expect(
         sessionStore.savedIntents.single.status,
         SwapIntentStatus.complete,
@@ -2589,221 +2558,12 @@ void main() {
         'Provider reports destination settlement complete',
       );
       expect(find.text('Swap delivered'), findsOneWidget);
-      expect(find.text('Shielding in wallet'), findsNothing);
-
       await _openActivityDetail(tester, '0xcomplete');
 
       expect(find.text('ZEC ready'), findsOneWidget);
       expect(find.text('Receive ZEC'), findsWidgets);
       expect(find.text('Make spendable'), findsNothing);
       expect(find.text('Technical details'), findsNothing);
-    },
-  );
-
-  testWidgets('confirmed shield transaction completes external-to-ZEC intent', (
-    tester,
-  ) async {
-    await _setDesktopViewport(tester);
-    final swapProvider = _CompletingExternalStatusSwapProvider();
-    final shieldingService = _FakeSwapShieldingService.success(
-      SwapShieldingResult(
-        txids: 'unused-broadcast-txid',
-        feeZatoshi: BigInt.from(10000),
-        shieldedZatoshi: BigInt.from(200000000),
-      ),
-      trackStatus: SwapShieldTxStatus.mined,
-    );
-    final sessionStore = _FakeSwapSessionStore(
-      initialIntents: [
-        _persistedShieldingConfirmingIntent(
-          id: '0xconfirming',
-          stagingAddress: 't1confirmingstaging',
-          shieldTxHash: 'shield-txid-mined',
-        ),
-      ],
-    );
-
-    await tester.pumpWidget(
-      _routerHarness(
-        GoRouter(
-          initialLocation: '/swap',
-          routes: [
-            GoRoute(path: '/swap', builder: (_, _) => const SwapScreen()),
-          ],
-        ),
-        swapProvider: swapProvider,
-        shieldingService: shieldingService,
-        sessionStore: sessionStore,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('swap_page_tab_activity')));
-    await tester.pumpAndSettle();
-
-    expect(swapProvider.statusRequests, isEmpty);
-    expect(shieldingService.requests, isEmpty);
-    expect(shieldingService.trackRequests, hasLength(1));
-    expect(shieldingService.trackRequests.single.accountUuid, 'account-1');
-    expect(shieldingService.trackRequests.single.txHash, 'shield-txid-mined');
-    expect(sessionStore.savedIntents.single.status, SwapIntentStatus.complete);
-    expect(
-      sessionStore.savedIntents.single.nextAction,
-      'Shield transaction confirmed.',
-    );
-    await _openActivityDetail(tester, '0xconfirming');
-
-    expect(find.text('ZEC ready'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('swap_status_refresh_button')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey('swap_queue_refresh_button')),
-      findsNothing,
-    );
-    expect(swapProvider.statusRequests, isEmpty);
-    expect(shieldingService.requests, isEmpty);
-    expect(shieldingService.trackRequests, hasLength(1));
-    expect(sessionStore.savedIntents.last.status, SwapIntentStatus.complete);
-    expect(find.text('ZEC ready'), findsOneWidget);
-    expect(find.text('Confirming spendable ZEC'), findsNothing);
-    expect(find.text('Making ZEC spendable'), findsNothing);
-    expect(
-      find.byKey(const ValueKey('swap_activity_route_step_3_done')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('expired shield transaction opens retry recovery', (
-    tester,
-  ) async {
-    await _setDesktopViewport(tester);
-    final swapProvider = _CompletingExternalStatusSwapProvider();
-    final shieldingService = _FakeSwapShieldingService.success(
-      SwapShieldingResult(
-        txids: 'unused-broadcast-txid',
-        feeZatoshi: BigInt.from(10000),
-        shieldedZatoshi: BigInt.from(200000000),
-      ),
-      trackStatus: SwapShieldTxStatus.expired,
-    );
-    final sessionStore = _FakeSwapSessionStore(
-      initialIntents: [
-        _persistedShieldingConfirmingIntent(
-          id: '0xexpiredshield',
-          stagingAddress: 't1expiredshieldstaging',
-          shieldTxHash: 'shield-txid-expired',
-        ),
-      ],
-    );
-
-    await tester.pumpWidget(
-      _routerHarness(
-        GoRouter(
-          initialLocation: '/swap',
-          routes: [
-            GoRoute(path: '/swap', builder: (_, _) => const SwapScreen()),
-          ],
-        ),
-        swapProvider: swapProvider,
-        shieldingService: shieldingService,
-        sessionStore: sessionStore,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('swap_page_tab_activity')));
-    await tester.pumpAndSettle();
-
-    expect(swapProvider.statusRequests, isEmpty);
-    expect(shieldingService.trackRequests.single.txHash, 'shield-txid-expired');
-    expect(
-      sessionStore.savedIntents.single.status,
-      SwapIntentStatus.shieldingFailed,
-    );
-    expect(find.text('Shielding needs retry'), findsOneWidget);
-
-    await _openActivityDetail(tester, '0xexpiredshield');
-
-    expect(find.text('Retry shield'), findsOneWidget);
-  });
-
-  testWidgets(
-    'shielding failure exposes retry without re-sending external funds',
-    (tester) async {
-      await _setDesktopViewport(tester);
-      final swapProvider = _ShieldingFailedStatusSwapProvider();
-      final sessionStore = _FakeSwapSessionStore(
-        initialIntents: [
-          _persistedShieldingFailedIntent(
-            id: '0xshieldfail',
-            stagingAddress: 't1failedshieldstaging',
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(
-        _routerHarness(
-          GoRouter(
-            initialLocation: '/swap',
-            routes: [
-              GoRoute(path: '/swap', builder: (_, _) => const SwapScreen()),
-            ],
-          ),
-          swapProvider: swapProvider,
-          sessionStore: sessionStore,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('swap_page_tab_activity')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Shielding needs retry'), findsOneWidget);
-      await _openActivityDetail(tester, '0xshieldfail');
-
-      expect(
-        find.byKey(const ValueKey('swap_resolution_panel')),
-        findsOneWidget,
-      );
-      expect(
-        find.text(
-          'Do not send the external deposit again. Retry shielding from the staging address or keep this recovery record open.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('Retry shield'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('swap_resolution_retry_shield_button')),
-        findsOneWidget,
-      );
-      expect(find.text('t1failedshieldstaging'), findsWidgets);
-      expect(
-        find.byKey(const ValueKey('swap_deposit_tx_hash_field')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('swap_deposit_submit_button')),
-        findsNothing,
-      );
-      expect(find.text('Submit USDC deposit'), findsNothing);
-
-      await tester.tap(
-        find.byKey(const ValueKey('swap_resolution_retry_shield_button')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        sessionStore.savedIntents.single.status,
-        SwapIntentStatus.shieldingPending,
-      );
-      expect(find.text('Shielding in wallet'), findsOneWidget);
-      expect(find.byKey(const ValueKey('swap_resolution_panel')), findsNothing);
-      expect(
-        find.byKey(const ValueKey('swap_deposit_submit_button')),
-        findsNothing,
-      );
     },
   );
 
@@ -4777,7 +4537,6 @@ void main() {
       SwapIntentStatus.awaitingExternalDeposit,
     );
     expect(hardwareSigningService.depositDrafts, isEmpty);
-    expect(hardwareSigningService.shieldDrafts, isEmpty);
     expect(find.byKey(const ValueKey('swap_review_panel')), findsNothing);
     expect(
       find.byKey(const ValueKey('swap_hardware_deposit_action_panel')),
@@ -4849,12 +4608,10 @@ Widget _routerHarness(
   SwapProvider? swapProvider,
   SwapDepositSender? depositSender,
   SwapMaxAmountEstimator? maxAmountEstimator,
-  SwapShieldingService? shieldingService,
   SwapHardwareSigningService? hardwareSigningService,
   SwapSessionStore? sessionStore,
   BigInt? spendableBalance,
   Duration? statusPollInterval,
-  Duration? shieldStatusPollInterval,
   Duration? priceRefreshInterval,
   LoadShieldedAddress? loadShieldedAddress,
   bool seedPrototypeFixtures = true,
@@ -4902,9 +4659,6 @@ Widget _routerHarness(
       swapMaxAmountEstimatorProvider.overrideWithValue(
         maxAmountEstimator ?? _FakeSwapMaxAmountEstimator(),
       ),
-      swapShieldingServiceProvider.overrideWithValue(
-        shieldingService ?? _FakeSwapShieldingService.notReady(),
-      ),
       swapHardwareSigningServiceProvider.overrideWithValue(
         hardwareSigningService ?? _FakeSwapHardwareSigningService(),
       ),
@@ -4924,10 +4678,6 @@ Widget _routerHarness(
         ),
       if (statusPollInterval != null)
         swapStatusPollIntervalProvider.overrideWithValue(statusPollInterval),
-      if (shieldStatusPollInterval != null)
-        swapShieldStatusPollIntervalProvider.overrideWithValue(
-          shieldStatusPollInterval,
-        ),
     ],
     child: MaterialApp.router(
       routerConfig: router,
@@ -4955,11 +4705,6 @@ class _FakeReceiveAddressService extends ReceiveAddressService {
   }) async {
     return _ref.read(accountProvider).value?.activeAddress ??
         'u1actualshieldedrecipient';
-  }
-
-  @override
-  Future<String> loadTransparentAddress({required String accountUuid}) async {
-    return 't1actualstaging';
   }
 
   @override
@@ -5370,27 +5115,6 @@ class _CompletingExternalStatusSwapProvider
   }
 }
 
-class _ShieldingFailedStatusSwapProvider
-    extends _LongExternalStatusSwapProvider {
-  @override
-  Future<SwapIntentSnapshot> getStatus(
-    String intentId, {
-    String? depositMemo,
-  }) async {
-    final base = await super.getStatus(intentId, depositMemo: depositMemo);
-    return SwapIntentSnapshot(
-      id: base.id,
-      providerLabel: base.providerLabel,
-      pairText: base.pairText,
-      sellAmountText: base.sellAmountText,
-      receiveEstimateText: base.receiveEstimateText,
-      status: SwapIntentStatus.shieldingFailed,
-      nextAction: 'Retry shielding from the staging address',
-      depositInstruction: base.depositInstruction,
-    );
-  }
-}
-
 class _StatusRequest {
   const _StatusRequest({required this.depositAddress, this.depositMemo});
 
@@ -5475,51 +5199,6 @@ class _DelayedSwapDepositSender extends _FakeSwapDepositSender {
   }
 }
 
-class _FakeSwapShieldingService implements SwapShieldingService {
-  _FakeSwapShieldingService.notReady()
-    : result = null,
-      error = const SwapShieldingNotReadyException('not scanned yet'),
-      trackStatus = SwapShieldTxStatus.unknown;
-
-  _FakeSwapShieldingService.success(
-    this.result, {
-    this.trackStatus = SwapShieldTxStatus.pending,
-  }) : error = null;
-
-  final SwapShieldingResult? result;
-  final Object? error;
-  final SwapShieldTxStatus trackStatus;
-  final requests = <_ShieldingRequest>[];
-  final trackRequests = <_ShieldTxRequest>[];
-
-  @override
-  Future<SwapShieldingResult> shieldStagingAddress({
-    required String accountUuid,
-    required String transparentAddress,
-  }) async {
-    requests.add(
-      _ShieldingRequest(
-        accountUuid: accountUuid,
-        transparentAddress: transparentAddress,
-      ),
-    );
-    final error = this.error;
-    if (error != null) throw error;
-    return result!;
-  }
-
-  @override
-  Future<SwapShieldTxState> trackShieldTransaction({
-    required String accountUuid,
-    required String txHash,
-  }) async {
-    trackRequests.add(
-      _ShieldTxRequest(accountUuid: accountUuid, txHash: txHash),
-    );
-    return SwapShieldTxState(status: trackStatus);
-  }
-}
-
 class _FakeSwapHardwareSigningService implements SwapHardwareSigningService {
   _FakeSwapHardwareSigningService({
     this.broadcastStatus = 'broadcasted',
@@ -5531,7 +5210,6 @@ class _FakeSwapHardwareSigningService implements SwapHardwareSigningService {
   final String? broadcastMessage;
   final Completer<List<int>>? proofCompleter;
   final depositDrafts = <String>[];
-  final shieldDrafts = <String>[];
   final proofDrafts = <List<int>>[];
   final broadcasts = <_HardwareBroadcastRequest>[];
 
@@ -5545,20 +5223,6 @@ class _FakeSwapHardwareSigningService implements SwapHardwareSigningService {
       pcztBytes: const [1, 2, 3],
       needsSaplingParams: false,
       feeZatoshi: BigInt.from(10000),
-    );
-  }
-
-  @override
-  Future<SwapHardwarePcztDraft> createShieldPczt({
-    required String accountUuid,
-    required String transparentAddress,
-  }) async {
-    shieldDrafts.add(transparentAddress);
-    return SwapHardwarePcztDraft(
-      pcztBytes: const [4, 5, 6],
-      needsSaplingParams: false,
-      feeZatoshi: BigInt.from(15000),
-      shieldedZatoshi: BigInt.from(200000000),
     );
   }
 
@@ -5793,110 +5457,6 @@ SwapPrototypeIntent _persistedExternalToZecIntent({
   );
 }
 
-SwapPrototypeIntent _persistedShieldingConfirmingIntent({
-  required String id,
-  required String stagingAddress,
-  required String shieldTxHash,
-}) {
-  return SwapPrototypeIntent(
-    id: id,
-    title: 'USDC to ZEC',
-    pair: 'USDC -> ZEC',
-    sellAmount: '140.350000 USDC',
-    receiveEstimate: '~2.0000 ZEC',
-    provider: 'NEAR Intents',
-    status: SwapIntentStatus.shieldingConfirming,
-    nextAction: 'Waiting for shield transaction confirmation.',
-    steps: const [
-      SwapPrototypeStep(
-        label: 'Quote locked',
-        state: SwapPrototypeStepState.done,
-        evidence: 'Stored locally',
-      ),
-      SwapPrototypeStep(
-        label: 'External deposit observed',
-        state: SwapPrototypeStepState.done,
-        evidence: 'Provider delivery observed',
-      ),
-      SwapPrototypeStep(
-        label: 'Shielding confirming',
-        state: SwapPrototypeStepState.active,
-        evidence: 'Waiting for shield transaction confirmation.',
-      ),
-    ],
-    exposure: [
-      SwapPrototypeField(label: 'ZEC destination', value: stagingAddress),
-    ],
-    receipt: [
-      SwapPrototypeField(label: 'Swap id', value: id),
-      SwapPrototypeField(label: 'Receive address', value: stagingAddress),
-      SwapPrototypeField(label: 'Shield tx', value: shieldTxHash),
-    ],
-    direction: SwapDirection.externalToZec,
-    externalAsset: SwapAsset.usdc,
-    depositAddress: id,
-    depositMemo: 'memo-7',
-    shieldTxHash: shieldTxHash,
-    providerQuoteId: 'quote-1',
-    providerSignature: 'quote-signature',
-    oneClickRecipient: stagingAddress,
-    oneClickRefundTo: '0xpersisted-refund',
-  );
-}
-
-SwapPrototypeIntent _persistedShieldingFailedIntent({
-  required String id,
-  required String stagingAddress,
-}) {
-  return SwapPrototypeIntent(
-    id: id,
-    title: 'USDC to ZEC',
-    pair: 'USDC -> ZEC',
-    sellAmount: '140.350000 USDC',
-    receiveEstimate: '~2.0000 ZEC',
-    provider: 'NEAR Intents',
-    status: SwapIntentStatus.shieldingFailed,
-    nextAction: 'Retry shielding from the staging address',
-    steps: const [
-      SwapPrototypeStep(
-        label: 'Quote locked',
-        state: SwapPrototypeStepState.done,
-        evidence: 'Stored locally',
-      ),
-      SwapPrototypeStep(
-        label: 'External deposit observed',
-        state: SwapPrototypeStepState.done,
-        evidence: 'Provider delivery observed',
-      ),
-      SwapPrototypeStep(
-        label: 'Shielding failed',
-        state: SwapPrototypeStepState.warning,
-        evidence: 'Retry wallet shielding',
-      ),
-    ],
-    exposure: [
-      SwapPrototypeField(label: 'ZEC destination', value: stagingAddress),
-      const SwapPrototypeField(
-        label: 'Recovery',
-        value: 'retry shield; do not resend external deposit',
-      ),
-    ],
-    receipt: [
-      SwapPrototypeField(label: 'Swap id', value: id),
-      SwapPrototypeField(label: 'Receive address', value: stagingAddress),
-      const SwapPrototypeField(label: 'Status', value: 'shielding failed'),
-    ],
-    direction: SwapDirection.externalToZec,
-    externalAsset: SwapAsset.usdc,
-    depositAddress: id,
-    depositMemo: 'memo-7',
-    providerQuoteId: 'quote-1',
-    providerSignature: 'quote-signature',
-    oneClickRecipient: stagingAddress,
-    oneClickRefundTo: '0xpersisted-refund',
-  );
-}
-
 class _DepositSendRequest {
   const _DepositSendRequest({
     required this.accountUuid,
@@ -5907,23 +5467,6 @@ class _DepositSendRequest {
   final String accountUuid;
   final String depositAddress;
   final String sellAmountText;
-}
-
-class _ShieldingRequest {
-  const _ShieldingRequest({
-    required this.accountUuid,
-    required this.transparentAddress,
-  });
-
-  final String accountUuid;
-  final String transparentAddress;
-}
-
-class _ShieldTxRequest {
-  const _ShieldTxRequest({required this.accountUuid, required this.txHash});
-
-  final String accountUuid;
-  final String txHash;
 }
 
 Future<void> _setDesktopViewport(WidgetTester tester) async {

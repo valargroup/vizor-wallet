@@ -202,11 +202,6 @@ class _PreviewReceiveAddressService extends ReceiveAddressService {
   _PreviewReceiveAddressService(super.ref);
 
   @override
-  Future<String> loadTransparentAddress({required String accountUuid}) async {
-    return 't1preview-shield-prompt-staging';
-  }
-
-  @override
   Future<String> renewShieldedAddress({required String accountUuid}) async {
     return 'u1preview-shielded-recipient';
   }

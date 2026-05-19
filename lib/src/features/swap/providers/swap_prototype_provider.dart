@@ -11,7 +11,6 @@ import '../../../providers/account_provider.dart';
 import 'swap_deposit_sender.dart';
 import 'swap_failure_policy.dart';
 import 'swap_max_amount_estimator.dart';
-import 'swap_shielding_service.dart';
 import 'swap_session_store.dart';
 import 'swap_zec_staging_address_service.dart';
 
@@ -26,10 +25,6 @@ final swapIntentProvider = Provider<SwapProvider>((ref) {
 
 final swapStatusPollIntervalProvider = Provider<Duration>((ref) {
   return const Duration(seconds: 20);
-});
-
-final swapShieldStatusPollIntervalProvider = Provider<Duration>((ref) {
-  return const Duration(seconds: 5);
 });
 
 final swapPriceRefreshIntervalProvider = Provider<Duration>((ref) {
@@ -90,11 +85,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       unawaited(refreshOpenIntentStatuses());
     });
     ref.onDispose(pollTimer.cancel);
-    final shieldPollInterval = ref.watch(swapShieldStatusPollIntervalProvider);
-    final shieldPollTimer = Timer.periodic(shieldPollInterval, (_) {
-      unawaited(_refreshShieldingConfirmations());
-    });
-    ref.onDispose(shieldPollTimer.cancel);
     final priceRefreshInterval = ref.watch(swapPriceRefreshIntervalProvider);
     final priceRefreshTimer = Timer.periodic(priceRefreshInterval, (_) {
       unawaited(_loadSupportedExternalAssets(forceRefreshPrices: true));
@@ -507,14 +497,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     await _refreshIntentStatuses(refreshable, showBusy: false);
   }
 
-  Future<void> _refreshShieldingConfirmations() async {
-    final refreshable = [
-      for (final intent in state.intents)
-        if (intent.status == SwapIntentStatus.shieldingConfirming) intent,
-    ];
-    await _refreshIntentStatuses(refreshable, showBusy: false);
-  }
-
   void updateDepositTxHash(String value) {
     state = state.copyWith(depositTxHashText: value, clearStatusError: true);
   }
@@ -561,7 +543,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     if (intent == null || !_isHardwareIntent(intent)) return;
     if (intent.direction != SwapDirection.zecToExternal) return;
     if (intent.depositTxHash?.trim().isNotEmpty ?? false) return;
-    if (intent.shieldTxHash?.trim().isNotEmpty ?? false) return;
 
     await removeIntent(intentId);
   }
@@ -680,40 +661,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  Future<void> retryShieldSelectedIntent() async {
-    if (state.intents.isEmpty) return;
-    final selected = state.selectedIntent;
-    if (selected.status != SwapIntentStatus.shieldingFailed) return;
-
-    final hardwareIntent = _isHardwareIntent(selected);
-    final nextAction = hardwareIntent
-        ? 'Sign a shield transaction with Keystone to make ZEC spendable.'
-        : 'Retrying wallet shielding from the staging address';
-    final pending = selected.copyWith(
-      status: SwapIntentStatus.shieldingPending,
-      nextAction: nextAction,
-      steps: _stepsForStatus(SwapIntentStatus.shieldingPending, nextAction),
-    );
-    state = state.copyWith(
-      intents: _replaceIntent(state.intents, selected.id, pending),
-      selectedIntentId: pending.id,
-      clearStatusError: true,
-    );
-    if (hardwareIntent) {
-      await _persistCurrentIntents();
-      return;
-    }
-    final updated = await _tryShieldStagingAddress(pending);
-    if (updated != pending) {
-      state = state.copyWith(
-        intents: _replaceIntent(state.intents, pending.id, updated),
-        selectedIntentId: updated.id,
-        clearStatusError: true,
-      );
-    }
-    await _persistCurrentIntents();
-  }
-
   void expireReviewQuote() {
     if (state.reviewQuote == null || state.reviewAddressPlan == null) return;
     state = state.copyWith(
@@ -758,74 +705,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       broadcastStatus: broadcastStatus,
       broadcastMessage: broadcastMessage,
     );
-  }
-
-  Future<void> recordHardwareShieldSubmission({
-    required String intentId,
-    required String accountUuid,
-    required String txHash,
-    required BigInt feeZatoshi,
-    String? broadcastStatus,
-    String? broadcastMessage,
-  }) async {
-    final intent = _intentById(intentId);
-    final normalizedTxHash = txHash.trim();
-    if (normalizedTxHash.isEmpty) return;
-    if (intent == null) {
-      await _recordHardwareShieldSubmissionForStoredIntent(
-        accountUuid: accountUuid,
-        intentId: intentId,
-        txHash: normalizedTxHash,
-        feeZatoshi: feeZatoshi,
-        broadcastStatus: broadcastStatus,
-        broadcastMessage: broadcastMessage,
-      );
-      return;
-    }
-
-    if (!_isAccountActive(intent.accountUuid)) {
-      await _recordHardwareShieldSubmissionForStoredIntent(
-        accountUuid: intent.accountUuid ?? accountUuid,
-        intentId: intentId,
-        txHash: normalizedTxHash,
-        feeZatoshi: feeZatoshi,
-        broadcastStatus: broadcastStatus,
-        broadcastMessage: broadcastMessage,
-      );
-      return;
-    }
-
-    log(
-      'Swap: hardware shield submitted intent=${_shortSwapValue(intent.id)} '
-      'tx=${_shortSwapValue(normalizedTxHash)}',
-    );
-    const nextAction = 'Waiting for shield transaction confirmation.';
-    final broadcastNotice = _hardwareBroadcastNotice(
-      status: broadcastStatus,
-      message: broadcastMessage,
-    );
-    final updated = intent.copyWith(
-      status: SwapIntentStatus.shieldingConfirming,
-      nextAction: nextAction,
-      steps: _stepsForStatus(SwapIntentStatus.shieldingConfirming, nextAction),
-      receipt: _receiptWithBroadcastNotice(
-        _receiptWithShieldSubmission(
-          intent.receipt,
-          txHash: normalizedTxHash,
-          feeZatoshi: feeZatoshi,
-        ),
-        broadcastNotice,
-      ),
-      statusError: broadcastNotice,
-      shieldTxHash: normalizedTxHash,
-      clearStatusError: broadcastNotice == null,
-    );
-    state = state.copyWith(
-      intents: _replaceIntent(state.intents, intent.id, updated),
-      selectedIntentId: updated.id,
-      clearStatusError: true,
-    );
-    await _persistCurrentIntents();
   }
 
   Future<void> _submitDepositTransaction(
@@ -1026,49 +905,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       snapshot,
       txHash: txHash,
       broadcastNotice: broadcastNotice,
-    );
-    await _persistIntentsForAccount(
-      scopedAccountUuid,
-      _replaceIntent(storedIntents, intentId, updated),
-    );
-  }
-
-  Future<void> _recordHardwareShieldSubmissionForStoredIntent({
-    required String? accountUuid,
-    required String intentId,
-    required String txHash,
-    required BigInt feeZatoshi,
-    String? broadcastStatus,
-    String? broadcastMessage,
-  }) async {
-    final scopedAccountUuid = accountUuid?.trim();
-    if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return;
-    final storedIntents = await ref
-        .read(swapSessionStoreProvider)
-        .loadIntents(accountUuid: scopedAccountUuid);
-    final intent = _intentByIdFrom(storedIntents, intentId);
-    if (intent == null) return;
-
-    const nextAction = 'Waiting for shield transaction confirmation.';
-    final broadcastNotice = _hardwareBroadcastNotice(
-      status: broadcastStatus,
-      message: broadcastMessage,
-    );
-    final updated = intent.copyWith(
-      status: SwapIntentStatus.shieldingConfirming,
-      nextAction: nextAction,
-      steps: _stepsForStatus(SwapIntentStatus.shieldingConfirming, nextAction),
-      receipt: _receiptWithBroadcastNotice(
-        _receiptWithShieldSubmission(
-          intent.receipt,
-          txHash: txHash,
-          feeZatoshi: feeZatoshi,
-        ),
-        broadcastNotice,
-      ),
-      statusError: broadcastNotice,
-      shieldTxHash: txHash,
-      clearStatusError: broadcastNotice == null,
     );
     await _persistIntentsForAccount(
       scopedAccountUuid,
@@ -1302,10 +1138,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
         if (currentIntent == null) continue;
         final checkedAt = DateTime.now().toUtc();
         try {
-          final refreshed =
-              currentIntent.status == SwapIntentStatus.shieldingConfirming
-              ? await _tryTrackShieldTransaction(currentIntent)
-              : await _refreshProviderBackedIntent(currentIntent);
+          final refreshed = await _refreshProviderBackedIntent(currentIntent);
           final updated = refreshed.copyWith(
             lastStatusCheckedAt: checkedAt,
             clearStatusError: true,
@@ -1418,9 +1251,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     }
     return intent.direction != null &&
         intent.depositAddress != null &&
-        (intent.providerQuoteId != null ||
-            intent.depositTxHash != null ||
-            intent.shieldTxHash != null);
+        (intent.providerQuoteId != null || intent.depositTxHash != null);
   }
 
   bool _shouldRefreshIntentStatus(SwapPrototypeIntent intent) {
@@ -1448,9 +1279,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
           _providerDepositAddress(intent),
           depositMemo: intent.depositMemo,
         );
-    return _tryShieldStagingAddress(
-      _updateIntentFromSnapshot(intent, snapshot),
-    );
+    return _updateIntentFromSnapshot(intent, snapshot);
   }
 
   SwapPrototypeIntent _intentFromSnapshot(
@@ -1628,180 +1457,10 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  Future<SwapPrototypeIntent> _tryShieldStagingAddress(
-    SwapPrototypeIntent intent,
-  ) async {
-    if (!_needsWalletShielding(intent)) return intent;
-
-    final accountUuid = _accountUuidForIntent(intent);
-    final transparentAddress = intent.oneClickRecipient;
-    if (accountUuid == null ||
-        transparentAddress == null ||
-        transparentAddress.trim().isEmpty) {
-      log(
-        'Swap: shielding failed before start; missing account/address '
-        'intent=${_shortSwapValue(intent.id)}',
-      );
-      return _shieldingFailedIntent(intent);
-    }
-    if (_isHardwareIntent(intent)) {
-      const nextAction =
-          'Sign a shield transaction with Keystone to make ZEC spendable.';
-      log(
-        'Swap: hardware shielding waiting for Keystone signing '
-        'intent=${_shortSwapValue(intent.id)} '
-        'staging=${_shortSwapValue(transparentAddress)}',
-      );
-      return intent.copyWith(
-        status: SwapIntentStatus.shieldingPending,
-        nextAction: nextAction,
-        steps: _stepsForStatus(SwapIntentStatus.shieldingPending, nextAction),
-      );
-    }
-
-    try {
-      log(
-        'Swap: shielding begin intent=${_shortSwapValue(intent.id)} '
-        'staging=${_shortSwapValue(transparentAddress)}',
-      );
-      final result = await ref
-          .read(swapShieldingServiceProvider)
-          .shieldStagingAddress(
-            accountUuid: accountUuid,
-            transparentAddress: transparentAddress,
-          );
-      final shieldTxHash = result.firstTxid;
-      if (shieldTxHash == null || shieldTxHash.isEmpty) {
-        log(
-          'Swap: shielding returned no txid intent=${_shortSwapValue(intent.id)}',
-        );
-        return _shieldingFailedIntent(intent);
-      }
-      log(
-        'Swap: shielding submitted intent=${_shortSwapValue(intent.id)} '
-        'tx=${_shortSwapValue(shieldTxHash)}',
-      );
-      const nextAction = 'Waiting for shield transaction confirmation.';
-      final updated = intent.copyWith(
-        status: SwapIntentStatus.shieldingConfirming,
-        nextAction: nextAction,
-        steps: _stepsForStatus(
-          SwapIntentStatus.shieldingConfirming,
-          nextAction,
-        ),
-        receipt: _receiptWithShieldSubmission(
-          intent.receipt,
-          txHash: shieldTxHash,
-          feeZatoshi: result.feeZatoshi,
-        ),
-        shieldTxHash: shieldTxHash,
-      );
-      await _persistShieldSubmissionCheckpoint(updated);
-      return updated;
-    } on SwapShieldingNotReadyException {
-      log(
-        'Swap: shielding not ready intent=${_shortSwapValue(intent.id)} '
-        'staging=${_shortSwapValue(transparentAddress)}',
-      );
-      return intent;
-    } catch (e) {
-      log(
-        'Swap: shielding failed intent=${_shortSwapValue(intent.id)} '
-        'error=$e',
-      );
-      return _shieldingFailedIntent(intent);
-    }
-  }
-
-  bool _needsWalletShielding(SwapPrototypeIntent intent) {
-    return intent.direction == SwapDirection.externalToZec &&
-        intent.status == SwapIntentStatus.shieldingPending;
-  }
-
   bool _isHardwareIntent(SwapPrototypeIntent intent) {
     final accountUuid = _accountUuidForIntent(intent);
     if (accountUuid == null || accountUuid.trim().isEmpty) return false;
     return ref.read(accountProvider.notifier).isHardwareAccount(accountUuid);
-  }
-
-  Future<void> _persistShieldSubmissionCheckpoint(
-    SwapPrototypeIntent updated,
-  ) async {
-    if (_intentById(updated.id) == null) return;
-    state = state.copyWith(
-      intents: _replaceIntent(state.intents, updated.id, updated),
-      clearStatusError: true,
-    );
-    try {
-      await _persistCurrentIntents();
-    } catch (e) {
-      log(
-        'Swap: shield checkpoint persist failed '
-        'intent=${_shortSwapValue(updated.id)} error=$e',
-      );
-    }
-  }
-
-  Future<SwapPrototypeIntent> _tryTrackShieldTransaction(
-    SwapPrototypeIntent intent,
-  ) async {
-    if (intent.status != SwapIntentStatus.shieldingConfirming) return intent;
-
-    final accountUuid = _accountUuidForIntent(intent);
-    final txHash = intent.shieldTxHash;
-    if (accountUuid == null || txHash == null || txHash.trim().isEmpty) {
-      return _shieldingFailedIntent(intent);
-    }
-
-    try {
-      final tracked = await ref
-          .read(swapShieldingServiceProvider)
-          .trackShieldTransaction(accountUuid: accountUuid, txHash: txHash);
-      switch (tracked.status) {
-        case SwapShieldTxStatus.mined:
-          log(
-            'Swap: shield tx mined intent=${_shortSwapValue(intent.id)} '
-            'tx=${_shortSwapValue(txHash)}',
-          );
-          const nextAction = 'Shield transaction confirmed.';
-          return intent.copyWith(
-            status: SwapIntentStatus.complete,
-            nextAction: nextAction,
-            steps: _stepsForStatus(SwapIntentStatus.complete, nextAction),
-          );
-        case SwapShieldTxStatus.expired:
-          log(
-            'Swap: shield tx expired intent=${_shortSwapValue(intent.id)} '
-            'tx=${_shortSwapValue(txHash)}',
-          );
-          return _shieldingFailedIntent(intent);
-        case SwapShieldTxStatus.pending:
-        case SwapShieldTxStatus.unknown:
-          const nextAction = 'Waiting for shield transaction confirmation.';
-          return intent.copyWith(
-            nextAction: nextAction,
-            steps: _stepsForStatus(
-              SwapIntentStatus.shieldingConfirming,
-              nextAction,
-            ),
-          );
-      }
-    } catch (e) {
-      log(
-        'Swap: shield tx track failed intent=${_shortSwapValue(intent.id)} '
-        'error=$e',
-      );
-      return intent;
-    }
-  }
-
-  SwapPrototypeIntent _shieldingFailedIntent(SwapPrototypeIntent intent) {
-    const nextAction = 'Retry wallet shielding from the staging address';
-    return intent.copyWith(
-      status: SwapIntentStatus.shieldingFailed,
-      nextAction: nextAction,
-      steps: _stepsForStatus(SwapIntentStatus.shieldingFailed, nextAction),
-    );
   }
 
   List<SwapPrototypeStep> _stepsForStatus(
@@ -1819,8 +1478,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     final failed =
         status == SwapIntentStatus.failed ||
         status == SwapIntentStatus.expired ||
-        status == SwapIntentStatus.refunded ||
-        status == SwapIntentStatus.shieldingFailed;
+        status == SwapIntentStatus.refunded;
     return [
       const SwapPrototypeStep(
         label: 'Quote locked',
@@ -1898,24 +1556,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
         if (field.label != 'Broadcast status') field,
       if (trimmedNotice != null && trimmedNotice.isNotEmpty)
         SwapPrototypeField(label: 'Broadcast status', value: trimmedNotice),
-    ];
-  }
-
-  List<SwapPrototypeField> _receiptWithShieldSubmission(
-    List<SwapPrototypeField> receipt, {
-    required String? txHash,
-    required BigInt feeZatoshi,
-  }) {
-    if (txHash == null || txHash.isEmpty) return receipt;
-    return [
-      for (final field in receipt)
-        if (field.label != 'Shield tx' && field.label != 'Shield fee') field,
-      SwapPrototypeField(label: 'Shield tx', value: txHash),
-      if (feeZatoshi > BigInt.zero)
-        SwapPrototypeField(
-          label: 'Shield fee',
-          value: ZecAmount.fromZatoshi(feeZatoshi).fee.toString(),
-        ),
     ];
   }
 

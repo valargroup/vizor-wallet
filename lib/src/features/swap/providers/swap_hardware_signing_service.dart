@@ -19,11 +19,6 @@ abstract interface class SwapHardwareSigningService {
     required SwapPrototypeIntent intent,
   });
 
-  Future<SwapHardwarePcztDraft> createShieldPczt({
-    required String accountUuid,
-    required String transparentAddress,
-  });
-
   Future<List<String>> encodeSigningUrParts({
     required SwapHardwarePcztDraft draft,
   });
@@ -47,13 +42,11 @@ class SwapHardwarePcztDraft {
     required this.pcztBytes,
     required this.needsSaplingParams,
     required this.feeZatoshi,
-    this.shieldedZatoshi,
   });
 
   final List<int> pcztBytes;
   final bool needsSaplingParams;
   final BigInt feeZatoshi;
-  final BigInt? shieldedZatoshi;
 }
 
 class RustSwapHardwareSigningService implements SwapHardwareSigningService {
@@ -130,40 +123,6 @@ class RustSwapHardwareSigningService implements SwapHardwareSigningService {
         }
       }
     }
-  }
-
-  @override
-  Future<SwapHardwarePcztDraft> createShieldPczt({
-    required String accountUuid,
-    required String transparentAddress,
-  }) async {
-    final staging = transparentAddress.trim();
-    if (staging.isEmpty) {
-      throw StateError('Transparent staging address is missing');
-    }
-
-    final dbPath = await getWalletDbPath();
-    final endpoint = _ref.read(rpcEndpointProvider);
-    log(
-      'SwapHardwareSigning: shield pczt begin staging=${_shortSwapValue(staging)}',
-    );
-    final result = await rust_sync.createShieldTransparentAddressPczt(
-      dbPath: dbPath,
-      network: endpoint.networkName,
-      accountUuid: accountUuid,
-      transparentAddress: staging,
-    );
-    log(
-      'SwapHardwareSigning: shield pczt ready staging=${_shortSwapValue(staging)} '
-      'shielded=${result.shieldedZatoshi} fee=${result.feeZatoshi} '
-      'needsSapling=${result.needsSaplingParams}',
-    );
-    return SwapHardwarePcztDraft(
-      pcztBytes: result.pcztBytes,
-      needsSaplingParams: result.needsSaplingParams,
-      feeZatoshi: result.feeZatoshi,
-      shieldedZatoshi: result.shieldedZatoshi,
-    );
   }
 
   @override
