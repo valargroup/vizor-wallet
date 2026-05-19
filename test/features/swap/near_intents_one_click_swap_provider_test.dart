@@ -48,7 +48,7 @@ void main() {
     expect(request.body?['destinationAsset'], 'nep141:usdc.example');
     expect(request.body?['refundTo'], 'u1refund');
     expect(request.body?['recipient'], '0xrecipient');
-    expect(request.body?['deadline'], '2026-05-07T10:10:00Z');
+    expect(request.body?['deadline'], '2026-05-07T12:00:00Z');
     expect(request.body?['referral'], 'rowan');
 
     expect(quote.providerQuoteId, 'quote-1');
@@ -61,7 +61,7 @@ void main() {
     expect(quote.depositInstruction.address, 't1deposit');
     expect(quote.depositInstruction.memo, 'memo-7');
     expect(quote.quoteExpiresAt, DateTime.utc(2026, 5, 7, 10, 8));
-    expect(quote.depositInstruction.deadline, DateTime.utc(2026, 5, 7, 10, 10));
+    expect(quote.depositInstruction.deadline, DateTime.utc(2026, 5, 7, 12));
   });
 
   test('quote flips asset ids for external asset into ZEC', () async {
@@ -807,17 +807,14 @@ void main() {
     ]);
     final provider = NearIntentsOneClickSwapProvider(
       transport: transport,
-      now: () => DateTime.utc(2026, 5, 7, 10, 11),
+      now: () => DateTime.utc(2026, 5, 7, 12, 1),
     );
 
     final status = await provider.getStatus('expired-deposit');
 
     expect(status.status, SwapIntentStatus.expired);
     expect(status.nextAction, 'Start a fresh quote');
-    expect(
-      status.depositInstruction.deadline,
-      DateTime.utc(2026, 5, 7, 10, 10),
-    );
+    expect(status.depositInstruction.deadline, DateTime.utc(2026, 5, 7, 12));
   });
 }
 
@@ -947,7 +944,7 @@ Map<String, Object?> _quoteResponse({
       'refundType': 'ORIGIN_CHAIN',
       'recipient': 'recipient-address',
       'recipientType': 'DESTINATION_CHAIN',
-      'deadline': '2026-05-07T10:10:00Z',
+      'deadline': '2026-05-07T12:00:00Z',
     },
     'quote': {
       'amountIn': '100000000',
@@ -958,7 +955,7 @@ Map<String, Object?> _quoteResponse({
       'timeEstimate': 120,
       'depositAddress': depositAddress,
       'depositMemo': depositMemo,
-      'deadline': '2026-05-07T10:10:00Z',
+      'deadline': '2026-05-07T12:00:00Z',
       'timeWhenInactive': '2026-05-07T10:08:00Z',
     },
   };

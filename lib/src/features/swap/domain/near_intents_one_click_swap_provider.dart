@@ -113,7 +113,7 @@ class NearIntentsOneClickSwapProvider
     this.referral,
     this.quoteWaitingTimeMs = 3000,
     this.slippageBps = 100,
-    this.quoteDeadline = const Duration(minutes: 10),
+    this.quoteDeadline = const Duration(hours: 2),
     this.assetIdOverrides = const {},
     DateTime Function()? now,
   }) : baseUri = baseUri ?? Uri.parse('https://1click.chaindefuser.com'),
