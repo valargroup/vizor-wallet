@@ -12,6 +12,7 @@ import 'package:zcash_wallet/src/core/layout/app_main_sidebar.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/core/widgets/app_icon.dart';
 import 'package:zcash_wallet/src/features/send/models/send_prefill_args.dart';
+import 'package:zcash_wallet/src/features/swap/domain/near_intents_one_click_swap_provider.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_hardware_signing_service.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_prototype_provider.dart';
@@ -29,6 +30,16 @@ import 'package:zcash_wallet/src/providers/sync_provider.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
 void main() {
+  test('swapIntentProvider tags 1Click quotes with the Vizor referral', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final provider = container.read(swapIntentProvider);
+
+    expect(provider, isA<NearIntentsOneClickSwapProvider>());
+    expect((provider as NearIntentsOneClickSwapProvider).referral, 'vizor');
+  });
+
   test('compactSwapAmountText truncates visible decimals without ellipsis', () {
     expect(compactSwapAmountText('~0.123456789 BTC'), '~0.123456 BTC');
     expect(compactSwapAmountText('12345.678901 USDC'), '12345.678901 USDC');

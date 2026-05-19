@@ -20,7 +20,10 @@ const _oneClickBaseUrl = String.fromEnvironment(
 );
 
 final swapIntentProvider = Provider<SwapProvider>((ref) {
-  return NearIntentsOneClickSwapProvider(baseUri: Uri.parse(_oneClickBaseUrl));
+  return NearIntentsOneClickSwapProvider(
+    baseUri: Uri.parse(_oneClickBaseUrl),
+    referral: 'vizor',
+  );
 });
 
 final swapStatusPollIntervalProvider = Provider<Duration>((ref) {
