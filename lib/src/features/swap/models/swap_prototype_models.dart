@@ -362,8 +362,9 @@ class SwapPrototypeState {
     return externalRequests.where((request) => request.isOpen).length;
   }
 
-  String get walletTransparentStagingAddress =>
-      't1wallet-shield-prompt-staging';
+  String get walletZecPreviewAddress => direction.sendsZec
+      ? 't1wallet-shield-prompt-staging'
+      : 'u1wallet-shielded-preview';
 
   double? get sellAmount {
     final amount = double.tryParse(amountText);
@@ -379,7 +380,13 @@ class SwapPrototypeState {
       direction: direction,
       externalAsset: externalAsset,
       userExternalAddress: destinationText,
-      walletTransparentAddress: walletTransparentStagingAddress,
+      walletZecAddress: walletZecPreviewAddress,
+      zecStagingAddressPolicy: direction.sendsZec
+          ? SwapZecStagingAddressPolicy.currentWalletTransparentAddress
+          : SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
+      zecShieldingPolicy: direction.sendsZec
+          ? SwapZecShieldingPolicy.promptAfterArrival
+          : SwapZecShieldingPolicy.notRequired,
     );
   }
 
@@ -445,8 +452,7 @@ class SwapPrototypeState {
         ),
         const SwapPrototypeField(
           label: 'ZEC destination',
-          value:
-              'ZEC arrives at the wallet receive address; shield prompt follows',
+          value: 'ZEC arrives directly at this wallet shielded address',
         ),
         SwapPrototypeField(
           label: 'Refund path',
@@ -617,7 +623,7 @@ const previewExternalRequests = <SwapExternalRequest>[
     status: SwapExternalRequestStatus.needsReview,
     riskLabel: 'Source-chain deposit required',
     riskDetail:
-        'Approval prepares one-time USDC deposit instructions; ZEC lands on the wallet t-address before shielding.',
+        'Approval prepares one-time USDC deposit instructions; ZEC arrives directly at this wallet shielded address.',
     direction: SwapDirection.externalToZec,
     externalAsset: SwapAsset.usdc,
     amountText: '140.35',
@@ -627,7 +633,7 @@ const previewExternalRequests = <SwapExternalRequest>[
       SwapPrototypeField(label: 'Pay asset', value: 'USDC on Ethereum'),
       SwapPrototypeField(
         label: 'Receive address',
-        value: 'current wallet address; shield prompt follows',
+        value: 'current shielded wallet address',
       ),
       SwapPrototypeField(label: 'Refund', value: '0xrequest-usdc-refund'),
     ],

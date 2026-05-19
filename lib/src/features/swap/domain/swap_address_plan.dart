@@ -3,16 +3,21 @@ import 'swap_contract.dart';
 enum SwapZecStagingAddressPolicy {
   currentWalletTransparentAddress,
   rotatingWalletTransparentAddress,
+  rotatingWalletUnifiedAddress,
 }
 
-enum SwapZecShieldingPolicy { promptAfterArrival, automaticAfterArrival }
+enum SwapZecShieldingPolicy {
+  promptAfterArrival,
+  automaticAfterArrival,
+  notRequired,
+}
 
 class SwapAddressPlan {
   const SwapAddressPlan({
     required this.direction,
     required this.externalAsset,
     required this.userExternalAddress,
-    required this.walletTransparentAddress,
+    required this.walletZecAddress,
     required this.zecStagingAddressPolicy,
     required this.zecShieldingPolicy,
     required this.oneClickRecipient,
@@ -23,14 +28,14 @@ class SwapAddressPlan {
     required SwapDirection direction,
     required SwapAsset externalAsset,
     required String userExternalAddress,
-    required String walletTransparentAddress,
+    required String walletZecAddress,
     SwapZecStagingAddressPolicy zecStagingAddressPolicy =
         SwapZecStagingAddressPolicy.currentWalletTransparentAddress,
     SwapZecShieldingPolicy zecShieldingPolicy =
         SwapZecShieldingPolicy.promptAfterArrival,
   }) {
     final external = userExternalAddress.trim();
-    final walletStaging = walletTransparentAddress.trim();
+    final walletZec = walletZecAddress.trim();
     if (external.isEmpty) {
       throw ArgumentError.value(
         userExternalAddress,
@@ -38,10 +43,10 @@ class SwapAddressPlan {
         'must not be empty',
       );
     }
-    if (walletStaging.isEmpty) {
+    if (walletZec.isEmpty) {
       throw ArgumentError.value(
-        walletTransparentAddress,
-        'walletTransparentAddress',
+        walletZecAddress,
+        'walletZecAddress',
         'must not be empty',
       );
     }
@@ -50,24 +55,34 @@ class SwapAddressPlan {
       direction: direction,
       externalAsset: externalAsset,
       userExternalAddress: external,
-      walletTransparentAddress: walletStaging,
+      walletZecAddress: walletZec,
       zecStagingAddressPolicy: zecStagingAddressPolicy,
       zecShieldingPolicy: zecShieldingPolicy,
-      oneClickRecipient: direction.sendsZec ? external : walletStaging,
-      oneClickRefundTo: direction.sendsZec ? walletStaging : external,
+      oneClickRecipient: direction.sendsZec ? external : walletZec,
+      oneClickRefundTo: direction.sendsZec ? walletZec : external,
     );
   }
 
   final SwapDirection direction;
   final SwapAsset externalAsset;
   final String userExternalAddress;
-  final String walletTransparentAddress;
+  final String walletZecAddress;
   final SwapZecStagingAddressPolicy zecStagingAddressPolicy;
   final SwapZecShieldingPolicy zecShieldingPolicy;
   final String oneClickRecipient;
   final String oneClickRefundTo;
 
-  bool get zecDeliveryUsesWalletStaging => !direction.sendsZec;
+  String get walletTransparentAddress => walletZecAddress;
+
+  bool get zecDeliveryIsDirectShielded =>
+      !direction.sendsZec &&
+      zecShieldingPolicy == SwapZecShieldingPolicy.notRequired;
+
+  bool get zecDeliveryUsesWalletStaging =>
+      !direction.sendsZec && !zecDeliveryIsDirectShielded;
+
+  bool get zecShieldingIsRequired =>
+      !direction.sendsZec && !zecDeliveryIsDirectShielded;
 
   bool get zecStagingIsRotating =>
       zecStagingAddressPolicy ==
@@ -76,12 +91,18 @@ class SwapAddressPlan {
   bool get zecShieldingIsAutomatic =>
       zecShieldingPolicy == SwapZecShieldingPolicy.automaticAfterArrival;
 
-  String get zecStagingLabel => zecStagingIsRotating
-      ? 'reserved wallet receive address'
-      : 'wallet receive address';
+  String get zecStagingLabel {
+    if (zecDeliveryIsDirectShielded) return 'shielded wallet address';
+    return zecStagingIsRotating
+        ? 'reserved wallet receive address'
+        : 'wallet receive address';
+  }
 
-  String get zecShieldingLabel =>
-      zecShieldingIsAutomatic ? 'auto-shield' : 'shield prompt';
+  String get zecShieldingLabel => switch (zecShieldingPolicy) {
+    SwapZecShieldingPolicy.automaticAfterArrival => 'auto-shield',
+    SwapZecShieldingPolicy.notRequired => 'no shield prompt',
+    SwapZecShieldingPolicy.promptAfterArrival => 'shield prompt',
+  };
 
   String get userInputLabel => direction.sendsZec
       ? 'Destination'
@@ -91,13 +112,23 @@ class SwapAddressPlan {
       ? 'External ${externalAsset.symbol} address or account'
       : 'Refund address on the ${externalAsset.symbol} source chain';
 
-  String get deliverySummary => zecDeliveryUsesWalletStaging
-      ? 'ZEC arrives at the $zecStagingLabel; $zecShieldingLabel follows'
-      : '${externalAsset.symbol} is delivered to the external destination';
+  String get deliverySummary {
+    if (zecDeliveryIsDirectShielded) {
+      return 'ZEC arrives directly at the shielded wallet address';
+    }
+    if (zecDeliveryUsesWalletStaging) {
+      return 'ZEC arrives at the $zecStagingLabel; $zecShieldingLabel follows';
+    }
+    return '${externalAsset.symbol} is delivered to the external destination';
+  }
 
-  String get reviewDeliveryValue => zecDeliveryUsesWalletStaging
-      ? '$zecStagingLabel; $zecShieldingLabel follows'
-      : userExternalAddress;
+  String get reviewDeliveryValue {
+    if (zecDeliveryIsDirectShielded) return 'shielded wallet address';
+    if (zecDeliveryUsesWalletStaging) {
+      return '$zecStagingLabel; $zecShieldingLabel follows';
+    }
+    return userExternalAddress;
+  }
 
   SwapQuoteRequest toQuoteRequest({
     required double sellAmount,

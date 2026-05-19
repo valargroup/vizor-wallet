@@ -309,7 +309,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       await _persistDraft(draft);
       final stagingAddress = await ref
           .read(swapZecStagingAddressServiceProvider)
-          .prepareForQuote(accountUuid: accountUuid);
+          .prepareForQuote(accountUuid: accountUuid, direction: direction);
       final addressPlan = stagingAddress.toAddressPlan(
         direction: direction,
         externalAsset: externalAsset,
@@ -1295,9 +1295,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
 
   String? _walletReservationAddressForIntent(SwapPrototypeIntent intent) {
     return switch (intent.direction) {
-      SwapDirection.externalToZec => intent.oneClickRecipient,
       SwapDirection.zecToExternal => intent.oneClickRefundTo,
       null => null,
+      SwapDirection.externalToZec => null,
     };
   }
 
@@ -1631,6 +1631,11 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
           SwapPrototypeField(
             label: '$externalSymbol recipient',
             value: addressPlan.oneClickRecipient,
+          )
+        else
+          SwapPrototypeField(
+            label: 'ZEC recipient',
+            value: addressPlan.oneClickRecipient,
           ),
         SwapPrototypeField(
           label: sendsZec ? 'ZEC deposit' : '$externalSymbol source deposit',
@@ -1666,12 +1671,8 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     SwapPrototypeIntent intent,
     SwapIntentSnapshot snapshot,
   ) {
-    final status = _walletAwareStatus(intent, snapshot.status);
-    final nextAction = _walletAwareNextAction(
-      intent,
-      snapshot.status,
-      snapshot.nextAction,
-    );
+    final status = snapshot.status;
+    final nextAction = snapshot.nextAction;
     return intent.copyWith(
       id: intent.id,
       pair: snapshot.pairText,
@@ -1714,38 +1715,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       statusError: broadcastNotice,
       clearStatusError: broadcastNotice == null,
     );
-  }
-
-  SwapIntentStatus _walletAwareStatus(
-    SwapPrototypeIntent intent,
-    SwapIntentStatus providerStatus,
-  ) {
-    if (intent.direction == SwapDirection.externalToZec &&
-        providerStatus == SwapIntentStatus.complete) {
-      if (intent.status == SwapIntentStatus.complete) {
-        return SwapIntentStatus.complete;
-      }
-      return SwapIntentStatus.shieldingPending;
-    }
-    return providerStatus;
-  }
-
-  String _walletAwareNextAction(
-    SwapPrototypeIntent intent,
-    SwapIntentStatus providerStatus,
-    String providerNextAction,
-  ) {
-    if (intent.direction == SwapDirection.externalToZec &&
-        providerStatus == SwapIntentStatus.complete) {
-      if (intent.status == SwapIntentStatus.complete) {
-        final currentAction = intent.nextAction.trim();
-        return currentAction.isEmpty
-            ? 'Shield transaction confirmed.'
-            : currentAction;
-      }
-      return 'Provider delivery observed. Shield the staging address before marking complete.';
-    }
-    return providerNextAction;
   }
 
   Future<SwapPrototypeIntent> _tryShieldStagingAddress(

@@ -1805,9 +1805,9 @@ class _RequestActionPlan {
         return _RequestActionPlan(
           title: 'Receive ZEC request',
           detail:
-              'Stage the quote, then send ${externalAsset.symbol} to a one-time source-chain address. ZEC lands on the wallet t-address, then prompts shielding.',
+              'Stage the quote, then send ${externalAsset.symbol} to a one-time source-chain address. ZEC arrives directly at this wallet shielded address.',
           leadLabel: 'Pay $amountText ${externalAsset.symbol}',
-          receiveLabel: 'Receive ZEC to wallet t-address',
+          receiveLabel: 'Receive ZEC to shielded wallet address',
           returnLabel: 'Refund ${request.destinationText ?? 'source address'}',
           iconName: AppIcons.shieldKeyhole,
           tone: _RequestActionPlanTone.swap,
@@ -3330,9 +3330,20 @@ class _ActivityRoutePlan {
   factory _ActivityRoutePlan.fromIntent(SwapPrototypeIntent intent) {
     final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
     final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
-    final deliverLabel = receiveSymbol == 'ZEC' ? 'Make spendable' : 'Deliver';
-    final deliverDetail = receiveSymbol == 'ZEC'
+    final receivesZec = receiveSymbol == 'ZEC';
+    final showsShieldingStep =
+        intent.status == SwapIntentStatus.shieldingPending ||
+        intent.status == SwapIntentStatus.shieldingConfirming ||
+        intent.status == SwapIntentStatus.shieldingFailed;
+    final deliverLabel = showsShieldingStep
+        ? 'Make spendable'
+        : receivesZec
+        ? 'Receive ZEC'
+        : 'Deliver';
+    final deliverDetail = showsShieldingStep
         ? 'Wallet is shielding received ZEC into your spendable balance.'
+        : receivesZec
+        ? 'Provider is sending ZEC directly to this wallet shielded address.'
         : 'Provider is sending funds to your destination address.';
     final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
 
@@ -3347,7 +3358,7 @@ class _ActivityRoutePlan {
       AppIcons.link,
       AppIcons.eye,
       AppIcons.renew,
-      receiveSymbol == 'ZEC' ? AppIcons.shieldKeyhole : AppIcons.checkCircle,
+      receivesZec ? AppIcons.shieldKeyhole : AppIcons.checkCircle,
     ];
     final states = switch (intent.status) {
       SwapIntentStatus.awaitingDeposit ||
@@ -4253,8 +4264,7 @@ class _ActivityDepositInstruction {
         : 'Receive address';
     final deliveryValue = direction.sendsZec
         ? intent.oneClickRecipient ?? 'external destination'
-        : intent.oneClickRecipient ??
-              'wallet receive address; shield prompt follows';
+        : intent.oneClickRecipient ?? 'shielded wallet address';
     final depositAddressLabel = direction.sendsZec
         ? '$depositSymbol deposit'
         : '$depositSymbol source deposit';

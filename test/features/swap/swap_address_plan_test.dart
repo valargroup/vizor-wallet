@@ -8,7 +8,7 @@ void main() {
       direction: SwapDirection.zecToExternal,
       externalAsset: SwapAsset.usdc,
       userExternalAddress: '0xrecipient',
-      walletTransparentAddress: 't1walletstaging',
+      walletZecAddress: 't1walletstaging',
     );
 
     expect(plan.oneClickRecipient, '0xrecipient');
@@ -33,7 +33,7 @@ void main() {
       direction: SwapDirection.externalToZec,
       externalAsset: SwapAsset.usdc,
       userExternalAddress: '0xrefund',
-      walletTransparentAddress: 't1walletstaging',
+      walletZecAddress: 't1walletstaging',
     );
 
     expect(plan.oneClickRecipient, 't1walletstaging');
@@ -61,7 +61,7 @@ void main() {
       direction: SwapDirection.externalToZec,
       externalAsset: SwapAsset.usdc,
       userExternalAddress: '0xrefund',
-      walletTransparentAddress: 't1rotating',
+      walletZecAddress: 't1rotating',
       zecStagingAddressPolicy:
           SwapZecStagingAddressPolicy.rotatingWalletTransparentAddress,
       zecShieldingPolicy: SwapZecShieldingPolicy.automaticAfterArrival,
@@ -75,13 +75,43 @@ void main() {
     );
   });
 
+  test(
+    'external to ZEC can receive directly to a shielded unified address',
+    () {
+      final plan = SwapAddressPlan.fromUserInput(
+        direction: SwapDirection.externalToZec,
+        externalAsset: SwapAsset.usdc,
+        userExternalAddress: '0xrefund',
+        walletZecAddress: 'u1shielded-wallet-recipient',
+        zecStagingAddressPolicy:
+            SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
+        zecShieldingPolicy: SwapZecShieldingPolicy.notRequired,
+      );
+
+      expect(plan.oneClickRecipient, 'u1shielded-wallet-recipient');
+      expect(plan.oneClickRefundTo, '0xrefund');
+      expect(plan.zecDeliveryUsesWalletStaging, isFalse);
+      expect(plan.zecDeliveryIsDirectShielded, isTrue);
+      expect(plan.zecShieldingIsRequired, isFalse);
+      expect(
+        plan.deliverySummary,
+        'ZEC arrives directly at the shielded wallet address',
+      );
+      expect(plan.reviewDeliveryValue, 'shielded wallet address');
+      expect(
+        plan.toQuoteRequest(sellAmount: 140.35).destination,
+        'u1shielded-wallet-recipient',
+      );
+    },
+  );
+
   test('rejects empty user or wallet addresses', () {
     expect(
       () => SwapAddressPlan.fromUserInput(
         direction: SwapDirection.externalToZec,
         externalAsset: SwapAsset.usdc,
         userExternalAddress: '',
-        walletTransparentAddress: 't1walletstaging',
+        walletZecAddress: 't1walletstaging',
       ),
       throwsA(isA<ArgumentError>()),
     );
@@ -90,7 +120,7 @@ void main() {
         direction: SwapDirection.externalToZec,
         externalAsset: SwapAsset.usdc,
         userExternalAddress: '0xrefund',
-        walletTransparentAddress: ' ',
+        walletZecAddress: ' ',
       ),
       throwsA(isA<ArgumentError>()),
     );

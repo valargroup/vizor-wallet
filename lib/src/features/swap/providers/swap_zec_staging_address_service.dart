@@ -4,6 +4,8 @@ import '../../../../main.dart' show log;
 import '../../../app_bootstrap.dart';
 import '../../../core/config/network_config.dart';
 import '../../../core/storage/wallet_paths.dart';
+import '../../../providers/account_provider.dart';
+import '../../../providers/receive_address_provider.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import '../domain/swap_address_plan.dart';
 import '../domain/swap_contract.dart';
@@ -15,6 +17,12 @@ final swapZecStagingAddressServiceProvider =
         readNetwork: () {
           final network = ref.read(appBootstrapProvider).network;
           return network.isEmpty ? kZcashDefaultNetworkName : network;
+        },
+        loadShieldedAddress: ({required accountUuid}) {
+          return _loadSwapShieldedRecipientAddress(
+            ref,
+            accountUuid: accountUuid,
+          );
         },
         reserveExchangeTransparentAddress:
             rust_wallet.reserveExchangeTransparentAddress,
@@ -28,6 +36,38 @@ final swapZecStagingAddressServiceProvider =
 typedef LoadWalletDbPath = Future<String> Function();
 
 typedef ReadNetwork = String Function();
+
+typedef LoadShieldedAddress =
+    Future<String> Function({required String accountUuid});
+
+Future<String> _loadSwapShieldedRecipientAddress(
+  Ref ref, {
+  required String accountUuid,
+}) async {
+  final receiveAddressService = ref.read(receiveAddressServiceProvider);
+  if (ref.read(accountProvider.notifier).isHardwareAccount(accountUuid)) {
+    return receiveAddressService.loadShieldedAddress(accountUuid: accountUuid);
+  }
+
+  try {
+    return await receiveAddressService.renewShieldedAddress(
+      accountUuid: accountUuid,
+    );
+  } catch (e) {
+    if (!_isSaplingReceiverUnsupported(e)) rethrow;
+    log(
+      'SwapZecStagingAddressService: diversified Sapling+Orchard UA '
+      'generation is unavailable; using current shielded UA: $e',
+    );
+    return receiveAddressService.loadShieldedAddress(accountUuid: accountUuid);
+  }
+}
+
+bool _isSaplingReceiverUnsupported(Object error) {
+  return error.toString().contains(
+    'Unified Address generation does not yet support receivers of type Sapling',
+  );
+}
 
 typedef ReserveExchangeTransparentAddress =
     Future<rust_wallet.ExchangeTransparentAddressResult> Function({
@@ -70,7 +110,7 @@ class SwapZecStagingAddress {
       direction: direction,
       externalAsset: externalAsset,
       userExternalAddress: userExternalAddress,
-      walletTransparentAddress: address,
+      walletZecAddress: address,
       zecStagingAddressPolicy: stagingAddressPolicy,
       zecShieldingPolicy: shieldingPolicy,
     );
@@ -84,7 +124,7 @@ class SwapZecStagingAddressUnavailableException implements Exception {
 
   @override
   String toString() {
-    return 'Could not reserve a fresh wallet t-address. '
+    return 'Could not prepare a fresh wallet receive address. '
         'Retry after wallet sync or close older pending swaps before requesting a new quote.';
   }
 }
@@ -93,6 +133,7 @@ class SwapZecStagingAddressService {
   const SwapZecStagingAddressService({
     required LoadWalletDbPath loadWalletDbPath,
     required ReadNetwork readNetwork,
+    required LoadShieldedAddress loadShieldedAddress,
     required ReserveExchangeTransparentAddress
     reserveExchangeTransparentAddress,
     required ReleaseExchangeTransparentAddress
@@ -101,6 +142,7 @@ class SwapZecStagingAddressService {
     releaseUnusedExchangeTransparentAddresses,
   }) : _loadWalletDbPath = loadWalletDbPath,
        _readNetwork = readNetwork,
+       _loadShieldedAddress = loadShieldedAddress,
        _reserveExchangeTransparentAddress = reserveExchangeTransparentAddress,
        _releaseExchangeTransparentAddress = releaseExchangeTransparentAddress,
        _releaseUnusedExchangeTransparentAddresses =
@@ -108,6 +150,7 @@ class SwapZecStagingAddressService {
 
   final LoadWalletDbPath _loadWalletDbPath;
   final ReadNetwork _readNetwork;
+  final LoadShieldedAddress _loadShieldedAddress;
   final ReserveExchangeTransparentAddress _reserveExchangeTransparentAddress;
   final ReleaseExchangeTransparentAddress _releaseExchangeTransparentAddress;
   final ReleaseUnusedExchangeTransparentAddresses
@@ -115,7 +158,37 @@ class SwapZecStagingAddressService {
 
   Future<SwapZecStagingAddress> prepareForQuote({
     required String accountUuid,
+    required SwapDirection direction,
   }) async {
+    if (!direction.sendsZec) {
+      return _prepareShieldedRecipient(accountUuid);
+    }
+    return _prepareTransparentRefundAddress(accountUuid);
+  }
+
+  Future<SwapZecStagingAddress> _prepareShieldedRecipient(
+    String accountUuid,
+  ) async {
+    try {
+      final address = await _loadShieldedAddress(accountUuid: accountUuid);
+      return SwapZecStagingAddress(
+        address: address,
+        stagingAddressPolicy:
+            SwapZecStagingAddressPolicy.rotatingWalletUnifiedAddress,
+        shieldingPolicy: SwapZecShieldingPolicy.notRequired,
+      );
+    } catch (e) {
+      log(
+        'SwapZecStagingAddressService: shielded receive address preparation '
+        'failed; blocking quote: $e',
+      );
+      throw SwapZecStagingAddressUnavailableException(e);
+    }
+  }
+
+  Future<SwapZecStagingAddress> _prepareTransparentRefundAddress(
+    String accountUuid,
+  ) async {
     try {
       final reserved = await _reserveExchangeTransparentAddress(
         dbPath: await _loadWalletDbPath(),

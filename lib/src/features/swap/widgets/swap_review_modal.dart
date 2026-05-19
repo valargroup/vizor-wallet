@@ -233,7 +233,7 @@ class _ReviewConsentPanel extends StatelessWidget {
         : 'Approval locks deposit instructions';
     final detail = sendsZec
         ? 'The wallet creates the ZEC deposit transaction to a one-time transparent address. Only txid and status are used to track the swap.'
-        : 'You still send ${quote.externalAsset.symbol} from the source chain. ZEC arrives in this wallet before the shield prompt.';
+        : 'You still send ${quote.externalAsset.symbol} from the source chain. ZEC arrives directly at this wallet shielded address.';
     return Container(
       key: const ValueKey('swap_review_consent_panel'),
       padding: const EdgeInsets.symmetric(
@@ -764,11 +764,14 @@ class _ReviewDetailsDisclosureState extends State<_ReviewDetailsDisclosure> {
           ),
         ),
         if (_open) ...[
-          if (widget.quote.direction.sendsZec)
-            _ReviewRow(
-              label: 'Receive address',
-              value: widget.addressPlan.reviewDeliveryValue,
-            ),
+          _ReviewRow(
+            label: widget.quote.direction.sendsZec
+                ? 'Receive address'
+                : 'ZEC recipient',
+            value: widget.quote.direction.sendsZec
+                ? widget.addressPlan.reviewDeliveryValue
+                : widget.addressPlan.oneClickRecipient,
+          ),
           _ReviewRow(
             label: refundLabel,
             value: widget.addressPlan.oneClickRefundTo,

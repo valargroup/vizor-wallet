@@ -936,10 +936,7 @@ SwapIntentStatus _statusFromOneClick(
     'KNOWN_DEPOSIT_TX' => SwapIntentStatus.depositObserved,
     'PROCESSING' => SwapIntentStatus.processing,
     'INCOMPLETE_DEPOSIT' => SwapIntentStatus.incompleteDeposit,
-    'SUCCESS' =>
-      quote.receiveAsset == SwapAsset.zec
-          ? SwapIntentStatus.shieldingPending
-          : SwapIntentStatus.complete,
+    'SUCCESS' => SwapIntentStatus.complete,
     'REFUNDED' => SwapIntentStatus.refunded,
     'FAILED' => SwapIntentStatus.failed,
     _ => SwapIntentStatus.providerStatusUnknown,

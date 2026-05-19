@@ -167,6 +167,11 @@ List<SwapPrototypeField> _supportDetailRows(
       '$symbol recipient',
       intent.oneClickRecipient ?? receiptValue('$symbol recipient'),
     );
+  } else if (intent.direction == SwapDirection.externalToZec) {
+    add(
+      'ZEC recipient',
+      intent.oneClickRecipient ?? receiptValue('ZEC recipient'),
+    );
   }
   add('Deposit address', intent.depositAddress);
   add('Deposit memo', intent.depositMemo ?? receiptValue('Memo'));

@@ -90,7 +90,7 @@ void main() {
         direction: SwapDirection.externalToZec,
         externalAsset: SwapAsset.usdc,
         sellAmount: 140.35,
-        destination: 't1rotating-zec-recipient',
+        destination: 'u1fresh-shielded-recipient',
         refundAddress: '0xexternal-refund',
       ),
     );
@@ -101,7 +101,7 @@ void main() {
     expect(request.body?['originAsset'], 'nep141:usdc.example');
     expect(request.body?['destinationAsset'], 'nep141:zec.omft.near');
     expect(request.body?['refundTo'], '0xexternal-refund');
-    expect(request.body?['recipient'], 't1rotating-zec-recipient');
+    expect(request.body?['recipient'], 'u1fresh-shielded-recipient');
     expect(quote.pairText, 'USDC -> ZEC');
     expect(quote.receiveEstimateText, '~2 ZEC');
     expect(quote.rateText, '1 USDC = 0.0143 ZEC');
@@ -419,7 +419,7 @@ void main() {
   );
 
   test(
-    'status uses deposit memo and maps 1Click success into shielding pending',
+    'status uses deposit memo and maps 1Click success to complete',
     () async {
       final transport = _FakeOneClickTransport([
         _FakeResponse.get('/v0/tokens', _tokens),
@@ -452,8 +452,8 @@ void main() {
         '0xexternal-deposit',
       );
       expect(request.uri.queryParameters['depositMemo'], '123');
-      expect(status.status, SwapIntentStatus.shieldingPending);
-      expect(status.nextAction, 'Shield received ZEC into this wallet');
+      expect(status.status, SwapIntentStatus.complete);
+      expect(status.nextAction, 'Swap complete');
     },
   );
 
@@ -1121,8 +1121,8 @@ const _statusScenarios = [
   _StatusScenario(
     oneClickStatus: 'SUCCESS',
     direction: SwapDirection.externalToZec,
-    expectedStatus: SwapIntentStatus.shieldingPending,
-    expectedNextAction: 'Shield received ZEC into this wallet',
+    expectedStatus: SwapIntentStatus.complete,
+    expectedNextAction: 'Swap complete',
     expectedPairText: 'USDC -> ZEC',
   ),
   _StatusScenario(
