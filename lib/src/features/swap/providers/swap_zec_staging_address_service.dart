@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../main.dart' show log;
-import '../../../providers/account_provider.dart';
 import '../../../providers/receive_address_provider.dart';
 import '../domain/swap_address_plan.dart';
 import '../domain/swap_contract.dart';
@@ -31,10 +30,6 @@ Future<String> _loadSwapShieldedRecipientAddress(
   required String accountUuid,
 }) async {
   final receiveAddressService = ref.read(receiveAddressServiceProvider);
-  if (ref.read(accountProvider.notifier).isHardwareAccount(accountUuid)) {
-    return receiveAddressService.loadShieldedAddress(accountUuid: accountUuid);
-  }
-
   try {
     return await receiveAddressService.renewShieldedAddress(
       accountUuid: accountUuid,

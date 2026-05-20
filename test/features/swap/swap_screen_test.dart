@@ -3685,6 +3685,55 @@ void main() {
     );
   });
 
+  testWidgets('hardware review quote rotates shielded ZEC recipient', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final swapProvider = _FakeSwapProvider();
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [
+            GoRoute(path: '/swap', builder: (_, _) => const SwapScreen()),
+          ],
+        ),
+        bootstrap: _hardwareBootstrap,
+        swapProvider: swapProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('swap_direction_externalToZec')),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_amount_field')),
+      '140.35',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_destination_field')),
+      '0xexternal-refund',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('swap_review_button')));
+    await tester.pumpAndSettle();
+
+    expect(swapProvider.requests, hasLength(1));
+    expect(swapProvider.requests.single.direction, SwapDirection.externalToZec);
+    expect(
+      swapProvider.requests.single.destination,
+      'u1actualshieldedrecipient',
+    );
+    expect(
+      swapProvider.requests.single.destination,
+      isNot(_hardwareBootstrap.initialAccountState.activeAddress),
+    );
+    expect(swapProvider.requests.single.refundAddress, '0xexternal-refund');
+  });
+
   testWidgets('started swap can refresh status from provider', (tester) async {
     await _setDesktopViewport(tester);
     final swapProvider = _FakeSwapProvider();
@@ -4677,7 +4726,14 @@ void main() {
 
     expect(depositSender.preflightRequests, isEmpty);
     expect(depositSender.requests, isEmpty);
-    expect(swapProvider.requests.single.destination, 'u1swapprototypeaddress');
+    expect(
+      swapProvider.requests.single.destination,
+      'u1actualshieldedrecipient',
+    );
+    expect(
+      swapProvider.requests.single.destination,
+      isNot(_hardwareBootstrap.initialAccountState.activeAddress),
+    );
     expect(swapProvider.startedQuotes, hasLength(1));
     expect(swapProvider.submittedDeposits, isEmpty);
     expect(sessionStore.savedIntents, hasLength(1));
@@ -4796,13 +4852,6 @@ Widget _routerHarness(
                 final receiveAddressService = ref.read(
                   receiveAddressServiceProvider,
                 );
-                if (ref
-                    .read(accountProvider.notifier)
-                    .isHardwareAccount(accountUuid)) {
-                  return receiveAddressService.loadShieldedAddress(
-                    accountUuid: accountUuid,
-                  );
-                }
                 return receiveAddressService.renewShieldedAddress(
                   accountUuid: accountUuid,
                 );
@@ -4870,11 +4919,6 @@ class _FakeReceiveAddressService extends ReceiveAddressService {
 
   @override
   Future<String> renewShieldedAddress({required String accountUuid}) async {
-    if (_ref.read(accountProvider.notifier).isHardwareAccount(accountUuid)) {
-      throw Exception(
-        'Unified Address generation does not yet support receivers of type Sapling.',
-      );
-    }
     return 'u1actualshieldedrecipient';
   }
 }
