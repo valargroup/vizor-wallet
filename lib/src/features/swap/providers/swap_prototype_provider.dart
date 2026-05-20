@@ -1020,43 +1020,60 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       'deposit=${_shortSwapValue(quote.depositInstruction.address)}',
     );
     state = state.copyWith(depositSubmitting: true, clearStatusError: true);
-    String? broadcastTxHash;
+    late final String txHash;
     try {
-      final txHash = await ref
+      txHash = await ref
           .read(swapDepositSenderProvider)
           .sendZecDeposit(accountUuid: accountUuid, quote: quote);
-      broadcastTxHash = txHash;
+    } catch (e) {
       log(
-        'Swap: live ZEC deposit broadcast tx=${_shortSwapValue(txHash)} '
-        'intent=${_shortSwapValue(intentId)}',
+        'Swap: live ZEC deposit failed intent=${_shortSwapValue(intentId)} '
+        'error=$e',
+      );
+      final message = swapFailureMessage(
+        SwapFailureOperation.sendZecDeposit,
+        e,
       );
       if (!_isAccountActive(accountUuid)) {
-        await _submitDepositTransactionForStoredIntent(
-          accountUuid: accountUuid,
-          intentId: intentId,
-          txHash: txHash,
-        );
         return;
       }
-      final intent = _intentById(intentId);
-      if (intent == null) {
-        state = state.copyWith(
-          depositTxHashText: txHash,
-          depositSubmitting: false,
-          statusError:
-              'ZEC deposit was broadcast, but the saved swap intent was not found. Copy the transaction hash before leaving this screen.',
-        );
-        return;
-      }
-      final checkpointed = intent.copyWith(
-        depositTxHash: txHash,
-        receipt: _receiptWithDepositTx(intent.receipt, txHash),
+      state = state.copyWith(depositSubmitting: false, statusError: message);
+      return;
+    }
+
+    log(
+      'Swap: live ZEC deposit broadcast tx=${_shortSwapValue(txHash)} '
+      'intent=${_shortSwapValue(intentId)}',
+    );
+    if (!_isAccountActive(accountUuid)) {
+      await _submitDepositTransactionForStoredIntent(
+        accountUuid: accountUuid,
+        intentId: intentId,
+        txHash: txHash,
       );
+      return;
+    }
+    final intent = _intentById(intentId);
+    if (intent == null) {
       state = state.copyWith(
         depositTxHashText: txHash,
-        intents: _replaceIntent(state.intents, intentId, checkpointed),
+        depositSubmitting: false,
+        statusError:
+            'ZEC deposit was broadcast, but the saved swap intent was not found. Copy the transaction hash before leaving this screen.',
       );
-      await _persistCurrentIntents();
+      return;
+    }
+    final checkpointed = intent.copyWith(
+      depositTxHash: txHash,
+      receipt: _receiptWithDepositTx(intent.receipt, txHash),
+    );
+    state = state.copyWith(
+      depositTxHashText: txHash,
+      intents: _replaceIntent(state.intents, intentId, checkpointed),
+    );
+    await _persistCurrentIntents();
+
+    try {
       final snapshot = await ref
           .read(swapIntentProvider)
           .submitDepositTransaction(
@@ -1092,23 +1109,19 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       await _persistCurrentIntents();
     } catch (e) {
       log(
-        'Swap: live ZEC deposit failed intent=${_shortSwapValue(intentId)} '
+        'Swap: live ZEC deposit submit failed after broadcast '
+        'intent=${_shortSwapValue(intentId)} tx=${_shortSwapValue(txHash)} '
         'error=$e',
       );
-      final message = swapFailureMessage(
-        SwapFailureOperation.sendZecDeposit,
-        e,
-      );
+      final message = swapFailureMessage(SwapFailureOperation.submitDeposit, e);
       if (!_isAccountActive(accountUuid)) {
-        if (broadcastTxHash != null) {
-          await _submitDepositTransactionForStoredIntent(
-            accountUuid: accountUuid,
-            intentId: intentId,
-            txHash: broadcastTxHash,
-            submitProviderStatus: false,
-            statusError: message,
-          );
-        }
+        await _submitDepositTransactionForStoredIntent(
+          accountUuid: accountUuid,
+          intentId: intentId,
+          txHash: txHash,
+          submitProviderStatus: false,
+          statusError: message,
+        );
         return;
       }
       state = state.copyWith(depositSubmitting: false, statusError: message);

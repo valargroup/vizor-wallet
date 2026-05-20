@@ -4302,7 +4302,8 @@ void main() {
       'zec-auto-txid',
     );
     expect(find.text('zec-auto-txid'), findsWidgets);
-    expect(find.textContaining('Could not send ZEC deposit'), findsOneWidget);
+    expect(find.textContaining('Could not submit deposit tx'), findsOneWidget);
+    expect(find.textContaining('Could not send ZEC deposit'), findsNothing);
   });
 
   testWidgets('ZEC deposit preflight failure does not start a swap intent', (
