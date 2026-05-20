@@ -381,6 +381,7 @@ abstract class RustLibApi extends BaseApi {
     required String dbPath,
     required String network,
     required String accountUuid,
+    required String addressRequest,
   });
 
   Future<SubtreeIndices> crateApiSyncGetNextSubtreeIndices({
@@ -2718,6 +2719,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required String dbPath,
     required String network,
     required String accountUuid,
+    required String addressRequest,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2726,6 +2728,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(dbPath, serializer);
           sse_encode_String(network, serializer);
           sse_encode_String(accountUuid, serializer);
+          sse_encode_String(addressRequest, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2738,7 +2741,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiSyncGetNextAvailableAddressConstMeta,
-        argValues: [dbPath, network, accountUuid],
+        argValues: [dbPath, network, accountUuid, addressRequest],
         apiImpl: this,
       ),
     );
@@ -2747,7 +2750,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSyncGetNextAvailableAddressConstMeta =>
       const TaskConstMeta(
         debugName: "get_next_available_address",
-        argNames: ["dbPath", "network", "accountUuid"],
+        argNames: ["dbPath", "network", "accountUuid", "addressRequest"],
       );
 
   @override
