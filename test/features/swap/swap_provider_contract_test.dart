@@ -19,7 +19,7 @@ void main() {
     expect(quote.sellAsset, SwapAsset.zec);
     expect(quote.receiveAsset, SwapAsset.usdc);
     expect(quote.pairText, 'ZEC -> USDC');
-    expect(quote.receiveEstimateText, '~105.26 USDC');
+    expect(quote.receiveEstimateText, '105.26 USDC');
     expect(quote.rateText, '1 ZEC = 70.17 USDC');
     expect(quote.depositInstruction.asset, SwapAsset.zec);
     expect(quote.depositInstruction.reuseWarning, 'Do not reuse this address');
@@ -42,11 +42,30 @@ void main() {
       expect(quote.sellAsset, SwapAsset.usdc);
       expect(quote.receiveAsset, SwapAsset.zec);
       expect(quote.pairText, 'USDC -> ZEC');
-      expect(quote.receiveEstimateText, '~2.0000 ZEC');
+      expect(quote.receiveEstimateText, '2.0000 ZEC');
       expect(quote.rateText, '1 USDC = 0.0143 ZEC');
       expect(quote.depositInstruction.asset, SwapAsset.usdc);
     },
   );
+
+  test('provider contract estimates exact-output input amount', () async {
+    const provider = StaticNearIntentsSwapProvider();
+
+    final quote = await provider.quote(
+      const SwapQuoteRequest(
+        direction: SwapDirection.zecToExternal,
+        externalAsset: SwapAsset.usdc,
+        mode: SwapQuoteMode.exactOutput,
+        amount: 105.26,
+        destination: '0xabc123',
+      ),
+    );
+
+    expect(quote.sellAmountText, '1.5000 ZEC');
+    expect(quote.receiveEstimateText, '105.26 USDC');
+    expect(quote.mode, SwapQuoteMode.exactOutput);
+    expect(quote.pairText, 'ZEC -> USDC');
+  });
 
   test('startSwap returns direction-specific initial intent status', () async {
     const provider = StaticNearIntentsSwapProvider();

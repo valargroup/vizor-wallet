@@ -34,6 +34,10 @@ final swapPriceRefreshIntervalProvider = Provider<Duration>((ref) {
   return const Duration(seconds: 30);
 });
 
+final swapPreviewQuoteDebounceProvider = Provider<Duration>((ref) {
+  return const Duration(milliseconds: 500);
+});
+
 const _liveFundsEnabled = bool.fromEnvironment(
   'ZCASH_SWAP_ENABLE_LIVE_FUNDS',
   defaultValue: true,
@@ -55,7 +59,9 @@ final swapInitialExternalRequestsProvider = Provider<List<SwapExternalRequest>>(
 
 class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   var _quoteGeneration = 0;
+  var _previewQuoteGeneration = 0;
   var _statusRefreshInFlight = false;
+  Timer? _previewQuoteDebounce;
 
   String? get _activeAccountUuidOrNull =>
       ref.read(accountProvider).value?.activeAccountUuid;
@@ -93,6 +99,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       unawaited(_loadSupportedExternalAssets(forceRefreshPrices: true));
     });
     ref.onDispose(priceRefreshTimer.cancel);
+    ref.onDispose(() {
+      _previewQuoteDebounce?.cancel();
+    });
     unawaited(_restorePersistedDraft());
     unawaited(_loadSupportedExternalAssets());
     unawaited(_restorePersistedIntents(accountUuid: _activeAccountUuidOrNull));
@@ -101,6 +110,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     return const SwapPrototypeState(
       direction: SwapDirection.zecToExternal,
       amountText: '',
+      receiveAmountText: '',
       destinationText: '',
       externalAsset: SwapAsset.usdc,
       reviewVisible: false,
@@ -119,33 +129,70 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
 
   void selectDirection(SwapDirection direction) {
     _clearReviewState();
-    state = state.copyWith(direction: direction, reviewVisible: false);
+    state = _withIndicativeCounterpart(
+      state.copyWith(
+        direction: direction,
+        quoteMode: SwapQuoteMode.exactInput,
+        reviewVisible: false,
+        clearPreviewQuote: true,
+        clearPreviewQuoteError: true,
+      ),
+    );
     unawaited(_persistDraft(_currentDraftSnapshot));
+    _schedulePreviewQuote();
   }
 
   void toggleDirection() {
     final currentQuote = state.quote;
     final nextDirection = state.direction.toggled;
     final nextAmountText = currentQuote == null
-        ? state.amountText
+        ? state.quoteAmountText
         : currentQuote.receiveAsset.formatAmount(currentQuote.receiveAmount);
 
     _clearReviewState();
-    state = state.copyWith(
-      direction: nextDirection,
-      amountText: nextAmountText,
-      reviewVisible: false,
+    state = _withIndicativeCounterpart(
+      state.copyWith(
+        direction: nextDirection,
+        quoteMode: SwapQuoteMode.exactInput,
+        amountText: nextAmountText,
+        receiveAmountText: '',
+        reviewVisible: false,
+        clearPreviewQuote: true,
+        clearPreviewQuoteError: true,
+      ),
     );
     unawaited(_persistDraft(_currentDraftSnapshot));
+    _schedulePreviewQuote();
   }
 
   void updateAmount(String value) {
     _clearReviewState();
-    state = state.copyWith(
-      amountText: value,
-      reviewVisible: false,
-      clearMaxAmountError: true,
+    state = _withIndicativeCounterpart(
+      state.copyWith(
+        quoteMode: SwapQuoteMode.exactInput,
+        amountText: value,
+        reviewVisible: false,
+        clearPreviewQuote: true,
+        clearPreviewQuoteError: true,
+        clearMaxAmountError: true,
+      ),
     );
+    _schedulePreviewQuote();
+  }
+
+  void updateReceiveAmount(String value) {
+    _clearReviewState();
+    state = _withIndicativeCounterpart(
+      state.copyWith(
+        quoteMode: SwapQuoteMode.exactOutput,
+        receiveAmountText: value,
+        reviewVisible: false,
+        clearPreviewQuote: true,
+        clearPreviewQuoteError: true,
+        clearMaxAmountError: true,
+      ),
+    );
+    _schedulePreviewQuote();
   }
 
   void updateDestination(String value) {
@@ -153,8 +200,11 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     state = state.copyWith(
       destinationText: value,
       reviewVisible: false,
+      clearPreviewQuote: true,
+      clearPreviewQuoteError: true,
       clearMaxAmountError: true,
     );
+    _schedulePreviewQuote();
   }
 
   void selectExternalAsset(SwapAsset asset) {
@@ -164,8 +214,16 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
     if (supportedAsset == null) return;
     _clearReviewState();
-    state = state.copyWith(externalAsset: supportedAsset, reviewVisible: false);
+    state = _withIndicativeCounterpart(
+      state.copyWith(
+        externalAsset: supportedAsset,
+        reviewVisible: false,
+        clearPreviewQuote: true,
+        clearPreviewQuoteError: true,
+      ),
+    );
     unawaited(_persistDraft(_currentDraftSnapshot));
+    _schedulePreviewQuote();
   }
 
   void updateSlippageBps(int value) {
@@ -174,10 +232,14 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     state = state.copyWith(
       slippageBps: normalized,
       reviewVisible: false,
+      clearPreviewQuote: true,
+      clearPreviewQuoteError: true,
       clearQuoteError: true,
       clearStatusError: true,
     );
+    state = _withIndicativeCounterpart(state);
     unawaited(_persistDraft(_currentDraftSnapshot));
+    _schedulePreviewQuote();
   }
 
   Future<void> useMaxZecAmount() async {
@@ -215,15 +277,21 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       }
       final amountText = ZecAmount.fromZatoshi(maxZatoshi).pretty().amountText;
       log('SwapMaxAmount: applied amount=$amountText');
-      state = state.copyWith(
-        amountText: amountText,
-        maxAmountLoading: false,
-        reviewVisible: false,
-        clearReview: true,
-        clearMaxAmountError: true,
-        clearQuoteError: true,
-        clearStatusError: true,
+      state = _withIndicativeCounterpart(
+        state.copyWith(
+          quoteMode: SwapQuoteMode.exactInput,
+          amountText: amountText,
+          maxAmountLoading: false,
+          reviewVisible: false,
+          clearReview: true,
+          clearPreviewQuote: true,
+          clearPreviewQuoteError: true,
+          clearMaxAmountError: true,
+          clearQuoteError: true,
+          clearStatusError: true,
+        ),
       );
+      _schedulePreviewQuote();
     } catch (e) {
       final msg = e.toString().toLowerCase();
       state = state.copyWith(
@@ -260,7 +328,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       final selected =
           _supportedAssetFor(state.externalAsset, supported) ?? supported.first;
       final selectedChanged = selected != state.externalAsset;
-      state = state.copyWith(
+      var nextState = state.copyWith(
         supportedExternalAssets: supported,
         indicativeExternalPerZec:
             pricing?.externalPerZec ?? state.indicativeExternalPerZec,
@@ -269,6 +337,10 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
         clearReview: selectedChanged,
         clearQuoteError: true,
       );
+      if (nextState.reviewQuote == null && nextState.previewQuote == null) {
+        nextState = _withIndicativeCounterpart(nextState);
+      }
+      state = nextState;
     } catch (_) {
       // Keep the static fallback so the prototype remains usable offline.
     }
@@ -278,7 +350,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     if (!state.canReviewQuote) return;
 
     final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
-    final amount = state.sellAmount;
+    final amount = state.quoteAmount;
     if (accountUuid == null || amount == null) {
       return;
     }
@@ -286,12 +358,17 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     final direction = state.direction;
     final externalAsset = state.externalAsset;
     final userExternalAddress = state.destinationText;
+    final quoteMode = state.quoteMode;
+    final amountText = state.quoteAmountText;
     final generation = ++_quoteGeneration;
+    _previewQuoteGeneration++;
+    _previewQuoteDebounce?.cancel();
     final draft = _currentDraftSnapshot;
 
     state = state.copyWith(
       reviewVisible: false,
       quoteLoading: true,
+      previewQuoteLoading: false,
       clearReview: true,
       clearQuoteError: true,
     );
@@ -310,8 +387,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
           .read(swapIntentProvider)
           .quote(
             addressPlan.toQuoteRequest(
-              sellAmount: amount,
-              sellAmountText: state.amountText.trim(),
+              mode: quoteMode,
+              amount: amount,
+              amountText: amountText,
               slippageBps: state.slippageBps,
             ),
           );
@@ -444,6 +522,8 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     state = state.copyWith(
       reviewVisible: false,
       amountText: '',
+      receiveAmountText: '',
+      quoteMode: SwapQuoteMode.exactInput,
       destinationText: '',
       intents: [intent, ...state.intents],
       startSubmitting: false,
@@ -451,6 +531,8 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       selectedIntentId: intent.id,
       depositTxHashText: '',
       clearReview: true,
+      clearPreviewQuote: true,
+      clearPreviewQuoteError: true,
       clearQuoteError: true,
       clearStatusError: true,
     );
@@ -600,7 +682,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     state = state.copyWith(
       direction: direction,
       externalAsset: externalAsset,
+      quoteMode: SwapQuoteMode.exactInput,
       amountText: amountText,
+      receiveAmountText: '',
       destinationText: destinationText,
       reviewVisible: false,
       quoteLoading: false,
@@ -611,9 +695,13 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       ),
       selectedRequestId: request.id,
       clearReview: true,
+      clearPreviewQuote: true,
+      clearPreviewQuoteError: true,
       clearQuoteError: true,
       clearStatusError: true,
     );
+    state = _withIndicativeCounterpart(state);
+    _schedulePreviewQuote();
     return true;
   }
 
@@ -653,15 +741,21 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     state = state.copyWith(
       direction: direction,
       externalAsset: externalAsset,
+      quoteMode: SwapQuoteMode.exactInput,
       amountText: amountText,
+      receiveAmountText: '',
       destinationText: destinationText,
       reviewVisible: false,
       quoteLoading: false,
       depositTxHashText: '',
       clearReview: true,
+      clearPreviewQuote: true,
+      clearPreviewQuoteError: true,
       clearQuoteError: true,
       clearStatusError: true,
     );
+    state = _withIndicativeCounterpart(state);
+    _schedulePreviewQuote();
   }
 
   void expireReviewQuote() {
@@ -1033,17 +1127,147 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
+  SwapPrototypeState _withIndicativeCounterpart(SwapPrototypeState next) {
+    final estimate = next.draftQuote;
+    if (estimate == null) {
+      return next.quoteMode == SwapQuoteMode.exactInput
+          ? next.copyWith(receiveAmountText: '')
+          : next.copyWith(amountText: '');
+    }
+    if (next.quoteMode == SwapQuoteMode.exactInput) {
+      return next.copyWith(
+        receiveAmountText: estimate.receiveAsset.formatAmount(
+          estimate.receiveAmount,
+        ),
+      );
+    }
+    return next.copyWith(
+      amountText: estimate.sellAsset.formatAmount(estimate.sellAmount),
+    );
+  }
+
+  void _schedulePreviewQuote() {
+    _previewQuoteDebounce?.cancel();
+    final generation = ++_previewQuoteGeneration;
+    if (state.quoteMode != SwapQuoteMode.exactOutput) {
+      state = state.copyWith(
+        previewQuoteLoading: false,
+        clearPreviewQuote: true,
+        clearPreviewQuoteError: true,
+      );
+      return;
+    }
+    final amount = state.quoteAmount;
+    final accountUuid = _activeAccountUuidOrNull;
+    if (amount == null ||
+        accountUuid == null ||
+        state.destinationText.trim().isEmpty) {
+      state = state.copyWith(
+        previewQuoteLoading: false,
+        clearPreviewQuote: true,
+        clearPreviewQuoteError: true,
+      );
+      return;
+    }
+
+    state = state.copyWith(
+      previewQuoteLoading: true,
+      clearPreviewQuoteError: true,
+    );
+    final delay = ref.read(swapPreviewQuoteDebounceProvider);
+    if (delay == Duration.zero) {
+      unawaited(_loadPreviewQuote(generation));
+      return;
+    }
+    _previewQuoteDebounce = Timer(delay, () {
+      unawaited(_loadPreviewQuote(generation));
+    });
+  }
+
+  Future<void> _loadPreviewQuote(int generation) async {
+    final accountUuid = _activeAccountUuidOrNull;
+    final amount = state.quoteAmount;
+    if (accountUuid == null || amount == null) {
+      return;
+    }
+    final direction = state.direction;
+    final externalAsset = state.externalAsset;
+    final userExternalAddress = state.destinationText;
+    final quoteMode = state.quoteMode;
+    final amountText = state.quoteAmountText;
+    final slippageBps = state.slippageBps;
+
+    try {
+      final stagingAddress = await ref
+          .read(swapZecStagingAddressServiceProvider)
+          .prepareForPreviewQuote(accountUuid: accountUuid);
+      final addressPlan = stagingAddress.toAddressPlan(
+        direction: direction,
+        externalAsset: externalAsset,
+        userExternalAddress: userExternalAddress,
+      );
+      final quote = await ref
+          .read(swapIntentProvider)
+          .quote(
+            addressPlan.toQuoteRequest(
+              mode: quoteMode,
+              amount: amount,
+              amountText: amountText,
+              dryRun: true,
+              slippageBps: slippageBps,
+            ),
+          );
+      if (generation != _previewQuoteGeneration) return;
+      if (!_isAccountActive(accountUuid)) return;
+      if (state.quoteMode != quoteMode ||
+          state.direction != direction ||
+          state.externalAsset != externalAsset ||
+          state.destinationText != userExternalAddress) {
+        return;
+      }
+      state = _withPreviewQuoteCounterpart(
+        state.copyWith(
+          previewQuote: quote,
+          previewQuoteLoading: false,
+          clearPreviewQuoteError: true,
+        ),
+        quote,
+      );
+    } catch (e) {
+      if (generation != _previewQuoteGeneration) return;
+      state = state.copyWith(
+        previewQuoteLoading: false,
+        previewQuoteError: _friendlyQuoteError(e),
+        clearPreviewQuote: true,
+      );
+    }
+  }
+
+  SwapPrototypeState _withPreviewQuoteCounterpart(
+    SwapPrototypeState next,
+    SwapQuote quote,
+  ) {
+    return next.copyWith(
+      amountText: quote.sellAsset.formatAmount(quote.sellAmount),
+    );
+  }
+
   void _clearAccountScopedTransientState() {
     _quoteGeneration++;
+    _previewQuoteGeneration++;
+    _previewQuoteDebounce?.cancel();
     state = state.copyWith(
       reviewVisible: false,
       quoteLoading: false,
+      previewQuoteLoading: false,
       startSubmitting: false,
       maxAmountLoading: false,
       depositSubmitting: false,
       depositTxHashText: '',
       statusRefreshing: false,
       clearReview: true,
+      clearPreviewQuote: true,
+      clearPreviewQuoteError: true,
       clearQuoteError: true,
       clearStatusError: true,
       clearMaxAmountError: true,
@@ -1095,6 +1319,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       final draft = await ref.read(swapSessionStoreProvider).loadDraft();
       if (draft == null) return;
       if (state.amountText.isNotEmpty ||
+          state.receiveAmountText.isNotEmpty ||
           state.destinationText.isNotEmpty ||
           state.quoteLoading ||
           state.reviewVisible) {
@@ -1293,6 +1518,8 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   ) {
     final sendsZec = quote.direction.sendsZec;
     final externalSymbol = quote.externalAsset.symbol;
+    final providerRefundInfo =
+        snapshot.providerRefundInfo ?? quote.providerRefundInfo;
     return SwapPrototypeIntent(
       id: snapshot.id,
       title: sendsZec ? 'ZEC to $externalSymbol' : '$externalSymbol to ZEC',
@@ -1393,6 +1620,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
           label: 'Refund to',
           value: addressPlan.oneClickRefundTo,
         ),
+        ..._providerRefundFields(providerRefundInfo),
       ],
       direction: quote.direction,
       externalAsset: quote.externalAsset,
@@ -1404,6 +1632,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       providerStatusRaw: snapshot.providerStatusRaw,
       nearIntentHash: snapshot.nearIntentHash,
       nearTransactionHash: snapshot.nearTransactionHash,
+      originChainTxHash: snapshot.originChainTxHash,
+      destinationChainTxHash: snapshot.destinationChainTxHash,
+      providerRefundInfo: providerRefundInfo,
       oneClickRecipient: addressPlan.oneClickRecipient,
       oneClickRefundTo: addressPlan.oneClickRefundTo,
       accountUuid: accountUuid,
@@ -1416,6 +1647,15 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   ) {
     final status = snapshot.status;
     final nextAction = snapshot.nextAction;
+    final providerRefundInfo =
+        intent.providerRefundInfo?.merge(snapshot.providerRefundInfo) ??
+        snapshot.providerRefundInfo;
+    final receiptWithStatus = snapshot.providerStatusRaw == null
+        ? intent.receipt
+        : _receiptWithProviderStatus(
+            intent.receipt,
+            snapshot.providerStatusRaw!,
+          );
     return intent.copyWith(
       id: intent.id,
       pair: snapshot.pairText,
@@ -1429,12 +1669,14 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       nearIntentHash: snapshot.nearIntentHash ?? intent.nearIntentHash,
       nearTransactionHash:
           snapshot.nearTransactionHash ?? intent.nearTransactionHash,
-      receipt: snapshot.providerStatusRaw == null
-          ? intent.receipt
-          : _receiptWithProviderStatus(
-              intent.receipt,
-              snapshot.providerStatusRaw!,
-            ),
+      originChainTxHash: snapshot.originChainTxHash ?? intent.originChainTxHash,
+      destinationChainTxHash:
+          snapshot.destinationChainTxHash ?? intent.destinationChainTxHash,
+      providerRefundInfo: providerRefundInfo,
+      receipt: _receiptWithProviderRefundInfo(
+        receiptWithStatus,
+        providerRefundInfo,
+      ),
       depositAddress:
           intent.depositAddress ?? snapshot.depositInstruction.address,
       depositMemo: intent.depositMemo ?? snapshot.depositInstruction.memo,
@@ -1449,10 +1691,11 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     required String txHash,
     String? broadcastNotice,
   }) {
-    return _updateIntentFromSnapshot(intent, snapshot).copyWith(
+    final updated = _updateIntentFromSnapshot(intent, snapshot);
+    return updated.copyWith(
       depositTxHash: txHash,
       receipt: _receiptWithBroadcastNotice(
-        _receiptWithDepositTx(intent.receipt, txHash),
+        _receiptWithDepositTx(updated.receipt, txHash),
         broadcastNotice,
       ),
       statusError: broadcastNotice,
@@ -1526,6 +1769,45 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       for (final field in receipt)
         if (field.label != 'Provider status') field,
       SwapPrototypeField(label: 'Provider status', value: providerStatus),
+    ];
+  }
+
+  List<SwapPrototypeField> _receiptWithProviderRefundInfo(
+    List<SwapPrototypeField> receipt,
+    SwapProviderRefundInfo? info,
+  ) {
+    final fields = _providerRefundFields(info);
+    if (fields.isEmpty) return receipt;
+    final labels = fields.map((field) => field.label).toSet();
+    return [
+      for (final field in receipt)
+        if (!labels.contains(field.label)) field,
+      ...fields,
+    ];
+  }
+
+  List<SwapPrototypeField> _providerRefundFields(SwapProviderRefundInfo? info) {
+    if (info == null || !info.hasAny) return const [];
+    return [
+      if (info.minimumDepositText != null)
+        SwapPrototypeField(
+          label: 'Minimum deposit',
+          value: info.minimumDepositText!,
+        ),
+      if (info.refundFeeText != null)
+        SwapPrototypeField(label: 'Refund fee', value: info.refundFeeText!),
+      if (info.depositedAmountText != null)
+        SwapPrototypeField(
+          label: 'Provider deposited',
+          value: info.depositedAmountText!,
+        ),
+      if (info.refundedAmountText != null)
+        SwapPrototypeField(
+          label: 'Provider refunded',
+          value: info.refundedAmountText!,
+        ),
+      if (info.refundReason != null)
+        SwapPrototypeField(label: 'Refund reason', value: info.refundReason!),
     ];
   }
 

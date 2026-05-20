@@ -16,7 +16,8 @@ class StaticNearIntentsSwapProvider implements SwapProvider {
     return SwapQuote.estimate(
       direction: request.direction,
       externalAsset: request.externalAsset,
-      sellAmount: request.sellAmount,
+      mode: request.mode,
+      amount: request.amount,
       providerLabel: providerLabel,
     );
   }

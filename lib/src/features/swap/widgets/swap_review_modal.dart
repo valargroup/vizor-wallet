@@ -20,6 +20,7 @@ class SwapReviewModal extends StatelessWidget {
     required this.starting,
     required this.amountWarning,
     required this.startError,
+    this.startBlockedReason,
     required this.onReviewAgain,
     required this.onCancelReview,
     required this.onStartIntent,
@@ -33,6 +34,7 @@ class SwapReviewModal extends StatelessWidget {
   final bool starting;
   final String? amountWarning;
   final String? startError;
+  final String? startBlockedReason;
   final VoidCallback onReviewAgain;
   final VoidCallback onCancelReview;
   final VoidCallback onStartIntent;
@@ -144,6 +146,10 @@ class SwapReviewModal extends StatelessWidget {
                         const SizedBox(height: AppSpacing.xs),
                         _ReviewNotice(message: startError!),
                       ],
+                      if (startBlockedReason != null) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        _ReviewNotice(message: startBlockedReason!),
+                      ],
                     ],
                   ),
                 ),
@@ -154,6 +160,7 @@ class SwapReviewModal extends StatelessWidget {
               _ReviewActions(
                 expired: expired,
                 starting: starting,
+                startBlockedReason: startBlockedReason,
                 sendsZec: quote.direction.sendsZec,
                 onCancelReview: onCancelReview,
                 onReviewAgain: onReviewAgain,
@@ -228,8 +235,12 @@ class _ReviewConsentPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final sendsZec = quote.direction.sendsZec;
+    final exactOutput = quote.mode == SwapQuoteMode.exactOutput;
+    final zecDepositLabel = exactOutput
+        ? 'the required ZEC deposit'
+        : 'the ZEC deposit';
     final title = sendsZec
-        ? 'Approval sends the ZEC deposit'
+        ? 'Approval sends $zecDepositLabel'
         : 'Approval locks deposit instructions';
     final detail = sendsZec
         ? 'The wallet creates the ZEC deposit transaction to a one-time transparent address. Only txid and status are used to track the swap.'
@@ -583,6 +594,8 @@ class _ReviewFeeSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final isExactOutput = quote.mode == SwapQuoteMode.exactOutput;
+    final refundFeeText = quote.providerRefundInfo?.refundFeeText;
     return Container(
       key: const ValueKey('swap_review_fee_summary'),
       padding: const EdgeInsets.all(AppSpacing.s),
@@ -616,20 +629,54 @@ class _ReviewFeeSummary extends StatelessWidget {
             value: quote.feeLabel,
             detail: 'Already reflected in the shown rate.',
           ),
-          _ReviewFeeRow(
-            label: 'Price protection',
-            value: _priceProtectionText(quote),
-            detail: 'Difference between estimate and minimum receive.',
-          ),
-          _ReviewFeeRow(
-            label: 'Minimum receive',
-            value: compactSwapAmountText(quote.minimumReceiveText),
-            detail: 'Lowest amount accepted before the swap refreshes.',
-          ),
+          if (isExactOutput) ...[
+            _ReviewFeeRow(
+              label: 'Target receive',
+              value: compactSwapAmountText(quote.receiveEstimateText),
+              detail: 'Requested output amount for this quote.',
+            ),
+            _ReviewFeeRow(
+              label: 'Required pay',
+              value: compactSwapAmountText(quote.sellAmountText),
+              detail: _exactOutputRequiredPayDetail(quote),
+            ),
+            if (refundFeeText != null)
+              _ReviewFeeRow(
+                label: 'Refund fee',
+                value: compactSwapAmountText(refundFeeText),
+                detail: 'Provider fee used if an origin-chain refund is sent.',
+              ),
+            _ReviewFeeRow(
+              label: 'Unused input',
+              value: 'May be refunded',
+              detail:
+                  'Any input above what the provider actually needs can return to the refund path after the swap, but tiny remainders may be consumed by network or refund fees.',
+            ),
+          ] else ...[
+            _ReviewFeeRow(
+              label: 'Price protection',
+              value: _priceProtectionText(quote),
+              detail: 'Difference between estimate and minimum receive.',
+            ),
+            _ReviewFeeRow(
+              label: 'Minimum receive',
+              value: compactSwapAmountText(quote.minimumReceiveText),
+              detail: 'Lowest amount accepted before the swap refreshes.',
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+String _exactOutputRequiredPayDetail(SwapQuote quote) {
+  final minimumDeposit = quote.providerRefundInfo?.minimumDepositText;
+  if (minimumDeposit == null) {
+    return 'Includes the provider input buffer for the exact receive amount.';
+  }
+  return 'Includes the provider input buffer. Minimum needed is '
+      '${compactSwapAmountText(minimumDeposit)}.';
 }
 
 class _ReviewFeeRow extends StatelessWidget {
@@ -812,6 +859,7 @@ class _ReviewActions extends StatelessWidget {
   const _ReviewActions({
     required this.expired,
     required this.starting,
+    this.startBlockedReason,
     required this.sendsZec,
     required this.onCancelReview,
     required this.onReviewAgain,
@@ -820,6 +868,7 @@ class _ReviewActions extends StatelessWidget {
 
   final bool expired;
   final bool starting;
+  final String? startBlockedReason;
   final bool sendsZec;
   final VoidCallback onCancelReview;
   final VoidCallback onReviewAgain;
@@ -883,14 +932,20 @@ class _ReviewActions extends StatelessWidget {
         Expanded(
           child: _ReviewActionButton(
             buttonKey: const ValueKey('swap_start_button'),
-            onPressed: starting ? null : onStartIntent,
+            onPressed: starting || startBlockedReason != null
+                ? null
+                : onStartIntent,
             variant: AppButtonVariant.primary,
             trailing: sendsZec
                 ? null
                 : starting
                 ? const AppIcon(AppIcons.loader)
                 : const AppIcon(AppIcons.arrowForwardIos),
-            child: Text(starting ? startingLabel : startLabel),
+            child: Text(
+              startBlockedReason == null
+                  ? (starting ? startingLabel : startLabel)
+                  : 'Insufficient ZEC',
+            ),
           ),
         ),
       ],

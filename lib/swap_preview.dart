@@ -73,7 +73,7 @@ Future<void> main() async {
         ),
         swapZecStagingAddressServiceProvider.overrideWith(
           (ref) => SwapZecStagingAddressService(
-            loadShieldedAddress: ({required accountUuid}) async {
+            loadCurrentShieldedAddress: ({required accountUuid}) async {
               return 'u1preview-shielded-recipient';
             },
           ),
@@ -127,7 +127,7 @@ List<SwapPrototypeIntent> _previewIntents(String scenario) {
       title: 'USDC to ZEC',
       pair: 'USDC -> ZEC',
       sellAmount: '12345.678901 USDC',
-      receiveEstimate: '~175.9421 ZEC',
+      receiveEstimate: '175.9421 ZEC',
       provider: 'NEAR Intents',
       status: SwapIntentStatus.awaitingExternalDeposit,
       nextAction:
@@ -221,7 +221,8 @@ class _PreviewSwapProvider implements SwapProvider {
     final estimate = SwapQuote.estimate(
       direction: request.direction,
       externalAsset: request.externalAsset,
-      sellAmount: request.sellAmount,
+      mode: request.mode,
+      amount: request.amount,
       providerLabel: providerLabel,
     );
     return SwapQuote(
@@ -229,6 +230,7 @@ class _PreviewSwapProvider implements SwapProvider {
       sellAsset: estimate.sellAsset,
       receiveAsset: estimate.receiveAsset,
       externalAsset: estimate.externalAsset,
+      mode: estimate.mode,
       sellAmount: estimate.sellAmount,
       receiveAmount: estimate.receiveAmount,
       minimumReceiveAmount: estimate.minimumReceiveAmount,
@@ -267,7 +269,7 @@ class _PreviewSwapProvider implements SwapProvider {
       providerLabel: providerLabel,
       pairText: 'USDC -> ZEC',
       sellAmountText: '12345.678901 USDC',
-      receiveEstimateText: '~175.9421 ZEC',
+      receiveEstimateText: '175.9421 ZEC',
       status: SwapIntentStatus.awaitingExternalDeposit,
       nextAction:
           'Send the external deposit, then submit the source-chain transaction hash after confirmation.',
@@ -293,7 +295,7 @@ class _PreviewSwapProvider implements SwapProvider {
       providerLabel: providerLabel,
       pairText: 'USDC -> ZEC',
       sellAmountText: '12345.678901 USDC',
-      receiveEstimateText: '~175.9421 ZEC',
+      receiveEstimateText: '175.9421 ZEC',
       status: SwapIntentStatus.depositObserved,
       nextAction: 'Deposit detected by 1Click',
       depositInstruction: SwapDepositInstruction(

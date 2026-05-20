@@ -9,7 +9,12 @@ import '../domain/swap_contract.dart';
 final swapZecStagingAddressServiceProvider =
     Provider<SwapZecStagingAddressService>((ref) {
       return SwapZecStagingAddressService(
-        loadShieldedAddress: ({required accountUuid}) {
+        loadCurrentShieldedAddress: ({required accountUuid}) {
+          return ref
+              .read(receiveAddressServiceProvider)
+              .loadShieldedAddress(accountUuid: accountUuid);
+        },
+        prepareFreshShieldedAddress: ({required accountUuid}) {
           return _loadSwapShieldedRecipientAddress(
             ref,
             accountUuid: accountUuid,
@@ -83,27 +88,47 @@ class SwapZecStagingAddressUnavailableException implements Exception {
 
 class SwapZecStagingAddressService {
   const SwapZecStagingAddressService({
-    required LoadShieldedAddress loadShieldedAddress,
-  }) : _loadShieldedAddress = loadShieldedAddress;
+    required LoadShieldedAddress loadCurrentShieldedAddress,
+    LoadShieldedAddress? prepareFreshShieldedAddress,
+  }) : _loadCurrentShieldedAddress = loadCurrentShieldedAddress,
+       _prepareFreshShieldedAddress =
+           prepareFreshShieldedAddress ?? loadCurrentShieldedAddress;
 
-  final LoadShieldedAddress _loadShieldedAddress;
+  final LoadShieldedAddress _loadCurrentShieldedAddress;
+  final LoadShieldedAddress _prepareFreshShieldedAddress;
+
+  Future<SwapZecStagingAddress> prepareForPreviewQuote({
+    required String accountUuid,
+  }) async {
+    return _prepareShieldedRecipient(
+      accountUuid,
+      loadShieldedAddress: _loadCurrentShieldedAddress,
+      operationLabel: 'preview',
+    );
+  }
 
   Future<SwapZecStagingAddress> prepareForQuote({
     required String accountUuid,
   }) async {
-    return _prepareShieldedRecipient(accountUuid);
+    return _prepareShieldedRecipient(
+      accountUuid,
+      loadShieldedAddress: _prepareFreshShieldedAddress,
+      operationLabel: 'quote',
+    );
   }
 
   Future<SwapZecStagingAddress> _prepareShieldedRecipient(
-    String accountUuid,
-  ) async {
+    String accountUuid, {
+    required LoadShieldedAddress loadShieldedAddress,
+    required String operationLabel,
+  }) async {
     try {
-      final address = await _loadShieldedAddress(accountUuid: accountUuid);
+      final address = await loadShieldedAddress(accountUuid: accountUuid);
       return SwapZecStagingAddress(address: address);
     } catch (e) {
       log(
         'SwapZecStagingAddressService: shielded receive address preparation '
-        'failed; blocking quote: $e',
+        'failed; blocking $operationLabel: $e',
       );
       throw SwapZecStagingAddressUnavailableException(e);
     }

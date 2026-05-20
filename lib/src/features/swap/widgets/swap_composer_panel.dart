@@ -15,6 +15,7 @@ class SwapComposerPanel extends StatefulWidget {
   const SwapComposerPanel({
     required this.state,
     required this.onAmountChanged,
+    required this.onReceiveAmountChanged,
     required this.onDestinationChanged,
     required this.onDirectionChanged,
     required this.onToggleDirection,
@@ -28,6 +29,7 @@ class SwapComposerPanel extends StatefulWidget {
 
   final SwapPrototypeState state;
   final ValueChanged<String> onAmountChanged;
+  final ValueChanged<String> onReceiveAmountChanged;
   final ValueChanged<String> onDestinationChanged;
   final ValueChanged<SwapDirection> onDirectionChanged;
   final VoidCallback onToggleDirection;
@@ -43,6 +45,7 @@ class SwapComposerPanel extends StatefulWidget {
 
 class _SwapComposerPanelState extends State<SwapComposerPanel> {
   late final TextEditingController _amountController;
+  late final TextEditingController _receiveAmountController;
   late final TextEditingController _destinationController;
   late final TextEditingController _assetQueryController;
   late final Object _overlayTapRegionGroup;
@@ -53,6 +56,9 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
   void initState() {
     super.initState();
     _amountController = TextEditingController(text: widget.state.amountText);
+    _receiveAmountController = TextEditingController(
+      text: widget.state.receiveAmountText,
+    );
     _destinationController = TextEditingController(
       text: widget.state.destinationText,
     );
@@ -64,12 +70,14 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
   void didUpdateWidget(covariant SwapComposerPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncController(_amountController, widget.state.amountText);
+    _syncController(_receiveAmountController, widget.state.receiveAmountText);
     _syncController(_destinationController, widget.state.destinationText);
   }
 
   @override
   void dispose() {
     _amountController.dispose();
+    _receiveAmountController.dispose();
     _destinationController.dispose();
     _assetQueryController.dispose();
     super.dispose();
@@ -145,6 +153,8 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
     final sendsZec = state.direction.sendsZec;
     final targetDirection = state.direction.toggled;
     final rateText = _rateTextForState(state);
+    final quoteBusy = state.quoteLoading || state.previewQuoteLoading;
+    final quoteError = state.quoteError ?? state.previewQuoteError;
     final zecAmountOverAvailable = _zecAmountOverAvailable(
       state,
       widget.zecAvailableZatoshi,
@@ -164,7 +174,7 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
         children: [
           _SwapTicketHeader(
             rateText: rateText,
-            quoteLoading: state.quoteLoading,
+            quoteLoading: quoteBusy,
             slippageBps: state.slippageBps,
             settingsOpen: _settingsOpen,
             onSettingsTap: _toggleSettings,
@@ -175,8 +185,10 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
             helper: sendsZec ? 'Shielded ZEC' : 'External source',
             tone: _SwapAmountTileTone.input,
             amount: _SwapAmountInput(
+              key: const ValueKey('swap_amount_field'),
               controller: _amountController,
               onChanged: widget.onAmountChanged,
+              hintText: sendsZec ? '0.0000' : '0.00',
             ),
             asset: sendsZec
                 ? const _TokenPill(asset: SwapAsset.zec, label: 'Zcash wallet')
@@ -213,13 +225,19 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
           const SizedBox(height: AppSpacing.xxs),
           _SwapAmountTile(
             label: 'You receive',
-            helper: quote == null
-                ? 'Estimated receive'
+            helper: state.quoteMode == SwapQuoteMode.exactOutput
+                ? (quote == null ? 'Target receive' : 'Exact output quote')
+                : quote == null
+                ? 'Enter target amount'
                 : 'Minimum ${compactSwapAmountText(quote.minimumReceiveText)}',
             tone: _SwapAmountTileTone.output,
-            amount: _ReceiveAmountText(
-              quote: quote,
-              receiveSymbol: state.direction.toSymbol(state.externalAsset),
+            amount: _SwapAmountInput(
+              key: const ValueKey('swap_receive_amount_field'),
+              controller: _receiveAmountController,
+              onChanged: widget.onReceiveAmountChanged,
+              hintText: state.direction.toSymbol(state.externalAsset) == 'ZEC'
+                  ? '0.0000'
+                  : '0.00',
             ),
             asset: sendsZec
                 ? _ExternalAssetButton(
@@ -240,9 +258,9 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
               onChanged: widget.onDestinationChanged,
             ),
           ],
-          if (state.quoteError != null) ...[
+          if (quoteError != null) ...[
             const SizedBox(height: AppSpacing.xs),
-            _QuoteErrorBanner(message: state.quoteError!),
+            _QuoteErrorBanner(message: quoteError),
           ],
         ],
       ),
@@ -447,10 +465,16 @@ class _SwapAmountTile extends StatelessWidget {
 }
 
 class _SwapAmountInput extends StatelessWidget {
-  const _SwapAmountInput({required this.controller, required this.onChanged});
+  const _SwapAmountInput({
+    required this.controller,
+    required this.onChanged,
+    required this.hintText,
+    super.key,
+  });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+  final String hintText;
 
   @override
   Widget build(BuildContext context) {
@@ -462,7 +486,6 @@ class _SwapAmountInput extends StatelessWidget {
       fontWeight: FontWeight.w500,
     );
     return TextField(
-      key: const ValueKey('swap_amount_field'),
       controller: controller,
       onChanged: onChanged,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -470,7 +493,7 @@ class _SwapAmountInput extends StatelessWidget {
       style: valueStyle,
       cursorColor: colors.text.accent,
       decoration: InputDecoration.collapsed(
-        hintText: '0.00',
+        hintText: hintText,
         hintStyle: valueStyle.copyWith(color: colors.text.disabled),
       ),
     );
@@ -551,39 +574,6 @@ class _SwapMaxAmountFooter extends StatelessWidget {
       ],
     );
   }
-}
-
-class _ReceiveAmountText extends StatelessWidget {
-  const _ReceiveAmountText({required this.quote, required this.receiveSymbol});
-
-  final SwapQuote? quote;
-  final String receiveSymbol;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final emptyAmount = receiveSymbol == 'ZEC' ? '0.0000' : '0.00';
-    final value = quote == null
-        ? emptyAmount
-        : compactSwapAmountText(
-            _stripTrailingSymbol(quote!.receiveEstimateText, receiveSymbol),
-          );
-    return Text(
-      value,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: AppTypography.headlineSmall.copyWith(
-        color: quote == null ? colors.text.disabled : colors.text.accent,
-        fontSize: 28,
-        height: 32 / 28,
-        fontWeight: FontWeight.w500,
-      ),
-    );
-  }
-}
-
-String _stripTrailingSymbol(String value, String symbol) {
-  return value.replaceFirst(RegExp(r'\s+' + RegExp.escape(symbol) + r'$'), '');
 }
 
 String _rateTextForState(SwapPrototypeState state) {

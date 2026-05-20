@@ -73,7 +73,10 @@ class SwapAddressPlan {
   }
 
   SwapQuoteRequest toQuoteRequest({
-    required double sellAmount,
+    double? amount,
+    double? sellAmount,
+    SwapQuoteMode mode = SwapQuoteMode.exactInput,
+    String? amountText,
     String? sellAmountText,
     bool dryRun = false,
     int? slippageBps,
@@ -82,7 +85,10 @@ class SwapAddressPlan {
     return SwapQuoteRequest(
       direction: direction,
       externalAsset: externalAsset,
+      mode: mode,
+      amount: amount,
       sellAmount: sellAmount,
+      amountText: amountText,
       sellAmountText: sellAmountText,
       destination: oneClickRecipient,
       refundAddress: oneClickRefundTo,

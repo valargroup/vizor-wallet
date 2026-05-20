@@ -26,6 +26,14 @@ void main() {
         plan.toQuoteRequest(sellAmount: 1.5).refundAddress,
         'u1wallet-refund',
       );
+      final exactOutput = plan.toQuoteRequest(
+        mode: SwapQuoteMode.exactOutput,
+        amount: 105.25,
+        amountText: '105.25',
+      );
+      expect(exactOutput.mode, SwapQuoteMode.exactOutput);
+      expect(exactOutput.amountAsset, SwapAsset.usdc);
+      expect(exactOutput.amount, 105.25);
     },
   );
 

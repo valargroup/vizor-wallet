@@ -155,6 +155,9 @@ class SwapPrototypeIntent {
     this.providerStatusRaw,
     this.nearIntentHash,
     this.nearTransactionHash,
+    this.originChainTxHash,
+    this.destinationChainTxHash,
+    this.providerRefundInfo,
     this.lastStatusCheckedAt,
     this.statusError,
     this.oneClickRecipient,
@@ -184,6 +187,9 @@ class SwapPrototypeIntent {
   final String? providerStatusRaw;
   final String? nearIntentHash;
   final String? nearTransactionHash;
+  final String? originChainTxHash;
+  final String? destinationChainTxHash;
+  final SwapProviderRefundInfo? providerRefundInfo;
   final DateTime? lastStatusCheckedAt;
   final String? statusError;
   final String? oneClickRecipient;
@@ -215,6 +221,9 @@ class SwapPrototypeIntent {
     String? providerStatusRaw,
     String? nearIntentHash,
     String? nearTransactionHash,
+    String? originChainTxHash,
+    String? destinationChainTxHash,
+    SwapProviderRefundInfo? providerRefundInfo,
     DateTime? lastStatusCheckedAt,
     String? statusError,
     String? oneClickRecipient,
@@ -245,6 +254,10 @@ class SwapPrototypeIntent {
       providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
       nearIntentHash: nearIntentHash ?? this.nearIntentHash,
       nearTransactionHash: nearTransactionHash ?? this.nearTransactionHash,
+      originChainTxHash: originChainTxHash ?? this.originChainTxHash,
+      destinationChainTxHash:
+          destinationChainTxHash ?? this.destinationChainTxHash,
+      providerRefundInfo: providerRefundInfo ?? this.providerRefundInfo,
       lastStatusCheckedAt: lastStatusCheckedAt ?? this.lastStatusCheckedAt,
       statusError: clearStatusError ? null : statusError ?? this.statusError,
       oneClickRecipient: oneClickRecipient ?? this.oneClickRecipient,
@@ -259,15 +272,20 @@ class SwapPrototypeState {
   const SwapPrototypeState({
     required this.direction,
     required this.amountText,
+    required this.receiveAmountText,
     required this.destinationText,
     required this.externalAsset,
     required this.reviewVisible,
     required this.intents,
     required this.externalRequests,
     required this.requestImportText,
+    this.quoteMode = SwapQuoteMode.exactInput,
     this.slippageBps = defaultSwapSlippageBps,
     this.supportedExternalAssets = swapExternalAssets,
     this.indicativeExternalPerZec = const {},
+    this.previewQuote,
+    this.previewQuoteLoading = false,
+    this.previewQuoteError,
     this.reviewQuote,
     this.reviewAddressPlan,
     this.reviewAccountUuid,
@@ -288,15 +306,20 @@ class SwapPrototypeState {
 
   final SwapDirection direction;
   final String amountText;
+  final String receiveAmountText;
   final String destinationText;
   final SwapAsset externalAsset;
   final bool reviewVisible;
   final List<SwapPrototypeIntent> intents;
   final List<SwapExternalRequest> externalRequests;
   final String requestImportText;
+  final SwapQuoteMode quoteMode;
   final int slippageBps;
   final List<SwapAsset> supportedExternalAssets;
   final Map<SwapAsset, double> indicativeExternalPerZec;
+  final SwapQuote? previewQuote;
+  final bool previewQuoteLoading;
+  final String? previewQuoteError;
   final SwapQuote? reviewQuote;
   final SwapAddressPlan? reviewAddressPlan;
   final String? reviewAccountUuid;
@@ -368,6 +391,19 @@ class SwapPrototypeState {
     return amount;
   }
 
+  double? get receiveAmount {
+    final amount = double.tryParse(receiveAmountText);
+    if (amount == null || amount <= 0) return null;
+    return amount;
+  }
+
+  double? get quoteAmount =>
+      quoteMode == SwapQuoteMode.exactInput ? sellAmount : receiveAmount;
+
+  String get quoteAmountText => quoteMode == SwapQuoteMode.exactInput
+      ? amountText.trim()
+      : receiveAmountText.trim();
+
   SwapAddressPlan? get addressPlan => reviewAddressPlan ?? draftAddressPlan;
 
   SwapAddressPlan? get draftAddressPlan {
@@ -389,20 +425,21 @@ class SwapPrototypeState {
       : 'Refund address on the ${externalAsset.symbol} source chain';
 
   bool get canReviewQuote =>
-      sellAmount != null && draftAddressPlan != null && !quoteLoading;
+      quoteAmount != null && draftAddressPlan != null && !quoteLoading;
 
   bool get canSubmitDepositTx =>
       depositTxHashText.trim().isNotEmpty && !depositSubmitting;
 
-  SwapQuote? get quote => reviewQuote ?? draftQuote;
+  SwapQuote? get quote => reviewQuote ?? previewQuote ?? draftQuote;
 
   SwapQuote? get draftQuote {
-    final amount = sellAmount;
+    final amount = quoteAmount;
     if (amount == null) return null;
     return SwapQuote.estimate(
       direction: direction,
       externalAsset: externalAsset,
-      sellAmount: amount,
+      mode: quoteMode,
+      amount: amount,
       externalPerZec: indicativeExternalPerZec[externalAsset],
       slippageBps: slippageBps,
     );
@@ -414,6 +451,7 @@ class SwapPrototypeState {
     if (liveQuote == null || estimate == null) return null;
     if (liveQuote.direction != direction ||
         liveQuote.externalAsset != externalAsset ||
+        quoteMode != SwapQuoteMode.exactInput ||
         liveQuote.sellAmount != estimate.sellAmount ||
         estimate.receiveAmount <= 0) {
       return null;
@@ -497,15 +535,20 @@ class SwapPrototypeState {
   SwapPrototypeState copyWith({
     SwapDirection? direction,
     String? amountText,
+    String? receiveAmountText,
     String? destinationText,
     SwapAsset? externalAsset,
     bool? reviewVisible,
     List<SwapPrototypeIntent>? intents,
     List<SwapExternalRequest>? externalRequests,
     String? requestImportText,
+    SwapQuoteMode? quoteMode,
     int? slippageBps,
     List<SwapAsset>? supportedExternalAssets,
     Map<SwapAsset, double>? indicativeExternalPerZec,
+    SwapQuote? previewQuote,
+    bool? previewQuoteLoading,
+    String? previewQuoteError,
     SwapQuote? reviewQuote,
     SwapAddressPlan? reviewAddressPlan,
     String? reviewAccountUuid,
@@ -523,6 +566,8 @@ class SwapPrototypeState {
     String? selectedRequestId,
     String? requestImportError,
     bool clearReview = false,
+    bool clearPreviewQuote = false,
+    bool clearPreviewQuoteError = false,
     bool clearQuoteError = false,
     bool clearStatusError = false,
     bool clearMaxAmountError = false,
@@ -533,17 +578,26 @@ class SwapPrototypeState {
     return SwapPrototypeState(
       direction: direction ?? this.direction,
       amountText: amountText ?? this.amountText,
+      receiveAmountText: receiveAmountText ?? this.receiveAmountText,
       destinationText: destinationText ?? this.destinationText,
       externalAsset: externalAsset ?? this.externalAsset,
       reviewVisible: reviewVisible ?? this.reviewVisible,
       intents: intents ?? this.intents,
       externalRequests: externalRequests ?? this.externalRequests,
       requestImportText: requestImportText ?? this.requestImportText,
+      quoteMode: quoteMode ?? this.quoteMode,
       slippageBps: slippageBps ?? this.slippageBps,
       supportedExternalAssets:
           supportedExternalAssets ?? this.supportedExternalAssets,
       indicativeExternalPerZec:
           indicativeExternalPerZec ?? this.indicativeExternalPerZec,
+      previewQuote: clearPreviewQuote
+          ? null
+          : previewQuote ?? this.previewQuote,
+      previewQuoteLoading: previewQuoteLoading ?? this.previewQuoteLoading,
+      previewQuoteError: clearPreviewQuote || clearPreviewQuoteError
+          ? null
+          : previewQuoteError ?? this.previewQuoteError,
       reviewQuote: clearReview ? null : reviewQuote ?? this.reviewQuote,
       reviewAddressPlan: clearReview
           ? null
@@ -669,7 +723,7 @@ const previewSwapIntents = <SwapPrototypeIntent>[
     title: 'ZEC to USDC',
     pair: 'ZEC -> USDC',
     sellAmount: '2.4000 ZEC',
-    receiveEstimate: '~168.42 USDC',
+    receiveEstimate: '168.42 USDC',
     provider: 'NEAR Intents',
     status: SwapIntentStatus.processing,
     nextAction: 'Swap is processing',
@@ -732,7 +786,7 @@ const previewSwapIntents = <SwapPrototypeIntent>[
     title: 'USDC to ZEC',
     pair: 'USDC -> ZEC',
     sellAmount: '210.52 USDC',
-    receiveEstimate: '~3.0000 ZEC',
+    receiveEstimate: '3.0000 ZEC',
     provider: 'NEAR Intents',
     status: SwapIntentStatus.awaitingExternalDeposit,
     nextAction: 'Send USDC to the one-time deposit address',
@@ -784,7 +838,7 @@ const previewSwapIntents = <SwapPrototypeIntent>[
     title: 'USDC to ZEC',
     pair: 'USDC -> ZEC',
     sellAmount: '100.00 USDC',
-    receiveEstimate: '~1.4250 ZEC',
+    receiveEstimate: '1.4250 ZEC',
     provider: 'NEAR Intents',
     status: SwapIntentStatus.incompleteDeposit,
     nextAction: 'Top up the missing deposit or wait for refund',
@@ -840,7 +894,7 @@ const previewSwapIntents = <SwapPrototypeIntent>[
     title: 'ZEC to USDC',
     pair: 'ZEC -> USDC',
     sellAmount: '0.9000 ZEC',
-    receiveEstimate: '~63.16 USDC',
+    receiveEstimate: '63.16 USDC',
     provider: 'NEAR Intents',
     status: SwapIntentStatus.refunded,
     nextAction: 'Refunded to source address',
@@ -882,7 +936,7 @@ const previewSwapIntents = <SwapPrototypeIntent>[
     title: 'NEAR to ZEC',
     pair: 'NEAR -> ZEC',
     sellAmount: '14.00 NEAR',
-    receiveEstimate: '~0.2778 ZEC',
+    receiveEstimate: '0.2778 ZEC',
     provider: 'NEAR Intents',
     status: SwapIntentStatus.failed,
     nextAction: 'Swap route failed',
@@ -921,7 +975,7 @@ const previewSwapIntents = <SwapPrototypeIntent>[
     title: 'ZEC to NEAR',
     pair: 'ZEC -> NEAR',
     sellAmount: '0.7500 ZEC',
-    receiveEstimate: '~37.8 NEAR',
+    receiveEstimate: '37.8 NEAR',
     provider: 'NEAR Intents',
     status: SwapIntentStatus.complete,
     nextAction: 'Copy redacted receipt',

@@ -1,5 +1,15 @@
 enum SwapDirection { zecToExternal, externalToZec }
 
+enum SwapQuoteMode {
+  exactInput,
+  exactOutput;
+
+  String get oneClickSwapType => switch (this) {
+    SwapQuoteMode.exactInput => 'EXACT_INPUT',
+    SwapQuoteMode.exactOutput => 'EXACT_OUTPUT',
+  };
+}
+
 extension SwapDirectionLabels on SwapDirection {
   bool get sendsZec => this == SwapDirection.zecToExternal;
 
@@ -479,19 +489,28 @@ class SwapQuoteRequest {
   const SwapQuoteRequest({
     required this.direction,
     required this.externalAsset,
-    required this.sellAmount,
+    double? amount,
+    double? sellAmount,
     required this.destination,
-    this.sellAmountText,
+    this.mode = SwapQuoteMode.exactInput,
+    String? amountText,
+    String? sellAmountText,
     this.refundAddress,
     this.dryRun = false,
     this.slippageBps,
     this.deadline,
-  });
+  }) : assert(
+         amount != null || sellAmount != null,
+         'SwapQuoteRequest amount is required',
+       ),
+       amount = amount ?? sellAmount ?? 0,
+       amountText = amountText ?? sellAmountText;
 
   final SwapDirection direction;
   final SwapAsset externalAsset;
-  final double sellAmount;
-  final String? sellAmountText;
+  final SwapQuoteMode mode;
+  final double amount;
+  final String? amountText;
   final String destination;
   final String? refundAddress;
   final bool dryRun;
@@ -500,6 +519,18 @@ class SwapQuoteRequest {
 
   SwapAsset get sellAsset => direction.fromAsset(externalAsset);
   SwapAsset get receiveAsset => direction.toAsset(externalAsset);
+  SwapAsset get amountAsset =>
+      mode == SwapQuoteMode.exactInput ? sellAsset : receiveAsset;
+
+  double get sellAmount {
+    if (mode != SwapQuoteMode.exactInput) {
+      throw StateError('Exact-output quote requests do not carry sellAmount');
+    }
+    return amount;
+  }
+
+  String? get sellAmountText =>
+      mode == SwapQuoteMode.exactInput ? amountText : null;
 }
 
 class SwapDepositInstruction {
@@ -520,12 +551,47 @@ class SwapDepositInstruction {
   final DateTime? deadline;
 }
 
+class SwapProviderRefundInfo {
+  const SwapProviderRefundInfo({
+    this.minimumDepositText,
+    this.refundFeeText,
+    this.depositedAmountText,
+    this.refundedAmountText,
+    this.refundReason,
+  });
+
+  final String? minimumDepositText;
+  final String? refundFeeText;
+  final String? depositedAmountText;
+  final String? refundedAmountText;
+  final String? refundReason;
+
+  bool get hasAny =>
+      minimumDepositText != null ||
+      refundFeeText != null ||
+      depositedAmountText != null ||
+      refundedAmountText != null ||
+      refundReason != null;
+
+  SwapProviderRefundInfo merge(SwapProviderRefundInfo? other) {
+    if (other == null) return this;
+    return SwapProviderRefundInfo(
+      minimumDepositText: other.minimumDepositText ?? minimumDepositText,
+      refundFeeText: other.refundFeeText ?? refundFeeText,
+      depositedAmountText: other.depositedAmountText ?? depositedAmountText,
+      refundedAmountText: other.refundedAmountText ?? refundedAmountText,
+      refundReason: other.refundReason ?? refundReason,
+    );
+  }
+}
+
 class SwapQuote {
   const SwapQuote({
     required this.direction,
     required this.sellAsset,
     required this.receiveAsset,
     required this.externalAsset,
+    this.mode = SwapQuoteMode.exactInput,
     required this.sellAmount,
     required this.receiveAmount,
     required this.minimumReceiveAmount,
@@ -540,12 +606,15 @@ class SwapQuote {
     this.receiveEstimateTextOverride,
     this.minimumReceiveTextOverride,
     this.rateTextOverride,
+    this.providerRefundInfo,
   });
 
   factory SwapQuote.estimate({
     required SwapDirection direction,
     required SwapAsset externalAsset,
-    required double sellAmount,
+    double? amount,
+    double? sellAmount,
+    SwapQuoteMode mode = SwapQuoteMode.exactInput,
     String providerLabel = 'NEAR Intents',
     String expiryLabel = '07:12',
     DateTime? quoteExpiresAt,
@@ -554,12 +623,23 @@ class SwapQuote {
     int slippageBps = 50,
   }) {
     assert(externalAsset.name != 'zec');
+    final quoteAmount = amount ?? sellAmount;
+    if (quoteAmount == null) {
+      throw ArgumentError('SwapQuote.estimate amount is required');
+    }
     final sellAsset = direction.fromAsset(externalAsset);
     final receiveAsset = direction.toAsset(externalAsset);
     final rate = externalPerZec ?? externalAsset.fallbackExternalPerZec;
-    final receiveAmount = direction.sendsZec
-        ? sellAmount * rate
-        : sellAmount / rate;
+    final estimatedSellAmount = switch (mode) {
+      SwapQuoteMode.exactInput => quoteAmount,
+      SwapQuoteMode.exactOutput =>
+        direction.sendsZec ? quoteAmount / rate : quoteAmount * rate,
+    };
+    final receiveAmount = switch (mode) {
+      SwapQuoteMode.exactInput =>
+        direction.sendsZec ? quoteAmount * rate : quoteAmount / rate,
+      SwapQuoteMode.exactOutput => quoteAmount,
+    };
     final rateText = direction.sendsZec
         ? '1 ZEC = ${rate.toStringAsFixed(2)} ${externalAsset.symbol}'
         : '1 ${externalAsset.symbol} = ${(1 / rate).toStringAsFixed(4)} ZEC';
@@ -568,7 +648,8 @@ class SwapQuote {
       sellAsset: sellAsset,
       receiveAsset: receiveAsset,
       externalAsset: externalAsset,
-      sellAmount: sellAmount,
+      mode: mode,
+      sellAmount: estimatedSellAmount,
       receiveAmount: receiveAmount,
       minimumReceiveAmount: receiveAmount * (1 - slippageBps / 10000),
       providerLabel: providerLabel,
@@ -590,6 +671,7 @@ class SwapQuote {
   final SwapAsset sellAsset;
   final SwapAsset receiveAsset;
   final SwapAsset externalAsset;
+  final SwapQuoteMode mode;
   final double sellAmount;
   final double receiveAmount;
   final double minimumReceiveAmount;
@@ -604,6 +686,7 @@ class SwapQuote {
   final String? receiveEstimateTextOverride;
   final String? minimumReceiveTextOverride;
   final String? rateTextOverride;
+  final SwapProviderRefundInfo? providerRefundInfo;
 
   String get pairText => '${sellAsset.symbol} -> ${receiveAsset.symbol}';
   String get sellAmountText =>
@@ -611,7 +694,7 @@ class SwapQuote {
       '${sellAsset.formatAmount(sellAmount)} ${sellAsset.symbol}';
   String get receiveEstimateText =>
       receiveEstimateTextOverride ??
-      '~${receiveAsset.formatAmount(receiveAmount)} ${receiveAsset.symbol}';
+      '${receiveAsset.formatAmount(receiveAmount)} ${receiveAsset.symbol}';
   String get minimumReceiveText =>
       minimumReceiveTextOverride ??
       '${receiveAsset.formatAmount(minimumReceiveAmount)} ${receiveAsset.symbol}';
@@ -642,6 +725,9 @@ class SwapIntentSnapshot {
     this.providerStatusRaw,
     this.nearIntentHash,
     this.nearTransactionHash,
+    this.originChainTxHash,
+    this.destinationChainTxHash,
+    this.providerRefundInfo,
   });
 
   factory SwapIntentSnapshot.fromQuote(
@@ -661,6 +747,7 @@ class SwapIntentSnapshot {
       nextAction:
           'Send ${quote.sellAsset.symbol} to the one-time deposit address',
       depositInstruction: quote.depositInstruction,
+      providerRefundInfo: quote.providerRefundInfo,
     );
   }
 
@@ -675,6 +762,9 @@ class SwapIntentSnapshot {
   final String? providerStatusRaw;
   final String? nearIntentHash;
   final String? nearTransactionHash;
+  final String? originChainTxHash;
+  final String? destinationChainTxHash;
+  final SwapProviderRefundInfo? providerRefundInfo;
 }
 
 class SwapPricingSnapshot {

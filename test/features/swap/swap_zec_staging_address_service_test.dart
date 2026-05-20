@@ -7,7 +7,7 @@ void main() {
     'blocks quote preparation when shielded wallet address is unavailable',
     () {
       final service = SwapZecStagingAddressService(
-        loadShieldedAddress: ({required accountUuid}) async {
+        loadCurrentShieldedAddress: ({required accountUuid}) async {
           throw Exception('address unavailable');
         },
       );
@@ -22,7 +22,7 @@ void main() {
   test('uses shielded unified address for the ZEC refund path', () async {
     var shieldedLoads = 0;
     final service = SwapZecStagingAddressService(
-      loadShieldedAddress: ({required accountUuid}) async {
+      loadCurrentShieldedAddress: ({required accountUuid}) async {
         shieldedLoads++;
         expect(accountUuid, 'account-1');
         return 'u1fresh-shielded-refund';
@@ -46,7 +46,7 @@ void main() {
   test('uses shielded unified address for external to ZEC delivery', () async {
     var shieldedLoads = 0;
     final service = SwapZecStagingAddressService(
-      loadShieldedAddress: ({required accountUuid}) async {
+      loadCurrentShieldedAddress: ({required accountUuid}) async {
         shieldedLoads++;
         expect(accountUuid, 'account-1');
         return 'u1fresh-shielded-recipient';
@@ -66,4 +66,32 @@ void main() {
     expect(plan.oneClickRefundTo, '0xrefund');
     expect(plan.zecDeliveryIsDirectShielded, isTrue);
   });
+
+  test(
+    'preview quote uses current address while live quote can use fresh address',
+    () async {
+      var currentLoads = 0;
+      var freshLoads = 0;
+      final service = SwapZecStagingAddressService(
+        loadCurrentShieldedAddress: ({required accountUuid}) async {
+          currentLoads++;
+          return 'u1current-shielded';
+        },
+        prepareFreshShieldedAddress: ({required accountUuid}) async {
+          freshLoads++;
+          return 'u1fresh-shielded';
+        },
+      );
+
+      final preview = await service.prepareForPreviewQuote(
+        accountUuid: 'account-1',
+      );
+      final live = await service.prepareForQuote(accountUuid: 'account-1');
+
+      expect(preview.address, 'u1current-shielded');
+      expect(live.address, 'u1fresh-shielded');
+      expect(currentLoads, 1);
+      expect(freshLoads, 1);
+    },
+  );
 }

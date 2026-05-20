@@ -11,16 +11,20 @@ String compactSwapAmountText(
       'must not be negative',
     );
   }
+  final withoutApproximationPrefix = value.replaceAllMapped(
+    RegExp(r'~(?=\d)'),
+    (_) => '',
+  );
   if (maxFractionDigits == 0) {
-    return value.replaceAllMapped(
-      RegExp(r'([~<>+\-]?)(\d+)\.(\d+)'),
+    return withoutApproximationPrefix.replaceAllMapped(
+      RegExp(r'([<>+\-]?)(\d+)\.(\d+)'),
       (match) => '${match[1]}${match[2]}',
     );
   }
   final expression = RegExp(
-    '([~<>+\\-]?)(\\d+)\\.(\\d{$maxFractionDigits})(\\d+)',
+    '([<>+\\-]?)(\\d+)\\.(\\d{$maxFractionDigits})(\\d+)',
   );
-  return value.replaceAllMapped(
+  return withoutApproximationPrefix.replaceAllMapped(
     expression,
     (match) => '${match[1]}${match[2]}.${match[3]}',
   );

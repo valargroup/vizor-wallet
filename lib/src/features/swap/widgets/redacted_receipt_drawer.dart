@@ -170,6 +170,31 @@ List<SwapPrototypeField> _supportDetailRows(
   add('Deposit memo', intent.depositMemo ?? receiptValue('Memo'));
   add('Deposit tx', intent.depositTxHash ?? receiptValue('Deposit tx'));
   add('Intent hash', intent.nearIntentHash);
+  add('Origin chain tx', intent.originChainTxHash);
+  add('Destination chain tx', intent.destinationChainTxHash);
+  add(
+    'Minimum deposit',
+    intent.providerRefundInfo?.minimumDepositText ??
+        receiptValue('Minimum deposit'),
+  );
+  add(
+    'Refund fee',
+    intent.providerRefundInfo?.refundFeeText ?? receiptValue('Refund fee'),
+  );
+  add(
+    'Provider deposited',
+    intent.providerRefundInfo?.depositedAmountText ??
+        receiptValue('Provider deposited'),
+  );
+  add(
+    'Provider refunded',
+    intent.providerRefundInfo?.refundedAmountText ??
+        receiptValue('Provider refunded'),
+  );
+  add(
+    'Refund reason',
+    intent.providerRefundInfo?.refundReason ?? receiptValue('Refund reason'),
+  );
 
   return fields;
 }

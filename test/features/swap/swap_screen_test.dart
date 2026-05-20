@@ -41,14 +41,14 @@ void main() {
   });
 
   test('compactSwapAmountText truncates visible decimals without ellipsis', () {
-    expect(compactSwapAmountText('~0.123456789 BTC'), '~0.123456 BTC');
+    expect(compactSwapAmountText('~0.123456789 BTC'), '0.123456 BTC');
     expect(compactSwapAmountText('12345.678901 USDC'), '12345.678901 USDC');
     expect(compactSwapAmountText('2 ZEC'), '2 ZEC');
     expect(
       compactSwapAmountText('1.1234567 ZEC -> ~2.7654321 USDC'),
-      '1.123456 ZEC -> ~2.765432 USDC',
+      '1.123456 ZEC -> 2.765432 USDC',
     );
-    expect(compactSwapAmountText('~0.9 BTC', maxFractionDigits: 0), '~0 BTC');
+    expect(compactSwapAmountText('~0.9 BTC', maxFractionDigits: 0), '0 BTC');
   });
 
   testWidgets('sidebar Swap item opens the swap prototype route', (
@@ -848,7 +848,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(swapProvider.pricingRequests, 1);
-    expect(find.text('~5.41'), findsOneWidget);
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '5.41');
     expect(find.text('1 ZEC = 540.62 USDC'), findsOneWidget);
     expect(find.byKey(const ValueKey('swap_rate_line')), findsOneWidget);
     expect(
@@ -887,7 +887,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('~100.00'), findsOneWidget);
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '100.00');
 
     await tester.tap(
       find.byKey(const ValueKey('swap_direction_externalToZec')),
@@ -895,7 +895,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_fieldText(tester, 'swap_amount_field'), '100.00');
-    expect(find.text('~1.0000'), findsOneWidget);
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '1.0000');
     expect(find.text('1 USDC = 0.0100 ZEC'), findsOneWidget);
   });
 
@@ -930,7 +930,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('~100.00'), findsOneWidget);
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '100.00');
     expect(find.text('1 ZEC = 100.00 USDC'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 1));
@@ -938,7 +938,7 @@ void main() {
 
     expect(swapProvider.pricingRequests, greaterThanOrEqualTo(2));
     expect(swapProvider.sawForcedRefresh, isTrue);
-    expect(find.text('~200.00'), findsOneWidget);
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '200.00');
     expect(find.text('1 ZEC = 200.00 USDC'), findsOneWidget);
   });
 
@@ -1065,7 +1065,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('2.4000 ZEC'), findsOneWidget);
-    expect(find.text('~168.42 USDC'), findsOneWidget);
+    expect(find.text('168.42 USDC'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('swap_activity_status_plan')),
       findsOneWidget,
@@ -1166,7 +1166,7 @@ void main() {
         providerLabel: 'NEAR Intents',
         pairText: 'ZEC -> USDC',
         sellAmountText: '1.0000 ZEC',
-        receiveEstimateText: '~70.170000 USDC',
+        receiveEstimateText: '70.170000 USDC',
         status: SwapIntentStatus.processing,
         nextAction: 'Swap is processing',
         depositInstruction: SwapDepositInstruction(
@@ -2003,7 +2003,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('0.7500 ZEC'), findsOneWidget);
-    expect(find.text('~37.8 NEAR'), findsOneWidget);
+    expect(find.text('37.8 NEAR'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('swap_support_details_section')),
       findsOneWidget,
@@ -2810,7 +2810,7 @@ void main() {
           title: 'USDC to ZEC',
           pair: 'USDC -> ZEC',
           sellAmount: '12345.678901 USDC',
-          receiveEstimate: '~175.9421 ZEC',
+          receiveEstimate: '175.9421 ZEC',
           direction: SwapDirection.externalToZec,
           externalAsset: SwapAsset.usdc,
           depositMemo:
@@ -2957,7 +2957,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('~105.26'), findsOneWidget);
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '105.26');
     expect(find.text('1 ZEC = 70.17 USDC'), findsOneWidget);
     expect(find.byKey(const ValueKey('swap_rate_line')), findsOneWidget);
     expect(find.byKey(const ValueKey('swap_address_summary')), findsOneWidget);
@@ -3118,6 +3118,113 @@ void main() {
       expect(find.text('Refund address'), findsOneWidget);
       expect(find.text('Receive address'), findsOneWidget);
       expect(find.text('Expires in'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'editing receive amount previews and reviews exact-output quote',
+    (tester) async {
+      await _setDesktopViewport(tester);
+      final swapProvider = _FakeSwapProvider();
+
+      await tester.pumpWidget(
+        _routerHarness(
+          GoRouter(
+            initialLocation: '/swap',
+            routes: [
+              GoRoute(path: '/swap', builder: (_, _) => const SwapScreen()),
+            ],
+          ),
+          swapProvider: swapProvider,
+          seedPrototypeFixtures: false,
+          previewQuoteDebounce: Duration.zero,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('swap_receive_amount_field')),
+        '105.26',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('swap_destination_field')),
+        '0xrecipient',
+      );
+      await tester.pumpAndSettle();
+
+      expect(_fieldText(tester, 'swap_receive_amount_field'), '105.26');
+      expect(_fieldText(tester, 'swap_amount_field'), '1.5000');
+      expect(swapProvider.requests, hasLength(1));
+      final previewRequest = swapProvider.requests.single;
+      expect(previewRequest.dryRun, isTrue);
+      expect(previewRequest.mode, SwapQuoteMode.exactOutput);
+      expect(previewRequest.amount, 105.26);
+      expect(previewRequest.amountText, '105.26');
+      expect(previewRequest.amountAsset, SwapAsset.usdc);
+
+      await tester.tap(find.byKey(const ValueKey('swap_review_button')));
+      await tester.pumpAndSettle();
+
+      expect(swapProvider.requests, hasLength(2));
+      final liveRequest = swapProvider.requests.last;
+      expect(liveRequest.dryRun, isFalse);
+      expect(liveRequest.mode, SwapQuoteMode.exactOutput);
+      expect(liveRequest.amount, 105.26);
+      expect(liveRequest.amountText, '105.26');
+      expect(liveRequest.destination, '0xrecipient');
+      expect(liveRequest.refundAddress, 'u1actualshieldedrecipient');
+      expect(find.text('Target receive'), findsOneWidget);
+      expect(find.text('Required pay'), findsOneWidget);
+      expect(find.text('Refund fee'), findsOneWidget);
+      expect(find.text('Unused input'), findsOneWidget);
+      expect(find.text('May be refunded'), findsOneWidget);
+      expect(find.text('Minimum receive'), findsNothing);
+      expect(find.text('Price protection'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'exact-output review blocks start when live required pay exceeds balance',
+    (tester) async {
+      await _setDesktopViewport(tester);
+      final swapProvider = _DriftingExactOutputSwapProvider();
+
+      await tester.pumpWidget(
+        _routerHarness(
+          GoRouter(
+            initialLocation: '/swap',
+            routes: [
+              GoRoute(path: '/swap', builder: (_, _) => const SwapScreen()),
+            ],
+          ),
+          swapProvider: swapProvider,
+          spendableBalance: BigInt.from(100000000),
+          previewQuoteDebounce: Duration.zero,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('swap_receive_amount_field')),
+        '105.26',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('swap_destination_field')),
+        '0xrecipient',
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('swap_review_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Required pay exceeds available ZEC. Review a smaller target amount.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Insufficient ZEC'), findsOneWidget);
+      expect(swapProvider.startedQuotes, isEmpty);
     },
   );
 
@@ -3432,7 +3539,7 @@ void main() {
       find.byKey(const ValueKey('swap_settlement_shielding_note')),
       findsNothing,
     );
-    expect(find.text('~2.0000'), findsWidgets);
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '2.0000');
     expect(find.text('1 USDC = 0.0143 ZEC'), findsOneWidget);
     expect(find.text('USDC -> ZEC'), findsNothing);
 
@@ -3623,6 +3730,37 @@ void main() {
     expect(swapProvider.statusRequests.single.depositAddress, 't1live-deposit');
     expect(swapProvider.statusRequests.single.depositMemo, 'memo-live');
     expect(find.text('USDC delivery in progress'), findsWidgets);
+
+    await _expandSupportDetails(tester);
+    final supportPanel = find.byKey(
+      const ValueKey('swap_support_bundle_panel'),
+    );
+    expect(
+      find.descendant(
+        of: supportPanel,
+        matching: find.text('Provider deposited'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: supportPanel, matching: find.text('1.5 ZEC')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: supportPanel,
+        matching: find.text('Provider refunded'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: supportPanel, matching: find.text('0.01 ZEC')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: supportPanel, matching: find.text('UNUSED_INPUT')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('started swap can submit a deposit transaction hash', (
@@ -4624,6 +4762,7 @@ Widget _routerHarness(
   BigInt? spendableBalance,
   Duration? statusPollInterval,
   Duration? priceRefreshInterval,
+  Duration? previewQuoteDebounce,
   LoadShieldedAddress? loadShieldedAddress,
   bool seedPrototypeFixtures = true,
   bool liveFundsEnabled = true,
@@ -4644,7 +4783,14 @@ Widget _routerHarness(
       ),
       swapZecStagingAddressServiceProvider.overrideWith(
         (ref) => SwapZecStagingAddressService(
-          loadShieldedAddress:
+          loadCurrentShieldedAddress:
+              loadShieldedAddress ??
+              ({required accountUuid}) {
+                return ref
+                    .read(receiveAddressServiceProvider)
+                    .loadShieldedAddress(accountUuid: accountUuid);
+              },
+          prepareFreshShieldedAddress:
               loadShieldedAddress ??
               ({required accountUuid}) {
                 final receiveAddressService = ref.read(
@@ -4689,6 +4835,10 @@ Widget _routerHarness(
         ),
       if (statusPollInterval != null)
         swapStatusPollIntervalProvider.overrideWithValue(statusPollInterval),
+      if (previewQuoteDebounce != null)
+        swapPreviewQuoteDebounceProvider.overrideWithValue(
+          previewQuoteDebounce,
+        ),
     ],
     child: MaterialApp.router(
       routerConfig: router,
@@ -4782,7 +4932,8 @@ class _FakeSwapProvider implements SwapProvider {
     final estimate = SwapQuote.estimate(
       direction: request.direction,
       externalAsset: request.externalAsset,
-      sellAmount: request.sellAmount,
+      mode: request.mode,
+      amount: request.amount,
       slippageBps: request.slippageBps ?? 50,
     );
     return SwapQuote(
@@ -4790,6 +4941,7 @@ class _FakeSwapProvider implements SwapProvider {
       sellAsset: estimate.sellAsset,
       receiveAsset: estimate.receiveAsset,
       externalAsset: estimate.externalAsset,
+      mode: estimate.mode,
       sellAmount: estimate.sellAmount,
       receiveAmount: estimate.receiveAmount,
       minimumReceiveAmount: estimate.minimumReceiveAmount,
@@ -4798,6 +4950,12 @@ class _FakeSwapProvider implements SwapProvider {
       expiryLabel: estimate.expiryLabel,
       providerQuoteId: 'quote-live',
       providerSignature: 'sig-live',
+      providerRefundInfo: request.mode == SwapQuoteMode.exactOutput
+          ? const SwapProviderRefundInfo(
+              minimumDepositText: '1.485 ZEC',
+              refundFeeText: '0.0001 ZEC',
+            )
+          : null,
       depositInstruction: SwapDepositInstruction(
         asset: estimate.sellAsset,
         address: request.direction == SwapDirection.zecToExternal
@@ -4853,6 +5011,11 @@ class _FakeSwapProvider implements SwapProvider {
         reuseWarning: depositInstruction.reuseWarning,
         memo: depositMemo ?? depositInstruction.memo,
       ),
+      providerRefundInfo: const SwapProviderRefundInfo(
+        depositedAmountText: '1.5 ZEC',
+        refundedAmountText: '0.01 ZEC',
+        refundReason: 'UNUSED_INPUT',
+      ),
     );
   }
 
@@ -4891,6 +5054,37 @@ class _FakeSwapProvider implements SwapProvider {
       status: SwapIntentStatus.depositObserved,
       nextAction: 'Deposit detected',
       depositInstruction: base.depositInstruction,
+    );
+  }
+}
+
+class _DriftingExactOutputSwapProvider extends _FakeSwapProvider {
+  @override
+  Future<SwapQuote> quote(SwapQuoteRequest request) async {
+    final quote = await super.quote(request);
+    if (request.mode != SwapQuoteMode.exactOutput) return quote;
+    final sellAmount = request.dryRun ? 0.5 : 1.5;
+    return SwapQuote(
+      direction: quote.direction,
+      sellAsset: quote.sellAsset,
+      receiveAsset: quote.receiveAsset,
+      externalAsset: quote.externalAsset,
+      mode: quote.mode,
+      sellAmount: sellAmount,
+      receiveAmount: quote.receiveAmount,
+      minimumReceiveAmount: quote.minimumReceiveAmount,
+      providerLabel: quote.providerLabel,
+      feeLabel: quote.feeLabel,
+      expiryLabel: quote.expiryLabel,
+      quoteExpiresAt: quote.quoteExpiresAt,
+      depositInstruction: quote.depositInstruction,
+      providerQuoteId: quote.providerQuoteId,
+      providerSignature: quote.providerSignature,
+      sellAmountTextOverride: '${sellAmount.toStringAsFixed(4)} ZEC',
+      receiveEstimateTextOverride: quote.receiveEstimateText,
+      minimumReceiveTextOverride: quote.minimumReceiveText,
+      rateTextOverride: quote.rateText,
+      providerRefundInfo: quote.providerRefundInfo,
     );
   }
 }
@@ -5040,6 +5234,7 @@ class _LongQuoteSwapProvider extends _FakeSwapProvider {
       sellAsset: estimate.sellAsset,
       receiveAsset: estimate.receiveAsset,
       externalAsset: estimate.externalAsset,
+      mode: estimate.mode,
       sellAmount: estimate.sellAmount,
       receiveAmount: estimate.receiveAmount,
       minimumReceiveAmount: estimate.minimumReceiveAmount,
@@ -5049,8 +5244,7 @@ class _LongQuoteSwapProvider extends _FakeSwapProvider {
       providerQuoteId: 'quote-long-provider-reference',
       providerSignature: 'signature-long-provider-reference',
       sellAmountTextOverride: '12345.678901 ${estimate.sellAsset.symbol}',
-      receiveEstimateTextOverride:
-          '~175.942100 ${estimate.receiveAsset.symbol}',
+      receiveEstimateTextOverride: '175.942100 ${estimate.receiveAsset.symbol}',
       minimumReceiveTextOverride: '174.812300 ${estimate.receiveAsset.symbol}',
       depositInstruction: SwapDepositInstruction(
         asset: estimate.sellAsset,
@@ -5399,7 +5593,7 @@ SwapPrototypeIntent _persistedIntent({
     title: 'ZEC to USDC',
     pair: 'ZEC -> USDC',
     sellAmount: '1.5000 ZEC',
-    receiveEstimate: '~105.25 USDC',
+    receiveEstimate: '105.25 USDC',
     provider: 'NEAR Intents',
     status: status,
     nextAction: effectiveNextAction,
@@ -5439,7 +5633,7 @@ SwapPrototypeIntent _persistedExternalToZecIntent({
     title: 'USDC to ZEC',
     pair: 'USDC -> ZEC',
     sellAmount: '140.350000 USDC',
-    receiveEstimate: '~2.0000 ZEC',
+    receiveEstimate: '2.0000 ZEC',
     provider: 'NEAR Intents',
     status: SwapIntentStatus.awaitingExternalDeposit,
     nextAction: 'Waiting for the stored source-chain deposit',

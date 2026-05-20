@@ -530,6 +530,7 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
                     openCount: swapState.openIntentCount,
                     onTabChanged: _selectTab,
                     onAmountChanged: swapNotifier.updateAmount,
+                    onReceiveAmountChanged: swapNotifier.updateReceiveAmount,
                     onDestinationChanged: swapNotifier.updateDestination,
                     onDirectionChanged: swapNotifier.selectDirection,
                     onToggleDirection: swapNotifier.toggleDirection,
@@ -636,6 +637,13 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
                     starting: swapState.startSubmitting,
                     amountWarning: swapState.reviewAmountDifferenceWarning,
                     startError: swapState.statusError,
+                    startBlockedReason:
+                        _reviewQuoteExceedsAvailableZec(
+                          reviewQuote,
+                          sync.spendableBalance,
+                        )
+                        ? 'Required pay exceeds available ZEC. Review a smaller target amount.'
+                        : null,
                     onReviewAgain: swapNotifier.showReview,
                     onCancelReview: swapNotifier.cancelReviewQuote,
                     onStartIntent: startIntent,
@@ -4683,6 +4691,7 @@ class _SwapComposerStack extends StatelessWidget {
     required this.openCount,
     required this.onTabChanged,
     required this.onAmountChanged,
+    required this.onReceiveAmountChanged,
     required this.onDestinationChanged,
     required this.onDirectionChanged,
     required this.onToggleDirection,
@@ -4702,6 +4711,7 @@ class _SwapComposerStack extends StatelessWidget {
   final int openCount;
   final ValueChanged<_SwapPageTab> onTabChanged;
   final ValueChanged<String> onAmountChanged;
+  final ValueChanged<String> onReceiveAmountChanged;
   final ValueChanged<String> onDestinationChanged;
   final ValueChanged<SwapDirection> onDirectionChanged;
   final VoidCallback onToggleDirection;
@@ -4742,6 +4752,7 @@ class _SwapComposerStack extends StatelessWidget {
               child: SwapComposerPanel(
                 state: state,
                 onAmountChanged: onAmountChanged,
+                onReceiveAmountChanged: onReceiveAmountChanged,
                 onDestinationChanged: onDestinationChanged,
                 onDirectionChanged: onDirectionChanged,
                 onToggleDirection: onToggleDirection,
@@ -4896,7 +4907,20 @@ bool _reviewAmountExceedsAvailableZec(
   BigInt availableZatoshi,
 ) {
   if (!state.direction.sendsZec) return false;
-  final amount = parseZecAmount(state.amountText);
+  return _zecAmountTextExceedsAvailable(state.amountText, availableZatoshi);
+}
+
+bool _reviewQuoteExceedsAvailableZec(SwapQuote quote, BigInt availableZatoshi) {
+  if (!quote.direction.sendsZec) return false;
+  final amountText = quote.sellAmountText.split(' ').first.trim();
+  return _zecAmountTextExceedsAvailable(amountText, availableZatoshi);
+}
+
+bool _zecAmountTextExceedsAvailable(
+  String amountText,
+  BigInt availableZatoshi,
+) {
+  final amount = parseZecAmount(amountText);
   if (amount == null || amount <= BigInt.zero) return false;
   return amount >= availableZatoshi;
 }
