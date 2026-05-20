@@ -6,6 +6,7 @@ import '../../providers/account_provider.dart';
 import '../../providers/app_security_provider.dart';
 import '../../providers/sync_failure.dart';
 import '../../providers/sync_provider.dart';
+import '../config/swap_feature_config.dart';
 import '../profile_pictures.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icon.dart';
@@ -79,6 +80,7 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
     }
     final accountName = activeAccount?.name ?? 'Username';
     final sync = ref.watch(syncProvider).value ?? SyncState();
+    final swapFeatureEnabled = ref.watch(swapFeatureEnabledProvider);
 
     return AppDesktopSidebarSurface(
       clipBehavior: Clip.none,
@@ -123,14 +125,18 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                     active: _matches('/send'),
                     onTap: _matches('/send') ? null : () => context.go('/send'),
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppSidebarItem(
-                    key: const ValueKey('sidebar_swap_button'),
-                    label: 'Swap',
-                    iconName: AppIcons.renew,
-                    active: _matches('/swap'),
-                    onTap: _matches('/swap') ? null : () => context.go('/swap'),
-                  ),
+                  if (swapFeatureEnabled) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    AppSidebarItem(
+                      key: const ValueKey('sidebar_swap_button'),
+                      label: 'Swap',
+                      iconName: AppIcons.renew,
+                      active: _matches('/swap'),
+                      onTap: _matches('/swap')
+                          ? null
+                          : () => context.go('/swap'),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
                     key: const ValueKey('sidebar_receive_button'),

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
+import 'package:zcash_wallet/src/core/config/swap_feature_config.dart';
 import 'package:zcash_wallet/src/core/layout/app_desktop_shell.dart';
 import 'package:zcash_wallet/src/core/layout/app_main_sidebar.dart';
 import 'package:zcash_wallet/src/core/profile_pictures.dart';
@@ -32,6 +33,21 @@ void main() {
 
     expect(find.text('99% Syncing...'), findsOneWidget);
     expect(find.text('Vizor is synced'), findsNothing);
+  });
+
+  testWidgets('sidebar hides Swap when swap feature is disabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_sidebarHarness(SyncState(), swapEnabled: false));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('sidebar_swap_button')), findsNothing);
+    expect(find.text('Swap'), findsNothing);
+    expect(find.byKey(const ValueKey('sidebar_send_button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('sidebar_receive_button')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('sidebar sync indicator is pinned to the sidebar edge', (
@@ -182,6 +198,7 @@ Color? _syncIndicatorColor(WidgetTester tester) {
 Widget _sidebarHarness(
   SyncState syncState, {
   AppThemeData themeData = AppThemeData.light,
+  bool swapEnabled = true,
 }) {
   final router = GoRouter(
     initialLocation: '/home',
@@ -195,6 +212,7 @@ Widget _sidebarHarness(
       ),
       GoRoute(path: '/accounts', builder: (_, _) => const Text('accounts')),
       GoRoute(path: '/send', builder: (_, _) => const Text('send')),
+      GoRoute(path: '/swap', builder: (_, _) => const Text('swap')),
       GoRoute(path: '/receive', builder: (_, _) => const Text('receive')),
       GoRoute(path: '/activity', builder: (_, _) => const Text('activity')),
       GoRoute(path: '/settings', builder: (_, _) => const Text('settings')),
@@ -206,6 +224,7 @@ Widget _sidebarHarness(
     overrides: [
       appBootstrapProvider.overrideWithValue(_bootstrap),
       syncProvider.overrideWith(() => _FakeSyncNotifier(syncState)),
+      swapFeatureEnabledProvider.overrideWithValue(swapEnabled),
     ],
     child: MaterialApp.router(
       routerConfig: router,

@@ -12,6 +12,7 @@ import 'package:desktop_window_bootstrap/desktop_window_bootstrap.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'src/app_bootstrap.dart';
+import 'src/core/config/swap_feature_config.dart';
 import 'src/core/layout/app_layout.dart';
 import 'src/core/motion/onboarding_motion.dart';
 import 'src/core/theme/app_theme.dart';
@@ -170,6 +171,7 @@ Future<void> runZcashWalletApp() async {
 final _routerProvider = Provider<GoRouter>((ref) {
   final bootstrap = ref.watch(appBootstrapProvider);
   final refresh = ref.watch(routerRefreshProvider);
+  final swapFeatureEnabled = ref.watch(swapFeatureEnabledProvider);
   ref.listen(walletProvider, (_, _) {
     refresh.requestRefresh();
   });
@@ -209,6 +211,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
       final isUnlock = state.matchedLocation == '/unlock';
       final isLostPassword = state.matchedLocation == '/lost-password';
       final isUnlockFlow = isUnlock || isLostPassword;
+      final isSwap = state.matchedLocation == '/swap';
 
       log(
         'router redirect: location=${state.matchedLocation}, hasWallet=$hasWallet, '
@@ -233,6 +236,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
       if (hasWallet && state.matchedLocation == '/welcome') {
         return requiresUnlock ? '/unlock' : '/home';
       }
+      if (!swapFeatureEnabled && isSwap) return '/home';
       return null;
     },
     routes: [
@@ -571,7 +575,11 @@ final _routerProvider = Provider<GoRouter>((ref) {
           return SendScreen(prefill: extra is SendPrefillArgs ? extra : null);
         },
       ),
-      GoRoute(path: '/swap', builder: (_, _) => const SwapScreen()),
+      GoRoute(
+        path: '/swap',
+        redirect: (_, _) => swapFeatureEnabled ? null : '/home',
+        builder: (_, _) => const SwapScreen(),
+      ),
       GoRoute(
         path: '/send/review',
         builder: (_, state) {
