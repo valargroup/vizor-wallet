@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/security/password_policy.dart';
@@ -168,6 +169,23 @@ void main() {
         roundId: 'round-1',
       ),
       const [2],
+    );
+  });
+
+  test('platform storage failures surface as storage unavailable', () async {
+    store = AppSecureStore.testing(storage: _PlatformFailingReadStorage());
+
+    await expectLater(
+      () => store.readString('zcash_accounts'),
+      throwsA(
+        isA<SecureStorageUnavailableException>()
+            .having(
+              (error) => error.operation,
+              'operation',
+              'read "zcash_accounts"',
+            )
+            .having((error) => error.cause, 'cause', isA<PlatformException>()),
+      ),
     );
   });
 
@@ -800,6 +818,24 @@ class _FailingWriteStorage extends FlutterSecureStorage {
       webOptions: webOptions,
       mOptions: mOptions,
       wOptions: wOptions,
+    );
+  }
+}
+
+class _PlatformFailingReadStorage extends FlutterSecureStorage {
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    throw PlatformException(
+      code: 'Libsecret error',
+      message: 'Failed to unlock the keyring',
     );
   }
 }
