@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/app_secure_store.dart';
+import '../models/swap_intent_presentation_mapper.dart';
 import '../models/swap_prototype_models.dart';
 
 const _swapSessionsKey = 'zcash_swap_sessions_v1';
@@ -58,7 +59,9 @@ class AppSecureStoreSwapSessionStore implements SwapSessionStore {
     return [
       for (final item in decoded)
         if (item is Map<String, dynamic>)
-          _intentFromJson(item).copyWith(accountUuid: accountUuid),
+          swapPrototypeIntentFromRecord(
+            _recordFromJson(item).copyWith(accountUuid: accountUuid),
+          ),
     ];
   }
 
@@ -71,7 +74,11 @@ class AppSecureStoreSwapSessionStore implements SwapSessionStore {
       _swapSessionsKeyFor(accountUuid),
       jsonEncode([
         for (final intent in intents)
-          _intentToJson(intent.copyWith(accountUuid: accountUuid)),
+          _recordToJson(
+            SwapIntentRecord.fromIntent(
+              intent.copyWith(accountUuid: accountUuid),
+            ),
+          ),
       ]),
     );
   }
@@ -119,60 +126,55 @@ SwapDraftSnapshot? _draftFromJson(Map<String, dynamic> json) {
   );
 }
 
-Map<String, Object?> _intentToJson(SwapPrototypeIntent intent) {
+Map<String, Object?> _recordToJson(SwapIntentRecord record) {
   return {
-    'id': intent.id,
-    'title': intent.title,
-    'pair': intent.pair,
-    'sellAmount': intent.sellAmount,
-    'receiveEstimate': intent.receiveEstimate,
-    'provider': intent.provider,
-    'status': intent.status.name,
-    'nextAction': intent.nextAction,
-    'steps': [for (final step in intent.steps) _stepToJson(step)],
-    'exposure': [for (final field in intent.exposure) _fieldToJson(field)],
-    'receipt': [for (final field in intent.receipt) _fieldToJson(field)],
-    'direction': intent.direction?.name,
-    'externalAsset': intent.externalAsset?.toPersistedJson(),
-    'depositAddress': intent.depositAddress,
-    'depositMemo': intent.depositMemo,
-    'depositTxHash': intent.depositTxHash,
-    'providerQuoteId': intent.providerQuoteId,
-    'providerSignature': intent.providerSignature,
-    'providerStatusRaw': intent.providerStatusRaw,
-    'nearIntentHash': intent.nearIntentHash,
-    'nearTransactionHash': intent.nearTransactionHash,
-    'originChainTxHash': intent.originChainTxHash,
-    'destinationChainTxHash': intent.destinationChainTxHash,
-    'providerRefundInfo': _providerRefundInfoToJson(intent.providerRefundInfo),
-    'lastStatusCheckedAt': intent.lastStatusCheckedAt
-        ?.toUtc()
-        .toIso8601String(),
-    'statusError': intent.statusError,
-    'oneClickRecipient': intent.oneClickRecipient,
-    'oneClickRefundTo': intent.oneClickRefundTo,
-    'depositDeadline': intent.depositDeadline?.toUtc().toIso8601String(),
-    'accountUuid': intent.accountUuid,
+    'id': record.id,
+    'provider': record.providerLabel,
+    'pair': record.pairText,
+    'sellAmount': record.sellAmountText,
+    'receiveEstimate': record.receiveEstimateText,
+    'status': record.status.name,
+    'nextAction': record.nextAction,
+    'direction': record.direction?.name,
+    'externalAsset': record.externalAsset?.toPersistedJson(),
+    'depositAddress': record.depositAddress,
+    'depositMemo': record.depositMemo,
+    'depositTxHash': record.depositTxHash,
+    'providerQuoteId': record.providerQuoteId,
+    'providerSignature': record.providerSignature,
+    'providerStatusRaw': record.providerStatusRaw,
+    'nearIntentHash': record.nearIntentHash,
+    'nearTransactionHash': record.nearTransactionHash,
+    'originChainTxHash': record.originChainTxHash,
+    'destinationChainTxHash': record.destinationChainTxHash,
+    'providerRefundInfo': _providerRefundInfoToJson(record.providerRefundInfo),
+    'lastStatusCheckedAt':
+        record.lastStatusCheckedAt?.toUtc().toIso8601String(),
+    'statusError': record.statusError,
+    'broadcastNotice': record.broadcastNotice,
+    'oneClickRecipient': record.oneClickRecipient,
+    'oneClickRefundTo': record.oneClickRefundTo,
+    'depositDeadline': record.depositDeadline?.toUtc().toIso8601String(),
+    'accountUuid': record.accountUuid,
+    'createdAt': record.createdAt?.toUtc().toIso8601String(),
+    'updatedAt': record.updatedAt?.toUtc().toIso8601String(),
+    'completedAt': record.completedAt?.toUtc().toIso8601String(),
   };
 }
 
-SwapPrototypeIntent _intentFromJson(Map<String, dynamic> json) {
-  return SwapPrototypeIntent(
+SwapIntentRecord _recordFromJson(Map<String, dynamic> json) {
+  return SwapIntentRecord(
     id: _string(json['id']),
-    title: _string(json['title']),
-    pair: _string(json['pair']),
-    sellAmount: _string(json['sellAmount']),
-    receiveEstimate: _string(json['receiveEstimate']),
-    provider: _string(json['provider']),
+    pairText: _string(json['pair']),
+    sellAmountText: _string(json['sellAmount']),
+    receiveEstimateText: _string(json['receiveEstimate']),
+    providerLabel: _string(json['provider']),
     status: _enumByName(
       SwapIntentStatus.values,
       json['status'],
       SwapIntentStatus.processing,
     ),
     nextAction: _string(json['nextAction']),
-    steps: _stepsFromJson(json['steps']),
-    exposure: _fieldsFromJson(json['exposure']),
-    receipt: _fieldsFromJson(json['receipt']),
     direction: _optionalEnumByName(SwapDirection.values, json['direction']),
     externalAsset: SwapAsset.fromPersistedJson(json['externalAsset']),
     depositAddress: _optionalString(json['depositAddress']),
@@ -188,10 +190,14 @@ SwapPrototypeIntent _intentFromJson(Map<String, dynamic> json) {
     providerRefundInfo: _providerRefundInfoFromJson(json['providerRefundInfo']),
     lastStatusCheckedAt: _optionalDateTime(json['lastStatusCheckedAt']),
     statusError: _optionalString(json['statusError']),
+    broadcastNotice: _optionalString(json['broadcastNotice']),
     oneClickRecipient: _optionalString(json['oneClickRecipient']),
     oneClickRefundTo: _optionalString(json['oneClickRefundTo']),
     depositDeadline: _optionalDateTime(json['depositDeadline']),
     accountUuid: _optionalString(json['accountUuid']),
+    createdAt: _optionalDateTime(json['createdAt']),
+    updatedAt: _optionalDateTime(json['updatedAt']),
+    completedAt: _optionalDateTime(json['completedAt']),
   );
 }
 
@@ -216,47 +222,6 @@ SwapProviderRefundInfo? _providerRefundInfoFromJson(Object? value) {
     refundReason: _optionalString(value['refundReason']),
   );
   return info.hasAny ? info : null;
-}
-
-Map<String, Object?> _stepToJson(SwapPrototypeStep step) {
-  return {
-    'label': step.label,
-    'state': step.state.name,
-    'evidence': step.evidence,
-  };
-}
-
-List<SwapPrototypeStep> _stepsFromJson(Object? value) {
-  if (value is! List) return const [];
-  return [
-    for (final item in value)
-      if (item is Map<String, dynamic>)
-        SwapPrototypeStep(
-          label: _string(item['label']),
-          state: _enumByName(
-            SwapPrototypeStepState.values,
-            item['state'],
-            SwapPrototypeStepState.pending,
-          ),
-          evidence: _string(item['evidence']),
-        ),
-  ];
-}
-
-Map<String, Object?> _fieldToJson(SwapPrototypeField field) {
-  return {'label': field.label, 'value': field.value};
-}
-
-List<SwapPrototypeField> _fieldsFromJson(Object? value) {
-  if (value is! List) return const [];
-  return [
-    for (final item in value)
-      if (item is Map<String, dynamic>)
-        SwapPrototypeField(
-          label: _string(item['label']),
-          value: _string(item['value']),
-        ),
-  ];
 }
 
 String _string(Object? value) => value is String ? value : '';

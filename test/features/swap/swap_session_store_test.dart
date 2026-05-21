@@ -108,8 +108,17 @@ void main() {
     expect(restored.single.oneClickRefundTo, 'u1refund');
     expect(restored.single.depositDeadline, DateTime.utc(2026, 5, 7, 12));
     expect(restored.single.status, SwapIntentStatus.processing);
-    expect(restored.single.steps.single.label, 'Deposit observed');
-    expect(restored.single.receipt.last.value, 'u1refund');
+    expect(
+      restored.single.steps.map((step) => step.label),
+      contains('Deposit observed'),
+    );
+    expect(
+      restored.single.receipt
+          .where((field) => field.label == 'Refund to')
+          .single
+          .value,
+      'u1refund',
+    );
   });
 
   test('keeps persisted swap sessions scoped to their account', () async {
@@ -139,6 +148,30 @@ void main() {
     expect(accountTwo.single.id, 'swap-account-2');
     expect(accountTwo.single.accountUuid, 'account-2');
   });
+
+  test(
+    'persists swap sessions as raw records, not presentation rows',
+    () async {
+      final intent = _minimalIntent(
+        id: 'swap-raw-record',
+        accountUuid: 'account-1',
+      );
+
+      await store.saveIntents(accountUuid: 'account-1', intents: [intent]);
+
+      final raw = await secureStore.readString(
+        'zcash_swap_sessions_v1:account-1',
+      );
+
+      expect(raw, isNotNull);
+      expect(raw, contains('"createdAt"'));
+      expect(raw, contains('"updatedAt"'));
+      expect(raw, isNot(contains('"title"')));
+      expect(raw, isNot(contains('"steps"')));
+      expect(raw, isNot(contains('"exposure"')));
+      expect(raw, isNot(contains('"receipt"')));
+    },
+  );
 
   test('round-trips only the last attempted swap pair', () async {
     const draft = SwapDraftSnapshot(

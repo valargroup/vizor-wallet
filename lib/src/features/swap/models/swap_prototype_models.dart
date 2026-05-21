@@ -132,6 +132,180 @@ class SwapDraftSnapshot {
   final int slippageBps;
 }
 
+class SwapIntentRecord {
+  const SwapIntentRecord({
+    required this.id,
+    required this.providerLabel,
+    required this.pairText,
+    required this.sellAmountText,
+    required this.receiveEstimateText,
+    required this.status,
+    required this.nextAction,
+    this.direction,
+    this.externalAsset,
+    this.depositAddress,
+    this.depositMemo,
+    this.depositTxHash,
+    this.providerQuoteId,
+    this.providerSignature,
+    this.providerStatusRaw,
+    this.nearIntentHash,
+    this.nearTransactionHash,
+    this.originChainTxHash,
+    this.destinationChainTxHash,
+    this.providerRefundInfo,
+    this.lastStatusCheckedAt,
+    this.statusError,
+    this.broadcastNotice,
+    this.oneClickRecipient,
+    this.oneClickRefundTo,
+    this.depositDeadline,
+    this.accountUuid,
+    this.createdAt,
+    this.updatedAt,
+    this.completedAt,
+  });
+
+  factory SwapIntentRecord.fromIntent(SwapPrototypeIntent intent) {
+    return SwapIntentRecord(
+      id: intent.id,
+      providerLabel: intent.provider,
+      pairText: intent.pair,
+      sellAmountText: intent.sellAmount,
+      receiveEstimateText: intent.receiveEstimate,
+      status: intent.status,
+      nextAction: intent.nextAction,
+      direction: intent.direction,
+      externalAsset: intent.externalAsset,
+      depositAddress: intent.depositAddress,
+      depositMemo: intent.depositMemo,
+      depositTxHash: intent.depositTxHash,
+      providerQuoteId: intent.providerQuoteId,
+      providerSignature: intent.providerSignature,
+      providerStatusRaw: intent.providerStatusRaw,
+      nearIntentHash: intent.nearIntentHash,
+      nearTransactionHash: intent.nearTransactionHash,
+      originChainTxHash: intent.originChainTxHash,
+      destinationChainTxHash: intent.destinationChainTxHash,
+      providerRefundInfo: intent.providerRefundInfo,
+      lastStatusCheckedAt: intent.lastStatusCheckedAt,
+      statusError: intent.statusError,
+      broadcastNotice: intent.broadcastNotice,
+      oneClickRecipient: intent.oneClickRecipient,
+      oneClickRefundTo: intent.oneClickRefundTo,
+      depositDeadline: intent.depositDeadline,
+      accountUuid: intent.accountUuid,
+      createdAt: intent.createdAt,
+      updatedAt: intent.updatedAt,
+      completedAt: intent.completedAt,
+    );
+  }
+
+  final String id;
+  final String providerLabel;
+  final String pairText;
+  final String sellAmountText;
+  final String receiveEstimateText;
+  final SwapIntentStatus status;
+  final String nextAction;
+  final SwapDirection? direction;
+  final SwapAsset? externalAsset;
+  final String? depositAddress;
+  final String? depositMemo;
+  final String? depositTxHash;
+  final String? providerQuoteId;
+  final String? providerSignature;
+  final String? providerStatusRaw;
+  final String? nearIntentHash;
+  final String? nearTransactionHash;
+  final String? originChainTxHash;
+  final String? destinationChainTxHash;
+  final SwapProviderRefundInfo? providerRefundInfo;
+  final DateTime? lastStatusCheckedAt;
+  final String? statusError;
+  final String? broadcastNotice;
+  final String? oneClickRecipient;
+  final String? oneClickRefundTo;
+  final DateTime? depositDeadline;
+  final String? accountUuid;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? completedAt;
+
+  DateTime? get activityTimestamp =>
+      updatedAt ?? createdAt ?? lastStatusCheckedAt;
+
+  SwapIntentRecord copyWith({
+    String? id,
+    String? providerLabel,
+    String? pairText,
+    String? sellAmountText,
+    String? receiveEstimateText,
+    SwapIntentStatus? status,
+    String? nextAction,
+    SwapDirection? direction,
+    SwapAsset? externalAsset,
+    String? depositAddress,
+    String? depositMemo,
+    String? depositTxHash,
+    String? providerQuoteId,
+    String? providerSignature,
+    String? providerStatusRaw,
+    String? nearIntentHash,
+    String? nearTransactionHash,
+    String? originChainTxHash,
+    String? destinationChainTxHash,
+    SwapProviderRefundInfo? providerRefundInfo,
+    DateTime? lastStatusCheckedAt,
+    String? statusError,
+    String? broadcastNotice,
+    String? oneClickRecipient,
+    String? oneClickRefundTo,
+    DateTime? depositDeadline,
+    String? accountUuid,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    DateTime? completedAt,
+    bool clearStatusError = false,
+    bool clearBroadcastNotice = false,
+  }) {
+    return SwapIntentRecord(
+      id: id ?? this.id,
+      providerLabel: providerLabel ?? this.providerLabel,
+      pairText: pairText ?? this.pairText,
+      sellAmountText: sellAmountText ?? this.sellAmountText,
+      receiveEstimateText: receiveEstimateText ?? this.receiveEstimateText,
+      status: status ?? this.status,
+      nextAction: nextAction ?? this.nextAction,
+      direction: direction ?? this.direction,
+      externalAsset: externalAsset ?? this.externalAsset,
+      depositAddress: depositAddress ?? this.depositAddress,
+      depositMemo: depositMemo ?? this.depositMemo,
+      depositTxHash: depositTxHash ?? this.depositTxHash,
+      providerQuoteId: providerQuoteId ?? this.providerQuoteId,
+      providerSignature: providerSignature ?? this.providerSignature,
+      providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
+      nearIntentHash: nearIntentHash ?? this.nearIntentHash,
+      nearTransactionHash: nearTransactionHash ?? this.nearTransactionHash,
+      originChainTxHash: originChainTxHash ?? this.originChainTxHash,
+      destinationChainTxHash:
+          destinationChainTxHash ?? this.destinationChainTxHash,
+      providerRefundInfo: providerRefundInfo ?? this.providerRefundInfo,
+      lastStatusCheckedAt: lastStatusCheckedAt ?? this.lastStatusCheckedAt,
+      statusError: clearStatusError ? null : statusError ?? this.statusError,
+      broadcastNotice:
+          clearBroadcastNotice ? null : broadcastNotice ?? this.broadcastNotice,
+      oneClickRecipient: oneClickRecipient ?? this.oneClickRecipient,
+      oneClickRefundTo: oneClickRefundTo ?? this.oneClickRefundTo,
+      depositDeadline: depositDeadline ?? this.depositDeadline,
+      accountUuid: accountUuid ?? this.accountUuid,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: completedAt ?? this.completedAt,
+    );
+  }
+}
+
 class SwapPrototypeIntent {
   const SwapPrototypeIntent({
     required this.id,
@@ -164,6 +338,10 @@ class SwapPrototypeIntent {
     this.oneClickRefundTo,
     this.depositDeadline,
     this.accountUuid,
+    this.createdAt,
+    this.updatedAt,
+    this.completedAt,
+    this.broadcastNotice,
   });
 
   final String id;
@@ -196,6 +374,10 @@ class SwapPrototypeIntent {
   final String? oneClickRefundTo;
   final DateTime? depositDeadline;
   final String? accountUuid;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? completedAt;
+  final String? broadcastNotice;
 
   String get statusLabel => status.label;
 
@@ -230,7 +412,12 @@ class SwapPrototypeIntent {
     String? oneClickRefundTo,
     DateTime? depositDeadline,
     String? accountUuid,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    DateTime? completedAt,
+    String? broadcastNotice,
     bool clearStatusError = false,
+    bool clearBroadcastNotice = false,
   }) {
     return SwapPrototypeIntent(
       id: id ?? this.id,
@@ -264,6 +451,11 @@ class SwapPrototypeIntent {
       oneClickRefundTo: oneClickRefundTo ?? this.oneClickRefundTo,
       depositDeadline: depositDeadline ?? this.depositDeadline,
       accountUuid: accountUuid ?? this.accountUuid,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: completedAt ?? this.completedAt,
+      broadcastNotice:
+          clearBroadcastNotice ? null : broadcastNotice ?? this.broadcastNotice,
     );
   }
 }
@@ -381,9 +573,10 @@ class SwapPrototypeState {
     return externalRequests.where((request) => request.isOpen).length;
   }
 
-  String get walletZecPreviewAddress => direction.sendsZec
-      ? 'u1wallet-refund-preview'
-      : 'u1wallet-shielded-preview';
+  String get walletZecPreviewAddress =>
+      direction.sendsZec
+          ? 'u1wallet-refund-preview'
+          : 'u1wallet-shielded-preview';
 
   double? get sellAmount {
     final amount = double.tryParse(amountText);
@@ -400,9 +593,10 @@ class SwapPrototypeState {
   double? get quoteAmount =>
       quoteMode == SwapQuoteMode.exactInput ? sellAmount : receiveAmount;
 
-  String get quoteAmountText => quoteMode == SwapQuoteMode.exactInput
-      ? amountText.trim()
-      : receiveAmountText.trim();
+  String get quoteAmountText =>
+      quoteMode == SwapQuoteMode.exactInput
+          ? amountText.trim()
+          : receiveAmountText.trim();
 
   SwapAddressPlan? get addressPlan => reviewAddressPlan ?? draftAddressPlan;
 
@@ -416,13 +610,15 @@ class SwapPrototypeState {
     );
   }
 
-  String get destinationFieldLabel => direction.sendsZec
-      ? 'Destination'
-      : '${externalAsset.symbol} refund address';
+  String get destinationFieldLabel =>
+      direction.sendsZec
+          ? 'Destination'
+          : '${externalAsset.symbol} refund address';
 
-  String get destinationFieldHint => direction.sendsZec
-      ? 'External ${externalAsset.symbol} address or account'
-      : 'Refund address on the ${externalAsset.symbol} source chain';
+  String get destinationFieldHint =>
+      direction.sendsZec
+          ? 'External ${externalAsset.symbol} address or account'
+          : 'Refund address on the ${externalAsset.symbol} source chain';
 
   bool get canReviewQuote =>
       quoteAmount != null && draftAddressPlan != null && !quoteLoading;
@@ -474,9 +670,10 @@ class SwapPrototypeState {
       return [
         SwapPrototypeField(
           label: 'Deposit address',
-          value: hasQuote
-              ? 'one-time ${externalAsset.symbol} address prepared at review'
-              : 'prepared after quote review',
+          value:
+              hasQuote
+                  ? 'one-time ${externalAsset.symbol} address prepared at review'
+                  : 'prepared after quote review',
         ),
         const SwapPrototypeField(
           label: 'ZEC destination',
@@ -484,15 +681,17 @@ class SwapPrototypeState {
         ),
         SwapPrototypeField(
           label: 'Refund path',
-          value: addressPlan == null
-              ? '${externalAsset.symbol} refund address required'
-              : '${externalAsset.symbol} refunds return to entered address',
+          value:
+              addressPlan == null
+                  ? '${externalAsset.symbol} refund address required'
+                  : '${externalAsset.symbol} refunds return to entered address',
         ),
         SwapPrototypeField(
           label: 'Source-chain visibility',
-          value: hasQuote
-              ? 'external deposit is public on source chain'
-              : 'not open yet',
+          value:
+              hasQuote
+                  ? 'external deposit is public on source chain'
+                  : 'not open yet',
         ),
         SwapPrototypeField(
           label: 'Third-party data',
@@ -507,9 +706,10 @@ class SwapPrototypeState {
     return [
       SwapPrototypeField(
         label: 'Deposit address',
-        value: hasQuote
-            ? 'one-time transparent address prepared at review'
-            : 'prepared after quote review',
+        value:
+            hasQuote
+                ? 'one-time transparent address prepared at review'
+                : 'prepared after quote review',
       ),
       const SwapPrototypeField(
         label: 'Address reuse',
@@ -517,9 +717,8 @@ class SwapPrototypeState {
       ),
       SwapPrototypeField(
         label: 'Transparent window',
-        value: hasQuote
-            ? 'opens only after ZEC deposit is sent'
-            : 'not open yet',
+        value:
+            hasQuote ? 'opens only after ZEC deposit is sent' : 'not open yet',
       ),
       const SwapPrototypeField(
         label: 'Third-party data',
@@ -591,20 +790,18 @@ class SwapPrototypeState {
           supportedExternalAssets ?? this.supportedExternalAssets,
       indicativeExternalPerZec:
           indicativeExternalPerZec ?? this.indicativeExternalPerZec,
-      previewQuote: clearPreviewQuote
-          ? null
-          : previewQuote ?? this.previewQuote,
+      previewQuote:
+          clearPreviewQuote ? null : previewQuote ?? this.previewQuote,
       previewQuoteLoading: previewQuoteLoading ?? this.previewQuoteLoading,
-      previewQuoteError: clearPreviewQuote || clearPreviewQuoteError
-          ? null
-          : previewQuoteError ?? this.previewQuoteError,
+      previewQuoteError:
+          clearPreviewQuote || clearPreviewQuoteError
+              ? null
+              : previewQuoteError ?? this.previewQuoteError,
       reviewQuote: clearReview ? null : reviewQuote ?? this.reviewQuote,
-      reviewAddressPlan: clearReview
-          ? null
-          : reviewAddressPlan ?? this.reviewAddressPlan,
-      reviewAccountUuid: clearReview
-          ? null
-          : reviewAccountUuid ?? this.reviewAccountUuid,
+      reviewAddressPlan:
+          clearReview ? null : reviewAddressPlan ?? this.reviewAddressPlan,
+      reviewAccountUuid:
+          clearReview ? null : reviewAccountUuid ?? this.reviewAccountUuid,
       quoteLoading: quoteLoading ?? this.quoteLoading,
       quoteExpired: clearReview ? false : quoteExpired ?? this.quoteExpired,
       quoteError: clearQuoteError ? null : quoteError ?? this.quoteError,
@@ -612,20 +809,22 @@ class SwapPrototypeState {
       statusError: clearStatusError ? null : statusError ?? this.statusError,
       startSubmitting: startSubmitting ?? this.startSubmitting,
       maxAmountLoading: maxAmountLoading ?? this.maxAmountLoading,
-      maxAmountError: clearMaxAmountError
-          ? null
-          : maxAmountError ?? this.maxAmountError,
+      maxAmountError:
+          clearMaxAmountError ? null : maxAmountError ?? this.maxAmountError,
       depositTxHashText: depositTxHashText ?? this.depositTxHashText,
       depositSubmitting: depositSubmitting ?? this.depositSubmitting,
-      selectedIntentId: clearSelectedIntent
-          ? null
-          : selectedIntentId ?? this.selectedIntentId,
-      selectedRequestId: clearSelectedRequest
-          ? null
-          : selectedRequestId ?? this.selectedRequestId,
-      requestImportError: clearRequestImportError
-          ? null
-          : requestImportError ?? this.requestImportError,
+      selectedIntentId:
+          clearSelectedIntent
+              ? null
+              : selectedIntentId ?? this.selectedIntentId,
+      selectedRequestId:
+          clearSelectedRequest
+              ? null
+              : selectedRequestId ?? this.selectedRequestId,
+      requestImportError:
+          clearRequestImportError
+              ? null
+              : requestImportError ?? this.requestImportError,
     );
   }
 }
