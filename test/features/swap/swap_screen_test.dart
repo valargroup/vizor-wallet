@@ -560,10 +560,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('swap_asset_group_usdc')), findsOneWidget);
+    expect(find.text('USDC networks'), findsNothing);
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey('swap_asset_network_badge_usdc')),
+        of: find.byKey(const ValueKey('swap_asset_row_usdc')),
         matching: find.text('Ethereum'),
       ),
       findsOneWidget,
@@ -571,12 +571,13 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(
-          const ValueKey('swap_asset_network_badge_nep141:base-usdc.example'),
+          const ValueKey('swap_asset_row_nep141:base-usdc.example'),
         ),
         matching: find.text('Base'),
       ),
       findsOneWidget,
     );
+    expect(find.text('USD Coin'), findsNothing);
     expect(find.text('Ethereum USDC'), findsNothing);
   });
 

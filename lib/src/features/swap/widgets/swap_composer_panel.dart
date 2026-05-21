@@ -1245,7 +1245,6 @@ class _AssetPickerPopover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final entries = _assetPickerEntries(assets);
     return Container(
       key: const ValueKey('swap_external_asset_menu'),
       width: 316,
@@ -1286,20 +1285,14 @@ class _AssetPickerPopover extends StatelessWidget {
                   )
                 : ListView.separated(
                     shrinkWrap: true,
-                    itemCount: entries.length,
+                    itemCount: assets.length,
                     separatorBuilder: (_, _) =>
                         const SizedBox(height: AppSpacing.xxs),
                     itemBuilder: (context, index) {
-                      final entry = entries[index];
-                      final header = entry.header;
-                      if (header != null) {
-                        return _AssetMenuSectionHeader(header: header);
-                      }
-                      final asset = entry.asset!;
+                      final asset = assets[index];
                       return _AssetMenuRow(
                         asset: asset,
                         selected: selected == asset,
-                        showNetworkBadge: entry.showNetworkBadge,
                         onTap: () => onSelected(asset),
                       );
                     },
@@ -1311,102 +1304,15 @@ class _AssetPickerPopover extends StatelessWidget {
   }
 }
 
-class _AssetPickerEntry {
-  const _AssetPickerEntry.asset({
-    required this.asset,
-    required this.showNetworkBadge,
-  }) : header = null;
-
-  const _AssetPickerEntry.header(this.header)
-    : asset = null,
-      showNetworkBadge = false;
-
-  final SwapAsset? asset;
-  final _AssetPickerHeader? header;
-  final bool showNetworkBadge;
-}
-
-class _AssetPickerHeader {
-  const _AssetPickerHeader({required this.symbol, required this.count});
-
-  final String symbol;
-  final int count;
-}
-
-List<_AssetPickerEntry> _assetPickerEntries(List<SwapAsset> assets) {
-  final symbolCounts = <String, int>{};
-  for (final asset in assets) {
-    final key = asset.symbol.toLowerCase();
-    symbolCounts[key] = (symbolCounts[key] ?? 0) + 1;
-  }
-
-  final insertedHeaders = <String>{};
-  final entries = <_AssetPickerEntry>[];
-  for (final asset in assets) {
-    final key = asset.symbol.toLowerCase();
-    final count = symbolCounts[key] ?? 0;
-    final duplicateSymbol = count > 1;
-    if (duplicateSymbol && insertedHeaders.add(key)) {
-      entries.add(
-        _AssetPickerEntry.header(
-          _AssetPickerHeader(symbol: asset.symbol, count: count),
-        ),
-      );
-    }
-    entries.add(
-      _AssetPickerEntry.asset(asset: asset, showNetworkBadge: duplicateSymbol),
-    );
-  }
-  return entries;
-}
-
-class _AssetMenuSectionHeader extends StatelessWidget {
-  const _AssetMenuSectionHeader({required this.header});
-
-  final _AssetPickerHeader header;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Padding(
-      key: ValueKey('swap_asset_group_${header.symbol.toLowerCase()}'),
-      padding: const EdgeInsets.only(
-        left: AppSpacing.xxs,
-        top: AppSpacing.xxs,
-        bottom: AppSpacing.xxs,
-      ),
-      child: Row(
-        children: [
-          Text(
-            '${header.symbol} networks',
-            style: AppTypography.labelMedium.copyWith(
-              color: colors.text.accent,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.xxs),
-          Text(
-            '${header.count}',
-            style: AppTypography.labelSmall.copyWith(
-              color: colors.text.secondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _AssetMenuRow extends StatelessWidget {
   const _AssetMenuRow({
     required this.asset,
     required this.selected,
-    required this.showNetworkBadge,
     required this.onTap,
   });
 
   final SwapAsset asset;
   final bool selected;
-  final bool showNetworkBadge;
   final VoidCallback onTap;
 
   @override
@@ -1435,42 +1341,17 @@ class _AssetMenuRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          asset.symbol,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.labelLarge.copyWith(
-                            color: colors.text.accent,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.xxs),
-                        if (showNetworkBadge) ...[
-                          _AssetNetworkBadge(
-                            key: ValueKey(
-                              'swap_asset_network_badge_${asset.identityKey}',
-                            ),
-                            label: asset.chainLabel,
-                          ),
-                          const SizedBox(width: AppSpacing.xxs),
-                        ],
-                        if (!showNetworkBadge)
-                          Flexible(
-                            child: Text(
-                              asset.displayName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.bodySmall.copyWith(
-                                color: colors.text.secondary,
-                              ),
-                            ),
-                          ),
-                      ],
+                    Text(
+                      asset.symbol,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.labelLarge.copyWith(
+                        color: colors.text.accent,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      showNetworkBadge ? asset.displayName : asset.chainLabel,
+                      asset.chainLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.labelSmall.copyWith(
@@ -1489,34 +1370,6 @@ class _AssetMenuRow extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _AssetNetworkBadge extends StatelessWidget {
-  const _AssetNetworkBadge({required this.label, super.key});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xxs,
-        vertical: 1,
-      ),
-      decoration: BoxDecoration(
-        color: colors.background.base,
-        border: Border.all(color: colors.border.subtle),
-        borderRadius: BorderRadius.circular(AppRadii.full),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppTypography.labelSmall.copyWith(color: colors.text.secondary),
       ),
     );
   }

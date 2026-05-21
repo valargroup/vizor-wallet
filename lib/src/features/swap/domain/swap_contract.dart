@@ -338,6 +338,152 @@ const swapExternalAssets = <SwapAsset>[
   SwapAsset.doge,
 ];
 
+List<SwapAsset> sortSwapAssetsForSelection(Iterable<SwapAsset> assets) {
+  final indexed = <_IndexedSwapAsset>[];
+  final seen = <String>{};
+  var order = 0;
+  for (final asset in assets) {
+    if (seen.add(asset.identityKey)) {
+      indexed.add(_IndexedSwapAsset(asset, order));
+    }
+    order++;
+  }
+  indexed.sort(_compareIndexedSwapAssetForSelection);
+  return [for (final item in indexed) item.asset];
+}
+
+class _IndexedSwapAsset {
+  const _IndexedSwapAsset(this.asset, this.order);
+
+  final SwapAsset asset;
+  final int order;
+}
+
+int _compareIndexedSwapAssetForSelection(
+  _IndexedSwapAsset left,
+  _IndexedSwapAsset right,
+) {
+  final leftAsset = left.asset;
+  final rightAsset = right.asset;
+  final routeRank = _compareInt(
+    _swapAssetRoutePriority(leftAsset),
+    _swapAssetRoutePriority(rightAsset),
+  );
+  if (routeRank != 0) return routeRank;
+
+  final symbolRank = _compareInt(
+    _swapAssetSymbolPriority(leftAsset.symbol),
+    _swapAssetSymbolPriority(rightAsset.symbol),
+  );
+  if (symbolRank != 0) return symbolRank;
+
+  final symbol = _swapAssetSortKey(
+    leftAsset.symbol,
+  ).compareTo(_swapAssetSortKey(rightAsset.symbol));
+  if (symbol != 0) return symbol;
+
+  final chainRank = _compareInt(
+    _swapAssetChainPriority(leftAsset.chainTicker),
+    _swapAssetChainPriority(rightAsset.chainTicker),
+  );
+  if (chainRank != 0) return chainRank;
+
+  final chain = leftAsset.chainLabel.compareTo(rightAsset.chainLabel);
+  if (chain != 0) return chain;
+
+  final assetId = (leftAsset.assetId ?? leftAsset.name).compareTo(
+    rightAsset.assetId ?? rightAsset.name,
+  );
+  if (assetId != 0) return assetId;
+
+  return _compareInt(left.order, right.order);
+}
+
+int _swapAssetRoutePriority(SwapAsset asset) {
+  final key =
+      '${_swapAssetSortKey(asset.symbol)}:${_swapAssetSortKey(asset.chainTicker)}';
+  const priority = <String>[
+    'usdc:eth',
+    'btc:btc',
+    'eth:eth',
+    'sol:sol',
+    'usdt:eth',
+    'near:near',
+    'usdc:base',
+    'usdc:arb',
+    'usdc:sol',
+    'usdt:sol',
+    'usdt:bsc',
+    'usdt:tron',
+    'usdc:sui',
+    'dai:eth',
+    'wbtc:eth',
+    'cbbtc:base',
+    'weth:eth',
+    'doge:doge',
+  ];
+  final index = priority.indexOf(key);
+  return index == -1 ? 1000 : index;
+}
+
+int _swapAssetSymbolPriority(String symbol) {
+  final key = _swapAssetSortKey(symbol);
+  const priority = <String>[
+    'usdc',
+    'usdt',
+    'btc',
+    'eth',
+    'sol',
+    'near',
+    'weth',
+    'wbtc',
+    'cbbtc',
+    'xbtc',
+    'bnb',
+    'doge',
+    'xrp',
+    'dai',
+    'usdt0',
+    'susdc',
+    'xdai',
+  ];
+  final index = priority.indexOf(key);
+  return index == -1 ? 1000 : index;
+}
+
+int _swapAssetChainPriority(String chainTicker) {
+  final key = _swapAssetSortKey(chainTicker);
+  const priority = <String>[
+    'eth',
+    'base',
+    'arb',
+    'sol',
+    'near',
+    'btc',
+    'bsc',
+    'tron',
+    'sui',
+    'aptos',
+    'op',
+    'avax',
+    'gnosis',
+    'pol',
+    'ton',
+    'stellar',
+    'xlayer',
+    'plasma',
+    'zec',
+  ];
+  final index = priority.indexOf(key);
+  return index == -1 ? 1000 : index;
+}
+
+String _swapAssetSortKey(String value) {
+  return _normalizeIconKey(value).replaceAll(RegExp(r'[^a-z0-9]+'), '');
+}
+
+int _compareInt(int left, int right) => left.compareTo(right);
+
 SwapAsset? _staticAssetFor(String symbol, String chainTicker, int decimals) {
   for (final asset in SwapAsset.values) {
     if (asset.symbol.toLowerCase() == symbol.toLowerCase() &&
@@ -370,6 +516,9 @@ String _normalizeIconKey(String value) {
 String _tokenIconAssetPath(String iconKey) {
   final assetKey = switch (iconKey) {
     'btc(omni)' => 'btc',
+    'gtusdcp' || 'mwusdc' || 'sparkusdc' || 'steakusdc' => 'usdc',
+    'hemibtc' => 'btc',
+    'kv-gtsolb' => 'sol',
     'nrusdt' || 'usdt0' => 'usdt',
     'stnear' => 'near',
     _ => iconKey,
@@ -379,6 +528,7 @@ String _tokenIconAssetPath(String iconKey) {
 
 String _chainIconAssetPath(String iconKey) {
   return switch (iconKey) {
+    'abs' => 'assets/swap/chains/eth.png',
     'bsc' => 'assets/swap/tokens/bnb.png',
     'cardano' => 'assets/swap/tokens/ada.png',
     'xlayer' => 'assets/swap/tokens/okb.png',
@@ -775,10 +925,10 @@ class SwapPricingSnapshot {
   List<SwapAsset> get supportedExternalAssets {
     final zecPrice = usdPrices[SwapAsset.zec];
     if (zecPrice == null || zecPrice <= 0) return const [];
-    return [
+    return sortSwapAssetsForSelection([
       for (final entry in usdPrices.entries)
         if (entry.key != SwapAsset.zec && entry.value > 0) entry.key,
-    ];
+    ]);
   }
 
   Map<SwapAsset, double> get externalPerZec {

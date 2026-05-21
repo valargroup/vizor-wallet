@@ -572,7 +572,7 @@ class NearIntentsOneClickSwapProvider
         assets.add(asset);
       }
     }
-    return assets;
+    return sortSwapAssetsForSelection(assets);
   }
 
   SwapAsset? _assetFromAssetId(String assetId, List<_OneClickToken> tokens) {

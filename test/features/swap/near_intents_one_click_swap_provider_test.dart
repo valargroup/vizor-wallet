@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/swap/domain/near_intents_one_click_swap_provider.dart';
@@ -347,6 +348,152 @@ void main() {
     },
   );
 
+  test('supported assets are prioritized without picker grouping', () async {
+    final transport = _FakeOneClickTransport([
+      _FakeResponse.get('/v0/tokens', _tokensWithAdditionalAssets),
+    ]);
+    final provider = NearIntentsOneClickSwapProvider(transport: transport);
+
+    final supported = await provider.listSupportedExternalAssets();
+
+    expect(supported.map((asset) => '${asset.symbol}:${asset.chainTicker}'), [
+      'USDC:eth',
+      'BTC:btc',
+      'SOL:sol',
+      'NEAR:near',
+      'USDC:base',
+      'USDC:near',
+    ]);
+  });
+
+  test('representative live token icon mappings resolve to bundled images', () {
+    final assets = [
+      SwapAsset.live(
+        assetId: 'nep141:aptos.omft.near',
+        symbol: 'APT',
+        blockchain: 'aptos',
+        decimals: 8,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:avax.omft.near',
+        symbol: 'AVAX',
+        blockchain: 'avax',
+        decimals: 18,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:bch.omft.near',
+        symbol: 'BCH',
+        blockchain: 'bch',
+        decimals: 8,
+      ),
+      SwapAsset.live(
+        assetId:
+            'nep141:eth-0x6b175474e89094c44da98b954eedeac495271d0f.omft.near',
+        symbol: 'DAI',
+        blockchain: 'eth',
+        decimals: 18,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:ltc.omft.near',
+        symbol: 'LTC',
+        blockchain: 'ltc',
+        decimals: 8,
+      ),
+      SwapAsset.live(
+        assetId: 'nep245:v2_1.omni.hot.tg:10_11111111111111111111',
+        symbol: 'ETH',
+        blockchain: 'op',
+        decimals: 18,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:sui.omft.near',
+        symbol: 'SUI',
+        blockchain: 'sui',
+        decimals: 9,
+      ),
+      SwapAsset.live(
+        assetId: 'nep245:v2_1.omni.hot.tg:1117_',
+        symbol: 'TON',
+        blockchain: 'ton',
+        decimals: 9,
+      ),
+      SwapAsset.live(
+        assetId: 'nep245:v2_1.omni.hot.tg:1100_111',
+        symbol: 'XLM',
+        blockchain: 'stellar',
+        decimals: 7,
+      ),
+      SwapAsset.live(
+        assetId:
+            'nep141:eth-0x68749665ff8d2d112fa859aa293f07a622782f38.omft.near',
+        symbol: 'XAUT',
+        blockchain: 'eth',
+        decimals: 6,
+      ),
+      SwapAsset.live(
+        assetId: 'nep245:v2_1.omni.hot.tg:143_usdt0',
+        symbol: 'USDT0',
+        blockchain: 'monad',
+        decimals: 6,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:base-gtusdcp.omft.near',
+        symbol: 'gtUSDCp',
+        blockchain: 'base',
+        decimals: 18,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:eth-hemibtc.omft.near',
+        symbol: 'hemiBTC',
+        blockchain: 'eth',
+        decimals: 8,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:sol-kv-gtsolb.omft.near',
+        symbol: 'kV-gtSOLb',
+        blockchain: 'sol',
+        decimals: 9,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:btc.omft.near',
+        symbol: 'BTC(OMNI)',
+        blockchain: 'btc',
+        decimals: 8,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:cfi.consumer-fi.near',
+        symbol: 'CFI',
+        blockchain: 'near',
+        decimals: 18,
+      ),
+      SwapAsset.live(
+        assetId: 'nep245:v2_1.omni.hot.tg:56_3NNshCLCt8r8E7x9FoDuiwoNQWgp',
+        symbol: 'EVAA',
+        blockchain: 'bsc',
+        decimals: 9,
+      ),
+      SwapAsset.live(
+        assetId: 'nep141:itlx.intellex_xyz.near',
+        symbol: 'ITLX',
+        blockchain: 'near',
+        decimals: 24,
+      ),
+    ];
+
+    for (final asset in assets) {
+      expect(
+        File(asset.tokenIconAsset).existsSync(),
+        isTrue,
+        reason: '${asset.symbol} token icon should exist',
+      );
+      expect(
+        File(asset.chainIconAsset).existsSync(),
+        isTrue,
+        reason: '${asset.symbol} ${asset.chainTicker} chain icon should exist',
+      );
+    }
+  });
+
   test(
     'quote serializes 24-decimal NEAR amounts without range errors',
     () async {
@@ -450,16 +597,19 @@ void main() {
       ];
 
       expect(ethUsdcVariants, hasLength(2));
-      expect(ethUsdcVariants.map((asset) => asset.assetId), [
-        'nep141:usdc.example',
-        'nep141:eth-usdc.secondary',
-      ]);
+      expect(
+        ethUsdcVariants.map((asset) => asset.assetId),
+        unorderedEquals(['nep141:usdc.example', 'nep141:eth-usdc.secondary']),
+      );
       expect(ethUsdcVariants.first, isNot(ethUsdcVariants.last));
+      final secondaryEthUsdc = ethUsdcVariants.singleWhere(
+        (asset) => asset.assetId == 'nep141:eth-usdc.secondary',
+      );
 
       await provider.quote(
         SwapQuoteRequest(
           direction: SwapDirection.zecToExternal,
-          externalAsset: ethUsdcVariants.last,
+          externalAsset: secondaryEthUsdc,
           sellAmount: 1.5,
           destination: '0xrecipient',
           refundAddress: 'u1refund',
