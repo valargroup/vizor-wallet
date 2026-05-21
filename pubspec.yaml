@@ -49,11 +49,11 @@ dependencies:
   mobile_scanner:
     git:
       url: https://github.com/chainapsis/mobile_scanner.git
-      ref: 92141705ce5dc5afdb239fb5af5d512b1a0a726e
+      ref: 7932282afb502abfac2f5f9fc860491372e56eda
   desktop_window_bootstrap:
     git:
       url: https://github.com/chainapsis/desktop_window_bootstrap.git
-      ref: f5cce36be47458e691e170e38cd76eb7fd239331
+      ref: 01beee7
   crypto: ^3.0.7
   flutter_foreground_task: ^9.2.1
   window_manager: ^0.5.1
