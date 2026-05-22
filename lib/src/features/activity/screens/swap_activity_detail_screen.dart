@@ -43,31 +43,29 @@ class _SwapActivityDetailScreenState
           AppSpacing.md,
           AppSpacing.md,
           AppSpacing.md,
-          0,
+          AppSpacing.md,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: AppRouteBackLink(minWidth: 60),
-            ),
-            const SizedBox(height: AppSpacing.s),
-            Expanded(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
-                  child: SizedBox.expand(
-                    child: SwapActivityDetailSurface(
-                      intentId: widget.swapIntentId,
-                      autoSignZecDeposit: widget.autoSignZecDeposit,
-                    ),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: AppRouteBackLink(minWidth: 60),
+                ),
+                const SizedBox(height: AppSpacing.s),
+                Expanded(
+                  child: SwapActivityDetailSurface(
+                    intentId: widget.swapIntentId,
+                    autoSignZecDeposit: widget.autoSignZecDeposit,
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

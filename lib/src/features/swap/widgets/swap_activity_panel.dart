@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart' show Material, MaterialType;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,14 +9,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
-import '../../../core/widgets/app_pane_modal_overlay.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
 import '../domain/near_intents_explorer.dart';
 import '../models/swap_prototype_models.dart';
 import '../providers/swap_prototype_provider.dart';
-import 'redacted_receipt_drawer.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 import 'swap_copy_feedback.dart';
@@ -57,7 +54,6 @@ class _SwapActivityDetailSurfaceState
   final _toastOverlayContextKey = GlobalKey(
     debugLabel: 'swap_activity_toast_overlay_context',
   );
-  String? _removeIntentId;
   _SwapKeystoneSigningRequest? _keystoneSigningRequest;
   var _initialIntentApplied = false;
 
@@ -130,10 +126,6 @@ class _SwapActivityDetailSurfaceState
     return accountHardwareByUuid[accountUuid] ?? false;
   }
 
-  void _closeRemoveIntentDialog() {
-    setState(() => _removeIntentId = null);
-  }
-
   void _refreshStatus() {
     final selected = ref.read(swapPrototypeProvider).selectedIntentOrNull;
     if (selected == null || !canRefreshSwapIntentStatus(selected.status)) {
@@ -172,20 +164,6 @@ class _SwapActivityDetailSurfaceState
       text: uri.toString(),
       toastMessage: 'Explorer Link Copied',
     );
-  }
-
-  void _requestRemoveIntent() {
-    final intent = ref.read(swapPrototypeProvider).selectedIntentOrNull;
-    if (intent == null) return;
-    setState(() => _removeIntentId = intent.id);
-  }
-
-  void _confirmRemoveIntent() {
-    final intentId = _removeIntentId;
-    if (intentId == null) return;
-    _closeRemoveIntentDialog();
-    unawaited(ref.read(swapPrototypeProvider.notifier).removeIntent(intentId));
-    context.go('/activity');
   }
 
   void _signZecDeposit(SwapPrototypeIntent intent) {
@@ -242,7 +220,6 @@ class _SwapActivityDetailSurfaceState
       (previous, next) {
         if (previous == next || !mounted) return;
         setState(() {
-          _removeIntentId = null;
           _keystoneSigningRequest = null;
         });
         context.go('/activity');
@@ -259,7 +236,6 @@ class _SwapActivityDetailSurfaceState
       });
     }
     final activityDetailIntent = _intentById(state.intents, initialIntentId);
-    final removeIntent = _intentById(state.intents, _removeIntentId);
     final keystoneSigningRequest = _keystoneSigningRequest;
     final keystoneSigningIntent = _intentById(
       state.intents,
@@ -276,13 +252,6 @@ class _SwapActivityDetailSurfaceState
             state: state,
             intent: activityDetailIntent,
             liveFundsEnabled: liveFundsEnabled,
-            onCopyText:
-                ({required String text, required String toastMessage}) =>
-                    copySwapText(
-                      _toastContext(context),
-                      text: text,
-                      toastMessage: toastMessage,
-                    ),
             onRefreshStatus: _refreshStatus,
             onDepositTxHashChanged: ref
                 .read(swapPrototypeProvider.notifier)
@@ -292,7 +261,6 @@ class _SwapActivityDetailSurfaceState
             onSignZecDeposit: _signZecDeposit,
             onCopyExplorerLink: (intent) =>
                 _copyNearIntentsExplorerLink(context, intent),
-            onRemoveIntent: _requestRemoveIntent,
             intentIsHardware: _isHardwareIntent(activityDetailIntent),
           ),
         if (keystoneSigningRequest != null && keystoneSigningIntent != null)
@@ -303,18 +271,6 @@ class _SwapActivityDetailSurfaceState
                   _closeKeystoneSigning(cleanupCancelledRequest: true),
               onDepositBroadcast: (result) =>
                   _handleKeystoneDepositBroadcast(context, result),
-            ),
-          ),
-        if (removeIntent != null)
-          AppPaneModalOverlay(
-            onDismiss: _closeRemoveIntentDialog,
-            child: Material(
-              type: MaterialType.transparency,
-              child: RemoveSwapActivityModal(
-                intent: removeIntent,
-                onCancel: _closeRemoveIntentDialog,
-                onConfirm: _confirmRemoveIntent,
-              ),
             ),
           ),
         Positioned.fill(
@@ -403,132 +359,6 @@ class SwapActivityDetailEntrance extends StatelessWidget {
   }
 }
 
-class RemoveSwapActivityModal extends StatelessWidget {
-  const RemoveSwapActivityModal({
-    required this.intent,
-    required this.onCancel,
-    required this.onConfirm,
-    super.key,
-  });
-
-  final SwapPrototypeIntent intent;
-  final VoidCallback onCancel;
-  final VoidCallback onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 460),
-      child: Container(
-        key: const ValueKey('swap_remove_intent_modal'),
-        margin: const EdgeInsets.all(AppSpacing.sm),
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        decoration: BoxDecoration(
-          color: colors.background.base,
-          border: Border.all(color: colors.border.regular),
-          borderRadius: BorderRadius.circular(AppRadii.small),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: colors.background.raised,
-                    border: Border.all(color: colors.border.subtle),
-                    borderRadius: BorderRadius.circular(AppRadii.xSmall),
-                  ),
-                  child: AppIcon(
-                    AppIcons.warning,
-                    size: AppIconSize.medium,
-                    color: colors.icon.warning,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Remove from activity?',
-                        style: AppTypography.headlineMedium.copyWith(
-                          color: colors.text.accent,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xxs),
-                      Text(
-                        intent.pair,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.labelLarge.copyWith(
-                          color: colors.text.secondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'This removes the saved swap from this wallet and stops polling it. '
-              'If this wallet has not seen funds for its reserved ZEC address, the address is released for reuse.',
-              style: AppTypography.bodyMedium.copyWith(
-                color: colors.text.primary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: colors.background.raised,
-                border: Border.all(color: colors.border.subtle),
-                borderRadius: BorderRadius.circular(AppRadii.xSmall),
-              ),
-              child: Text(
-                'This does not cancel the provider quote or recover sent funds. Remove it only if you did not send funds, or if you saved the deposit details elsewhere for support.',
-                style: AppTypography.bodySmall.copyWith(
-                  color: colors.text.warning,
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton(
-                    key: const ValueKey('swap_remove_intent_cancel_button'),
-                    onPressed: onCancel,
-                    variant: AppButtonVariant.secondary,
-                    size: AppButtonSize.medium,
-                    child: const Text('Keep'),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: AppButton(
-                    key: const ValueKey('swap_remove_intent_confirm_button'),
-                    onPressed: onConfirm,
-                    variant: AppButtonVariant.destructive,
-                    size: AppButtonSize.medium,
-                    child: const Text('Remove'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class SwapActivityEmptyState extends StatelessWidget {
   const SwapActivityEmptyState({super.key});
 
@@ -578,28 +408,20 @@ class _SwapActivityStack extends StatelessWidget {
   const _SwapActivityStack({
     required this.state,
     required this.selectedIntent,
-    required this.onCopyText,
-    required this.onRefreshStatus,
     required this.onDepositTxHashChanged,
     required this.onSubmitDepositTransaction,
     required this.onReviewFreshQuote,
     required this.onSignZecDeposit,
-    required this.onCopyExplorerLink,
-    required this.onRemoveIntent,
     required this.liveFundsEnabled,
     required this.intentIsHardware,
   });
 
   final SwapPrototypeState state;
   final SwapPrototypeIntent selectedIntent;
-  final SwapSupportCopyText onCopyText;
-  final VoidCallback onRefreshStatus;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
   final VoidCallback onReviewFreshQuote;
   final ValueChanged<SwapPrototypeIntent> onSignZecDeposit;
-  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
-  final VoidCallback onRemoveIntent;
   final bool liveFundsEnabled;
   final bool intentIsHardware;
 
@@ -611,7 +433,6 @@ class _SwapActivityStack extends StatelessWidget {
     final statusPlan = _ActivityStatusPlan.fromIntent(selectedIntent);
     final resolution = _ActivityResolution.fromIntent(selectedIntent);
     final showDepositControls = _showDepositControls(selectedIntent.status);
-    final showSupportDetails = _showActivityReceipt(selectedIntent.status);
     final statusError = selectedIntent.statusError ?? state.statusError;
     final hasDepositTx =
         selectedIntent.depositTxHash?.trim().isNotEmpty ?? false;
@@ -627,17 +448,13 @@ class _SwapActivityStack extends StatelessWidget {
           intent: selectedIntent,
           plan: statusPlan,
           statusRefreshing: state.statusRefreshing,
-          canRefreshStatus: canRefreshSwapIntentStatus(selectedIntent.status),
-          onRefreshStatus: onRefreshStatus,
-          onCopyExplorerLink: onCopyExplorerLink,
-          onRemoveIntent: onRemoveIntent,
         ),
         if (statusError != null) ...[
-          const SizedBox(height: AppSpacing.xs),
+          const SizedBox(height: AppSpacing.md),
           _ActivityStatusErrorPanel(message: statusError),
         ],
-        const SizedBox(height: AppSpacing.xs),
         if (showHardwareDepositAction) ...[
+          const SizedBox(height: AppSpacing.md),
           _ActivityHardwareActionPanel(
             key: const ValueKey('swap_hardware_deposit_action_panel'),
             iconName: AppIcons.qr,
@@ -648,19 +465,19 @@ class _SwapActivityStack extends StatelessWidget {
             buttonLabel: 'Sign with Keystone',
             onPressed: () => onSignZecDeposit(selectedIntent),
           ),
-          const SizedBox(height: AppSpacing.xs),
         ],
         if (resolution != null) ...[
+          const SizedBox(height: AppSpacing.md),
           _ActivityResolutionPanel(
             resolution: resolution,
             intent: selectedIntent,
             onReviewFreshQuote: onReviewFreshQuote,
           ),
-          const SizedBox(height: AppSpacing.xs),
         ],
         if (showDepositControls &&
             depositInstruction != null &&
             !showHardwareDepositAction) ...[
+          const SizedBox(height: AppSpacing.md),
           _ActivityDepositActionPanel(
             state: state,
             instruction: depositInstruction,
@@ -668,14 +485,6 @@ class _SwapActivityStack extends StatelessWidget {
             onSubmitDepositTransaction: onSubmitDepositTransaction,
             liveFundsEnabled: liveFundsEnabled,
           ),
-          const SizedBox(height: AppSpacing.xs),
-        ],
-        if (showSupportDetails) ...[
-          _ActivitySupportDetailsSection(
-            intent: selectedIntent,
-            onCopyText: onCopyText,
-          ),
-          const SizedBox(height: AppSpacing.xs),
         ],
       ],
     );
@@ -687,14 +496,12 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
     required this.state,
     required this.intent,
     required this.liveFundsEnabled,
-    required this.onCopyText,
     required this.onRefreshStatus,
     required this.onDepositTxHashChanged,
     required this.onSubmitDepositTransaction,
     required this.onReviewFreshQuote,
     required this.onSignZecDeposit,
     required this.onCopyExplorerLink,
-    required this.onRemoveIntent,
     required this.intentIsHardware,
     super.key,
   });
@@ -702,62 +509,33 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
   final SwapPrototypeState state;
   final SwapPrototypeIntent intent;
   final bool liveFundsEnabled;
-  final SwapSupportCopyText onCopyText;
   final VoidCallback onRefreshStatus;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
   final VoidCallback onReviewFreshQuote;
   final ValueChanged<SwapPrototypeIntent> onSignZecDeposit;
   final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
-  final VoidCallback onRemoveIntent;
   final bool intentIsHardware;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
     return Container(
       key: const ValueKey('swap_activity_detail_page'),
       padding: const EdgeInsets.fromLTRB(
+        AppSpacing.sm,
         AppSpacing.xs,
         AppSpacing.sm,
-        AppSpacing.md,
-        AppSpacing.md,
+        0,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ActivityAssetPair(intent: intent),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Swap progress',
-                      key: const ValueKey('swap_activity_detail_title'),
-                      style: AppTypography.headlineSmall.copyWith(
-                        color: colors.text.accent,
-                        fontSize: 24,
-                        height: 30 / 24,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      intent.pair,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.labelLarge.copyWith(
-                        color: colors.text.secondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          _ActivityDetailHeader(
+            intent: intent,
+            statusRefreshing: state.statusRefreshing,
+            canRefreshStatus: canRefreshSwapIntentStatus(intent.status),
+            onRefreshStatus: onRefreshStatus,
+            onCopyExplorerLink: onCopyExplorerLink,
           ),
           const SizedBox(height: AppSpacing.md),
           Expanded(
@@ -765,14 +543,10 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
               child: _SwapActivityStack(
                 state: state,
                 selectedIntent: intent,
-                onCopyText: onCopyText,
-                onRefreshStatus: onRefreshStatus,
                 onDepositTxHashChanged: onDepositTxHashChanged,
                 onSubmitDepositTransaction: onSubmitDepositTransaction,
                 onReviewFreshQuote: onReviewFreshQuote,
                 onSignZecDeposit: onSignZecDeposit,
-                onCopyExplorerLink: onCopyExplorerLink,
-                onRemoveIntent: onRemoveIntent,
                 liveFundsEnabled: liveFundsEnabled,
                 intentIsHardware: intentIsHardware,
               ),
@@ -780,6 +554,161 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ActivityDetailHeader extends StatelessWidget {
+  const _ActivityDetailHeader({
+    required this.intent,
+    required this.statusRefreshing,
+    required this.canRefreshStatus,
+    required this.onRefreshStatus,
+    required this.onCopyExplorerLink,
+  });
+
+  final SwapPrototypeIntent intent;
+  final bool statusRefreshing;
+  final bool canRefreshStatus;
+  final VoidCallback onRefreshStatus;
+  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final checkedLabel = statusRefreshing
+        ? 'Checking now'
+        : _lastStatusCheckedLabel(intent.lastStatusCheckedAt) ??
+              'Not checked yet';
+    final titleCluster = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ActivityAssetPair(intent: intent),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Swap progress',
+                key: const ValueKey('swap_activity_detail_title'),
+                style: AppTypography.headlineSmall.copyWith(
+                  color: colors.text.accent,
+                  fontSize: 24,
+                  height: 30 / 24,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                intent.pair,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.labelLarge.copyWith(
+                  color: colors.text.secondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxs),
+              _ActiveSwapCheckedStatus(
+                label: checkedLabel,
+                active: statusRefreshing,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final actions = _ActivityDetailHeaderActions(
+      intent: intent,
+      statusRefreshing: statusRefreshing,
+      canRefreshStatus: canRefreshStatus,
+      onRefreshStatus: onRefreshStatus,
+      onCopyExplorerLink: onCopyExplorerLink,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 600;
+        if (compact) {
+          return Column(
+            key: const ValueKey('swap_activity_detail_header'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              titleCluster,
+              const SizedBox(height: AppSpacing.s),
+              Align(alignment: Alignment.centerRight, child: actions),
+            ],
+          );
+        }
+        return Row(
+          key: const ValueKey('swap_activity_detail_header'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: titleCluster),
+            const SizedBox(width: AppSpacing.md),
+            SizedBox(
+              width: canRefreshStatus ? 320 : 176,
+              child: Align(alignment: Alignment.topRight, child: actions),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ActivityDetailHeaderActions extends StatelessWidget {
+  const _ActivityDetailHeaderActions({
+    required this.intent,
+    required this.statusRefreshing,
+    required this.canRefreshStatus,
+    required this.onRefreshStatus,
+    required this.onCopyExplorerLink,
+  });
+
+  final SwapPrototypeIntent intent;
+  final bool statusRefreshing;
+  final bool canRefreshStatus;
+  final VoidCallback onRefreshStatus;
+  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final explorerUri = nearIntentsExplorerUri(
+      nearIntentHash: intent.nearIntentHash,
+      depositTxHash: intent.depositTxHash,
+      depositAddress: intent.depositAddress ?? intent.id,
+    );
+    return Wrap(
+      key: const ValueKey('swap_activity_detail_header_actions'),
+      spacing: AppSpacing.xs,
+      runSpacing: AppSpacing.xs,
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        AppButton(
+          key: const ValueKey(
+            'swap_activity_copy_near_intents_explorer_button',
+          ),
+          onPressed: explorerUri == null
+              ? null
+              : () => onCopyExplorerLink(intent),
+          variant: AppButtonVariant.secondary,
+          size: AppButtonSize.medium,
+          minWidth: 156,
+          leading: const AppIcon(AppIcons.link),
+          child: const Text('Copy link'),
+        ),
+        if (canRefreshStatus)
+          AppButton(
+            key: const ValueKey('swap_status_refresh_button'),
+            onPressed: statusRefreshing ? null : onRefreshStatus,
+            variant: AppButtonVariant.secondary,
+            size: AppButtonSize.medium,
+            minWidth: 132,
+            leading: const AppIcon(AppIcons.renew),
+            child: Text(statusRefreshing ? 'Refreshing' : 'Refresh'),
+          ),
+      ],
     );
   }
 }
@@ -820,7 +749,6 @@ class SwapActivityDetailModal extends StatelessWidget {
     required this.state,
     required this.intent,
     required this.liveFundsEnabled,
-    required this.onCopyText,
     required this.onClose,
     required this.onRefreshStatus,
     required this.onDepositTxHashChanged,
@@ -828,7 +756,6 @@ class SwapActivityDetailModal extends StatelessWidget {
     required this.onReviewFreshQuote,
     required this.onSignZecDeposit,
     required this.onCopyExplorerLink,
-    required this.onRemoveIntent,
     required this.intentIsHardware,
     super.key,
   });
@@ -836,7 +763,6 @@ class SwapActivityDetailModal extends StatelessWidget {
   final SwapPrototypeState state;
   final SwapPrototypeIntent intent;
   final bool liveFundsEnabled;
-  final SwapSupportCopyText onCopyText;
   final VoidCallback onClose;
   final VoidCallback onRefreshStatus;
   final ValueChanged<String> onDepositTxHashChanged;
@@ -844,7 +770,6 @@ class SwapActivityDetailModal extends StatelessWidget {
   final VoidCallback onReviewFreshQuote;
   final ValueChanged<SwapPrototypeIntent> onSignZecDeposit;
   final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
-  final VoidCallback onRemoveIntent;
   final bool intentIsHardware;
 
   @override
@@ -922,14 +847,10 @@ class SwapActivityDetailModal extends StatelessWidget {
                       child: _SwapActivityStack(
                         state: state,
                         selectedIntent: intent,
-                        onCopyText: onCopyText,
-                        onRefreshStatus: onRefreshStatus,
                         onDepositTxHashChanged: onDepositTxHashChanged,
                         onSubmitDepositTransaction: onSubmitDepositTransaction,
                         onReviewFreshQuote: onReviewFreshQuote,
                         onSignZecDeposit: onSignZecDeposit,
-                        onCopyExplorerLink: onCopyExplorerLink,
-                        onRemoveIntent: onRemoveIntent,
                         liveFundsEnabled: liveFundsEnabled,
                         intentIsHardware: intentIsHardware,
                       ),
@@ -1415,19 +1336,13 @@ class _ActivityRouteTrackerState extends State<_ActivityRouteTracker> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
     final plan = _ActivityRoutePlan.fromIntent(widget.intent);
     final displayPlan = plan.displayedAtProgress(_displayProgressIndex);
     return Semantics(
       label: 'Swap progress: ${displayPlan.semanticLabel}',
-      child: Container(
+      child: Padding(
         key: const ValueKey('swap_activity_route_tracker'),
-        padding: const EdgeInsets.all(AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: colors.background.raised,
-          border: Border.all(color: colors.border.subtle),
-          borderRadius: BorderRadius.circular(AppRadii.xSmall),
-        ),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1453,10 +1368,6 @@ class _ActivityRouteTrackerState extends State<_ActivityRouteTracker> {
                   ),
               ],
             ),
-            if (!plan.isComplete) ...[
-              const SizedBox(height: AppSpacing.s),
-              _ActivityRouteFocusCard(plan: plan, tone: widget.tone),
-            ],
           ],
         ),
       ),
@@ -1572,92 +1483,6 @@ class _ActivityStepBlinkOpacity extends StatelessWidget {
         return Opacity(opacity: opacity, child: child);
       },
       child: child,
-    );
-  }
-}
-
-class _ActivityRouteFocusCard extends StatelessWidget {
-  const _ActivityRouteFocusCard({required this.plan, required this.tone});
-
-  final _ActivityRoutePlan plan;
-  final _ActivityStatusPlanTone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final step = plan.activeStep;
-    final color = _activityRouteColor(context, step.state, tone);
-    final iconName = switch (step.state) {
-      _ActivityRouteStepState.done => AppIcons.checkCircle,
-      _ActivityRouteStepState.warning => AppIcons.warning,
-      _ActivityRouteStepState.failed => AppIcons.block,
-      _ => step.iconName,
-    };
-    return Container(
-      key: const ValueKey('swap_activity_current_step_card'),
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-        borderRadius: BorderRadius.circular(AppRadii.xSmall),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    border: Border.all(color: color.withValues(alpha: 0.32)),
-                    borderRadius: BorderRadius.circular(AppRadii.full),
-                  ),
-                  child: AppIcon(iconName, size: 14, color: color),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.xs),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  plan.focusLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.labelSmall.copyWith(
-                    color: colors.text.secondary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  plan.focusTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.labelLarge.copyWith(color: color),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  plan.focusDetail,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyExtraSmall.copyWith(
-                    color: colors.text.secondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -2072,18 +1897,6 @@ class _ActivityRoutePlan {
   int get completedStepCount =>
       steps.where((step) => step.state == _ActivityRouteStepState.done).length;
 
-  String get focusLabel => switch (activeStep.state) {
-    _ActivityRouteStepState.warning => 'Needs review',
-    _ActivityRouteStepState.failed => 'Stopped',
-    _ => 'Now',
-  };
-
-  String get focusTitle => activeStep.label;
-
-  String get focusDetail => isComplete
-      ? 'All funds have reached the final destination.'
-      : activeStep.detail;
-
   String get phaseLabel {
     if (isComplete) return 'Funds delivered';
     final step = activeStep;
@@ -2093,7 +1906,7 @@ class _ActivityRoutePlan {
   }
 
   String get semanticLabel =>
-      '$phaseLabel, $completedStepCount of ${steps.length} steps done';
+      '$phaseLabel, ${activeStep.detail}, $completedStepCount of ${steps.length} steps done';
 
   bool get isComplete =>
       steps.every((step) => step.state == _ActivityRouteStepState.done);
@@ -2281,10 +2094,9 @@ class _ActivityResolutionPanel extends StatelessWidget {
             depositAddress.isNotEmpty);
     return Container(
       key: const ValueKey('swap_resolution_panel'),
-      padding: const EdgeInsets.all(AppSpacing.xs),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(AppRadii.xSmall),
       ),
       child: Row(
@@ -2375,20 +2187,6 @@ bool _showDepositControls(SwapIntentStatus status) {
   };
 }
 
-bool _showActivityReceipt(SwapIntentStatus status) {
-  return switch (status) {
-    SwapIntentStatus.complete ||
-    SwapIntentStatus.refunded ||
-    SwapIntentStatus.expired ||
-    SwapIntentStatus.failed ||
-    SwapIntentStatus.depositObserved ||
-    SwapIntentStatus.processing ||
-    SwapIntentStatus.incompleteDeposit ||
-    SwapIntentStatus.providerStatusUnknown => true,
-    _ => false,
-  };
-}
-
 bool canRefreshSwapIntentStatus(SwapIntentStatus status) {
   return status != SwapIntentStatus.complete;
 }
@@ -2398,116 +2196,38 @@ class _ActiveSwapSummaryPanel extends StatelessWidget {
     required this.intent,
     required this.plan,
     required this.statusRefreshing,
-    required this.canRefreshStatus,
-    required this.onRefreshStatus,
-    required this.onCopyExplorerLink,
-    required this.onRemoveIntent,
   });
 
   final SwapPrototypeIntent intent;
   final _ActivityStatusPlan plan;
   final bool statusRefreshing;
-  final bool canRefreshStatus;
-  final VoidCallback onRefreshStatus;
-  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
-  final VoidCallback onRemoveIntent;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 560;
-        final checkedLabel = statusRefreshing
-            ? 'Checking now'
-            : _lastStatusCheckedLabel(intent.lastStatusCheckedAt) ??
-                  'Not checked yet';
-        final checkedStatus = _ActiveSwapCheckedStatus(
-          label: checkedLabel,
-          active: statusRefreshing,
-        );
-        final explorerUri = nearIntentsExplorerUri(
-          nearIntentHash: intent.nearIntentHash,
-          depositTxHash: intent.depositTxHash,
-          depositAddress: intent.depositAddress ?? intent.id,
-        );
-        final statusActions = Wrap(
-          spacing: AppSpacing.xs,
-          runSpacing: AppSpacing.xs,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            AppButton(
-              key: const ValueKey(
-                'swap_activity_copy_near_intents_explorer_button',
-              ),
-              onPressed: explorerUri == null
-                  ? null
-                  : () => onCopyExplorerLink(intent),
-              variant: AppButtonVariant.secondary,
-              size: AppButtonSize.medium,
-              minWidth: 116,
-              leading: const AppIcon(AppIcons.link),
-              child: const Text('Copy link'),
-            ),
-            if (canRefreshStatus)
-              AppButton(
-                key: const ValueKey('swap_status_refresh_button'),
-                onPressed: statusRefreshing ? null : onRefreshStatus,
-                variant: AppButtonVariant.secondary,
-                size: AppButtonSize.medium,
-                minWidth: 124,
-                leading: const AppIcon(AppIcons.renew),
-                child: Text(statusRefreshing ? 'Refreshing' : 'Refresh'),
-              ),
-            AppButton(
-              key: const ValueKey('swap_activity_remove_button'),
-              onPressed: onRemoveIntent,
-              variant: AppButtonVariant.ghost,
-              size: AppButtonSize.medium,
-              minWidth: 112,
-              leading: const AppIcon(AppIcons.cross),
-              child: const Text('Remove'),
-            ),
-          ],
-        );
-
-        return Container(
-          key: const ValueKey('swap_active_summary_panel'),
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: colors.background.base,
-            border: Border.all(color: colors.border.regular),
-            borderRadius: BorderRadius.circular(AppRadii.xSmall),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (compact) ...[
-                checkedStatus,
-                const SizedBox(height: AppSpacing.xs),
-                Align(alignment: Alignment.centerRight, child: statusActions),
-              ] else
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(child: checkedStatus),
-                    const SizedBox(width: AppSpacing.s),
-                    statusActions,
-                  ],
-                ),
-              const SizedBox(height: AppSpacing.md),
-              _ActivityStatusPlanPanel(
-                intent: intent,
-                plan: plan,
-                statusRefreshing: statusRefreshing,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _ActiveSwapTradeLine(intent: intent),
-            ],
-          ),
-        );
-      },
+    return Column(
+      key: const ValueKey('swap_active_summary_panel'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ActivityStatusPlanPanel(
+          intent: intent,
+          plan: plan,
+          statusRefreshing: statusRefreshing,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        const _ActivityDetailDivider(),
+        const SizedBox(height: AppSpacing.md),
+        _ActiveSwapTradeLine(intent: intent),
+      ],
     );
+  }
+}
+
+class _ActivityDetailDivider extends StatelessWidget {
+  const _ActivityDetailDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(height: 1, color: context.colors.border.subtle);
   }
 }
 
@@ -2588,16 +2308,8 @@ class _ActiveSwapTradeLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final recipient = _externalRecipientSummary(intent);
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xs,
-        vertical: AppSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: colors.background.raised,
-        border: Border.all(color: colors.border.subtle),
-        borderRadius: BorderRadius.circular(AppRadii.xSmall),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2741,8 +2453,6 @@ class _ActivityDepositInstruction {
     required this.address,
     required this.railLabel,
     required this.reuseWarning,
-    required this.deliveryLabel,
-    required this.deliveryValue,
     required this.txHashLabel,
     required this.txHashHint,
     required this.submitLabel,
@@ -2759,13 +2469,6 @@ class _ActivityDepositInstruction {
     }
 
     final depositSymbol = direction.fromSymbol(externalAsset);
-    final receiveSymbol = direction.toSymbol(externalAsset);
-    final deliveryLabel = direction.sendsZec
-        ? '$receiveSymbol destination'
-        : 'Receive address';
-    final deliveryValue = direction.sendsZec
-        ? intent.oneClickRecipient ?? 'external destination'
-        : intent.oneClickRecipient ?? 'shielded wallet address';
     final depositAddressLabel = direction.sendsZec
         ? '$depositSymbol deposit'
         : '$depositSymbol source deposit';
@@ -2780,8 +2483,6 @@ class _ActivityDepositInstruction {
       railLabel: externalAsset.railLabel,
       reuseWarning: 'Do not reuse this address',
       memo: intent.depositMemo,
-      deliveryLabel: deliveryLabel,
-      deliveryValue: deliveryValue,
       txHashLabel: '$depositSymbol deposit tx hash',
       txHashHint: '$depositSymbol source-chain transaction hash',
       submitLabel: 'Submit $depositSymbol deposit',
@@ -2796,8 +2497,6 @@ class _ActivityDepositInstruction {
   final String railLabel;
   final String reuseWarning;
   final String? memo;
-  final String deliveryLabel;
-  final String deliveryValue;
   final String txHashLabel;
   final String txHashHint;
   final String submitLabel;
@@ -2829,7 +2528,6 @@ class _ActivityHardwareActionPanel extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
         color: colors.background.raised,
-        border: Border.all(color: colors.border.regular),
         borderRadius: BorderRadius.circular(AppRadii.xSmall),
       ),
       child: Row(
@@ -2841,7 +2539,6 @@ class _ActivityHardwareActionPanel extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: colors.background.base,
-              border: Border.all(color: colors.border.subtle),
               borderRadius: BorderRadius.circular(AppRadii.xSmall),
             ),
             child: AppIcon(iconName, size: 20, color: colors.icon.regular),
@@ -2937,13 +2634,8 @@ class _ActivityDepositInstructionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: colors.background.base,
-        border: Border.all(color: colors.border.subtle),
-        borderRadius: BorderRadius.circular(AppRadii.xSmall),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2958,10 +2650,6 @@ class _ActivityDepositInstructionPanel extends StatelessWidget {
           ),
           if (instruction.memo != null)
             _ActivityInstructionRow(label: 'Memo', value: instruction.memo!),
-          _ActivityInstructionRow(
-            label: instruction.deliveryLabel,
-            value: instruction.deliveryValue,
-          ),
         ],
       ),
     );
@@ -3047,14 +2735,9 @@ class _DepositTxHashDisclosureState extends State<_DepositTxHashDisclosure> {
     final submitLabel = widget.state.depositSubmitting
         ? 'Submitting'
         : widget.instruction.submitLabel;
-    return Container(
+    return Padding(
       key: const ValueKey('swap_deposit_tx_hash_disclosure'),
       padding: const EdgeInsets.all(AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: colors.background.base,
-        border: Border.all(color: colors.border.subtle),
-        borderRadius: BorderRadius.circular(AppRadii.xSmall),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3065,11 +2748,6 @@ class _DepositTxHashDisclosureState extends State<_DepositTxHashDisclosure> {
                 width: 30,
                 height: 30,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: colors.background.raised,
-                  border: Border.all(color: colors.border.subtle),
-                  borderRadius: BorderRadius.circular(AppRadii.xSmall),
-                ),
                 child: AppIcon(
                   AppIcons.link,
                   size: 16,
@@ -3148,86 +2826,6 @@ class _DepositTxHashDisclosureState extends State<_DepositTxHashDisclosure> {
                     ),
                   ),
                 ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActivitySupportDetailsSection extends StatefulWidget {
-  const _ActivitySupportDetailsSection({
-    required this.intent,
-    required this.onCopyText,
-  });
-
-  final SwapPrototypeIntent intent;
-  final SwapSupportCopyText onCopyText;
-
-  @override
-  State<_ActivitySupportDetailsSection> createState() =>
-      _ActivitySupportDetailsSectionState();
-}
-
-class _ActivitySupportDetailsSectionState
-    extends State<_ActivitySupportDetailsSection> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      key: const ValueKey('swap_support_details_section'),
-      padding: const EdgeInsets.all(AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: colors.background.base,
-        border: Border.all(color: colors.border.subtle),
-        borderRadius: BorderRadius.circular(AppRadii.xSmall),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Support details',
-                  style: AppTypography.labelLarge.copyWith(
-                    color: colors.text.accent,
-                  ),
-                ),
-              ),
-              AppButton(
-                key: const ValueKey('swap_support_details_toggle'),
-                onPressed: () => setState(() => _expanded = !_expanded),
-                variant: AppButtonVariant.secondary,
-                size: AppButtonSize.small,
-                leading: const AppIcon(AppIcons.scroll),
-                trailing: AppIcon(
-                  _expanded ? AppIcons.arrowUpward : AppIcons.arrowDown,
-                ),
-                child: Text(_expanded ? 'Hide' : 'Show'),
-              ),
-            ],
-          ),
-          if (!_expanded)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xxs),
-              child: Text(
-                'Hidden by default. Copy this only when support asks for it.',
-                style: AppTypography.bodyExtraSmall.copyWith(
-                  color: colors.text.secondary,
-                ),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: RedactedReceiptDrawer(
-                rows: widget.intent.receipt,
-                intent: widget.intent,
-                onCopyText: widget.onCopyText,
               ),
             ),
         ],
