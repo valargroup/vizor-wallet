@@ -688,10 +688,30 @@ mod tests {
         let json = commitment_bundle_recovery_json(&commitment, &payloads, &[0x99; 64]).unwrap();
 
         workflow::store_signed_vote_commitment(&db, "round-1", 0, 1, &json).unwrap();
-        db.store_commitment_bundle("round-1", 0, 1, &json, 42)
+        let err = db
+            .get_commitment_bundle("round-1", 0, 1)
+            .expect_err("vc_tree_position is not known until vote confirmation");
+        assert!(
+            err.to_string().contains("refusing to assume position 0"),
+            "{err}"
+        );
+
+        let conn = db.conn();
+        let stored_json: String = conn
+            .query_row(
+                "SELECT commitment_bundle_json FROM votes
+                 WHERE round_id = :round_id AND wallet_id = :wallet_id
+                 AND bundle_index = :bundle_index AND proposal_id = :proposal_id",
+                rusqlite::named_params! {
+                    ":round_id": "round-1",
+                    ":wallet_id": "wallet-1",
+                    ":bundle_index": 0i64,
+                    ":proposal_id": 1i64,
+                },
+                |row| row.get(0),
+            )
             .unwrap();
-        let (stored_json, stored_position) =
-            db.get_commitment_bundle("round-1", 0, 1).unwrap().unwrap();
+        drop(conn);
         let stored: serde_json::Value = serde_json::from_str(&stored_json).unwrap();
 
         let stored_payload = &stored["share_payloads"][0];
@@ -708,7 +728,6 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(stored_position, 42);
         assert_eq!(stored_payload["tree_position"], 42);
         assert_eq!(
             stored_payload["all_enc_shares"].as_array().unwrap().len(),

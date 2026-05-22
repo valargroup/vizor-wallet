@@ -1758,11 +1758,13 @@ pub fn clear_recovery_state(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pasta_curves::Fp;
     use std::{
         io::{Read, Write},
         net::TcpListener,
         thread,
     };
+    use vote_commitment_tree::{MemoryTreeServer, MerkleHashVote};
     use zcash_client_backend::proto::service::TreeState;
 
     const ROUND_ID: &str = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -2248,7 +2250,7 @@ mod tests {
         state::init_voting_round(&db, &test_api_round_params().into(), None).unwrap();
         db.setup_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
-        let server = start_tree_server(1, vec![fp_one_base64()], 3);
+        let server = start_tree_server(1, vec![1], 3);
 
         let height = sync_vote_tree(
             db_path.to_str().unwrap().to_string(),
@@ -2300,7 +2302,7 @@ mod tests {
         state::init_voting_round(&db, &test_api_round_params().into(), None).unwrap();
         db.setup_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
-        let server = start_tree_server(1, vec![fp_one_base64()], 3);
+        let server = start_tree_server(1, vec![1], 3);
 
         let height = sync_vote_tree(
             db_path.to_str().unwrap().to_string(),
@@ -2337,7 +2339,7 @@ mod tests {
         state::init_voting_round(&db, &test_api_round_params().into(), None).unwrap();
         db.setup_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
-        let server = start_tree_server(1, vec![fp_one_base64()], 3);
+        let server = start_tree_server(1, vec![1], 3);
 
         let height = sync_vote_tree(
             db_path.to_str().unwrap().to_string(),
@@ -2678,15 +2680,16 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
     struct MockTreeBlock {
         height: u32,
-        start_index: usize,
+        start_index: u64,
         leaf: String,
         root: String,
     }
 
-    fn start_tree_server(height: u32, leaves: Vec<String>, expected_requests: usize) -> String {
-        let (latest_root, blocks) = mock_tree_blocks(&leaves);
+    fn start_tree_server(height: u32, leaf_values: Vec<u64>, expected_requests: usize) -> String {
+        let (latest_root, blocks) = mock_tree_blocks(&leaf_values);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         thread::spawn(move || {
@@ -2700,7 +2703,7 @@ mod tests {
                     .next()
                     .and_then(|line| line.split_whitespace().nth(1))
                     .unwrap_or("/");
-                let body = tree_response_body(path, height, latest_root.as_deref(), &blocks);
+                let body = tree_response_body(path, height, &latest_root, &blocks);
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(),
@@ -2715,7 +2718,7 @@ mod tests {
     fn tree_response_body(
         path: &str,
         height: u32,
-        latest_root: Option<&str>,
+        latest_root: &Option<String>,
         blocks: &[MockTreeBlock],
     ) -> String {
         if path.ends_with("/latest") {
@@ -2742,7 +2745,7 @@ mod tests {
                     .iter()
                     .find(|block| block.height >= from_height && block.height <= to_height)
                 else {
-                    return r#"{"blocks":[],"next_from_height":0}"#.to_string();
+                    return r#"{"blocks":[]}"#.to_string();
                 };
                 let next_from_height = blocks
                     .iter()
@@ -2759,23 +2762,23 @@ mod tests {
         }
     }
 
-    fn mock_tree_blocks(leaves: &[String]) -> (Option<String>, Vec<MockTreeBlock>) {
-        let mut server = vote_commitment_tree::MemoryTreeServer::empty();
-        let mut blocks = Vec::new();
+    fn mock_tree_blocks(leaf_values: &[u64]) -> (Option<String>, Vec<MockTreeBlock>) {
+        if leaf_values.is_empty() {
+            return (None, vec![]);
+        }
 
-        for (idx, leaf_b64) in leaves.iter().enumerate() {
-            let leaf_bytes = BASE64_STANDARD.decode(leaf_b64).unwrap();
-            let leaf_bytes: [u8; 32] = leaf_bytes.try_into().unwrap();
-            let leaf = vote_commitment_tree::MerkleHashVote::from_bytes(&leaf_bytes).unwrap();
-            let height = (idx + 1) as u32;
-            server.append(leaf.inner()).unwrap();
+        let mut server = MemoryTreeServer::empty();
+        let mut blocks = Vec::with_capacity(leaf_values.len());
+        for (index, value) in leaf_values.iter().copied().enumerate() {
+            let height = u32::try_from(index + 1).unwrap();
+            server.append(Fp::from(value)).unwrap();
             server.checkpoint(height).unwrap();
-            let root = vote_commitment_tree::MerkleHashVote::from_fp(server.root());
+            let root = server.root_at_height(height).unwrap();
             blocks.push(MockTreeBlock {
                 height,
-                start_index: idx,
-                leaf: leaf_b64.clone(),
-                root: BASE64_STANDARD.encode(root.to_bytes()),
+                start_index: u64::try_from(index).unwrap(),
+                leaf: fp_base64(value),
+                root: fp_base64_from_fp(root),
             });
         }
 
@@ -2790,8 +2793,12 @@ mod tests {
         })
     }
 
-    fn fp_one_base64() -> String {
-        "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string()
+    fn fp_base64(value: u64) -> String {
+        fp_base64_from_fp(Fp::from(value))
+    }
+
+    fn fp_base64_from_fp(value: Fp) -> String {
+        BASE64_STANDARD.encode(MerkleHashVote::from_fp(value).to_bytes())
     }
 
     fn test_note_info(position: u64) -> zcash_voting::NoteInfo {
