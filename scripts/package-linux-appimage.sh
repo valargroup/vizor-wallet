@@ -160,13 +160,23 @@ DESKTOP_FILE="$APPDIR/$APP_ID.desktop"
 cp "$BUNDLE_DIR/data/applications/$APP_ID.desktop" "$DESKTOP_FILE"
 sed -i \
   -e "s/^Name=.*/Name=$APP_NAME/" \
-  -e "s/^Exec=.*/Exec=AppRun/" \
+  -e "s/^Exec=.*/Exec=$BINARY_NAME/" \
   -e "s/^Icon=.*/Icon=$APP_ID/" \
   -e "s/^Categories=.*/Categories=Office;Finance;/" \
   -e "s/^StartupWMClass=.*/StartupWMClass=$APP_ID/" \
   "$DESKTOP_FILE"
 cp "$DESKTOP_FILE" "$APPDIR_APPLICATIONS_DIR/$APP_ID.desktop"
 cp "$BUNDLE_DIR/data/icons/hicolor/256x256/apps/$APP_ID.png" "$APPDIR/$APP_ID.png"
+
+set_desktop_exec() {
+  local exec_name="$1"
+  local file
+  for file in "$DESKTOP_FILE" "$APPDIR_APPLICATIONS_DIR/$APP_ID.desktop"; do
+    if [[ -e "$file" ]]; then
+      sed -i -e "s/^Exec=.*/Exec=$exec_name/" "$file"
+    fi
+  done
+}
 
 write_app_run() {
   cat > "$APPDIR/AppRun" <<APPRUN
@@ -306,6 +316,7 @@ export APPIMAGE_EXTRACT_AND_RUN=1
   --icon-file "$APPDIR/$APP_ID.png"
 
 write_app_run
+set_desktop_exec "AppRun"
 install_appimage_root_icon
 
 copy_gstreamer_runtime
