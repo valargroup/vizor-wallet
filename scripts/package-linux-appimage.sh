@@ -168,7 +168,8 @@ sed -i \
 cp "$DESKTOP_FILE" "$APPDIR_APPLICATIONS_DIR/$APP_ID.desktop"
 cp "$BUNDLE_DIR/data/icons/hicolor/256x256/apps/$APP_ID.png" "$APPDIR/$APP_ID.png"
 
-cat > "$APPDIR/AppRun" <<APPRUN
+write_app_run() {
+  cat > "$APPDIR/AppRun" <<APPRUN
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -183,7 +184,8 @@ fi
 
 exec "\${APPDIR}/usr/bin/${BINARY_NAME}" "\$@"
 APPRUN
-chmod +x "$APPDIR/AppRun"
+  chmod +x "$APPDIR/AppRun"
+}
 
 should_skip_dependency() {
   local path="$1"
@@ -303,6 +305,7 @@ export APPIMAGE_EXTRACT_AND_RUN=1
   --desktop-file "$DESKTOP_FILE" \
   --icon-file "$APPDIR/$APP_ID.png"
 
+write_app_run
 install_appimage_root_icon
 
 copy_gstreamer_runtime
