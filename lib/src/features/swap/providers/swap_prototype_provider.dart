@@ -4,49 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../main.dart' show log;
 import '../../../core/formatting/zec_amount.dart';
-import '../domain/near_intents_one_click_swap_provider.dart';
 import '../domain/zip321_payment_request.dart';
 import '../models/swap_intent_presentation_mapper.dart';
 import '../models/swap_prototype_models.dart';
 import '../../../providers/account_provider.dart';
+import 'swap_activity_tracker.dart';
 import 'swap_deposit_sender.dart';
 import 'swap_failure_policy.dart';
 import 'swap_max_amount_estimator.dart';
-import 'swap_session_store.dart';
+import 'swap_draft_store.dart';
+import 'swap_provider_config.dart';
 import 'swap_zec_staging_address_service.dart';
 
-const _oneClickBaseUrl = String.fromEnvironment(
-  'ZCASH_SWAP_1CLICK_BASE_URL',
-  defaultValue: 'https://config-lambda.keplr.app/api/near-intents/1click',
-);
-
-final swapIntentProvider = Provider<SwapProvider>((ref) {
-  return NearIntentsOneClickSwapProvider(
-    baseUri: Uri.parse(_oneClickBaseUrl),
-    referral: 'vizor',
-  );
-});
-
-final swapStatusPollIntervalProvider = Provider<Duration>((ref) {
-  return const Duration(seconds: 20);
-});
-
-final swapPriceRefreshIntervalProvider = Provider<Duration>((ref) {
-  return const Duration(seconds: 30);
-});
-
-final swapPreviewQuoteDebounceProvider = Provider<Duration>((ref) {
-  return const Duration(milliseconds: 500);
-});
-
-const _liveFundsEnabled = bool.fromEnvironment(
-  'ZCASH_SWAP_ENABLE_LIVE_FUNDS',
-  defaultValue: true,
-);
-
-final swapLiveFundsEnabledProvider = Provider<bool>((ref) {
-  return _liveFundsEnabled;
-});
+export 'swap_provider_config.dart';
 
 final swapInitialIntentsProvider = Provider<List<SwapPrototypeIntent>>((ref) {
   return const [];
@@ -583,15 +553,19 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   Future<void> refreshSelectedIntentStatus() async {
     if (state.statusRefreshing || state.intents.isEmpty) return;
     final selected = state.selectedIntent;
-    await _refreshIntentStatuses([selected], showBusy: true);
+    await _refreshIntentStatuses(
+      intentIds: [selected.id],
+      showBusy: true,
+      includeTerminal: true,
+    );
   }
 
   Future<void> refreshOpenIntentStatuses() async {
-    final refreshable = [
-      for (final intent in state.intents)
-        if (_shouldRefreshIntentStatus(intent)) intent,
-    ];
-    await _refreshIntentStatuses(refreshable, showBusy: false);
+    await _refreshIntentStatuses(
+      intentIds: [for (final intent in state.intents) intent.id],
+      showBusy: false,
+      includeTerminal: false,
+    );
   }
 
   void updateDepositTxHash(String value) {
@@ -945,10 +919,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   }) async {
     final scopedAccountUuid = accountUuid?.trim();
     if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return;
-    final store = ref.read(swapSessionStoreProvider);
-    final storedIntents = await store.loadIntents(
-      accountUuid: scopedAccountUuid,
-    );
+    final storedIntents = await ref
+        .read(swapActivityTrackerProvider)
+        .loadIntents(accountUuid: scopedAccountUuid);
     final intent = _intentByIdFrom(storedIntents, intentId);
     if (intent == null) return;
 
@@ -1007,7 +980,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     final scopedAccountUuid = accountUuid?.trim();
     if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return;
     final storedIntents = await ref
-        .read(swapSessionStoreProvider)
+        .read(swapActivityTrackerProvider)
         .loadIntents(accountUuid: scopedAccountUuid);
     final intent = _intentByIdFrom(storedIntents, intentId);
     if (intent == null) return;
@@ -1330,7 +1303,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     }
     try {
       final persisted = await ref
-          .read(swapSessionStoreProvider)
+          .read(swapActivityTrackerProvider)
           .loadIntents(accountUuid: accountUuid);
       if (persisted.isEmpty && !replaceExisting) return;
       state = state.copyWith(
@@ -1351,7 +1324,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
 
   Future<void> _restorePersistedDraft() async {
     try {
-      final draft = await ref.read(swapSessionStoreProvider).loadDraft();
+      final draft = await ref.read(swapDraftStoreProvider).loadDraft();
       if (draft == null) return;
       if (state.amountText.isNotEmpty ||
           state.receiveAmountText.isNotEmpty ||
@@ -1380,85 +1353,73 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     } catch (_) {}
   }
 
-  Future<void> _refreshIntentStatuses(
-    List<SwapPrototypeIntent> intents, {
+  Future<void> _refreshIntentStatuses({
+    required Iterable<String> intentIds,
     required bool showBusy,
+    required bool includeTerminal,
   }) async {
-    if (_statusRefreshInFlight || intents.isEmpty) return;
+    final ids = intentIds.toSet();
+    if (_statusRefreshInFlight || ids.isEmpty) return;
     final refreshAccountUuid = _activeAccountUuidOrNull;
+    if (refreshAccountUuid == null || refreshAccountUuid.trim().isEmpty) {
+      return;
+    }
     _statusRefreshInFlight = true;
     if (showBusy) {
       state = state.copyWith(statusRefreshing: true, clearStatusError: true);
     }
 
     try {
-      var updatedIntents = state.intents;
-      var changed = false;
-      String? refreshError;
+      final result = includeTerminal
+          ? await ref
+                .read(swapActivityTrackerProvider)
+                .refreshIntents(
+                  accountUuid: refreshAccountUuid,
+                  currentIntents: state.intents,
+                  intentIds: ids,
+                  includeTerminal: true,
+                )
+          : await ref
+                .read(swapActivityTrackerProvider)
+                .refreshOpenIntents(
+                  accountUuid: refreshAccountUuid,
+                  currentIntents: state.intents,
+                );
 
-      for (final intent in intents) {
-        final currentIntent = _intentByIdFrom(updatedIntents, intent.id);
-        if (currentIntent == null) continue;
-        final checkedAt = DateTime.now().toUtc();
-        try {
-          final updated = await _refreshProviderBackedIntent(
-            currentIntent,
-            checkedAt: checkedAt,
-          );
-          if (updated.status != currentIntent.status) {
-            log(
-              'Swap: status transition intent=${_shortSwapValue(updated.id)} '
-              '${currentIntent.status.name}->${updated.status.name}',
-            );
-          }
-          updatedIntents = _replaceIntent(
-            updatedIntents,
-            currentIntent.id,
-            updated,
-          );
-        } catch (e) {
-          final message = swapFailureMessage(
-            SwapFailureOperation.refreshStatus,
-            e,
-          );
-          refreshError ??= message;
-          log(
-            'Swap: status refresh failed intent=${_shortSwapValue(currentIntent.id)} '
-            'error=$e',
-          );
-          updatedIntents = _replaceIntent(
-            updatedIntents,
-            currentIntent.id,
-            currentIntent.copyWith(
-              lastStatusCheckedAt: checkedAt,
-              statusError: message,
-            ),
-          );
-        }
-        changed = true;
-      }
-
-      if (!changed) {
+      if (!result.didRefresh) {
         if (showBusy) {
           state = state.copyWith(statusRefreshing: false);
         }
         return;
       }
 
-      if (refreshAccountUuid != null && !_isAccountActive(refreshAccountUuid)) {
-        await _persistIntentsForAccount(refreshAccountUuid, updatedIntents);
+      if (!_isAccountActive(refreshAccountUuid)) {
         return;
       }
 
+      _logStatusTransitions(state.intents, result.intents);
       state = state.copyWith(
         statusRefreshing: false,
-        intents: updatedIntents,
-        statusError: showBusy ? refreshError : null,
-        clearStatusError: refreshError == null,
+        intents: result.intents,
+        statusError: showBusy ? result.refreshError : null,
+        clearStatusError: result.refreshError == null,
       );
-      await _persistCurrentIntents();
     } finally {
       _statusRefreshInFlight = false;
+    }
+  }
+
+  void _logStatusTransitions(
+    List<SwapPrototypeIntent> before,
+    List<SwapPrototypeIntent> after,
+  ) {
+    for (final updated in after) {
+      final previous = _intentByIdFrom(before, updated.id);
+      if (previous == null || previous.status == updated.status) continue;
+      log(
+        'Swap: status transition intent=${_shortSwapValue(updated.id)} '
+        '${previous.status.name}->${updated.status.name}',
+      );
     }
   }
 
@@ -1474,14 +1435,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   ) async {
     final scopedAccountUuid = accountUuid?.trim();
     if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return;
-    final intents = [
-      for (final intent in intentsToPersist)
-        if (_isPersistableIntent(intent, accountUuid: scopedAccountUuid))
-          intent.copyWith(accountUuid: scopedAccountUuid),
-    ];
     await ref
-        .read(swapSessionStoreProvider)
-        .saveIntents(accountUuid: scopedAccountUuid, intents: intents);
+        .read(swapActivityTrackerProvider)
+        .saveIntents(accountUuid: scopedAccountUuid, intents: intentsToPersist);
   }
 
   bool _isAccountActive(String? accountUuid) {
@@ -1493,7 +1449,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
 
   Future<void> _persistDraft(SwapDraftSnapshot draft) async {
     try {
-      await ref.read(swapSessionStoreProvider).saveDraft(draft);
+      await ref.read(swapDraftStoreProvider).saveDraft(draft);
     } catch (_) {}
   }
 
@@ -1505,22 +1461,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  bool _isPersistableIntent(SwapPrototypeIntent intent, {String? accountUuid}) {
-    final expectedAccountUuid = accountUuid ?? _activeAccountUuidOrNull;
-    if (expectedAccountUuid == null ||
-        intent.accountUuid != expectedAccountUuid) {
-      return false;
-    }
-    return intent.direction != null &&
-        intent.depositAddress != null &&
-        (intent.providerQuoteId != null || intent.depositTxHash != null);
-  }
-
-  bool _shouldRefreshIntentStatus(SwapPrototypeIntent intent) {
-    if (!_isPersistableIntent(intent)) return false;
-    return !intent.status.isTerminal;
-  }
-
   String _providerDepositAddress(SwapPrototypeIntent intent) {
     return intent.depositAddress ?? intent.id;
   }
@@ -1530,24 +1470,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       return error.toString();
     }
     return swapFailureMessage(SwapFailureOperation.quote, error);
-  }
-
-  Future<SwapPrototypeIntent> _refreshProviderBackedIntent(
-    SwapPrototypeIntent intent, {
-    DateTime? checkedAt,
-  }) async {
-    final snapshot = await ref
-        .read(swapIntentProvider)
-        .getStatus(
-          _providerDepositAddress(intent),
-          depositMemo: intent.depositMemo,
-        );
-    return updateSwapIntentFromSnapshot(
-      intent,
-      snapshot,
-      updatedAt: checkedAt,
-      lastStatusCheckedAt: checkedAt,
-    ).copyWith(clearStatusError: true);
   }
 
   SwapPrototypeIntent _depositSnapshotIntent(

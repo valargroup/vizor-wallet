@@ -21,7 +21,7 @@ import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/wallet_mutation_guard.dart';
-import '../../swap/providers/swap_session_store.dart';
+import '../../swap/providers/swap_activity_store.dart';
 import '../widgets/account_name_modal.dart';
 import '../widgets/account_profile_picture_modal.dart';
 import '../widgets/account_remove_modal.dart';
