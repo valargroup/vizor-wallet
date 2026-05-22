@@ -179,6 +179,7 @@ set_desktop_exec() {
 }
 
 write_app_run() {
+  rm -f "$APPDIR/AppRun"
   cat > "$APPDIR/AppRun" <<APPRUN
 #!/usr/bin/env bash
 set -euo pipefail
