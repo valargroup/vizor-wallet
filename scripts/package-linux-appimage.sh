@@ -230,25 +230,79 @@ copy_dependencies_for() {
   local file="$1"
   [[ -f "$file" ]] || return 0
 
+  local ldd_output
+  if ! ldd_output="$(ldd "$file" 2>/dev/null)"; then
+    echo "Skipping dependency scan for $file because ldd failed" >&2
+    return 0
+  fi
+
   while IFS= read -r dependency; do
     copy_dependency "$dependency"
-  done < <(
-    ldd "$file" 2>/dev/null |
-      awk '
-        /=> \// { print $3; next }
-        /^[[:space:]]*\// { print $1; next }
-      ' |
-      sort -u
-  )
+  done < <(awk '
+    /=> \// { print $3; next }
+    /^[[:space:]]*\// { print $1; next }
+  ' <<<"$ldd_output" | sort -u)
+}
+
+resolve_multiarch() {
+  if command -v dpkg-architecture >/dev/null 2>&1; then
+    dpkg-architecture -qDEB_HOST_MULTIARCH
+    return
+  fi
+
+  if command -v gcc >/dev/null 2>&1; then
+    gcc -print-multiarch
+    return
+  fi
+
+  case "$(uname -m)" in
+    aarch64|arm64)
+      printf '%s\n' "aarch64-linux-gnu"
+      ;;
+    x86_64|amd64)
+      printf '%s\n' "x86_64-linux-gnu"
+      ;;
+    *)
+      echo "Could not resolve Debian multiarch tuple. Install dpkg-dev or gcc." >&2
+      exit 1
+      ;;
+  esac
+}
+
+find_system_library() {
+  local library="$1"
+  local multiarch="$2"
+  local source_library=""
+
+  if command -v ldconfig >/dev/null 2>&1; then
+    source_library="$(ldconfig -p 2>/dev/null | awk -v lib="$library" '$1 == lib { print $NF; exit }')" || true
+    if [[ -n "$source_library" && -f "$source_library" ]]; then
+      printf '%s\n' "$source_library"
+      return 0
+    fi
+  fi
+
+  local directory
+  for directory in "/usr/lib/$multiarch" "/lib/$multiarch" "/usr/lib" "/lib"; do
+    if [[ -f "$directory/$library" ]]; then
+      printf '%s\n' "$directory/$library"
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 copy_gstreamer_runtime() {
   local multiarch
-  multiarch="$(gcc -print-multiarch)"
+  multiarch="$(resolve_multiarch)"
   local plugin_source_dir="/usr/lib/${multiarch}/gstreamer-1.0"
   local scanner_source="/usr/lib/${multiarch}/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
   local plugin_destination_dir="$APPDIR_LIB_DIR/gstreamer-1.0"
   local scanner_destination_dir="$APPDIR_LIB_DIR/gstreamer1.0/gstreamer-1.0"
+
+  echo "Resolved multiarch tuple: $multiarch"
+  echo "Looking for GStreamer plugins in $plugin_source_dir"
 
   mkdir -p "$plugin_destination_dir" "$scanner_destination_dir"
 
@@ -267,6 +321,7 @@ copy_gstreamer_runtime() {
     libgstximagesrc.so; do
     local source_path="$plugin_source_dir/$plugin"
     if [[ -f "$source_path" ]]; then
+      echo "Bundling GStreamer plugin $plugin"
       cp -L "$source_path" "$plugin_destination_dir/$plugin"
       copy_dependencies_for "$source_path"
       case "$plugin" in
@@ -281,6 +336,8 @@ copy_gstreamer_runtime() {
           copied_scale_plugin="true"
           ;;
       esac
+    else
+      echo "GStreamer plugin not found, skipping $plugin"
     fi
   done
 
@@ -290,18 +347,23 @@ copy_gstreamer_runtime() {
   fi
 
   if [[ -f "$scanner_source" ]]; then
+    echo "Bundling GStreamer plugin scanner"
     cp -L "$scanner_source" "$scanner_destination_dir/gst-plugin-scanner"
     chmod +x "$scanner_destination_dir/gst-plugin-scanner"
     copy_dependencies_for "$scanner_source"
+  else
+    echo "GStreamer plugin scanner not found at $scanner_source"
   fi
 
   local library
   for library in libgstreamer-1.0.so.0 libgstapp-1.0.so.0 libgstbase-1.0.so.0 libgstvideo-1.0.so.0; do
     local source_library
-    source_library="$(ldconfig -p | awk -v lib="$library" '$1 == lib { print $NF; exit }')"
-    if [[ -n "$source_library" && -f "$source_library" ]]; then
+    if source_library="$(find_system_library "$library" "$multiarch")"; then
+      echo "Bundling GStreamer library $library from $source_library"
       copy_dependency "$source_library"
       copy_dependencies_for "$source_library"
+    else
+      echo "GStreamer library not found, skipping $library"
     fi
   done
 }
