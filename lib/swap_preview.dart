@@ -20,6 +20,8 @@ import 'src/features/swap/providers/swap_max_amount_estimator.dart';
 import 'src/features/swap/providers/swap_activity_store.dart';
 import 'src/features/swap/providers/swap_draft_store.dart';
 import 'src/features/swap/providers/swap_zec_staging_address_service.dart';
+import 'src/features/swap/screens/swap_address_scan_screen.dart';
+import 'src/features/swap/screens/swap_review_screen.dart';
 import 'src/features/swap/screens/swap_screen.dart';
 import 'src/providers/account_models.dart';
 import 'src/providers/receive_address_provider.dart';
@@ -34,7 +36,17 @@ Future<void> main() async {
   final router = GoRouter(
     initialLocation: '/swap',
     routes: [
-      GoRoute(path: '/swap', builder: (_, _) => const SwapScreen()),
+      GoRoute(
+        path: '/swap',
+        builder: (_, _) => const SwapScreen(),
+        routes: [
+          GoRoute(path: 'review', builder: (_, _) => const SwapReviewScreen()),
+          GoRoute(
+            path: 'address-scan',
+            builder: (_, _) => const SwapAddressScanScreen(),
+          ),
+        ],
+      ),
       GoRoute(path: '/activity', builder: (_, _) => const ActivityScreen()),
       GoRoute(
         path: '/activity/swap/:swapId',

@@ -57,6 +57,8 @@ import 'src/features/settings/screens/settings_screen.dart';
 import 'src/features/settings/screens/settings_change_password_screen.dart';
 import 'src/features/settings/screens/settings_endpoint_screen.dart';
 import 'src/features/settings/screens/settings_seed_phrase_screen.dart';
+import 'src/features/swap/screens/swap_address_scan_screen.dart';
+import 'src/features/swap/screens/swap_review_screen.dart';
 import 'src/features/swap/screens/swap_screen.dart';
 import 'src/providers/theme_mode_provider.dart';
 import 'src/providers/app_security_provider.dart';
@@ -212,7 +214,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
       final isUnlock = state.matchedLocation == '/unlock';
       final isLostPassword = state.matchedLocation == '/lost-password';
       final isUnlockFlow = isUnlock || isLostPassword;
-      final isSwap = state.matchedLocation == '/swap';
+      final isSwap = state.matchedLocation.startsWith('/swap');
 
       log(
         'router redirect: location=${state.matchedLocation}, hasWallet=$hasWallet, '
@@ -594,6 +596,16 @@ final _routerProvider = Provider<GoRouter>((ref) {
         path: '/swap',
         redirect: (_, _) => swapFeatureEnabled ? null : '/home',
         builder: (_, _) => const SwapScreen(),
+      ),
+      GoRoute(
+        path: '/swap/review',
+        redirect: (_, _) => swapFeatureEnabled ? null : '/home',
+        builder: (_, _) => const SwapReviewScreen(),
+      ),
+      GoRoute(
+        path: '/swap/address-scan',
+        redirect: (_, _) => swapFeatureEnabled ? null : '/home',
+        builder: (_, _) => const SwapAddressScanScreen(),
       ),
       GoRoute(
         path: '/send/review',

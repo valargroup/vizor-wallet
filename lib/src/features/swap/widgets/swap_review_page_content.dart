@@ -3,187 +3,140 @@ import 'package:flutter/widgets.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
-import '../domain/swap_address_plan.dart';
 import '../domain/swap_contract.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 import 'swap_deposit_qr_panel.dart';
 
-const _reviewActionHeight = 54.0;
-
-class SwapReviewModal extends StatelessWidget {
-  const SwapReviewModal({
+class SwapReviewPageContent extends StatelessWidget {
+  const SwapReviewPageContent({
     required this.quote,
-    required this.addressPlan,
     required this.accountLabel,
     required this.expired,
-    required this.starting,
     required this.amountWarning,
     required this.startError,
     this.startBlockedReason,
-    required this.onReviewAgain,
-    required this.onCancelReview,
-    required this.onStartIntent,
     super.key,
   });
 
   final SwapQuote quote;
-  final SwapAddressPlan addressPlan;
   final String? accountLabel;
   final bool expired;
-  final bool starting;
   final String? amountWarning;
   final String? startError;
   final String? startBlockedReason;
-  final VoidCallback onReviewAgain;
-  final VoidCallback onCancelReview;
-  final VoidCallback onStartIntent;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     return ConstrainedBox(
-      key: const ValueKey('swap_review_modal'),
-      constraints: const BoxConstraints(maxWidth: 560),
-      child: SizedBox(
-        height: double.infinity,
-        child: Container(
-          key: const ValueKey('swap_review_panel'),
-          margin: const EdgeInsets.all(AppSpacing.xs),
-          padding: const EdgeInsets.all(AppSpacing.sm),
-          decoration: BoxDecoration(
-            color: colors.background.base,
-            border: Border.all(color: colors.border.regular),
-            borderRadius: BorderRadius.circular(AppRadii.small),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Swap review',
-                          key: const ValueKey('swap_review_title'),
-                          style: AppTypography.headlineSmall.copyWith(
-                            color: colors.text.accent,
-                            fontSize: 26,
-                            height: 32 / 26,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (accountLabel != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            'Account: $accountLabel',
-                            key: const ValueKey('swap_review_account_label'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.labelMedium.copyWith(
-                              color: colors.text.secondary,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  _ReviewStatusBadge(expired: expired),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Expanded(
-                child: _ReviewScrollArea(
+      key: const ValueKey('swap_review_panel'),
+      constraints: const BoxConstraints(maxWidth: 680),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xxs,
+          AppSpacing.xs,
+          AppSpacing.xxs,
+          AppSpacing.md,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _ReviewTradeSummary(quote: quote),
-                      const SizedBox(height: AppSpacing.s),
-                      _ReviewFeeSummary(quote: quote),
-                      const SizedBox(height: AppSpacing.s),
-                      if (quote.direction.sendsZec)
-                        _ReviewDepositInstructionCard(quote: quote)
-                      else
-                        SwapDepositQrPanel(
-                          key: const ValueKey('swap_review_deposit_qr_panel'),
-                          title:
-                              'Send ${quote.externalAsset.symbol} to source-chain deposit',
-                          qrData: quote.depositInstruction.address,
-                          addressLabel:
-                              '${quote.externalAsset.symbol} source deposit',
-                          address: quote.depositInstruction.address,
-                          railLabel: quote.depositInstruction.asset.railLabel,
-                          reuseWarning: quote.depositInstruction.reuseWarning,
-                          memo: quote.depositInstruction.memo,
-                          dense: true,
+                      Text(
+                        'Swap review',
+                        key: const ValueKey('swap_review_title'),
+                        style: AppTypography.headlineSmall.copyWith(
+                          color: colors.text.accent,
+                          fontSize: 26,
+                          height: 32 / 26,
+                          fontWeight: FontWeight.w600,
                         ),
-                      const SizedBox(height: AppSpacing.s),
-                      _ReviewDetailsDisclosure(
-                        quote: quote,
-                        addressPlan: addressPlan,
                       ),
-                      const SizedBox(height: AppSpacing.xs),
-                      _ReviewConsentPanel(quote: quote),
-                      if (amountWarning != null) ...[
-                        const SizedBox(height: AppSpacing.xs),
-                        _ReviewNotice(
-                          key: const ValueKey('swap_review_amount_warning'),
-                          message: amountWarning!,
+                      if (accountLabel != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Account: $accountLabel',
+                          key: const ValueKey('swap_review_account_label'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.labelMedium.copyWith(
+                            color: colors.text.secondary,
+                          ),
                         ),
-                      ],
-                      if (expired) ...[
-                        const SizedBox(height: AppSpacing.xs),
-                        const _ReviewNotice(
-                          message:
-                              'Quote expired. Review again for a fresh route.',
-                        ),
-                      ],
-                      if (startError != null) ...[
-                        const SizedBox(height: AppSpacing.xs),
-                        _ReviewNotice(message: startError!),
-                      ],
-                      if (startBlockedReason != null) ...[
-                        const SizedBox(height: AppSpacing.xs),
-                        _ReviewNotice(message: startBlockedReason!),
                       ],
                     ],
                   ),
                 ),
+                const SizedBox(width: AppSpacing.xs),
+                _ReviewStatusBadge(expired: expired),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _ReviewTradeSummary(quote: quote),
+            const SizedBox(height: AppSpacing.s),
+            _ReviewFeeSummary(quote: quote),
+            const SizedBox(height: AppSpacing.s),
+            if (quote.direction.sendsZec)
+              _ReviewDepositInstructionCard(quote: quote)
+            else
+              SwapDepositQrPanel(
+                key: const ValueKey('swap_review_deposit_qr_panel'),
+                title:
+                    'Send ${quote.externalAsset.symbol} to source-chain deposit',
+                qrData: quote.depositInstruction.address,
+                addressLabel: '${quote.externalAsset.symbol} source deposit',
+                address: quote.depositInstruction.address,
+                railLabel: quote.depositInstruction.asset.railLabel,
+                reuseWarning: quote.depositInstruction.reuseWarning,
+                memo: quote.depositInstruction.memo,
+                dense: true,
               ),
-              const SizedBox(height: AppSpacing.sm),
-              const _ReviewDivider(),
-              const SizedBox(height: AppSpacing.sm),
-              _ReviewActions(
-                expired: expired,
-                starting: starting,
-                startBlockedReason: startBlockedReason,
-                sendsZec: quote.direction.sendsZec,
-                onCancelReview: onCancelReview,
-                onReviewAgain: onReviewAgain,
-                onStartIntent: onStartIntent,
+            if (amountWarning != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _ReviewNotice(
+                key: const ValueKey('swap_review_amount_warning'),
+                message: amountWarning!,
               ),
             ],
-          ),
+            if (expired) ...[
+              const SizedBox(height: AppSpacing.xs),
+              const _ReviewNotice(
+                message: 'Quote expired. Review again for a fresh route.',
+              ),
+            ],
+            if (startError != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _ReviewNotice(message: startError!),
+            ],
+            if (startBlockedReason != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _ReviewNotice(message: startBlockedReason!),
+            ],
+          ],
         ),
       ),
     );
   }
 }
 
-class _ReviewScrollArea extends StatefulWidget {
-  const _ReviewScrollArea({required this.child});
+class SwapReviewPageScrollArea extends StatefulWidget {
+  const SwapReviewPageScrollArea({required this.child, super.key});
 
   final Widget child;
 
   @override
-  State<_ReviewScrollArea> createState() => _ReviewScrollAreaState();
+  State<SwapReviewPageScrollArea> createState() =>
+      _SwapReviewPageScrollAreaState();
 }
 
-class _ReviewScrollAreaState extends State<_ReviewScrollArea> {
+class _SwapReviewPageScrollAreaState extends State<SwapReviewPageScrollArea> {
   late final ScrollController _controller;
 
   @override
@@ -226,71 +179,83 @@ class _ReviewScrollAreaState extends State<_ReviewScrollArea> {
   }
 }
 
-class _ReviewConsentPanel extends StatelessWidget {
-  const _ReviewConsentPanel({required this.quote});
+class SwapReviewPageActions extends StatelessWidget {
+  const SwapReviewPageActions({
+    required this.expired,
+    required this.starting,
+    this.startBlockedReason,
+    required this.sendsZec,
+    required this.onCancelReview,
+    required this.onReviewAgain,
+    required this.onStartIntent,
+    super.key,
+  });
 
-  final SwapQuote quote;
+  final bool expired;
+  final bool starting;
+  final String? startBlockedReason;
+  final bool sendsZec;
+  final VoidCallback onCancelReview;
+  final VoidCallback onReviewAgain;
+  final VoidCallback onStartIntent;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final sendsZec = quote.direction.sendsZec;
-    final exactOutput = quote.mode == SwapQuoteMode.exactOutput;
-    final zecDepositLabel = exactOutput
-        ? 'the required ZEC deposit'
-        : 'the ZEC deposit';
-    final title = sendsZec
-        ? 'Approval sends $zecDepositLabel'
-        : 'Approval locks deposit instructions';
-    final detail = sendsZec
-        ? 'The wallet creates the ZEC deposit transaction to a one-time transparent address. Only txid and status are used to track the swap.'
-        : 'You still send ${quote.externalAsset.symbol} from the source chain. ZEC arrives directly at this wallet shielded address.';
-    return Container(
-      key: const ValueKey('swap_review_consent_panel'),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s,
-        vertical: AppSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: colors.background.raised,
-        border: Border.all(color: colors.border.subtle),
-        borderRadius: BorderRadius.circular(AppRadii.xSmall),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AppIcon(
-            sendsZec ? AppIcons.transparentBalance : AppIcons.shieldKeyhole,
-            size: 18,
-            color: colors.icon.brandCrimson,
-          ),
-          const SizedBox(width: AppSpacing.xs),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.labelLarge.copyWith(
-                    color: colors.text.accent,
-                    fontSize: 15,
-                    height: 20 / 15,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  detail,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmall.copyWith(
-                    color: colors.text.primary,
-                    height: 18 / 14,
-                  ),
-                ),
-              ],
+    final startLabel = sendsZec ? 'Send ZEC deposit' : 'Start swap';
+    final startingLabel = sendsZec ? 'Sending' : 'Starting';
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 680),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xxs,
+          AppSpacing.s,
+          AppSpacing.xxs,
+          AppSpacing.md,
+        ),
+        child: Wrap(
+          key: const ValueKey('swap_review_actions'),
+          alignment: WrapAlignment.end,
+          runAlignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.s,
+          runSpacing: AppSpacing.xs,
+          children: [
+            _ReviewActionButton(
+              buttonKey: const ValueKey('swap_review_cancel_button'),
+              onPressed: onCancelReview,
+              variant: AppButtonVariant.secondary,
+              child: const Text('Cancel'),
             ),
-          ),
-        ],
+            if (expired)
+              _ReviewActionButton(
+                buttonKey: const ValueKey('swap_review_again_button'),
+                onPressed: onReviewAgain,
+                variant: AppButtonVariant.primary,
+                leading: const AppIcon(AppIcons.renew),
+                child: const Text('Review again'),
+              )
+            else
+              _ReviewActionButton(
+                buttonKey: const ValueKey('swap_start_button'),
+                onPressed:
+                    starting || startBlockedReason != null
+                        ? null
+                        : onStartIntent,
+                variant: AppButtonVariant.primary,
+                trailing:
+                    sendsZec
+                        ? null
+                        : starting
+                        ? const AppIcon(AppIcons.loader)
+                        : const AppIcon(AppIcons.arrowForwardIos),
+                child: Text(
+                  startBlockedReason == null
+                      ? (starting ? startingLabel : startLabel)
+                      : 'Insufficient ZEC',
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -305,12 +270,14 @@ class _ReviewDepositInstructionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final instruction = quote.depositInstruction;
-    final title = quote.direction.sendsZec
-        ? 'Send ZEC deposit to'
-        : 'Send ${quote.externalAsset.symbol} to source-chain deposit';
-    final detail = quote.direction.sendsZec
-        ? 'The wallet uses this one-time transparent address after you continue.'
-        : 'Send exactly from the source chain, then track the deposit from Activity.';
+    final title =
+        quote.direction.sendsZec
+            ? 'Send ZEC deposit to'
+            : 'Send ${quote.externalAsset.symbol} to source-chain deposit';
+    final detail =
+        quote.direction.sendsZec
+            ? 'The wallet uses this one-time transparent address after you continue.'
+            : 'Send exactly from the source chain, then track the deposit from Activity.';
     return Container(
       key: const ValueKey('swap_review_deposit_instruction'),
       padding: const EdgeInsets.symmetric(
@@ -539,9 +506,8 @@ class _ReviewAmountColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Column(
-      crossAxisAlignment: alignEnd
-          ? CrossAxisAlignment.end
-          : CrossAxisAlignment.start,
+      crossAxisAlignment:
+          alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
         Text(
           label,
@@ -553,9 +519,8 @@ class _ReviewAmountColumn extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xxs),
         Row(
-          mainAxisAlignment: alignEnd
-              ? MainAxisAlignment.end
-              : MainAxisAlignment.start,
+          mainAxisAlignment:
+              alignEnd ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
             if (!alignEnd) ...[
               SwapAssetIcon(asset: asset, size: 28),
@@ -747,86 +712,16 @@ class _ReviewFeeRow extends StatelessWidget {
 String _priceProtectionText(SwapQuote quote) {
   final buffer = quote.receiveAmount - quote.minimumReceiveAmount;
   final bounded = buffer.isFinite && buffer > 0 ? buffer : 0.0;
-  final percent = quote.receiveAmount > 0 && quote.receiveAmount.isFinite
-      ? bounded / quote.receiveAmount * 100
-      : 0.0;
-  final percentText = percent >= 1
-      ? percent.toStringAsFixed(1)
-      : percent.toStringAsFixed(2);
+  final percent =
+      quote.receiveAmount > 0 && quote.receiveAmount.isFinite
+          ? bounded / quote.receiveAmount * 100
+          : 0.0;
+  final percentText =
+      percent >= 1 ? percent.toStringAsFixed(1) : percent.toStringAsFixed(2);
   return compactSwapAmountText(
     '${quote.receiveAsset.formatAmount(bounded)} '
     '${quote.receiveAsset.symbol} ($percentText%)',
   );
-}
-
-class _ReviewDetailsDisclosure extends StatefulWidget {
-  const _ReviewDetailsDisclosure({
-    required this.quote,
-    required this.addressPlan,
-  });
-
-  final SwapQuote quote;
-  final SwapAddressPlan addressPlan;
-
-  @override
-  State<_ReviewDetailsDisclosure> createState() =>
-      _ReviewDetailsDisclosureState();
-}
-
-class _ReviewDetailsDisclosureState extends State<_ReviewDetailsDisclosure> {
-  var _open = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final refundLabel = widget.quote.direction.sendsZec
-        ? 'Refund address'
-        : '${widget.quote.externalAsset.symbol} refund';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        GestureDetector(
-          key: const ValueKey('swap_review_details_toggle'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _open ? 'Hide address details' : 'Address details',
-                    style: AppTypography.labelLarge.copyWith(
-                      color: colors.text.secondary,
-                    ),
-                  ),
-                ),
-                AppIcon(
-                  _open ? AppIcons.arrowUpward : AppIcons.arrowDown,
-                  size: 16,
-                  color: colors.icon.muted,
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (_open) ...[
-          _ReviewRow(
-            label: widget.quote.direction.sendsZec
-                ? 'Receive address'
-                : 'ZEC recipient',
-            value: widget.quote.direction.sendsZec
-                ? widget.addressPlan.reviewDeliveryValue
-                : widget.addressPlan.oneClickRecipient,
-          ),
-          _ReviewRow(
-            label: refundLabel,
-            value: widget.addressPlan.oneClickRefundTo,
-          ),
-        ],
-      ],
-    );
-  }
 }
 
 class _ReviewNotice extends StatelessWidget {
@@ -855,104 +750,6 @@ class _ReviewNotice extends StatelessWidget {
   }
 }
 
-class _ReviewActions extends StatelessWidget {
-  const _ReviewActions({
-    required this.expired,
-    required this.starting,
-    this.startBlockedReason,
-    required this.sendsZec,
-    required this.onCancelReview,
-    required this.onReviewAgain,
-    required this.onStartIntent,
-  });
-
-  final bool expired;
-  final bool starting;
-  final String? startBlockedReason;
-  final bool sendsZec;
-  final VoidCallback onCancelReview;
-  final VoidCallback onReviewAgain;
-  final VoidCallback onStartIntent;
-
-  @override
-  Widget build(BuildContext context) {
-    final startLabel = sendsZec ? 'Send ZEC deposit' : 'Start swap';
-    final startingLabel = sendsZec ? 'Sending' : 'Starting';
-
-    if (expired) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            key: const ValueKey('swap_review_actions'),
-            children: [
-              Expanded(
-                child: _ReviewActionButton(
-                  buttonKey: const ValueKey('swap_review_cancel_button'),
-                  onPressed: onCancelReview,
-                  variant: AppButtonVariant.secondary,
-                  child: const Text('Cancel'),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.s),
-              Expanded(
-                child: _ReviewActionButton(
-                  buttonKey: const ValueKey('swap_review_again_button'),
-                  onPressed: onReviewAgain,
-                  variant: AppButtonVariant.primary,
-                  leading: const AppIcon(AppIcons.renew),
-                  child: const Text('Review again'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          _ReviewActionButton(
-            buttonKey: const ValueKey('swap_start_button'),
-            onPressed: null,
-            variant: AppButtonVariant.primary,
-            child: const Text('Quote expired'),
-          ),
-        ],
-      );
-    }
-
-    return Row(
-      key: const ValueKey('swap_review_actions'),
-      children: [
-        Expanded(
-          child: _ReviewActionButton(
-            buttonKey: const ValueKey('swap_review_cancel_button'),
-            onPressed: onCancelReview,
-            variant: AppButtonVariant.secondary,
-            child: const Text('Cancel'),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.s),
-        Expanded(
-          child: _ReviewActionButton(
-            buttonKey: const ValueKey('swap_start_button'),
-            onPressed: starting || startBlockedReason != null
-                ? null
-                : onStartIntent,
-            variant: AppButtonVariant.primary,
-            trailing: sendsZec
-                ? null
-                : starting
-                ? const AppIcon(AppIcons.loader)
-                : const AppIcon(AppIcons.arrowForwardIos),
-            child: Text(
-              startBlockedReason == null
-                  ? (starting ? startingLabel : startLabel)
-                  : 'Insufficient ZEC',
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _ReviewActionButton extends StatelessWidget {
   const _ReviewActionButton({
     required this.buttonKey,
@@ -972,21 +769,15 @@ class _ReviewActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final slotWidth = constraints.maxWidth;
-        return AppButton(
-          key: buttonKey,
-          onPressed: onPressed,
-          variant: variant,
-          size: AppButtonSize.medium,
-          height: _reviewActionHeight,
-          minWidth: slotWidth.isFinite ? slotWidth : null,
-          leading: leading,
-          trailing: trailing,
-          child: child,
-        );
-      },
+    return AppButton(
+      key: buttonKey,
+      onPressed: onPressed,
+      variant: variant,
+      size: AppButtonSize.large,
+      minWidth: 148,
+      leading: leading,
+      trailing: trailing,
+      child: child,
     );
   }
 }
@@ -998,44 +789,5 @@ class _ReviewDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Container(height: 1, color: colors.border.subtle);
-  }
-}
-
-class _ReviewRow extends StatelessWidget {
-  const _ReviewRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 144,
-            child: Text(
-              label,
-              style: AppTypography.labelLarge.copyWith(
-                color: colors.text.secondary,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.end,
-              style: AppTypography.bodyMedium.copyWith(
-                color: colors.text.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -22,6 +22,7 @@ class SwapComposerPanel extends StatefulWidget {
     required this.onExternalAssetChanged,
     required this.onSlippageChanged,
     required this.onUseMaxZecAmount,
+    required this.onScanDestinationAddress,
     required this.zecAvailableText,
     required this.zecAvailableZatoshi,
     super.key,
@@ -36,6 +37,7 @@ class SwapComposerPanel extends StatefulWidget {
   final ValueChanged<SwapAsset> onExternalAssetChanged;
   final ValueChanged<int> onSlippageChanged;
   final VoidCallback onUseMaxZecAmount;
+  final VoidCallback onScanDestinationAddress;
   final String zecAvailableText;
   final BigInt zecAvailableZatoshi;
 
@@ -215,6 +217,7 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
               badge: 'Refund only',
               controller: _destinationController,
               onChanged: widget.onDestinationChanged,
+              onScan: widget.onScanDestinationAddress,
             ),
           ],
           const SizedBox(height: AppSpacing.xxs),
@@ -256,6 +259,7 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
               badge: state.externalAsset.chainLabel,
               controller: _destinationController,
               onChanged: widget.onDestinationChanged,
+              onScan: widget.onScanDestinationAddress,
             ),
           ],
           if (quoteError != null) ...[
@@ -650,6 +654,7 @@ class _InlineAddressField extends StatefulWidget {
     required this.badge,
     required this.controller,
     required this.onChanged,
+    required this.onScan,
   });
 
   final String label;
@@ -657,6 +662,7 @@ class _InlineAddressField extends StatefulWidget {
   final String badge;
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+  final VoidCallback onScan;
 
   @override
   State<_InlineAddressField> createState() => _InlineAddressFieldState();
@@ -784,6 +790,39 @@ class _InlineAddressFieldState extends State<_InlineAddressField> {
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Tooltip(
+                message: 'Scan QR',
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    key: const ValueKey('swap_address_scan_button'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: widget.onScan,
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colors.background.raised,
+                        border: Border.all(
+                          color: emphasized
+                              ? colors.border.regular
+                              : colors.border.subtle,
+                        ),
+                        borderRadius: BorderRadius.circular(AppRadii.small),
+                      ),
+                      child: AppIcon(
+                        AppIcons.qr,
+                        size: 16,
+                        color: emphasized
+                            ? colors.icon.accent
+                            : colors.icon.muted,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],

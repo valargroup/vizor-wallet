@@ -10,6 +10,7 @@ import '../../../core/formatting/zec_amount.dart';
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_main_sidebar.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_pane_modal_overlay.dart';
@@ -17,13 +18,13 @@ import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
+import '../domain/swap_address_scan_payload.dart';
 import '../models/swap_prototype_models.dart';
 import '../providers/swap_prototype_provider.dart';
 import '../widgets/redacted_receipt_drawer.dart';
 import '../widgets/swap_activity_panel.dart';
 import '../widgets/swap_composer_panel.dart';
 import '../widgets/swap_copy_feedback.dart';
-import '../widgets/swap_review_modal.dart';
 
 class SwapScreen extends ConsumerStatefulWidget {
   const SwapScreen({super.key});
@@ -85,28 +86,6 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
     final swapNotifier = ref.read(swapPrototypeProvider.notifier);
     final accountState = ref.watch(accountProvider).value;
     final activeAccountUuid = accountState?.activeAccountUuid;
-    String? accountLabelFor(String? accountUuid) {
-      if (accountUuid == null || accountUuid.trim().isEmpty) return null;
-      for (final account in accountState?.accounts ?? const <AccountInfo>[]) {
-        if (account.uuid == accountUuid) {
-          return account.name;
-        }
-      }
-      return null;
-    }
-
-    bool isHardwareIntent(SwapPrototypeIntent intent) {
-      final accountUuid = intent.accountUuid;
-      if (accountUuid == null || accountUuid.trim().isEmpty) return false;
-      final currentAccountState =
-          ref.read(accountProvider).value ?? accountState;
-      final accountHardwareByUuid = {
-        for (final account in currentAccountState?.accounts ?? const [])
-          account.uuid: account.isHardware,
-      };
-      return accountHardwareByUuid[accountUuid] ?? false;
-    }
-
     final sync = ref.watch(
       syncProvider.select(
         (value) =>
@@ -117,31 +96,29 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
       sync.spendableBalance,
     ).pretty(denomStyle: ZecDenomStyle.upper).toString();
     final selectedIntent = swapState.selectedIntentOrNull;
-    final reviewQuote = swapState.reviewQuote;
-    final reviewAddressPlan = swapState.reviewAddressPlan;
-    final reviewAccountLabel = accountLabelFor(swapState.reviewAccountUuid);
 
-    void startIntent() {
+    void openReview() {
       unawaited(() async {
-        final started = await swapNotifier.startIntent();
-        if (!context.mounted || !started) return;
-        final startedIntent = ref
-            .read(swapPrototypeProvider)
-            .selectedIntentOrNull;
-        if (startedIntent != null) {
-          final needsKeystoneDeposit =
-              isHardwareIntent(startedIntent) &&
-              startedIntent.direction == SwapDirection.zecToExternal &&
-              !(startedIntent.depositTxHash?.trim().isNotEmpty ?? false);
-          context.go(
-            Uri(
-              path: '/activity/swap/${Uri.encodeComponent(startedIntent.id)}',
-              queryParameters: {if (needsKeystoneDeposit) 'sign': 'zecDeposit'},
-            ).toString(),
-          );
+        await swapNotifier.showReview();
+        if (!context.mounted) return;
+        final next = ref.read(swapPrototypeProvider);
+        if (next.reviewVisible &&
+            next.reviewQuote != null &&
+            next.reviewAddressPlan != null) {
+          await context.push('/swap/review');
+        }
+      }());
+    }
+
+    void scanDestinationAddress() {
+      unawaited(() async {
+        final scanned = await context.push<String>('/swap/address-scan');
+        if (!context.mounted || scanned == null || scanned.trim().isEmpty) {
           return;
         }
-        context.go('/activity');
+        final normalized = normalizeSwapAddressScanPayload(scanned);
+        if (normalized == null || normalized.isEmpty) return;
+        swapNotifier.updateDestination(normalized);
       }());
     }
 
@@ -276,70 +253,75 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
           AppDesktopShell(
             sidebar: const AppMainSidebar(),
             pane: AppDesktopPane(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final viewportHeight = constraints.maxHeight.isFinite
-                      ? constraints.maxHeight
-                      : null;
-                  final primary = _SwapComposerStack(
-                    viewportHeight: viewportHeight,
-                    state: swapState,
-                    onAmountChanged: swapNotifier.updateAmount,
-                    onReceiveAmountChanged: swapNotifier.updateReceiveAmount,
-                    onDestinationChanged: swapNotifier.updateDestination,
-                    onDirectionChanged: swapNotifier.selectDirection,
-                    onToggleDirection: swapNotifier.toggleDirection,
-                    onExternalAssetChanged: swapNotifier.selectExternalAsset,
-                    onSlippageChanged: swapNotifier.updateSlippageBps,
-                    onUseMaxZecAmount: swapNotifier.useMaxZecAmount,
-                    onReviewQuote: swapNotifier.showReview,
-                    zecAvailableText: zecAvailableText,
-                    zecAvailableZatoshi: sync.spendableBalance,
-                  );
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: AppRouteBackLink(minWidth: 60),
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.s,
+                      ),
+                      child: Column(
+                        children: [
+                          const _SwapPageTitle(),
+                          const SizedBox(height: AppSpacing.md),
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final viewportHeight =
+                                    constraints.maxHeight.isFinite
+                                    ? constraints.maxHeight
+                                    : null;
+                                final primary = _SwapComposerStack(
+                                  viewportHeight: viewportHeight,
+                                  state: swapState,
+                                  onAmountChanged: swapNotifier.updateAmount,
+                                  onReceiveAmountChanged:
+                                      swapNotifier.updateReceiveAmount,
+                                  onDestinationChanged:
+                                      swapNotifier.updateDestination,
+                                  onDirectionChanged:
+                                      swapNotifier.selectDirection,
+                                  onToggleDirection:
+                                      swapNotifier.toggleDirection,
+                                  onExternalAssetChanged:
+                                      swapNotifier.selectExternalAsset,
+                                  onSlippageChanged:
+                                      swapNotifier.updateSlippageBps,
+                                  onUseMaxZecAmount:
+                                      swapNotifier.useMaxZecAmount,
+                                  onReviewQuote: openReview,
+                                  onScanDestinationAddress:
+                                      scanDestinationAddress,
+                                  zecAvailableText: zecAvailableText,
+                                  zecAvailableZatoshi: sync.spendableBalance,
+                                );
 
-                  return SingleChildScrollView(
-                    controller: _scrollController,
-                    child: _SwapViewportFrame(
-                      minHeight: viewportHeight,
-                      alignment: Alignment.center,
-                      child: primary,
+                                return SingleChildScrollView(
+                                  controller: _scrollController,
+                                  child: _SwapViewportFrame(
+                                    minHeight: viewportHeight,
+                                    alignment: Alignment.center,
+                                    child: primary,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
             ),
           ),
-          if (swapState.reviewVisible &&
-              reviewQuote != null &&
-              reviewAddressPlan != null)
-            AppPaneModalOverlay(
-              onDismiss: swapNotifier.cancelReviewQuote,
-              child: Material(
-                type: MaterialType.transparency,
-                child: _SwapReviewModalEntrance(
-                  child: SwapReviewModal(
-                    quote: reviewQuote,
-                    addressPlan: reviewAddressPlan,
-                    accountLabel: reviewAccountLabel,
-                    expired: swapState.quoteExpired,
-                    starting: swapState.startSubmitting,
-                    amountWarning: swapState.reviewAmountDifferenceWarning,
-                    startError: swapState.statusError,
-                    startBlockedReason:
-                        _reviewQuoteExceedsAvailableZec(
-                          reviewQuote,
-                          sync.spendableBalance,
-                        )
-                        ? 'Required pay exceeds available ZEC. Review a smaller target amount.'
-                        : null,
-                    onReviewAgain: swapNotifier.showReview,
-                    onCancelReview: swapNotifier.cancelReviewQuote,
-                    onStartIntent: startIntent,
-                  ),
-                ),
-              ),
-            ),
           if (_commandPaletteOpen)
             AppPaneModalOverlay(
               onDismiss: _closeCommandPalette,
@@ -358,30 +340,6 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SwapReviewModalEntrance extends StatelessWidget {
-  const _SwapReviewModalEntrance({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      key: const ValueKey('swap_review_modal_entrance'),
-      tween: Tween<double>(begin: -28, end: 0),
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      child: child,
-      builder: (context, dx, child) {
-        final opacity = 1 - (dx.abs() / 28);
-        return Opacity(
-          opacity: opacity.clamp(0.0, 1.0).toDouble(),
-          child: Transform.translate(offset: Offset(dx, 0), child: child),
-        );
-      },
     );
   }
 }
@@ -698,6 +656,7 @@ class _SwapComposerStack extends StatelessWidget {
     required this.onSlippageChanged,
     required this.onUseMaxZecAmount,
     required this.onReviewQuote,
+    required this.onScanDestinationAddress,
     required this.zecAvailableText,
     required this.zecAvailableZatoshi,
   });
@@ -713,6 +672,7 @@ class _SwapComposerStack extends StatelessWidget {
   final ValueChanged<int> onSlippageChanged;
   final VoidCallback onUseMaxZecAmount;
   final VoidCallback onReviewQuote;
+  final VoidCallback onScanDestinationAddress;
   final String zecAvailableText;
   final BigInt zecAvailableZatoshi;
 
@@ -735,6 +695,7 @@ class _SwapComposerStack extends StatelessWidget {
           onExternalAssetChanged: onExternalAssetChanged,
           onSlippageChanged: onSlippageChanged,
           onUseMaxZecAmount: onUseMaxZecAmount,
+          onScanDestinationAddress: onScanDestinationAddress,
           zecAvailableText: zecAvailableText,
           zecAvailableZatoshi: zecAvailableZatoshi,
         ),
@@ -747,6 +708,21 @@ class _SwapComposerStack extends StatelessWidget {
     if (height == null || !height.isFinite) return null;
     if (height <= 0) return null;
     return height;
+  }
+}
+
+class _SwapPageTitle extends StatelessWidget {
+  const _SwapPageTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Text(
+      'Swap',
+      key: const ValueKey('swap_page_title'),
+      textAlign: TextAlign.center,
+      style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
+    );
   }
 }
 
@@ -785,7 +761,7 @@ class _SwapComposerBody extends StatelessWidget {
     }
 
     return SizedBox(
-      height: height,
+      height: _effectiveSwapBodyHeight(height, state),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -803,6 +779,12 @@ class _SwapComposerBody extends StatelessWidget {
       ),
     );
   }
+}
+
+double _effectiveSwapBodyHeight(double height, SwapPrototypeState state) {
+  final hasQuoteError =
+      state.quoteError != null || state.previewQuoteError != null;
+  return hasQuoteError ? height + 72 : height;
 }
 
 class _SwapReviewFooter extends StatelessWidget {
@@ -854,12 +836,6 @@ bool _reviewAmountExceedsAvailableZec(
 ) {
   if (!state.direction.sendsZec) return false;
   return _zecAmountTextExceedsAvailable(state.amountText, availableZatoshi);
-}
-
-bool _reviewQuoteExceedsAvailableZec(SwapQuote quote, BigInt availableZatoshi) {
-  if (!quote.direction.sendsZec) return false;
-  final amountText = quote.sellAmountText.split(' ').first.trim();
-  return _zecAmountTextExceedsAvailable(amountText, availableZatoshi);
 }
 
 bool _zecAmountTextExceedsAvailable(
