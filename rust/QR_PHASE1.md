@@ -132,7 +132,12 @@ Birthday height: `4000000`.
 Known Account A/B live validation completed against
 `https://testnet.zec.rocks:443`:
 
-- Account A -> Account B send, creating Account A QR change:
+- Account A -> Account B send, creating Account A QR change and funding the
+  Account B spend:
+  `f0250cb22adc07fc56c9c273654bb2978c41780abfe400b4871221f8cc5accb8`
+  mined at height `4028955`.
+- Follow-up Account A -> Account B send during the artifact run, also creating
+  Account A QR change:
   `4210b0f959b7e519eaabec412bac8838fb5a119bdf1b397d1f0cb17c8e9bfffd`
   mined at height `4028964`.
 - Account B -> Account A send, creating Account B QR change:
