@@ -1,5 +1,7 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rust_lib_zcash_wallet::api::{sync as sync_api, wallet as wallet_api};
 
@@ -67,6 +69,106 @@ fn orchard_note_versions(db_path: &Path, is_change: bool) -> Vec<i64> {
         .expect("query note versions")
         .map(|row| row.expect("note version row"))
         .collect()
+}
+
+fn log_orchard_note_snapshot(db_path: &Path, label: &str) {
+    let conn = rusqlite::Connection::open(db_path).expect("open wallet db");
+    let mut stmt = conn
+        .prepare(
+            "SELECT rn.id,
+                    lower(hex(t.txid)) AS txid,
+                    rn.action_index,
+                    rn.value,
+                    rn.note_version,
+                    rn.is_change,
+                    CASE WHEN s.transaction_id IS NULL THEN 0 ELSE 1 END AS spent,
+                    IFNULL(t.mined_height, 0) AS mined_height
+             FROM orchard_received_notes rn
+             JOIN transactions t ON t.id_tx = rn.transaction_id
+             LEFT JOIN orchard_received_note_spends s
+               ON s.orchard_received_note_id = rn.id
+             ORDER BY rn.id",
+        )
+        .expect("prepare note snapshot query");
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i64>(7)?,
+            ))
+        })
+        .expect("query note snapshot");
+
+    eprintln!("Orchard note snapshot for {label} at {}", db_path.display());
+    for row in rows {
+        let (id, txid, action_index, value, note_version, is_change, spent, mined_height) =
+            row.expect("note snapshot row");
+        eprintln!(
+            "  id={id} txid={txid} action={action_index} value={value} note_version={note_version} is_change={is_change} spent={spent} mined_height={mined_height}"
+        );
+    }
+}
+
+fn live_artifact_dir() -> PathBuf {
+    std::env::var("VIZOR_QR_TESTNET_ARTIFACT_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock before Unix epoch")
+                .as_secs();
+            PathBuf::from("target")
+                .join("qr-phase1-live")
+                .join(format!("known-accounts-{now}"))
+        })
+}
+
+fn vacuum_db_copy(db_path: &Path, dest: &Path) {
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).expect("create artifact directory");
+    }
+    if dest.exists() {
+        fs::remove_file(dest).expect("remove stale artifact DB");
+    }
+    let conn = rusqlite::Connection::open(db_path).expect("open wallet db for artifact copy");
+    conn.execute("VACUUM INTO ?1", [path_str(dest)])
+        .expect("vacuum wallet db artifact");
+}
+
+fn write_known_account_artifacts(
+    account_a_db: &Path,
+    account_b_db: &Path,
+    a_to_b_txid: &str,
+    b_to_a_txid: &str,
+) {
+    let artifact_dir = live_artifact_dir();
+    fs::create_dir_all(&artifact_dir).expect("create artifact directory");
+    let account_a_copy = artifact_dir.join("account-a.db");
+    let account_b_copy = artifact_dir.join("account-b.db");
+    vacuum_db_copy(account_a_db, &account_a_copy);
+    vacuum_db_copy(account_b_db, &account_b_copy);
+
+    let txid_file = artifact_dir.join("txids.txt");
+    fs::write(
+        &txid_file,
+        format!(
+            "A -> B QR change creation: {a_to_b_txid}\nB -> A QR change creation: {b_to_a_txid}\nAccount A DB: {}\nAccount B DB: {}\n",
+            account_a_copy.display(),
+            account_b_copy.display(),
+        ),
+    )
+    .expect("write txid artifact");
+
+    eprintln!("QR Phase 1 artifact directory: {}", artifact_dir.display());
+    eprintln!("QR Phase 1 txid file: {}", txid_file.display());
+    eprintln!("QR Phase 1 Account A DB copy: {}", account_a_copy.display());
+    eprintln!("QR Phase 1 Account B DB copy: {}", account_b_copy.display());
 }
 
 fn qr_change_count(db_path: &Path) -> i64 {
@@ -212,6 +314,35 @@ fn wait_for_mined_tx(
         assert!(
             start.elapsed() < timeout,
             "timed out waiting for testnet tx {txid} to mine"
+        );
+        std::thread::sleep(poll);
+    }
+}
+
+fn wait_for_spendable_balance(
+    db_path: &Path,
+    lightwalletd_url: &str,
+    account_uuid: &str,
+    min_spendable: u64,
+    timeout: Duration,
+    poll: Duration,
+) -> sync_api::WalletBalance {
+    let start = Instant::now();
+    loop {
+        sync_wallet(db_path, lightwalletd_url);
+        let current = balance(db_path, account_uuid);
+        if current.spendable > min_spendable {
+            return current;
+        }
+
+        eprintln!(
+            "waiting for spendable balance > {min_spendable}; current={} elapsed={}s",
+            current.spendable,
+            start.elapsed().as_secs()
+        );
+        assert!(
+            start.elapsed() < timeout,
+            "timed out waiting for spendable balance > {min_spendable}"
         );
         std::thread::sleep(poll);
     }
@@ -482,6 +613,7 @@ fn known_test_accounts_create_qr_change_on_both_sides() {
         "Account A starting spendable balance: {} zatoshi",
         account_a_starting_balance.spendable
     );
+    log_orchard_note_snapshot(&account_a_db, "Account A before A -> B");
     assert!(
         account_a_starting_balance.spendable
             > A_TO_B_SEND_ZATOSHI + B_TO_A_SEND_ZATOSHI + MIN_POST_A_TO_B_CHANGE_ZATOSHI,
@@ -500,6 +632,7 @@ fn known_test_accounts_create_qr_change_on_both_sides() {
         "testnet-qr-a-to-b",
     );
     eprintln!("Account A -> Account B broadcast: {a_to_b_txid}");
+    log_orchard_note_snapshot(&account_a_db, "Account A after A -> B broadcast");
     assert!(
         qr_change_count(&account_a_db) > account_a_qr_change_before,
         "A -> B did not persist Account A QR Orchard change"
@@ -518,13 +651,21 @@ fn known_test_accounts_create_qr_change_on_both_sides() {
     );
 
     sync_wallet(&account_b_db, &lightwalletd_url);
+    log_orchard_note_snapshot(&account_b_db, "Account B after A -> B mined");
     let account_b_external_versions = orchard_note_versions(&account_b_db, false);
     assert!(
         account_b_external_versions.iter().all(|v| *v == 2),
         "A -> B external Orchard output should remain ordinary V2, got {:?}",
         account_b_external_versions
     );
-    let account_b_balance = balance(&account_b_db, &account_b.account_uuid);
+    let account_b_balance = wait_for_spendable_balance(
+        &account_b_db,
+        &lightwalletd_url,
+        &account_b.account_uuid,
+        B_TO_A_SEND_ZATOSHI,
+        timeout,
+        poll,
+    );
     eprintln!(
         "Account B spendable balance after A -> B: {} zatoshi",
         account_b_balance.spendable
@@ -546,6 +687,7 @@ fn known_test_accounts_create_qr_change_on_both_sides() {
         "testnet-qr-b-to-a",
     );
     eprintln!("Account B -> Account A broadcast: {b_to_a_txid}");
+    log_orchard_note_snapshot(&account_b_db, "Account B after B -> A broadcast");
     assert!(
         qr_change_count(&account_b_db) > account_b_qr_change_before,
         "B -> A did not persist Account B QR Orchard change"
@@ -564,6 +706,7 @@ fn known_test_accounts_create_qr_change_on_both_sides() {
     );
 
     sync_wallet(&account_a_db, &lightwalletd_url);
+    log_orchard_note_snapshot(&account_a_db, "Account A after B -> A mined");
     let account_a_external_versions = orchard_note_versions(&account_a_db, false);
     assert!(
         account_a_external_versions.iter().all(|v| *v == 2),
@@ -574,4 +717,5 @@ fn known_test_accounts_create_qr_change_on_both_sides() {
     eprintln!("QR Phase 1 known-account txids:");
     eprintln!("A -> B QR change creation: {a_to_b_txid}");
     eprintln!("B -> A QR change creation: {b_to_a_txid}");
+    write_known_account_artifacts(&account_a_db, &account_b_db, &a_to_b_txid, &b_to_a_txid);
 }

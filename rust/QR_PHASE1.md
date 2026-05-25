@@ -109,6 +109,7 @@ Run the live test explicitly:
 ```bash
 cd rust
 VIZOR_QR_TESTNET_LIVE=1 \
+VIZOR_QR_TESTNET_ARTIFACT_DIR=target/qr-phase1-live/known-accounts-latest \
 VIZOR_QR_TESTNET_CONFIRM_TIMEOUT_SECS=3600 \
 VIZOR_QR_TESTNET_CONFIRM_POLL_SECS=75 \
 cargo test --test testnet_qr_phase1 -- --ignored --nocapture
@@ -127,6 +128,42 @@ powder bronze skirt because truly bonus link gloom cluster quantum birth mutual 
 ```
 
 Birthday height: `4000000`.
+
+Known Account A/B live validation completed against
+`https://testnet.zec.rocks:443`:
+
+- Account A -> Account B send, creating Account A QR change:
+  `4210b0f959b7e519eaabec412bac8838fb5a119bdf1b397d1f0cb17c8e9bfffd`
+  mined at height `4028964`.
+- Account B -> Account A send, creating Account B QR change:
+  `373f2e36c83178ad70c8d9bf67a7de333fc42f6dd5f4583249bcc5b3ce0e6446`
+  mined at height `4028969`.
+- The saved artifact DBs from this run are written under
+  `rust/target/qr-phase1-live/known-accounts-latest/`.
+
+Inspect note versions in the saved DBs:
+
+```bash
+sqlite3 -header -column target/qr-phase1-live/known-accounts-latest/account-a.db \
+  "SELECT rn.id, lower(hex(t.txid)) AS txid_db_order, rn.action_index,
+          rn.value, rn.note_version, rn.is_change,
+          CASE WHEN s.transaction_id IS NULL THEN 0 ELSE 1 END AS spent,
+          IFNULL(t.mined_height, 0) AS mined_height
+   FROM orchard_received_notes rn
+   JOIN transactions t ON t.id_tx = rn.transaction_id
+   LEFT JOIN orchard_received_note_spends s ON s.orchard_received_note_id = rn.id
+   ORDER BY rn.id;"
+
+sqlite3 -header -column target/qr-phase1-live/known-accounts-latest/account-b.db \
+  "SELECT rn.id, lower(hex(t.txid)) AS txid_db_order, rn.action_index,
+          rn.value, rn.note_version, rn.is_change,
+          CASE WHEN s.transaction_id IS NULL THEN 0 ELSE 1 END AS spent,
+          IFNULL(t.mined_height, 0) AS mined_height
+   FROM orchard_received_notes rn
+   JOIN transactions t ON t.id_tx = rn.transaction_id
+   LEFT JOIN orchard_received_note_spends s ON s.orchard_received_note_id = rn.id
+   ORDER BY rn.id;"
+```
 
 ## Validation checklist
 
