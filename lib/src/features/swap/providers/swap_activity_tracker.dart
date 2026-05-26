@@ -6,12 +6,24 @@ import 'swap_activity_store.dart';
 import 'swap_failure_policy.dart';
 import 'swap_provider_config.dart';
 
+const swapActivityStatusRefreshInterval = Duration(seconds: 30);
+
 final swapActivityTrackerProvider = Provider<SwapActivityTracker>((ref) {
   return SwapActivityTracker(
     activityStore: ref.read(swapActivityStoreProvider),
     swapProvider: ref.read(swapIntentProvider),
+    onRecordsChanged: () {
+      ref.read(swapActivityRecordsRevisionProvider.notifier).bump();
+    },
   );
 });
+
+final swapActivityStatusRefresherProvider =
+    Provider<SwapActivityStatusRefresher>(
+      (ref) => SwapActivityStatusRefresher(
+        tracker: ref.read(swapActivityTrackerProvider),
+      ),
+    );
 
 class SwapActivityRefreshResult {
   const SwapActivityRefreshResult({
@@ -25,15 +37,101 @@ class SwapActivityRefreshResult {
   final bool didRefresh;
 }
 
+class SwapActivityStatusRefresher {
+  SwapActivityStatusRefresher({
+    required SwapActivityTracker tracker,
+    Duration minInterval = swapActivityStatusRefreshInterval,
+  }) : _tracker = tracker,
+       _minInterval = minInterval;
+
+  final SwapActivityTracker _tracker;
+  final Duration _minInterval;
+  final Map<String, DateTime> _lastRefreshAt = {};
+  final Map<String, Future<void>> _inFlight = {};
+
+  Future<void> refreshOpenActivities({
+    required String accountUuid,
+    bool force = false,
+  }) {
+    final scopedAccountUuid = accountUuid.trim();
+    if (scopedAccountUuid.isEmpty) return Future.value();
+
+    final running = _inFlight[scopedAccountUuid];
+    if (running != null) return running;
+
+    final now = DateTime.now().toUtc();
+    final previous = _lastRefreshAt[scopedAccountUuid];
+    if (!force && previous != null && now.difference(previous) < _minInterval) {
+      return Future.value();
+    }
+
+    final future = _refresh(scopedAccountUuid, now, force: force);
+    _inFlight[scopedAccountUuid] = future;
+    return future.whenComplete(() {
+      _inFlight.remove(scopedAccountUuid);
+    });
+  }
+
+  Future<void> _refresh(
+    String accountUuid,
+    DateTime startedAt, {
+    required bool force,
+  }) async {
+    _lastRefreshAt[accountUuid] = startedAt;
+    try {
+      final currentIntents = await _tracker.loadIntents(
+        accountUuid: accountUuid,
+      );
+      final dueIds = [
+        for (final intent in currentIntents)
+          if (_isRefreshDue(intent, accountUuid, startedAt, force: force))
+            intent.id,
+      ];
+      if (dueIds.isEmpty) return;
+      await _tracker.refreshIntents(
+        accountUuid: accountUuid,
+        currentIntents: currentIntents,
+        intentIds: dueIds,
+        includeTerminal: false,
+      );
+    } catch (_) {
+      // Activity rows are secondary to the wallet shell. Refresh failures are
+      // persisted per intent when the provider returns a status error; storage
+      // or transport failures should not break Home or Activity rendering.
+    }
+  }
+
+  bool _isRefreshDue(
+    SwapPrototypeIntent intent,
+    String accountUuid,
+    DateTime now, {
+    required bool force,
+  }) {
+    if (!SwapActivityTracker._shouldAutoRefreshIntent(
+      intent,
+      accountUuid: accountUuid,
+    )) {
+      return false;
+    }
+    if (force) return true;
+    final checkedAt = intent.lastStatusCheckedAt;
+    if (checkedAt == null) return true;
+    return now.difference(checkedAt.toUtc()) >= _minInterval;
+  }
+}
+
 class SwapActivityTracker {
   const SwapActivityTracker({
     required SwapActivityStore activityStore,
     required SwapProvider swapProvider,
+    void Function()? onRecordsChanged,
   }) : _activityStore = activityStore,
-       _swapProvider = swapProvider;
+       _swapProvider = swapProvider,
+       _onRecordsChanged = onRecordsChanged;
 
   final SwapActivityStore _activityStore;
   final SwapProvider _swapProvider;
+  final void Function()? _onRecordsChanged;
 
   Future<List<SwapPrototypeIntent>> loadIntents({
     required String accountUuid,
@@ -56,6 +154,7 @@ class SwapActivityTracker {
             ),
       ],
     );
+    _onRecordsChanged?.call();
   }
 
   Future<SwapActivityRefreshResult> refreshOpenIntents({

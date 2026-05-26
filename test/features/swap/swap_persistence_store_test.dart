@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/storage/app_secure_store.dart';
@@ -11,17 +14,27 @@ void main() {
   late AppSecureStore secureStore;
   late SwapActivityStore activityStore;
   late SwapDraftStore draftStore;
+  late Directory tempDir;
 
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
+    tempDir = await Directory.systemTemp.createTemp(
+      'swap_activity_store_test_',
+    );
     secureStore = AppSecureStore.instance;
     await secureStore.deleteAll();
-    activityStore = AppSecureStoreSwapActivityStore(secureStore);
+    activityStore = AppSecureStoreSwapActivityStore(
+      secureStore,
+      supportDirectoryProvider: () async => tempDir,
+    );
     draftStore = AppSecureStoreSwapDraftStore(secureStore);
   });
 
   tearDown(() async {
     await secureStore.deleteAll();
+    if (await tempDir.exists()) {
+      await tempDir.delete(recursive: true);
+    }
   });
 
   test('round-trips the swap activity fields needed for recovery', () async {
@@ -151,32 +164,75 @@ void main() {
     expect(accountTwo.single.accountUuid, 'account-2');
   });
 
-  test(
-    'persists swap activity as raw records, not presentation rows',
-    () async {
-      final intent = _minimalIntent(
-        id: 'swap-raw-record',
-        accountUuid: 'account-1',
-      );
+  test('persists swap activity in an encrypted local metadata file', () async {
+    final intent = _minimalIntent(
+      id: 'swap-raw-record',
+      accountUuid: 'account-1',
+    );
 
-      await activityStore.saveRecords(
-        accountUuid: 'account-1',
-        records: [SwapIntentRecord.fromIntent(intent)],
-      );
+    await activityStore.saveRecords(
+      accountUuid: 'account-1',
+      records: [SwapIntentRecord.fromIntent(intent)],
+    );
 
-      final raw = await secureStore.readString(
-        'zcash_swap_activities_v1:account-1',
-      );
+    final raw = await secureStore.readString(
+      legacySwapActivityStorageKeyForTest('account-1'),
+    );
+    final metadataKey = await secureStore.readString(
+      swapActivityMetadataKeyForTest('account-1'),
+    );
+    final files = _persistedFiles(tempDir);
+    final encryptedPayload = files.single.readAsStringSync();
 
-      expect(raw, isNotNull);
-      expect(raw, contains('"createdAt"'));
-      expect(raw, contains('"updatedAt"'));
-      expect(raw, isNot(contains('"title"')));
-      expect(raw, isNot(contains('"steps"')));
-      expect(raw, isNot(contains('"exposure"')));
-      expect(raw, isNot(contains('"receipt"')));
-    },
-  );
+    expect(raw, isNull);
+    expect(metadataKey, isNotNull);
+    expect(files, hasLength(1));
+    expect(encryptedPayload, contains('"version":2'));
+    expect(encryptedPayload, contains('"cipherText"'));
+    expect(encryptedPayload, isNot(contains('swap-raw-record')));
+    expect(encryptedPayload, isNot(contains('quote-swap-raw-record')));
+    expect(encryptedPayload, isNot(contains('"records"')));
+    expect(encryptedPayload, isNot(contains('"title"')));
+    expect(encryptedPayload, isNot(contains('"steps"')));
+    expect(encryptedPayload, isNot(contains('"exposure"')));
+    expect(encryptedPayload, isNot(contains('"receipt"')));
+  });
+
+  test('loads legacy raw-list swap activity records', () async {
+    await secureStore.writeString(
+      legacySwapActivityStorageKeyForTest('account-1'),
+      jsonEncode([
+        {
+          'id': 'legacy-swap',
+          'provider': 'NEAR Intents',
+          'pair': 'ZEC -> USDC',
+          'sellAmount': '1.0000 ZEC',
+          'receiveEstimate': '100.00 USDC',
+          'status': 'processing',
+          'nextAction': 'Processing',
+          'direction': 'zecToExternal',
+          'depositAddress': 'legacy-swap',
+          'providerQuoteId': 'quote-legacy-swap',
+          'accountUuid': 'stale-account-value',
+        },
+      ]),
+    );
+
+    final restored = await activityStore.loadRecords(accountUuid: 'account-1');
+
+    expect(restored, hasLength(1));
+    expect(restored.single.id, 'legacy-swap');
+    expect(restored.single.providerLabel, 'NEAR Intents');
+    expect(restored.single.accountUuid, 'account-1');
+    expect(restored.single.direction, SwapDirection.zecToExternal);
+    expect(
+      await secureStore.readString(
+        legacySwapActivityStorageKeyForTest('account-1'),
+      ),
+      isNull,
+    );
+    expect(_persistedFiles(tempDir), hasLength(1));
+  });
 
   test('round-trips only the last attempted swap pair', () async {
     const draft = SwapDraftSnapshot(
@@ -222,6 +278,14 @@ void main() {
       expect(restored.slippageBps, 150);
     },
   );
+}
+
+List<File> _persistedFiles(Directory directory) {
+  if (!directory.existsSync()) return const [];
+  return directory
+      .listSync(recursive: true)
+      .whereType<File>()
+      .toList(growable: false);
 }
 
 SwapPrototypeIntent _minimalIntent({

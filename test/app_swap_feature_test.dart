@@ -5,6 +5,7 @@ import 'package:zcash_wallet/app.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/core/config/swap_feature_config.dart';
+import 'package:zcash_wallet/src/features/activity/screens/activity_screen.dart';
 import 'package:zcash_wallet/src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'package:zcash_wallet/src/features/home/screens/home_screen.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
@@ -33,36 +34,72 @@ void main() {
         '/home',
         swapEnabled: true,
         swapActivityStore: _FakeSwapActivityStore([
-          SwapIntentRecord(
-            id: 'swap-home-1',
-            providerLabel: 'NEAR Intents',
-            pairText: 'ZEC -> USDC',
-            sellAmountText: '1.0000 ZEC',
-            receiveEstimateText: '70.170000 USDC',
-            status: SwapIntentStatus.processing,
-            nextAction: 'Swap is processing',
-            direction: SwapDirection.zecToExternal,
-            externalAsset: SwapAsset.usdc,
-            depositAddress: 't1home-deposit',
-            providerQuoteId: 'quote-home-1',
-            accountUuid: 'account-1',
-            createdAt: DateTime.utc(2026, 5, 22, 10),
-            updatedAt: DateTime.utc(2026, 5, 22, 10),
-          ),
+          _swapActivityRecord(id: 'swap-home-1'),
         ]),
       ),
     );
-    await _pumpUntilPresent(tester, find.text('Swap ZEC to USDC'));
+    await _pumpUntilPresent(tester, find.text('Swapping...'));
 
     expect(find.text('Recent Activity'), findsOneWidget);
-    expect(find.text('Swap ZEC to USDC'), findsOneWidget);
+    expect(find.text('Swapping...'), findsOneWidget);
     expect(find.text('-1.0000 ZEC'), findsOneWidget);
 
-    await tester.tap(find.text('Swap ZEC to USDC'));
+    await tester.tap(find.text('Swapping...'));
     await _pumpUntilPresent(tester, find.byType(SwapActivityDetailScreen));
 
+    expect(
+      find.byKey(const ValueKey('swap_activity_detail_page')),
+      findsOneWidget,
+    );
     expect(find.text('Swap progress'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Back to Home'));
+    await _pumpUntilAbsent(tester, find.byType(SwapActivityDetailScreen));
+
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.byType(SwapActivityDetailScreen), findsNothing);
   });
+
+  testWidgets('activity swap detail back returns to activity', (tester) async {
+    await tester.pumpWidget(
+      _appHarness(
+        '/activity',
+        swapEnabled: true,
+        swapActivityStore: _FakeSwapActivityStore([
+          _swapActivityRecord(id: 'swap-activity-1'),
+        ]),
+      ),
+    );
+    await _pumpUntilPresent(tester, find.text('Swapping...'));
+
+    await tester.tap(find.text('Swapping...'));
+    await _pumpUntilPresent(tester, find.byType(SwapActivityDetailScreen));
+
+    await tester.tap(find.bySemanticsLabel('Back to Activity'));
+    await _pumpUntilAbsent(tester, find.byType(SwapActivityDetailScreen));
+
+    expect(find.byType(ActivityScreen), findsOneWidget);
+    expect(find.byType(SwapActivityDetailScreen), findsNothing);
+  });
+}
+
+SwapIntentRecord _swapActivityRecord({required String id}) {
+  return SwapIntentRecord(
+    id: id,
+    providerLabel: 'NEAR Intents',
+    pairText: 'ZEC -> USDC',
+    sellAmountText: '1.0000 ZEC',
+    receiveEstimateText: '70.170000 USDC',
+    status: SwapIntentStatus.processing,
+    nextAction: 'Swap is processing',
+    direction: SwapDirection.zecToExternal,
+    externalAsset: SwapAsset.usdc,
+    depositAddress: 't1home-deposit',
+    providerQuoteId: 'quote-$id',
+    accountUuid: 'account-1',
+    createdAt: DateTime.utc(2026, 5, 22, 10),
+    updatedAt: DateTime.utc(2026, 5, 22, 10),
+  );
 }
 
 Widget _appHarness(
@@ -87,6 +124,13 @@ Future<void> _pumpUntilPresent(WidgetTester tester, Finder finder) async {
   for (var i = 0; i < 20; i++) {
     await tester.pump(const Duration(milliseconds: 50));
     if (finder.evaluate().isNotEmpty) return;
+  }
+}
+
+Future<void> _pumpUntilAbsent(WidgetTester tester, Finder finder) async {
+  for (var i = 0; i < 20; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (finder.evaluate().isEmpty) return;
   }
 }
 

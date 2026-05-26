@@ -6,16 +6,19 @@ class ActivityRowData {
     required this.leadingIconName,
     required this.leadingBackgroundColor,
     required this.leadingIconColor,
+    this.leadingProgressValue,
     this.subtitle,
     this.subtitleIconName,
     required this.amountText,
     this.amountIconName,
     this.amountIconColor,
     this.amountColor,
+    this.amountSubtitle,
     required this.statusText,
     required this.timestampText,
     this.statusIconName,
     this.statusColor,
+    this.childRows = const [],
     this.onTap,
   });
 
@@ -23,15 +26,18 @@ class ActivityRowData {
   final String leadingIconName;
   final Color leadingBackgroundColor;
   final Color leadingIconColor;
+  final double? leadingProgressValue;
   final String? subtitle;
   final String? subtitleIconName;
   final String amountText;
   final String? amountIconName;
   final Color? amountIconColor;
   final Color? amountColor;
+  final String? amountSubtitle;
   final String statusText;
   final String timestampText;
   final String? statusIconName;
   final Color? statusColor;
+  final List<ActivityRowData> childRows;
   final VoidCallback? onTap;
 }

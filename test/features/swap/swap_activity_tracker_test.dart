@@ -36,7 +36,8 @@ void main() {
       ),
     ];
     store.savedRecords = [
-      for (final intent in persistedIntents) SwapIntentRecord.fromIntent(intent),
+      for (final intent in persistedIntents)
+        SwapIntentRecord.fromIntent(intent),
     ];
 
     final result = await tracker.refreshOpenIntents(
@@ -86,6 +87,64 @@ void main() {
     expect(result.didRefresh, isFalse);
     expect(provider.statusRequests, isEmpty);
     expect(store.saveCount, 0);
+  });
+
+  test('status refresher throttles repeated activity refreshes', () async {
+    final store = _MemorySwapActivityStore();
+    final provider = _StatusSwapProvider({});
+    final tracker = SwapActivityTracker(
+      activityStore: store,
+      swapProvider: provider,
+    );
+    final refresher = SwapActivityStatusRefresher(
+      tracker: tracker,
+      minInterval: const Duration(minutes: 1),
+    );
+    store.savedRecords = [
+      SwapIntentRecord.fromIntent(
+        _intent(id: 'swap-a', depositAddress: 'deposit-a'),
+      ),
+    ];
+
+    await refresher.refreshOpenActivities(
+      accountUuid: 'account-1',
+      force: true,
+    );
+    await refresher.refreshOpenActivities(accountUuid: 'account-1');
+
+    expect(provider.statusRequests, ['deposit-a']);
+
+    await refresher.refreshOpenActivities(
+      accountUuid: 'account-1',
+      force: true,
+    );
+
+    expect(provider.statusRequests, ['deposit-a', 'deposit-a']);
+  });
+
+  test('status refresher skips recently checked persisted activity', () async {
+    final store = _MemorySwapActivityStore();
+    final provider = _StatusSwapProvider({});
+    final tracker = SwapActivityTracker(
+      activityStore: store,
+      swapProvider: provider,
+    );
+    final refresher = SwapActivityStatusRefresher(
+      tracker: tracker,
+      minInterval: const Duration(minutes: 1),
+    );
+    store.savedRecords = [
+      SwapIntentRecord.fromIntent(
+        _intent(
+          id: 'swap-recent',
+          depositAddress: 'deposit-recent',
+        ).copyWith(lastStatusCheckedAt: DateTime.now().toUtc()),
+      ),
+    ];
+
+    await refresher.refreshOpenActivities(accountUuid: 'account-1');
+
+    expect(provider.statusRequests, isEmpty);
   });
 }
 

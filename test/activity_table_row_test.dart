@@ -236,6 +236,37 @@ void main() {
       expect(text.style?.letterSpacing, AppTypography.labelLarge.letterSpacing);
     }
   });
+
+  testWidgets('activity table renders grouped child rows under parent rows', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppTheme(
+          data: AppThemeData.light,
+          child: ActivityTable(
+            rows: [
+              _row(
+                title: 'Swapping...',
+                childRows: [_row(title: 'Receiving ZEC...')],
+              ),
+              _row(title: 'Sent'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Swapping...'), findsOneWidget);
+    expect(find.text('Receiving ZEC...'), findsOneWidget);
+    expect(find.text('Sent'), findsOneWidget);
+
+    final parentTop = tester.getTopLeft(find.text('Swapping...')).dy;
+    final childTop = tester.getTopLeft(find.text('Receiving ZEC...')).dy;
+    final nextTop = tester.getTopLeft(find.text('Sent')).dy;
+    expect(childTop, greaterThan(parentTop));
+    expect(nextTop, greaterThan(childTop));
+  });
 }
 
 rust_sync.TransactionInfo _tx({
@@ -263,6 +294,7 @@ rust_sync.TransactionInfo _tx({
 ActivityRowData _row({
   required String title,
   String? subtitle,
+  List<ActivityRowData> childRows = const [],
   VoidCallback? onTap,
 }) {
   return ActivityRowData(
@@ -274,6 +306,7 @@ ActivityRowData _row({
     amountText: '1.00 $kZcashDefaultCurrencyTicker',
     statusText: 'Completed',
     timestampText: 'Today, 13:11',
+    childRows: childRows,
     onTap: onTap,
   );
 }

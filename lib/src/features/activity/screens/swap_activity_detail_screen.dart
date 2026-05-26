@@ -1,21 +1,25 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_layout.dart';
 import '../../../core/layout/app_main_sidebar.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
+import '../../swap/models/swap_activity_navigation.dart';
 import '../../swap/widgets/swap_activity_panel.dart';
 
 class SwapActivityDetailScreen extends ConsumerStatefulWidget {
   const SwapActivityDetailScreen({
     required this.swapIntentId,
+    this.returnTarget = SwapActivityReturnTarget.activity,
     this.autoSignZecDeposit = false,
     super.key,
   });
 
   final String swapIntentId;
+  final SwapActivityReturnTarget returnTarget;
   final bool autoSignZecDeposit;
 
   @override
@@ -52,9 +56,13 @@ class _SwapActivityDetailScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Align(
+                Align(
                   alignment: Alignment.centerLeft,
-                  child: AppRouteBackLink(minWidth: 60),
+                  child: AppBackLink(
+                    label: widget.returnTarget.label,
+                    minWidth: 60,
+                    onTap: () => context.go(widget.returnTarget.path),
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.s),
                 Expanded(

@@ -14,6 +14,7 @@ import 'src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'src/features/receive/models/receive_prefill_args.dart';
 import 'src/features/send/models/send_prefill_args.dart';
 import 'src/features/swap/models/swap_prototype_models.dart';
+import 'src/features/swap/models/swap_activity_navigation.dart';
 import 'src/features/swap/providers/swap_prototype_provider.dart';
 import 'src/features/swap/providers/swap_deposit_sender.dart';
 import 'src/features/swap/providers/swap_max_amount_estimator.dart';
@@ -52,7 +53,12 @@ Future<void> main() async {
         path: '/activity/swap/:swapId',
         builder: (_, state) => SwapActivityDetailScreen(
           swapIntentId: state.pathParameters['swapId'] ?? '',
-          autoSignZecDeposit: state.uri.queryParameters['sign'] == 'zecDeposit',
+          returnTarget: SwapActivityReturnTarget.fromQueryValue(
+            state.uri.queryParameters[swapActivityReturnQueryKey],
+          ),
+          autoSignZecDeposit:
+              state.uri.queryParameters[swapActivitySignQueryKey] ==
+              swapActivitySignZecDepositValue,
         ),
       ),
       GoRoute(

@@ -31,8 +31,10 @@ import '../../activity/models/activity_row_data.dart';
 import '../../activity/screens/activity_transaction_status_screen.dart';
 import '../../activity/widgets/activity_table.dart';
 import '../../activity/swap_activity_row_mapper.dart';
+import '../../swap/models/swap_activity_navigation.dart';
 import '../../swap/models/swap_prototype_models.dart';
-import '../../swap/providers/swap_prototype_provider.dart';
+import '../../swap/providers/swap_activity_store.dart';
+import '../../swap/providers/swap_activity_tracker.dart';
 import '../widgets/keystone_shield_signing_overlay.dart';
 
 const _shieldErrorTooltipIconSize = 14.0;
@@ -414,12 +416,15 @@ class _HomePaneState extends ConsumerState<_HomePane> {
   final ScrollController _scrollController = ScrollController();
   bool _isHovered = false;
   bool _canScroll = false;
+  Timer? _swapActivityRefreshTimer;
+  String? _swapActivityRefreshAccountUuid;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _syncSwapActivityStatusRefresh();
       _updateCanScroll();
     });
   }
@@ -435,8 +440,35 @@ class _HomePaneState extends ConsumerState<_HomePane> {
 
   @override
   void dispose() {
+    _swapActivityRefreshTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _syncSwapActivityStatusRefresh() {
+    final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
+    if (accountUuid == _swapActivityRefreshAccountUuid &&
+        _swapActivityRefreshTimer?.isActive == true) {
+      return;
+    }
+    _swapActivityRefreshTimer?.cancel();
+    _swapActivityRefreshAccountUuid = accountUuid;
+    if (accountUuid == null || accountUuid.trim().isEmpty) return;
+
+    unawaited(_refreshSwapActivityStatus(accountUuid));
+    _swapActivityRefreshTimer = Timer.periodic(
+      swapActivityStatusRefreshInterval,
+      (_) => unawaited(_refreshSwapActivityStatus(accountUuid)),
+    );
+  }
+
+  Future<void> _refreshSwapActivityStatus(
+    String accountUuid, {
+    bool force = false,
+  }) {
+    return ref
+        .read(swapActivityStatusRefresherProvider)
+        .refreshOpenActivities(accountUuid: accountUuid, force: force);
   }
 
   void _updateCanScroll() {
@@ -450,6 +482,12 @@ class _HomePaneState extends ConsumerState<_HomePane> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<AccountState>>(accountProvider, (previous, next) {
+      if (previous?.value?.activeAccountUuid != next.value?.activeAccountUuid) {
+        _syncSwapActivityStatusRefresh();
+      }
+    });
+
     final notice = _noticeData();
     final rows = _activityRows(context);
     final showHoverScrollbar = isDesktopLayoutPlatform;
@@ -583,14 +621,10 @@ class _HomePaneState extends ConsumerState<_HomePane> {
 
   List<ActivityRowData> _activityRows(BuildContext context) {
     final accountUuid = ref.watch(accountProvider).value?.activeAccountUuid;
-    final swapState = ref.watch(swapPrototypeProvider);
     final swapRecords = accountUuid == null
         ? const <SwapIntentRecord>[]
-        : [
-            for (final intent in swapState.intents)
-              if (intent.accountUuid == accountUuid)
-                SwapIntentRecord.fromIntent(intent),
-          ];
+        : ref.watch(swapActivityRecordsProvider(accountUuid)).value ??
+              const <SwapIntentRecord>[];
     final entries = <_HomeActivityEntry>[
       if (widget.hasActivitySyncData)
         for (final tx in widget.sync.recentTransactions)
@@ -626,7 +660,10 @@ class _HomePaneState extends ConsumerState<_HomePane> {
 
   void _openSwapStatus(SwapIntentRecord record) {
     context.push(
-      Uri(path: '/activity/swap/${Uri.encodeComponent(record.id)}').toString(),
+      swapActivityDetailUri(
+        intentId: record.id,
+        returnTarget: SwapActivityReturnTarget.home,
+      ).toString(),
     );
   }
 

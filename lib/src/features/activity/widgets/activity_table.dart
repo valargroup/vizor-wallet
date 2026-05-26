@@ -71,7 +71,7 @@ class ActivityTable extends StatelessWidget {
               _ActivityTableMessage(text: emptyText)
             else
               for (var i = 0; i < rows.length; i++) ...[
-                ActivityTableRow(
+                ActivityTableRowGroup(
                   key: rowKeyPrefix == null
                       ? null
                       : ValueKey('${rowKeyPrefix}_row_$i'),
@@ -160,13 +160,26 @@ class _ActivityTableHeader extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
         child: _ActivityColumnLayout(
-          txType: Text('Type', style: mutedStyle),
+          txType: Text('Tx Type', style: mutedStyle),
           amount: Text('Amount', style: mutedStyle),
           status: Text('Status', style: mutedStyle),
-          timestamp: Text(
-            'Date & time',
-            textAlign: TextAlign.end,
-            style: mutedStyle,
+          timestamp: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  'Time Stamp',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: AppTypography.labelMedium.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xxs),
+              AppIcon(AppIcons.arrowDown, size: 12, color: colors.icon.accent),
+            ],
           ),
         ),
       ),
@@ -300,10 +313,40 @@ class _StatusLabel extends StatelessWidget {
   }
 }
 
-class ActivityTableRow extends StatefulWidget {
-  const ActivityTableRow({required this.row, super.key});
+class ActivityTableRowGroup extends StatelessWidget {
+  const ActivityTableRowGroup({required this.row, super.key});
 
   final ActivityRowData row;
+
+  @override
+  Widget build(BuildContext context) {
+    if (row.childRows.isEmpty) {
+      return ActivityTableRow(row: row);
+    }
+
+    return Column(
+      children: [
+        ActivityTableRow(row: row),
+        for (final childRow in row.childRows) ...[
+          const SizedBox(height: AppSpacing.xxs),
+          ActivityTableRow(row: childRow, compact: true, childRow: true),
+        ],
+      ],
+    );
+  }
+}
+
+class ActivityTableRow extends StatefulWidget {
+  const ActivityTableRow({
+    required this.row,
+    this.compact = false,
+    this.childRow = false,
+    super.key,
+  });
+
+  final ActivityRowData row;
+  final bool compact;
+  final bool childRow;
 
   @override
   State<ActivityTableRow> createState() => _ActivityTableRowState();
@@ -348,12 +391,13 @@ class _ActivityTableRowState extends State<ActivityTableRow> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final row = widget.row;
-    final isInteractive = row.onTap != null;
+    final isInteractive = row.onTap != null && !widget.childRow;
+    final rowHeight = widget.compact ? 40.0 : 48.0;
     final content = Stack(
       clipBehavior: Clip.none,
       children: [
         Container(
-          height: 48,
+          height: rowHeight,
           padding: const EdgeInsets.all(AppSpacing.xxs),
           decoration: BoxDecoration(
             color: isInteractive && _hovered
@@ -364,7 +408,9 @@ class _ActivityTableRowState extends State<ActivityTableRow> {
           child: _ActivityColumnLayout(
             txType: Row(
               children: [
-                _ActivityAvatar(row: row),
+                widget.childRow
+                    ? const _ActivityChildConnector()
+                    : _ActivityAvatar(row: row),
                 const SizedBox(width: AppSpacing.s),
                 Flexible(
                   child: Column(
@@ -487,6 +533,41 @@ class _AmountLabel extends StatelessWidget {
       style: AppTypography.labelLarge.copyWith(color: color),
     );
 
+    final value = _AmountValue(row: row, text: text, color: color);
+    final subtitle = row.amountSubtitle;
+    if (subtitle == null) return value;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        value,
+        Text(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.labelMedium.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AmountValue extends StatelessWidget {
+  const _AmountValue({
+    required this.row,
+    required this.text,
+    required this.color,
+  });
+
+  final ActivityRowData row;
+  final Text text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
     final iconName = row.amountIconName;
     if (iconName == null) return text;
 
@@ -515,6 +596,28 @@ class _ActivityAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final progress = row.leadingProgressValue;
+    if (progress != null) {
+      return SizedBox(
+        width: 32,
+        height: 32,
+        child: CustomPaint(
+          painter: _ActivityAvatarProgressPainter(
+            progress: progress.clamp(0, 1).toDouble(),
+            trackColor: context.colors.border.subtle,
+            progressColor: context.colors.icon.brandCrimson,
+          ),
+          child: Center(
+            child: AppIcon(
+              row.leadingIconName,
+              size: 16,
+              color: row.leadingIconColor,
+            ),
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
       width: 32,
       height: 32,
@@ -532,6 +635,102 @@ class _ActivityAvatar extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _ActivityAvatarProgressPainter extends CustomPainter {
+  const _ActivityAvatarProgressPainter({
+    required this.progress,
+    required this.trackColor,
+    required this.progressColor,
+  });
+
+  final double progress;
+  final Color trackColor;
+  final Color progressColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokeWidth = 2.0;
+    final rect = Offset.zero & size;
+    final arcRect = rect.deflate(strokeWidth / 2);
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final progressPaint = Paint()
+      ..color = progressColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawOval(arcRect, trackPaint);
+    canvas.drawArc(
+      arcRect,
+      -math.pi / 2,
+      math.pi * 2 * progress,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ActivityAvatarProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.progressColor != progressColor;
+  }
+}
+
+class _ActivityChildConnector extends StatelessWidget {
+  const _ActivityChildConnector();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: Center(
+        child: CustomPaint(
+          size: const Size(14, 14),
+          painter: _ActivityChildConnectorPainter(
+            color: context.colors.icon.disabled,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityChildConnectorPainter extends CustomPainter {
+  const _ActivityChildConnectorPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final path = Path()
+      ..moveTo(size.width * 0.25, size.height * 0.15)
+      ..lineTo(size.width * 0.25, size.height * 0.72)
+      ..quadraticBezierTo(
+        size.width * 0.25,
+        size.height * 0.86,
+        size.width * 0.39,
+        size.height * 0.86,
+      )
+      ..lineTo(size.width * 0.82, size.height * 0.86);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ActivityChildConnectorPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 

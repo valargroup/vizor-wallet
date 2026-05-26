@@ -20,7 +20,9 @@ import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../../swap/models/swap_prototype_models.dart';
-import '../../swap/providers/swap_prototype_provider.dart';
+import '../../swap/models/swap_activity_navigation.dart';
+import '../../swap/providers/swap_activity_store.dart';
+import '../../swap/providers/swap_activity_tracker.dart';
 import '../activity_row_mapper.dart';
 import '../models/activity_row_data.dart';
 import '../swap_activity_row_mapper.dart';
@@ -35,7 +37,7 @@ class ActivityScreen extends ConsumerStatefulWidget {
 }
 
 class _ActivityScreenState extends ConsumerState<ActivityScreen> {
-  static const _activityRowsPerPage = 6;
+  static const _activityRowsPerPage = 5;
   // Figma frame keeps a 32px Back row plus a 616px Activity panel.
   static const double _activityPaneMinHeight = 648;
 
@@ -48,6 +50,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   String? _activeAccountUuid;
   bool _isHovered = false;
   bool _canScroll = false;
+  Timer? _swapActivityRefreshTimer;
+  String? _swapActivityRefreshAccountUuid;
 
   @override
   void initState() {
@@ -57,6 +61,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(appLayoutProvider.notifier).setMode(AppLayoutMode.large);
+      _syncSwapActivityStatusRefresh();
       _updateCanScroll();
     });
   }
@@ -72,6 +77,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
 
   @override
   void dispose() {
+    _swapActivityRefreshTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -173,8 +179,37 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
 
   void _openSwapStatus(SwapIntentRecord record) {
     context.push(
-      Uri(path: '/activity/swap/${Uri.encodeComponent(record.id)}').toString(),
+      swapActivityDetailUri(
+        intentId: record.id,
+        returnTarget: SwapActivityReturnTarget.activity,
+      ).toString(),
     );
+  }
+
+  void _syncSwapActivityStatusRefresh() {
+    final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
+    if (accountUuid == _swapActivityRefreshAccountUuid &&
+        _swapActivityRefreshTimer?.isActive == true) {
+      return;
+    }
+    _swapActivityRefreshTimer?.cancel();
+    _swapActivityRefreshAccountUuid = accountUuid;
+    if (accountUuid == null || accountUuid.trim().isEmpty) return;
+
+    unawaited(_refreshSwapActivityStatus(accountUuid));
+    _swapActivityRefreshTimer = Timer.periodic(
+      swapActivityStatusRefreshInterval,
+      (_) => unawaited(_refreshSwapActivityStatus(accountUuid)),
+    );
+  }
+
+  Future<void> _refreshSwapActivityStatus(
+    String accountUuid, {
+    bool force = false,
+  }) {
+    return ref
+        .read(swapActivityStatusRefresherProvider)
+        .refreshOpenActivities(accountUuid: accountUuid, force: force);
   }
 
   Future<void> _pushTransactionStatus(
@@ -238,6 +273,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       final nextUuid = next.value?.activeAccountUuid;
       if (nextUuid != _activeAccountUuid) {
         unawaited(_loadTransactions(showLoading: true, resetPage: true));
+        _syncSwapActivityStatusRefresh();
       }
     });
     ref.listen<AsyncValue<SyncState>>(syncProvider, (previous, next) {
@@ -250,7 +286,6 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
 
     final syncState = ref.watch(syncProvider).value;
     final accountUuid = ref.watch(accountProvider).value?.activeAccountUuid;
-    final swapState = ref.watch(swapPrototypeProvider);
     final sync = (syncState ?? SyncState()).scopedToAccount(accountUuid);
     final hasSyncForActiveAccount =
         syncState?.hasDataForAccount(accountUuid) ?? false;
@@ -268,11 +303,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         (loadedTransactions != null || hasSyncForActiveAccount);
     final swapRecords = accountUuid == null
         ? const <SwapIntentRecord>[]
-        : [
-            for (final intent in swapState.intents)
-              if (intent.accountUuid == accountUuid)
-                SwapIntentRecord.fromIntent(intent),
-          ];
+        : ref.watch(swapActivityRecordsProvider(accountUuid)).value ??
+              const <SwapIntentRecord>[];
     final entries = <_ActivityEntry>[
       if (canRenderTransactions)
         for (final tx in transactions)

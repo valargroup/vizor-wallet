@@ -58,6 +58,7 @@ import 'src/features/settings/screens/settings_change_password_screen.dart';
 import 'src/features/settings/screens/settings_endpoint_screen.dart';
 import 'src/features/settings/screens/settings_seed_phrase_screen.dart';
 import 'src/features/swap/screens/swap_address_scan_screen.dart';
+import 'src/features/swap/models/swap_activity_navigation.dart';
 import 'src/features/swap/screens/swap_review_screen.dart';
 import 'src/features/swap/screens/swap_screen.dart';
 import 'src/providers/theme_mode_provider.dart';
@@ -555,8 +556,12 @@ final _routerProvider = Provider<GoRouter>((ref) {
           }
           return SwapActivityDetailScreen(
             swapIntentId: swapId,
+            returnTarget: SwapActivityReturnTarget.fromQueryValue(
+              state.uri.queryParameters[swapActivityReturnQueryKey],
+            ),
             autoSignZecDeposit:
-                state.uri.queryParameters['sign'] == 'zecDeposit',
+                state.uri.queryParameters[swapActivitySignQueryKey] ==
+                swapActivitySignZecDepositValue,
           );
         },
       ),

@@ -42,13 +42,23 @@ void main() {
       ),
     );
 
-    expect(row!.title, 'Swap ZEC to USDC');
-    expect(row!.subtitle, 'NEAR Intents');
-    expect(row!.subtitleIconName, AppIcons.link);
+    expect(row!.title, 'Swapping...');
+    expect(row!.subtitle, 'ZEC Zcash');
+    expect(row!.subtitleIconName, isNull);
     expect(row!.amountText, '-0.0030 ZEC');
-    expect(row!.statusText, 'In progress');
+    expect(row!.statusText, '1/4 In progress');
     expect(row!.statusIconName, AppIcons.loader);
+    expect(row!.leadingProgressValue, 0.25);
+    final progressMatch = RegExp(
+      r'^(\d+)/(\d+) In progress$',
+    ).firstMatch(row!.statusText);
+    expect(progressMatch, isNotNull);
+    expect(
+      row!.leadingProgressValue,
+      int.parse(progressMatch!.group(1)!) / int.parse(progressMatch.group(2)!),
+    );
     expect(row!.timestampText, '--');
+    expect(row!.childRows, isEmpty);
   });
 
   testWidgets('maps receive-ZEC swaps as inbound activity rows', (
@@ -84,11 +94,14 @@ void main() {
       ),
     );
 
-    expect(row!.title, 'Swap USDC to ZEC');
-    expect(row!.amountText, '+0.0030 ZEC');
+    expect(row!.title, 'Swapping...');
+    expect(row!.subtitle, 'USDC on Ethereum');
+    expect(row!.amountText, '-0.21 USDC');
     expect(row!.statusText, 'Action needed');
     expect(row!.statusIconName, AppIcons.warning);
+    expect(row!.leadingProgressValue, isNull);
     expect(row!.timestampText, isNot('--'));
+    expect(row!.childRows, isEmpty);
   });
 
   testWidgets('masks swap row amounts in privacy mode', (tester) async {
@@ -124,5 +137,48 @@ void main() {
 
     expect(row!.amountText, isNot(contains('0.0030')));
     expect(row!.amountText, contains('***'));
+    expect(row!.childRows, isEmpty);
+  });
+
+  testWidgets('maps failed swaps without child rows and with refunded amount', (
+    tester,
+  ) async {
+    ActivityRowData? row;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppTheme(
+          data: AppThemeData.light,
+          child: Builder(
+            builder: (context) {
+              row = buildSwapActivityRow(
+                context: context,
+                record: const SwapIntentRecord(
+                  id: 'swap-failed',
+                  providerLabel: 'NEAR Intents',
+                  pairText: 'USDC -> ZEC',
+                  sellAmountText: '101.23 USDC',
+                  receiveEstimateText: '4.12 ZEC',
+                  status: SwapIntentStatus.failed,
+                  nextAction: 'Swap failed',
+                  direction: SwapDirection.externalToZec,
+                  externalAsset: SwapAsset.usdc,
+                ),
+              );
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(row!.title, 'Swap failed');
+    expect(row!.amountText, '101.23 USDC');
+    expect(row!.amountIconName, AppIcons.arrowBack);
+    expect(row!.amountSubtitle, 'Refunded');
+    expect(row!.statusText, 'Failed');
+    expect(row!.statusIconName, AppIcons.skull);
+    expect(row!.leadingProgressValue, isNull);
+    expect(row!.childRows, isEmpty);
   });
 }
