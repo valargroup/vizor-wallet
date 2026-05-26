@@ -149,6 +149,16 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                   ],
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
+                    key: const ValueKey('sidebar_address_book_button'),
+                    label: 'Address Book',
+                    iconName: AppIcons.users,
+                    active: _matches('/address-book'),
+                    onTap: _matches('/address-book')
+                        ? null
+                        : () => context.go('/address-book'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  AppSidebarItem(
                     key: const ValueKey('sidebar_activity_button'),
                     label: 'Activity',
                     iconName: AppIcons.history,

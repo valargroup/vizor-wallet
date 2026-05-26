@@ -48,6 +48,22 @@ void main() {
       find.byKey(const ValueKey('sidebar_receive_button')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('sidebar_address_book_button')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('sidebar Address Book item opens the address book route', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_sidebarHarness(SyncState()));
+    await tester.pump();
+
+    await tester.tap(find.text('Address Book'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('address book'), findsOneWidget);
   });
 
   testWidgets('sidebar keeps primary navigation item spacing consistent', (
@@ -61,6 +77,7 @@ void main() {
       tester.getTopLeft(find.text('Send')).dy,
       tester.getTopLeft(find.text('Receive')).dy,
       tester.getTopLeft(find.text('Swap')).dy,
+      tester.getTopLeft(find.text('Address Book')).dy,
       tester.getTopLeft(find.text('Activity')).dy,
     ];
     final gaps = [
@@ -237,6 +254,10 @@ Widget _sidebarHarness(
       GoRoute(path: '/send', builder: (_, _) => const Text('send')),
       GoRoute(path: '/swap', builder: (_, _) => const Text('swap')),
       GoRoute(path: '/receive', builder: (_, _) => const Text('receive')),
+      GoRoute(
+        path: '/address-book',
+        builder: (_, _) => const Text('address book'),
+      ),
       GoRoute(path: '/activity', builder: (_, _) => const Text('activity')),
       GoRoute(path: '/settings', builder: (_, _) => const Text('settings')),
       GoRoute(path: '/about', builder: (_, _) => const Text('about')),

@@ -45,6 +45,8 @@ abstract final class AppBackResolver {
     '/swap/review': 'Review',
     '/swap/address-scan': 'Scan',
     '/receive': 'Receive',
+    '/address-book': 'Address Book',
+    '/address-book/scan': 'Scan',
     '/activity': 'Activity',
     '/activity/tx/:txid': 'Transaction',
     '/accounts': 'Accounts',

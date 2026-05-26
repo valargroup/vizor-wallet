@@ -7,8 +7,10 @@ import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../src/core/theme/app_theme.dart';
+import 'address_book_use_cases.dart';
 import 'button_use_cases.dart';
 import 'chip_use_cases.dart';
+import 'context_menu_use_cases.dart';
 import 'color_use_cases.dart';
 import 'icon_use_cases.dart';
 import 'screen_use_cases.dart';
@@ -112,23 +114,23 @@ class WidgetbookApp extends StatelessWidget {
                   name: 'Swap Page',
                   useCases: [
                     WidgetbookUseCase(
-                      name: 'Figma 1 - In amount active',
+                      name: 'Input active - Pay amount',
                       builder: buildSwapPageFigmaNode1UseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 2 - Out amount active',
+                      name: 'Input active - Receive amount',
                       builder: buildSwapPageFigmaNode2UseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 3 - Amount entered',
+                      name: 'Amount entered',
                       builder: buildSwapPageFigmaNode3UseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 5 - Direction switched',
+                      name: 'Direction switched',
                       builder: buildSwapPageFigmaNode5UseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 6 - Fiat value input',
+                      name: 'Fiat value input',
                       builder: buildSwapPageFigmaNode6UseCase,
                     ),
                   ],
@@ -137,44 +139,103 @@ class WidgetbookApp extends StatelessWidget {
                   name: 'Swap Modals',
                   useCases: [
                     WidgetbookUseCase(
-                      name: 'Figma 7 - Address modal',
+                      name: 'Address modal',
                       builder: buildSwapAddressModalFigmaNode7UseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 7a - Scan permission',
+                      name: 'Address scan - Permission',
                       builder: buildSwapAddressScanModalPermissionUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 7b - Scan denied',
+                      name: 'Address scan - Denied',
                       builder: buildSwapAddressScanModalDeniedUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 7c - Scan active',
+                      name: 'Address scan - Active',
                       builder: buildSwapAddressScanModalActiveUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 7d - Scan loading',
+                      name: 'Address scan - Loading',
                       builder: buildSwapAddressScanModalLoadingUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma - Slippage modal',
+                      name: 'Slippage modal',
                       builder: buildSwapSlippageModalUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma - Slippage custom',
+                      name: 'Slippage custom',
                       builder: buildSwapSlippageModalCustomUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma - Slippage invalid',
+                      name: 'Slippage invalid',
                       builder: buildSwapSlippageModalInvalidUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 8 - Asset modal',
+                      name: 'Asset modal',
                       builder: buildSwapAssetModalUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Figma 9 - Asset modal empty',
+                      name: 'Asset modal - Empty',
                       builder: buildSwapAssetModalEmptyUseCase,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            WidgetbookFolder(
+              name: 'Address Book',
+              children: [
+                WidgetbookComponent(
+                  name: 'Page',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Contacts list',
+                      builder: buildAddressBookContactsListUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Contacts list - Solana menu',
+                      builder: buildAddressBookSolanaMenuUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'No contacts',
+                      builder: buildAddressBookNoContactsUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Empty search',
+                      builder: buildAddressBookEmptySearchUseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Modals',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Add contact',
+                      builder: buildAddressBookAddContactModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Avatar picker',
+                      builder: buildAddressBookAvatarModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Network selector',
+                      builder: buildAddressBookNetworkModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Network selector - Empty',
+                      builder: buildAddressBookNetworkModalEmptyUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Edit contact',
+                      builder: buildAddressBookEditContactModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Remove contact',
+                      builder: buildAddressBookRemoveContactModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Contact picker',
+                      builder: buildAddressBookContactPickerModalUseCase,
                     ),
                   ],
                 ),
@@ -291,6 +352,27 @@ class WidgetbookApp extends StatelessWidget {
               ],
             ),
             WidgetbookComponent(
+              name: 'Context Menu',
+              useCases: [
+                WidgetbookUseCase(
+                  name: 'Gallery',
+                  builder: buildContextMenuGalleryUseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Contact actions',
+                  builder: buildContextMenuContactUseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Account actions',
+                  builder: buildContextMenuAccountUseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Narrow width',
+                  builder: buildContextMenuNarrowUseCase,
+                ),
+              ],
+            ),
+            WidgetbookComponent(
               name: 'Loading Icon',
               useCases: [
                 WidgetbookUseCase(
@@ -326,23 +408,23 @@ class WidgetbookApp extends StatelessWidget {
               name: 'Swap Widget',
               useCases: [
                 WidgetbookUseCase(
-                  name: 'Figma 1 - In amount active',
+                  name: 'Input active - Pay amount',
                   builder: buildSwapWidgetFigmaNode1UseCase,
                 ),
                 WidgetbookUseCase(
-                  name: 'Figma 2 - Out amount active',
+                  name: 'Input active - Receive amount',
                   builder: buildSwapWidgetFigmaNode2UseCase,
                 ),
                 WidgetbookUseCase(
-                  name: 'Figma 3 - Amount entered',
+                  name: 'Amount entered',
                   builder: buildSwapWidgetFigmaNode3UseCase,
                 ),
                 WidgetbookUseCase(
-                  name: 'Figma 5 - Direction switched',
+                  name: 'Direction switched',
                   builder: buildSwapWidgetFigmaNode5UseCase,
                 ),
                 WidgetbookUseCase(
-                  name: 'Figma 6 - Fiat value input',
+                  name: 'Fiat value input',
                   builder: buildSwapWidgetFigmaNode6UseCase,
                 ),
               ],
