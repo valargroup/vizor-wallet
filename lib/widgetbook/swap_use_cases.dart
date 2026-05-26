@@ -14,7 +14,10 @@ import '../src/features/swap/models/swap_fiat_amount.dart';
 import '../src/features/swap/models/swap_prototype_models.dart';
 import '../src/features/swap/widgets/swap_address_qr_scan_modal.dart';
 import '../src/features/swap/widgets/swap_composer_panel.dart';
+import '../src/features/swap/widgets/swap_deposit_tokens_page_content.dart';
 import '../src/features/swap/widgets/swap_near_intents_attribution.dart';
+import '../src/features/swap/widgets/swap_review_page_content.dart';
+import '../src/features/swap/widgets/swap_status_page_content.dart';
 
 Widget buildSwapPageFigmaNode1UseCase(BuildContext context) {
   return _SwapPageFrame(
@@ -167,6 +170,169 @@ Widget buildSwapAssetModalEmptyUseCase(BuildContext context) {
   );
 }
 
+Widget buildSwapReviewDefaultUseCase(BuildContext context) {
+  return _SwapReviewPageFrame(
+    backLabel: 'Swap',
+    child: _SwapReviewPreview(
+      quote: _figmaReviewDefaultQuote,
+      addressPlan: _figmaExternalToZecAddressPlan,
+      accountLabel: 'John',
+      slippageToleranceText: '0.25 USDC (0.5%)',
+      priceProtectionText: '0.04 ZEC (5.0%)',
+    ),
+  );
+}
+
+Widget buildSwapReviewZecToExternalUseCase(BuildContext context) {
+  return _SwapReviewPageFrame(
+    backLabel: 'Swap',
+    child: _SwapReviewPreview(
+      quote: _figmaReviewZecToExternalQuote,
+      addressPlan: _figmaZecToExternalAddressPlan,
+      accountLabel: 'John',
+      slippageToleranceText: '0.001 ZEC (0.5%)',
+      priceProtectionText: '0.25 USDC (0.5%)',
+    ),
+  );
+}
+
+Widget buildSwapReviewLargeAmountsUseCase(BuildContext context) {
+  return _SwapReviewPageFrame(
+    backLabel: 'Swap',
+    child: _SwapReviewPreview(
+      quote: _figmaReviewLargeQuote,
+      addressPlan: _figmaExternalToZecAddressPlan,
+      accountLabel: 'John',
+      slippageToleranceText: '0.25 USDC (0.5%)',
+      priceProtectionText: '0.04 ZEC (5.0%)',
+      payFiatText: r'$999.123M',
+      receiveFiatText: r'$110.24',
+    ),
+  );
+}
+
+Widget buildSwapDepositDurationUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Review',
+    child: SwapDepositTokensPageContent(
+      asset: SwapAsset.usdc,
+      amountText: '999.99 USDC',
+      depositAddress: '0x123kjhc4e984ac1832f10aa4x98g20',
+      expiresInLabel: '2hrs',
+      onDeposited: () {},
+    ),
+  );
+}
+
+Widget buildSwapDepositCountdownUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Review',
+    child: SwapDepositTokensPageContent(
+      asset: SwapAsset.usdc,
+      amountText: '999.99 USDC',
+      depositAddress: '0x123kjhc4e984ac1832f10aa4x98g20',
+      expiresInLabel: '14:59',
+      expiresAt: DateTime.now().add(const Duration(minutes: 14, seconds: 59)),
+      onDeposited: () {},
+    ),
+  );
+}
+
+Widget buildSwapDepositTimeoutUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Swap',
+    child: SwapDepositTimeoutPageContent(onRestart: () {}),
+  );
+}
+
+Widget buildSwapStatusProgressUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Swapping ...',
+      badgeKind: SwapStatusBadgeKind.liveQuote,
+      activeTab: SwapStatusTab.progress,
+      progressIndex: 0,
+      steps: _designProgressSteps,
+      details: _designTransactionDetails,
+    ),
+  );
+}
+
+Widget buildSwapStatusProgressNextStepUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Swapping ...',
+      badgeKind: SwapStatusBadgeKind.liveQuote,
+      activeTab: SwapStatusTab.progress,
+      progressIndex: 1,
+      steps: _designProgressSteps,
+      details: _designTransactionDetails,
+    ),
+  );
+}
+
+Widget buildSwapStatusLargeAmountsUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Swapping ...',
+      badgeKind: SwapStatusBadgeKind.liveQuote,
+      activeTab: SwapStatusTab.progress,
+      progressIndex: 0,
+      steps: _designProgressSteps,
+      details: _designTransactionDetails,
+      payAsset: _figmaReviewLargeQuote.sellAsset,
+      receiveAsset: _figmaReviewLargeQuote.receiveAsset,
+      payFiatText: r'$999.123M',
+      receiveFiatText: r'$110.24',
+      payAmountText: r'999,123,000.123456 $SHIT',
+      receiveAmountText: '0.251 ZEC',
+    ),
+  );
+}
+
+Widget buildSwapStatusDetailsCollapsedUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusDetailsTogglePreview(initiallyExpanded: false),
+  );
+}
+
+Widget buildSwapStatusDetailsExpandedUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusDetailsTogglePreview(initiallyExpanded: true),
+  );
+}
+
+Widget buildSwapStatusCompletedUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Swap completed',
+      badgeKind: SwapStatusBadgeKind.completed,
+      showTabs: false,
+      steps: const [],
+      details: _designCompletedDetails,
+    ),
+  );
+}
+
+Widget buildSwapStatusFailedUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Swap failed',
+      badgeKind: SwapStatusBadgeKind.failed,
+      showTabs: false,
+      steps: const [],
+      details: _designFailedDetails,
+    ),
+  );
+}
+
 Widget buildSwapWidgetFigmaNode1UseCase(BuildContext context) {
   return _SwapWidgetFrame(
     child: _SwapComposerPreview(
@@ -234,8 +400,189 @@ final _figmaAssetModalAssets = <SwapAsset>[
   SwapAsset.sol,
 ];
 
+final _figmaExternalToZecAddressPlan = SwapAddressPlan.fromUserInput(
+  direction: SwapDirection.externalToZec,
+  externalAsset: SwapAsset.usdc,
+  userExternalAddress: '0x123kjhc4e984ac1832f10aa4x98g20',
+  walletZecAddress: 'u1figmareviewwalletzecaddresspreview',
+);
+
+final _figmaZecToExternalAddressPlan = SwapAddressPlan.fromUserInput(
+  direction: SwapDirection.zecToExternal,
+  externalAsset: SwapAsset.usdc,
+  userExternalAddress: '0x123kjhc4e984ac1832f10aa4x98g20',
+  walletZecAddress: 'u1figmareviewwalletzecaddresspreview',
+);
+
+final _figmaReviewDefaultQuote = SwapQuote(
+  direction: SwapDirection.externalToZec,
+  sellAsset: SwapAsset.usdc,
+  receiveAsset: SwapAsset.zec,
+  externalAsset: SwapAsset.usdc,
+  sellAmount: 110.24,
+  receiveAmount: 0.251,
+  minimumReceiveAmount: 0.249,
+  providerLabel: 'NEAR Intents',
+  feeLabel: 'Included in shown rate',
+  expiryLabel: '2hrs',
+  depositInstruction: SwapDepositInstruction(
+    asset: SwapAsset.usdc,
+    address: '0x123kjhc4e984ac1832f10aa4x98g20',
+    expiresInLabel: '2hrs',
+    reuseWarning: 'Do not reuse this address',
+  ),
+  sellAmountTextOverride: '999,999.99 USDC',
+  receiveEstimateTextOverride: '0.251 ZEC',
+  minimumReceiveTextOverride: '0.249 ZEC',
+);
+
+final _figmaReviewZecToExternalQuote = SwapQuote(
+  direction: SwapDirection.zecToExternal,
+  sellAsset: SwapAsset.zec,
+  receiveAsset: SwapAsset.usdc,
+  externalAsset: SwapAsset.usdc,
+  sellAmount: 0.251,
+  receiveAmount: 110.24,
+  minimumReceiveAmount: 109.99,
+  providerLabel: 'NEAR Intents',
+  feeLabel: 'Included in shown rate',
+  expiryLabel: '2hrs',
+  depositInstruction: SwapDepositInstruction(
+    asset: SwapAsset.zec,
+    address: 't1figmareviewdepositaddress',
+    expiresInLabel: '2hrs',
+    reuseWarning: 'Do not reuse this address',
+  ),
+  sellAmountTextOverride: '0.251 ZEC',
+  receiveEstimateTextOverride: '999,999.99 USDC',
+  minimumReceiveTextOverride: '999,999.74 USDC',
+);
+
+final _figmaReviewLargeQuote = SwapQuote(
+  direction: SwapDirection.externalToZec,
+  sellAsset: SwapAsset.live(
+    assetId: 'figma-shit-sol',
+    symbol: r'$SHIT',
+    blockchain: 'sol',
+    decimals: 6,
+  ),
+  receiveAsset: SwapAsset.zec,
+  externalAsset: SwapAsset.live(
+    assetId: 'figma-shit-sol',
+    symbol: r'$SHIT',
+    blockchain: 'sol',
+    decimals: 6,
+  ),
+  sellAmount: 999123000,
+  receiveAmount: 0.251,
+  minimumReceiveAmount: 0.249,
+  providerLabel: 'NEAR Intents',
+  feeLabel: 'Included in shown rate',
+  expiryLabel: '2hrs',
+  depositInstruction: SwapDepositInstruction(
+    asset: _figmaUsdc,
+    address: '0x123kjhc4e984ac1832f10aa4x98g20',
+    expiresInLabel: '2hrs',
+    reuseWarning: 'Do not reuse this address',
+  ),
+  receiveEstimateTextOverride: '0.251 ZEC',
+  minimumReceiveTextOverride: '0.249 ZEC',
+);
+
 final _figmaUsdcPerZec = <SwapAsset, double>{_figmaUsdc: 6.57894737};
 final _figmaZecPerUsdc = <SwapAsset, double>{_figmaUsdc: 512};
+
+const _designProgressSteps = <SwapStatusStepData>[
+  SwapStatusStepData(
+    title: 'USDC source deposit',
+    state: SwapStatusStepState.pending,
+    completeTitle: 'USDC Deposited',
+    activeTitle: 'Depositing USDC...',
+    pendingTitle: 'Deposit USDC',
+    lastCheckedLabel: 'Last check: 1m ago',
+    description:
+        'Confirm waiting for the source chain and provider to recognise the deposit',
+  ),
+  SwapStatusStepData(
+    title: 'Deposit confirmation',
+    state: SwapStatusStepState.pending,
+    activeTitle: 'Deposit confirmation...',
+    lastCheckedLabel: 'Last check: 1m ago',
+    description:
+        'Confirm waiting for the source chain and provider to recognise the deposit',
+  ),
+  SwapStatusStepData(
+    title: 'Swap',
+    state: SwapStatusStepState.pending,
+    activeTitle: 'Swap...',
+    lastCheckedLabel: 'Last check: 1m ago',
+    description: 'The provider is executing the swap route.',
+  ),
+  SwapStatusStepData(
+    title: 'Send ZEC',
+    state: SwapStatusStepState.pending,
+    activeTitle: 'Send ZEC...',
+    lastCheckedLabel: 'Last check: 1m ago',
+    description: 'Delivering ZEC to the recipient address.',
+  ),
+];
+
+const _designTransactionDetails = <SwapStatusDetailRowData>[
+  SwapStatusDetailRowData(label: 'Account', value: 'John'),
+  SwapStatusDetailRowData(
+    label: 'USDC Refund address',
+    value: '0x123kjhc ... 4x98g20',
+  ),
+  SwapStatusDetailRowData(
+    label: 'Deposit USDC to',
+    value: '0x123kjhc ... 4x98g20',
+    copyable: true,
+  ),
+  SwapStatusDetailRowData(
+    label: 'Swap fee',
+    value: 'Included in shown rate',
+    help: true,
+  ),
+  SwapStatusDetailRowData(
+    label: 'Slippage tolerance',
+    value: '0.25 USDC (0.5%)',
+  ),
+  SwapStatusDetailRowData(
+    label: 'Price protection',
+    value: '0.04 ZEC (5.0%)',
+    help: true,
+  ),
+  SwapStatusDetailRowData(
+    label: 'Minimum Receive',
+    value: '0.249 ZEC',
+    help: true,
+  ),
+];
+
+const _designCompletedDetails = <SwapStatusDetailRowData>[
+  SwapStatusDetailRowData(label: 'Account', value: 'John'),
+  SwapStatusDetailRowData(
+    label: 'USDC Deposit to',
+    value: '0x123kjhc ... 4x98g20',
+    copyable: true,
+  ),
+  SwapStatusDetailRowData(label: 'Total fees', value: '~0.25 USDC', help: true),
+  SwapStatusDetailRowData(
+    label: 'Realised slippage',
+    value: '0.25 USDC (0.27%)',
+  ),
+  SwapStatusDetailRowData(label: 'Timestamp', value: 'May 20, 2026 13:20'),
+];
+
+const _designFailedDetails = <SwapStatusDetailRowData>[
+  SwapStatusDetailRowData(label: 'Account', value: 'John'),
+  SwapStatusDetailRowData(
+    label: 'USDC Refunded to',
+    value: '0x123kjhc ... 4x98g20',
+  ),
+  SwapStatusDetailRowData(label: 'Total fees', value: '~0.25 USDC', help: true),
+  SwapStatusDetailRowData(label: 'Timestamp', value: 'May 20, 2026 13:20'),
+];
 
 final _figmaNode1State = SwapPrototypeState(
   direction: SwapDirection.externalToZec,
@@ -309,6 +656,229 @@ final _figmaNode6State = SwapPrototypeState(
   slippageBps: 50,
   indicativeExternalPerZec: _figmaUsdcPerZec,
 );
+
+class _SwapFlowPageFrame extends StatelessWidget {
+  const _SwapFlowPageFrame({required this.backLabel, required this.child});
+
+  final String backLabel;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 1080.0;
+        final height = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 720.0;
+
+        return SizedBox(
+          width: width,
+          height: height,
+          child: ColoredBox(
+            color: colors.background.base,
+            child: AppDesktopShell(
+              sidebar: const _PreviewSwapSidebar(),
+              pane: AppDesktopPane(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: AppBackLink(
+                        label: backLabel,
+                        minWidth: 60,
+                        onTap: () {},
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return Stack(
+                            children: [
+                              Positioned.fill(
+                                child: SingleChildScrollView(
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      minHeight: constraints.maxHeight,
+                                    ),
+                                    child: Center(child: child),
+                                  ),
+                                ),
+                              ),
+                              if (constraints.maxHeight >= 520)
+                                const Positioned(
+                                  left: 0,
+                                  bottom: AppSpacing.md,
+                                  child: SwapNearIntentsAttribution(),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+typedef _SwapReviewPageFrame = _SwapFlowPageFrame;
+
+class _SwapReviewPreview extends StatelessWidget {
+  const _SwapReviewPreview({
+    required this.quote,
+    required this.addressPlan,
+    required this.accountLabel,
+    this.slippageToleranceText,
+    this.priceProtectionText,
+    this.payFiatText,
+    this.receiveFiatText,
+  });
+
+  final SwapQuote quote;
+  final SwapAddressPlan addressPlan;
+  final String accountLabel;
+  final String? slippageToleranceText;
+  final String? priceProtectionText;
+  final String? payFiatText;
+  final String? receiveFiatText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SwapReviewPageContent(
+          quote: quote,
+          addressPlan: addressPlan,
+          accountLabel: accountLabel,
+          expired: false,
+          amountWarning: null,
+          startError: null,
+          slippageToleranceTextOverride: slippageToleranceText,
+          priceProtectionTextOverride: priceProtectionText,
+          payFiatTextOverride: payFiatText,
+          receiveFiatTextOverride: receiveFiatText,
+        ),
+        const SizedBox(height: AppSpacing.base),
+        SwapReviewPageActions(
+          expired: false,
+          starting: false,
+          sendsZec: quote.direction.sendsZec,
+          onCancelReview: () {},
+          onReviewAgain: () {},
+          onStartIntent: () {},
+        ),
+      ],
+    );
+  }
+}
+
+class _SwapStatusPreview extends StatelessWidget {
+  const _SwapStatusPreview({
+    required this.title,
+    required this.badgeKind,
+    required this.steps,
+    required this.details,
+    this.activeTab = SwapStatusTab.progress,
+    this.progressIndex = 0,
+    this.detailsExpanded = false,
+    this.showTabs = true,
+    this.payAsset = SwapAsset.usdc,
+    this.receiveAsset = SwapAsset.zec,
+    this.payFiatText = '\$110.24',
+    this.receiveFiatText = '\$110.24',
+    this.payAmountText = '999,999.99 USDC',
+    this.receiveAmountText = '0.251 ZEC',
+    this.onToggleDetails,
+  });
+
+  final String title;
+  final SwapStatusBadgeKind badgeKind;
+  final List<SwapStatusStepData> steps;
+  final List<SwapStatusDetailRowData> details;
+  final SwapStatusTab activeTab;
+  final int progressIndex;
+  final bool detailsExpanded;
+  final bool showTabs;
+  final SwapAsset payAsset;
+  final SwapAsset receiveAsset;
+  final String payFiatText;
+  final String receiveFiatText;
+  final String payAmountText;
+  final String receiveAmountText;
+  final VoidCallback? onToggleDetails;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwapStatusPageContent(
+      title: title,
+      payAsset: payAsset,
+      receiveAsset: receiveAsset,
+      payFiatText: payFiatText,
+      receiveFiatText: receiveFiatText,
+      payAmountText: payAmountText,
+      receiveAmountText: receiveAmountText,
+      badgeKind: badgeKind,
+      progressIndex: progressIndex,
+      activeTab: activeTab,
+      steps: steps,
+      details: details,
+      detailsExpanded: detailsExpanded,
+      showTabs: showTabs,
+      onToggleDetails: onToggleDetails,
+      onOpenExplorer: () {},
+    );
+  }
+}
+
+class _SwapStatusDetailsTogglePreview extends StatefulWidget {
+  const _SwapStatusDetailsTogglePreview({required this.initiallyExpanded});
+
+  final bool initiallyExpanded;
+
+  @override
+  State<_SwapStatusDetailsTogglePreview> createState() =>
+      _SwapStatusDetailsTogglePreviewState();
+}
+
+class _SwapStatusDetailsTogglePreviewState
+    extends State<_SwapStatusDetailsTogglePreview> {
+  late var _expanded = widget.initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SwapStatusPreview(
+      title: 'Swapping ...',
+      badgeKind: SwapStatusBadgeKind.liveQuote,
+      activeTab: SwapStatusTab.details,
+      detailsExpanded: _expanded,
+      steps: _designProgressSteps,
+      details: _designTransactionDetails,
+      onToggleDetails: () {
+        setState(() {
+          _expanded = !_expanded;
+        });
+      },
+    );
+  }
+}
 
 class _SwapWidgetFrame extends StatelessWidget {
   const _SwapWidgetFrame({required this.child});

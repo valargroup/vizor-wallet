@@ -18,9 +18,11 @@ import '../providers/swap_prototype_provider.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 import 'swap_copy_feedback.dart';
+import 'swap_deposit_tokens_page_content.dart';
 import 'swap_deposit_qr_panel.dart';
 import 'swap_keystone_signing_overlay.dart';
 import 'swap_queue_panel.dart';
+import 'swap_status_page_content.dart';
 
 class SwapActivityDetailSurface extends ConsumerStatefulWidget {
   const SwapActivityDetailSurface({
@@ -149,20 +151,13 @@ class _SwapActivityDetailSurfaceState
     context.go('/swap');
   }
 
-  void _copyNearIntentsExplorerLink(
-    BuildContext context,
-    SwapPrototypeIntent intent,
-  ) {
-    final uri = nearIntentsExplorerUri(
-      nearIntentHash: intent.nearIntentHash,
-      depositTxHash: intent.depositTxHash,
-      depositAddress: intent.depositAddress ?? intent.id,
-    );
-    if (uri == null) return;
-    copySwapText(
-      _toastContext(context),
-      text: uri.toString(),
-      toastMessage: 'Explorer Link Copied',
+  void _openNearIntentsExplorerLink(SwapPrototypeIntent intent) {
+    unawaited(
+      launchNearIntentsExplorer(
+        nearIntentHash: intent.nearIntentHash,
+        depositTxHash: intent.depositTxHash,
+        depositAddress: intent.depositAddress ?? intent.id,
+      ),
     );
   }
 
@@ -259,8 +254,7 @@ class _SwapActivityDetailSurfaceState
             onSubmitDepositTransaction: _submitDepositTransaction,
             onReviewFreshQuote: _reviewFreshQuote,
             onSignZecDeposit: _signZecDeposit,
-            onCopyExplorerLink: (intent) =>
-                _copyNearIntentsExplorerLink(context, intent),
+            onCopyExplorerLink: _openNearIntentsExplorerLink,
             intentIsHardware: _isHardwareIntent(activityDetailIntent),
           ),
         if (keystoneSigningRequest != null && keystoneSigningIntent != null)
@@ -519,199 +513,460 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final flowContent = _SwapActivityFlowContent(
+      state: state,
+      intent: intent,
+      liveFundsEnabled: liveFundsEnabled,
+      onRefreshStatus: onRefreshStatus,
+      onDepositTxHashChanged: onDepositTxHashChanged,
+      onSubmitDepositTransaction: onSubmitDepositTransaction,
+      onReviewFreshQuote: onReviewFreshQuote,
+      onSignZecDeposit: onSignZecDeposit,
+      onCopyExplorerLink: onCopyExplorerLink,
+      intentIsHardware: intentIsHardware,
+    );
+
     return Container(
       key: const ValueKey('swap_activity_detail_page'),
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.sm,
-        AppSpacing.xs,
-        AppSpacing.sm,
-        0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _ActivityDetailHeader(
-            intent: intent,
-            statusRefreshing: state.statusRefreshing,
-            canRefreshStatus: canRefreshSwapIntentStatus(intent.status),
-            onRefreshStatus: onRefreshStatus,
-            onCopyExplorerLink: onCopyExplorerLink,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Expanded(
-            child: _ActivityDetailScrollArea(
-              child: _SwapActivityStack(
-                state: state,
-                selectedIntent: intent,
-                onDepositTxHashChanged: onDepositTxHashChanged,
-                onSubmitDepositTransaction: onSubmitDepositTransaction,
-                onReviewFreshQuote: onReviewFreshQuote,
-                onSignZecDeposit: onSignZecDeposit,
-                liveFundsEnabled: liveFundsEnabled,
-                intentIsHardware: intentIsHardware,
+      padding: EdgeInsets.zero,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return _ActivityDetailScrollArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: flowContent,
+                ),
               ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SwapActivityFlowContent extends StatelessWidget {
+  const _SwapActivityFlowContent({
+    required this.state,
+    required this.intent,
+    required this.liveFundsEnabled,
+    required this.onRefreshStatus,
+    required this.onDepositTxHashChanged,
+    required this.onSubmitDepositTransaction,
+    required this.onReviewFreshQuote,
+    required this.onSignZecDeposit,
+    required this.onCopyExplorerLink,
+    required this.intentIsHardware,
+  });
+
+  final SwapPrototypeState state;
+  final SwapPrototypeIntent intent;
+  final bool liveFundsEnabled;
+  final VoidCallback onRefreshStatus;
+  final ValueChanged<String> onDepositTxHashChanged;
+  final VoidCallback onSubmitDepositTransaction;
+  final VoidCallback onReviewFreshQuote;
+  final ValueChanged<SwapPrototypeIntent> onSignZecDeposit;
+  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
+  final bool intentIsHardware;
+
+  @override
+  Widget build(BuildContext context) {
+    final depositInstruction = _ActivityDepositInstruction.fromIntent(intent);
+    final statusError = intent.statusError ?? state.statusError;
+    final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
+    final showHardwareDepositAction =
+        intentIsHardware &&
+        intent.direction == SwapDirection.zecToExternal &&
+        intent.status == SwapIntentStatus.awaitingDeposit &&
+        !hasDepositTx;
+    final showDepositPage =
+        intent.direction == SwapDirection.externalToZec &&
+        intent.status == SwapIntentStatus.awaitingExternalDeposit &&
+        depositInstruction != null;
+
+    final primaryContent = switch (intent.status) {
+      SwapIntentStatus.expired => SwapDepositTimeoutPageContent(
+        onRestart: onReviewFreshQuote,
+      ),
+      _ when showDepositPage => SwapDepositTokensPageContent(
+        asset: _activitySellAsset(intent) ?? SwapAsset.usdc,
+        amountText: intent.sellAmount,
+        depositAddress: depositInstruction.address,
+        expiresInLabel: _depositDeadlineLabel(intent) ?? '2hrs',
+        expiresAt: intent.depositDeadline,
+        memo: depositInstruction.memo,
+        onDeposited: onRefreshStatus,
+      ),
+      _ => _SwapStatusForIntent(
+        intent: intent,
+        onOpenExplorer: () => onCopyExplorerLink(intent),
+      ),
+    };
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        primaryContent,
+        if (statusError != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            width: 400,
+            child: _ActivityStatusErrorPanel(message: statusError),
+          ),
+        ],
+        if (showHardwareDepositAction) ...[
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            width: 400,
+            child: _ActivityHardwareActionPanel(
+              key: const ValueKey('swap_hardware_deposit_action_panel'),
+              iconName: AppIcons.qr,
+              title: 'Sign ZEC deposit',
+              message:
+                  'Use Keystone to approve one ZEC transaction to the swap deposit address.',
+              buttonKey: const ValueKey('swap_hardware_deposit_button'),
+              buttonLabel: 'Sign with Keystone',
+              onPressed: () => onSignZecDeposit(intent),
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _ActivityDetailHeader extends StatelessWidget {
-  const _ActivityDetailHeader({
+class _SwapStatusForIntent extends StatefulWidget {
+  const _SwapStatusForIntent({
     required this.intent,
-    required this.statusRefreshing,
-    required this.canRefreshStatus,
-    required this.onRefreshStatus,
-    required this.onCopyExplorerLink,
+    required this.onOpenExplorer,
   });
 
   final SwapPrototypeIntent intent;
-  final bool statusRefreshing;
-  final bool canRefreshStatus;
-  final VoidCallback onRefreshStatus;
-  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
+  final VoidCallback onOpenExplorer;
+
+  @override
+  State<_SwapStatusForIntent> createState() => _SwapStatusForIntentState();
+}
+
+class _SwapStatusForIntentState extends State<_SwapStatusForIntent> {
+  SwapStatusTab _activeTab = SwapStatusTab.progress;
+  bool _detailsExpanded = false;
+
+  @override
+  void didUpdateWidget(covariant _SwapStatusForIntent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.intent.id != widget.intent.id) {
+      _activeTab = SwapStatusTab.progress;
+      _detailsExpanded = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final checkedLabel = statusRefreshing
-        ? 'Checking now'
-        : _lastStatusCheckedLabel(intent.lastStatusCheckedAt) ??
-              'Not checked yet';
-    final titleCluster = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _ActivityAssetPair(intent: intent),
-        const SizedBox(width: AppSpacing.xs),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Swap progress',
-                key: const ValueKey('swap_activity_detail_title'),
-                style: AppTypography.headlineSmall.copyWith(
-                  color: colors.text.accent,
-                  fontSize: 24,
-                  height: 30 / 24,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                intent.pair,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.labelLarge.copyWith(
-                  color: colors.text.secondary,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xxs),
-              _ActiveSwapCheckedStatus(
-                label: checkedLabel,
-                active: statusRefreshing,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-    final actions = _ActivityDetailHeaderActions(
-      intent: intent,
-      statusRefreshing: statusRefreshing,
-      canRefreshStatus: canRefreshStatus,
-      onRefreshStatus: onRefreshStatus,
-      onCopyExplorerLink: onCopyExplorerLink,
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 600;
-        if (compact) {
-          return Column(
-            key: const ValueKey('swap_activity_detail_header'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              titleCluster,
-              const SizedBox(height: AppSpacing.s),
-              Align(alignment: Alignment.centerRight, child: actions),
-            ],
-          );
-        }
-        return Row(
-          key: const ValueKey('swap_activity_detail_header'),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: titleCluster),
-            const SizedBox(width: AppSpacing.md),
-            SizedBox(
-              width: canRefreshStatus ? 320 : 176,
-              child: Align(alignment: Alignment.topRight, child: actions),
-            ),
-          ],
-        );
+    final intent = widget.intent;
+    final sellAsset = _activitySellAsset(intent) ?? SwapAsset.zec;
+    final receiveAsset = _activityReceiveAsset(intent) ?? SwapAsset.usdc;
+    final fiatText = _activityFiatText(intent, sellAsset, receiveAsset);
+    return SwapStatusPageContent(
+      title: _swapStatusTitle(intent),
+      payAsset: sellAsset,
+      receiveAsset: receiveAsset,
+      payFiatText: fiatText,
+      receiveFiatText: fiatText,
+      payAmountText: intent.sellAmount,
+      receiveAmountText: intent.receiveEstimate,
+      badgeKind: _swapStatusBadgeKind(intent.status),
+      progressIndex: _swapStatusProgressIndex(intent.status),
+      activeTab: _activeTab,
+      steps: _swapProgressSteps(intent),
+      details: _swapStatusDetails(intent),
+      detailsExpanded: _detailsExpanded,
+      showTabs: !intent.status.isTerminal,
+      onTabChanged: (tab) {
+        setState(() {
+          _activeTab = tab;
+        });
       },
+      onToggleDetails: () {
+        setState(() {
+          _detailsExpanded = !_detailsExpanded;
+        });
+      },
+      onOpenExplorer: widget.onOpenExplorer,
     );
   }
 }
 
-class _ActivityDetailHeaderActions extends StatelessWidget {
-  const _ActivityDetailHeaderActions({
-    required this.intent,
-    required this.statusRefreshing,
-    required this.canRefreshStatus,
-    required this.onRefreshStatus,
-    required this.onCopyExplorerLink,
-  });
+String _swapStatusTitle(SwapPrototypeIntent intent) {
+  return switch (intent.status) {
+    SwapIntentStatus.complete => 'Swap completed',
+    SwapIntentStatus.failed ||
+    SwapIntentStatus.refunded ||
+    SwapIntentStatus.incompleteDeposit => 'Swap failed',
+    _ => 'Swapping ...',
+  };
+}
 
-  final SwapPrototypeIntent intent;
-  final bool statusRefreshing;
-  final bool canRefreshStatus;
-  final VoidCallback onRefreshStatus;
-  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
+SwapStatusBadgeKind _swapStatusBadgeKind(SwapIntentStatus status) {
+  return switch (status) {
+    SwapIntentStatus.complete => SwapStatusBadgeKind.completed,
+    SwapIntentStatus.failed ||
+    SwapIntentStatus.refunded ||
+    SwapIntentStatus.expired ||
+    SwapIntentStatus.incompleteDeposit => SwapStatusBadgeKind.failed,
+    _ => SwapStatusBadgeKind.liveQuote,
+  };
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final explorerUri = nearIntentsExplorerUri(
-      nearIntentHash: intent.nearIntentHash,
-      depositTxHash: intent.depositTxHash,
-      depositAddress: intent.depositAddress ?? intent.id,
-    );
-    return Wrap(
-      key: const ValueKey('swap_activity_detail_header_actions'),
-      spacing: AppSpacing.xs,
-      runSpacing: AppSpacing.xs,
-      alignment: WrapAlignment.end,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        AppButton(
-          key: const ValueKey(
-            'swap_activity_copy_near_intents_explorer_button',
-          ),
-          onPressed: explorerUri == null
-              ? null
-              : () => onCopyExplorerLink(intent),
-          variant: AppButtonVariant.secondary,
-          size: AppButtonSize.medium,
-          minWidth: 156,
-          leading: const AppIcon(AppIcons.link),
-          child: const Text('Copy link'),
+int _swapStatusProgressIndex(SwapIntentStatus status) {
+  return switch (status) {
+    SwapIntentStatus.awaitingDeposit ||
+    SwapIntentStatus.awaitingExternalDeposit => 0,
+    SwapIntentStatus.depositObserved => 1,
+    SwapIntentStatus.processing ||
+    SwapIntentStatus.providerStatusUnknown ||
+    SwapIntentStatus.incompleteDeposit => 2,
+    SwapIntentStatus.complete ||
+    SwapIntentStatus.refunded ||
+    SwapIntentStatus.expired ||
+    SwapIntentStatus.failed => 3,
+  };
+}
+
+List<SwapStatusStepData> _swapProgressSteps(SwapPrototypeIntent intent) {
+  final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
+  final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
+  final sourceVerb = intent.direction == SwapDirection.zecToExternal
+      ? 'Sending'
+      : 'Depositing';
+  final sourceDone = intent.direction == SwapDirection.zecToExternal
+      ? '$sourceSymbol sent'
+      : '$sourceSymbol Deposited';
+  final deliveryTitle = intent.direction == SwapDirection.zecToExternal
+      ? 'Deliver $receiveSymbol'
+      : 'Send $receiveSymbol';
+
+  final lastCheckedLabel =
+      _lastRelativeStatusCheckedLabel(intent.lastStatusCheckedAt) ??
+      'Last check: just now';
+
+  return [
+    SwapStatusStepData(
+      title: sourceSymbol,
+      state: SwapStatusStepState.pending,
+      completeTitle: sourceDone,
+      activeTitle: '$sourceVerb $sourceSymbol...',
+      pendingTitle: intent.direction == SwapDirection.zecToExternal
+          ? 'Send $sourceSymbol'
+          : 'Deposit $sourceSymbol',
+      lastCheckedLabel: lastCheckedLabel,
+      description:
+          'Confirm waiting for the source chain and provider to recognise the deposit',
+    ),
+    SwapStatusStepData(
+      title: 'Deposit confirmation',
+      state: SwapStatusStepState.pending,
+      activeTitle: 'Deposit confirmation...',
+      lastCheckedLabel: lastCheckedLabel,
+      description: 'Confirming the deposit before the swap route starts.',
+    ),
+    SwapStatusStepData(
+      title: 'Swap',
+      state: SwapStatusStepState.pending,
+      activeTitle: 'Swap...',
+      lastCheckedLabel: lastCheckedLabel,
+      description: 'The provider is executing the swap route.',
+    ),
+    SwapStatusStepData(
+      title: deliveryTitle,
+      state: SwapStatusStepState.pending,
+      activeTitle: '$deliveryTitle...',
+      lastCheckedLabel: lastCheckedLabel,
+      description: 'Delivering the output asset to the recipient address.',
+    ),
+  ];
+}
+
+List<SwapStatusDetailRowData> _swapStatusDetails(SwapPrototypeIntent intent) {
+  final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
+  final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
+  final refundAddress = intent.oneClickRefundTo?.trim();
+  final recipientAddress = intent.oneClickRecipient?.trim();
+  final depositAddress = intent.depositAddress?.trim();
+  final depositTxHash = intent.depositTxHash?.trim();
+  final timestamp = _swapTimestampLabel(
+    intent.completedAt ?? intent.updatedAt ?? intent.createdAt,
+  );
+  final terminal = intent.status.isTerminal;
+  final failed =
+      _swapStatusBadgeKind(intent.status) == SwapStatusBadgeKind.failed;
+
+  if (terminal) {
+    return [
+      const SwapStatusDetailRowData(label: 'Account', value: 'Current account'),
+      if (depositTxHash != null && depositTxHash.isNotEmpty)
+        SwapStatusDetailRowData(
+          label: '$sourceSymbol Deposit tx',
+          value: depositTxHash,
+          copyable: true,
+          copyText: depositTxHash,
         ),
-        if (canRefreshStatus)
-          AppButton(
-            key: const ValueKey('swap_status_refresh_button'),
-            onPressed: statusRefreshing ? null : onRefreshStatus,
-            variant: AppButtonVariant.secondary,
-            size: AppButtonSize.medium,
-            minWidth: 132,
-            leading: const AppIcon(AppIcons.renew),
-            child: Text(statusRefreshing ? 'Refreshing' : 'Refresh'),
-          ),
-      ],
-    );
+      if (failed && refundAddress != null && refundAddress.isNotEmpty)
+        SwapStatusDetailRowData(
+          label: '$sourceSymbol Refunded to',
+          value: _compactSwapAddress(refundAddress),
+        )
+      else if (depositAddress != null && depositAddress.isNotEmpty)
+        SwapStatusDetailRowData(
+          label: '$sourceSymbol Deposit to',
+          value: _compactSwapAddress(depositAddress),
+          copyable: true,
+          copyText: depositAddress,
+        ),
+      SwapStatusDetailRowData(
+        label: 'Total fees',
+        value: intent.providerRefundInfo?.refundFeeText ?? 'Included',
+        help: true,
+      ),
+      if (!failed)
+        const SwapStatusDetailRowData(
+          label: 'Realised slippage',
+          value: 'Not reported',
+        ),
+      if (timestamp != null)
+        SwapStatusDetailRowData(label: 'Timestamp', value: timestamp),
+    ];
   }
+
+  return [
+    const SwapStatusDetailRowData(label: 'Account', value: 'Current account'),
+    if (recipientAddress != null && recipientAddress.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$receiveSymbol Recipient',
+        value: _compactSwapAddress(recipientAddress),
+        copyable: true,
+        copyText: recipientAddress,
+      ),
+    if (refundAddress != null && refundAddress.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$sourceSymbol Refund address',
+        value: _compactSwapAddress(refundAddress),
+      ),
+    if (depositAddress != null && depositAddress.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: 'Deposit $sourceSymbol to',
+        value: _compactSwapAddress(depositAddress),
+        copyable: true,
+        copyText: depositAddress,
+      ),
+    if (depositTxHash != null && depositTxHash.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$sourceSymbol Deposit tx',
+        value: depositTxHash,
+        copyable: true,
+        copyText: depositTxHash,
+      ),
+    const SwapStatusDetailRowData(
+      label: 'Swap fee',
+      value: 'Included in shown rate',
+      help: true,
+    ),
+    const SwapStatusDetailRowData(
+      label: 'Slippage tolerance',
+      value: 'Configured quote',
+    ),
+    const SwapStatusDetailRowData(
+      label: 'Price protection',
+      value: 'Minimum receive protected',
+      help: true,
+    ),
+    SwapStatusDetailRowData(
+      label: 'Minimum Receive',
+      value: intent.receiveEstimate,
+      help: true,
+    ),
+  ];
 }
+
+String _activityFiatText(
+  SwapPrototypeIntent intent,
+  SwapAsset sellAsset,
+  SwapAsset receiveAsset,
+) {
+  final sellFiat = _usdTextForStableAmount(intent.sellAmount, sellAsset);
+  if (sellFiat != null) return sellFiat;
+  final receiveFiat = _usdTextForStableAmount(
+    intent.receiveEstimate,
+    receiveAsset,
+  );
+  if (receiveFiat != null) return receiveFiat;
+  return r'$--';
+}
+
+String? _usdTextForStableAmount(String amountText, SwapAsset asset) {
+  final symbol = asset.symbol.toUpperCase();
+  if (symbol != 'USDC' && symbol != 'USDT' && symbol != 'DAI') return null;
+  final raw = amountText.split(RegExp(r'\s+')).first.replaceAll(',', '').trim();
+  final value = double.tryParse(raw);
+  if (value == null || !value.isFinite) return null;
+  if (value >= 1000000) return '\$${(value / 1000000).toStringAsFixed(2)}M';
+  if (value >= 1000) return '\$${(value / 1000).toStringAsFixed(2)}K';
+  return '\$${value.toStringAsFixed(2)}';
+}
+
+String? _depositDeadlineLabel(SwapPrototypeIntent intent) {
+  final deadline = intent.depositDeadline;
+  if (deadline == null) return null;
+  final remaining = deadline.difference(DateTime.now());
+  if (remaining.isNegative) return '00:00';
+  if (remaining.inHours >= 1) return '${remaining.inHours}hrs';
+  if (remaining.inMinutes >= 15) return '${remaining.inMinutes}mins';
+  final minutes = remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
+
+String? _lastRelativeStatusCheckedLabel(DateTime? checkedAt) {
+  if (checkedAt == null) return null;
+  final elapsed = DateTime.now().difference(checkedAt.toLocal());
+  if (elapsed.inMinutes <= 0) return 'Last check: just now';
+  return 'Last check: ${elapsed.inMinutes}m ago';
+}
+
+String? _swapTimestampLabel(DateTime? timestamp) {
+  if (timestamp == null) return null;
+  final local = timestamp.toLocal();
+  final month = _monthNames[local.month - 1];
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$month ${local.day}, ${local.year} $hour:$minute';
+}
+
+String _compactSwapAddress(String address) {
+  final trimmed = address.trim();
+  if (trimmed.length <= 18) return trimmed;
+  return '${trimmed.substring(0, 9)} ... ${trimmed.substring(trimmed.length - 7)}';
+}
+
+const _monthNames = <String>[
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 class _SwapActivityMissingPanel extends StatelessWidget {
   const _SwapActivityMissingPanel();
@@ -2229,47 +2484,6 @@ class _ActivityDetailDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(height: 1, color: context.colors.border.subtle);
   }
-}
-
-class _ActiveSwapCheckedStatus extends StatelessWidget {
-  const _ActiveSwapCheckedStatus({required this.label, required this.active});
-
-  final String label;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final color = active ? colors.text.accent : colors.text.muted;
-    return Row(
-      key: const ValueKey('swap_activity_checked_label'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AppIcon(
-          active ? AppIcons.renew : AppIcons.time,
-          size: 14,
-          color: active ? colors.icon.accent : colors.icon.muted,
-        ),
-        const SizedBox(width: AppSpacing.xxs),
-        Flexible(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.labelSmall.copyWith(color: color),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-String? _lastStatusCheckedLabel(DateTime? checkedAt) {
-  if (checkedAt == null) return null;
-  final local = checkedAt.toLocal();
-  final hour = local.hour.toString().padLeft(2, '0');
-  final minute = local.minute.toString().padLeft(2, '0');
-  return 'Checked $hour:$minute';
 }
 
 SwapAsset? _activitySellAsset(SwapPrototypeIntent intent) {

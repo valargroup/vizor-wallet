@@ -383,7 +383,11 @@ class _ReviewTradeSide extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SwapAssetIcon(asset: asset, size: 32),
+                SwapAssetIcon(
+                  asset: asset,
+                  size: 32,
+                  showChainBadge: !asset.isNativeZec,
+                ),
                 const SizedBox(width: AppSpacing.xs),
                 Flexible(
                   child: Column(

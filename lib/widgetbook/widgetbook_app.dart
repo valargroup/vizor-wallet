@@ -180,6 +180,73 @@ class WidgetbookApp extends StatelessWidget {
                     ),
                   ],
                 ),
+                WidgetbookComponent(
+                  name: 'Swap Review',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Default',
+                      builder: buildSwapReviewDefaultUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'ZEC to external',
+                      builder: buildSwapReviewZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amounts',
+                      builder: buildSwapReviewLargeAmountsUseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Swap Deposit',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Duration',
+                      builder: buildSwapDepositDurationUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Countdown',
+                      builder: buildSwapDepositCountdownUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Timeout',
+                      builder: buildSwapDepositTimeoutUseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Swap Status',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Progress',
+                      builder: buildSwapStatusProgressUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Progress next step',
+                      builder: buildSwapStatusProgressNextStepUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amounts',
+                      builder: buildSwapStatusLargeAmountsUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Details collapsed',
+                      builder: buildSwapStatusDetailsCollapsedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Details expanded',
+                      builder: buildSwapStatusDetailsExpandedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Completed',
+                      builder: buildSwapStatusCompletedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Failed',
+                      builder: buildSwapStatusFailedUseCase,
+                    ),
+                  ],
+                ),
               ],
             ),
             WidgetbookFolder(

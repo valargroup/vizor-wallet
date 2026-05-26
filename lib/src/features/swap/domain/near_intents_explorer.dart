@@ -1,4 +1,9 @@
+import 'package:url_launcher/url_launcher.dart';
+
 const nearIntentsExplorerHost = 'explorer.near-intents.org';
+
+typedef NearIntentsUrlLauncher =
+    Future<bool> Function(Uri uri, {required LaunchMode mode});
 
 Uri nearIntentsExplorerTransactionUri(String depositAddress) {
   return Uri(
@@ -33,4 +38,24 @@ Uri? nearIntentsExplorerUri({
   }
 
   return null;
+}
+
+Future<bool> launchNearIntentsExplorer({
+  String? nearIntentHash,
+  String? depositTxHash,
+  String? depositAddress,
+  NearIntentsUrlLauncher launcher = launchUrl,
+}) async {
+  final uri = nearIntentsExplorerUri(
+    nearIntentHash: nearIntentHash,
+    depositTxHash: depositTxHash,
+    depositAddress: depositAddress,
+  );
+  if (uri == null) return false;
+
+  try {
+    return await launcher(uri, mode: LaunchMode.externalApplication);
+  } catch (_) {
+    return false;
+  }
 }

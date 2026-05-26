@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:zcash_wallet/src/features/swap/domain/near_intents_explorer.dart';
 
 void main() {
@@ -41,5 +42,43 @@ void main() {
       uri.toString(),
       'https://explorer.near-intents.org/?search=intent-hash',
     );
+  });
+
+  test(
+    'launches explorer externally so the browser owns the new tab',
+    () async {
+      Uri? launchedUri;
+      LaunchMode? launchMode;
+
+      final launched = await launchNearIntentsExplorer(
+        depositAddress: 't1provider-deposit',
+        launcher: (uri, {required mode}) async {
+          launchedUri = uri;
+          launchMode = mode;
+          return true;
+        },
+      );
+
+      expect(launched, isTrue);
+      expect(
+        launchedUri.toString(),
+        'https://explorer.near-intents.org/transactions/t1provider-deposit',
+      );
+      expect(launchMode, LaunchMode.externalApplication);
+    },
+  );
+
+  test('launch returns false when there is no explorer target', () async {
+    var launchCount = 0;
+
+    final launched = await launchNearIntentsExplorer(
+      launcher: (uri, {required mode}) async {
+        launchCount++;
+        return true;
+      },
+    );
+
+    expect(launched, isFalse);
+    expect(launchCount, 0);
   });
 }

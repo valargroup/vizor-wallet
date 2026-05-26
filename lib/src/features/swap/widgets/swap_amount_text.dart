@@ -38,6 +38,7 @@ bool isLongSwapSummaryAmountText(String value) {
 String compactSwapSummaryAmountText(
   String value, {
   bool forceCompactThousands = false,
+  int? maxCharacters,
 }) {
   final base = compactSwapAmountText(value);
   final match = RegExp(
@@ -51,17 +52,50 @@ String compactSwapSummaryAmountText(
   final prefix = match[1] ?? '';
   final suffix = match[3]!;
   if (amount >= 1000000) {
-    return '$prefix${_truncatedCompactNumber(amount / 1000000)}M$suffix';
+    return _compactSummaryNumber(
+      prefix: prefix,
+      value: amount / 1000000,
+      marker: 'M',
+      suffix: suffix,
+      maxCharacters: maxCharacters,
+    );
   }
   if (forceCompactThousands && amount >= 1000) {
-    return '$prefix${_truncatedCompactNumber(amount / 1000)}K$suffix';
+    return _compactSummaryNumber(
+      prefix: prefix,
+      value: amount / 1000,
+      marker: 'K',
+      suffix: suffix,
+      maxCharacters: maxCharacters,
+    );
   }
   return base;
 }
 
-String _truncatedCompactNumber(double value) {
-  const fractionDigits = 3;
-  const factor = 1000.0;
+String _compactSummaryNumber({
+  required String prefix,
+  required double value,
+  required String marker,
+  required String suffix,
+  required int? maxCharacters,
+}) {
+  for (var fractionDigits = 3; fractionDigits >= 0; fractionDigits--) {
+    final text =
+        '$prefix${_truncatedCompactNumber(value, fractionDigits)}$marker$suffix';
+    if (maxCharacters == null ||
+        text.length <= maxCharacters ||
+        fractionDigits == 0) {
+      return text;
+    }
+  }
+  throw StateError('unreachable');
+}
+
+String _truncatedCompactNumber(double value, int fractionDigits) {
+  var factor = 1.0;
+  for (var index = 0; index < fractionDigits; index++) {
+    factor *= 10;
+  }
   final truncated = (value * factor).truncateToDouble() / factor;
   var text = truncated.toStringAsFixed(fractionDigits);
   while (text.contains('.') && text.endsWith('0')) {
