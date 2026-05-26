@@ -681,7 +681,7 @@ class _SwapStatusForIntentState extends State<_SwapStatusForIntent> {
       payAmountText: intent.sellAmount,
       receiveAmountText: intent.receiveEstimate,
       badgeKind: _swapStatusBadgeKind(intent.status),
-      progressIndex: _swapStatusProgressIndex(intent.status),
+      progressIndex: _swapStatusProgressIndex(intent),
       activeTab: _activeTab,
       steps: _swapProgressSteps(intent),
       details: _swapStatusDetails(intent),
@@ -723,10 +723,11 @@ SwapStatusBadgeKind _swapStatusBadgeKind(SwapIntentStatus status) {
   };
 }
 
-int _swapStatusProgressIndex(SwapIntentStatus status) {
-  return switch (status) {
+int _swapStatusProgressIndex(SwapPrototypeIntent intent) {
+  final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
+  return switch (intent.status) {
     SwapIntentStatus.awaitingDeposit ||
-    SwapIntentStatus.awaitingExternalDeposit => 0,
+    SwapIntentStatus.awaitingExternalDeposit => hasDepositTx ? 1 : 0,
     SwapIntentStatus.depositObserved => 1,
     SwapIntentStatus.processing ||
     SwapIntentStatus.providerStatusUnknown ||

@@ -21,7 +21,7 @@ void main() {
             builder: (context) {
               row = buildSwapActivityRow(
                 context: context,
-                record: const SwapIntentRecord(
+                record: SwapIntentRecord(
                   id: 'swap-1',
                   providerLabel: 'NEAR Intents',
                   pairText: 'ZEC -> USDC',
@@ -32,7 +32,12 @@ void main() {
                   direction: SwapDirection.zecToExternal,
                   externalAsset: SwapAsset.usdc,
                   createdAt: null,
-                  updatedAt: null,
+                  updatedAt: DateTime.now().subtract(
+                    const Duration(minutes: 2),
+                  ),
+                  lastStatusCheckedAt: DateTime.now().subtract(
+                    const Duration(minutes: 1),
+                  ),
                 ),
               );
               return const SizedBox.shrink();
@@ -46,9 +51,9 @@ void main() {
     expect(row!.subtitle, 'ZEC Zcash');
     expect(row!.subtitleIconName, isNull);
     expect(row!.amountText, '-0.0030 ZEC');
-    expect(row!.statusText, '1/4 In progress');
+    expect(row!.statusText, '3/4 In progress');
     expect(row!.statusIconName, AppIcons.loader);
-    expect(row!.leadingProgressValue, 0.25);
+    expect(row!.leadingProgressValue, 0.75);
     final progressMatch = RegExp(
       r'^(\d+)/(\d+) In progress$',
     ).firstMatch(row!.statusText);
@@ -57,8 +62,13 @@ void main() {
       row!.leadingProgressValue,
       int.parse(progressMatch!.group(1)!) / int.parse(progressMatch.group(2)!),
     );
-    expect(row!.timestampText, '--');
-    expect(row!.childRows, isEmpty);
+    expect(row!.timestampText, isNot('--'));
+    expect(row!.childRows, hasLength(1));
+    expect(row!.childRows.single.title, 'Depositing USDC...');
+    expect(row!.childRows.single.amountText, '+0.21 USDC');
+    expect(row!.childRows.single.statusText, 'In progress');
+    expect(row!.childRows.single.statusIconName, AppIcons.loader);
+    expect(row!.childRows.single.timestampText, '1m ago');
   });
 
   testWidgets('maps receive-ZEC swaps as inbound activity rows', (
@@ -97,10 +107,49 @@ void main() {
     expect(row!.title, 'Swapping...');
     expect(row!.subtitle, 'USDC on Ethereum');
     expect(row!.amountText, '-0.21 USDC');
-    expect(row!.statusText, 'Action needed');
-    expect(row!.statusIconName, AppIcons.warning);
-    expect(row!.leadingProgressValue, isNull);
+    expect(row!.statusText, '1/4 In progress');
+    expect(row!.statusIconName, AppIcons.loader);
+    expect(row!.leadingProgressValue, 0.25);
     expect(row!.timestampText, isNot('--'));
+    expect(row!.childRows, isEmpty);
+  });
+
+  testWidgets('maps broadcast deposits to the confirmation step', (
+    tester,
+  ) async {
+    ActivityRowData? row;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppTheme(
+          data: AppThemeData.light,
+          child: Builder(
+            builder: (context) {
+              row = buildSwapActivityRow(
+                context: context,
+                record: const SwapIntentRecord(
+                  id: 'swap-confirming-deposit',
+                  providerLabel: 'NEAR Intents',
+                  pairText: 'ZEC -> USDC',
+                  sellAmountText: '0.0030 ZEC',
+                  receiveEstimateText: '0.21 USDC',
+                  status: SwapIntentStatus.awaitingDeposit,
+                  nextAction: 'Waiting for deposit confirmation',
+                  direction: SwapDirection.zecToExternal,
+                  externalAsset: SwapAsset.usdc,
+                  depositTxHash: 'zec-deposit-txid',
+                ),
+              );
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(row!.statusText, '2/4 In progress');
+    expect(row!.statusIconName, AppIcons.loader);
+    expect(row!.leadingProgressValue, 0.5);
     expect(row!.childRows, isEmpty);
   });
 
@@ -137,7 +186,11 @@ void main() {
 
     expect(row!.amountText, isNot(contains('0.0030')));
     expect(row!.amountText, contains('***'));
-    expect(row!.childRows, isEmpty);
+    expect(row!.statusText, 'Completed');
+    expect(row!.leadingProgressValue, isNull);
+    expect(row!.childRows, hasLength(1));
+    expect(row!.childRows.single.amountText, isNot(contains('0.21')));
+    expect(row!.childRows.single.amountText, contains('***'));
   });
 
   testWidgets('maps failed swaps without child rows and with refunded amount', (

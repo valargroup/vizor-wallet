@@ -2123,6 +2123,70 @@ void main() {
     },
   );
 
+  testWidgets(
+    'activity detail moves broadcast ZEC deposits to confirmation step',
+    (tester) async {
+      await _setDesktopViewport(tester);
+      final sessionStore = _FakeSwapPersistenceStore(
+        initialIntents: [
+          _persistedIntent(
+            id: 'confirming-deposit',
+            txHash: 'zec-auto-txid',
+            status: SwapIntentStatus.awaitingDeposit,
+            nextAction: 'Waiting for deposit confirmation',
+          ),
+        ],
+      );
+      final swapProvider = _FixedStatusSwapProvider(
+        const SwapIntentSnapshot(
+          id: 'confirming-deposit',
+          providerLabel: 'NEAR Intents',
+          pairText: 'ZEC -> USDC',
+          sellAmountText: '1.5000 ZEC',
+          receiveEstimateText: '105.25 USDC',
+          status: SwapIntentStatus.awaitingDeposit,
+          nextAction: 'Waiting for deposit confirmation',
+          depositInstruction: SwapDepositInstruction(
+            asset: SwapAsset.zec,
+            address: 'confirming-deposit',
+            expiresInLabel: '07:12',
+            reuseWarning: 'Do not reuse this address',
+            memo: 'memo-7',
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        _routerHarness(
+          GoRouter(
+            initialLocation: '/swap',
+            routes: [_swapRoute(), _swapActivityRoute()],
+          ),
+          seedPrototypeFixtures: false,
+          swapProvider: swapProvider,
+          sessionStore: sessionStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _openActivitySurface(tester);
+      expect(find.text('2/4 In progress'), findsOneWidget);
+
+      await _openActivityDetail(tester, 'confirming-deposit');
+
+      expect(
+        find.byKey(const ValueKey('swap_activity_route_step_0_complete')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('swap_activity_route_step_1_active')),
+        findsOneWidget,
+      );
+      expect(find.text('Deposit confirmation...'), findsOneWidget);
+      expect(find.text('Sending ZEC...'), findsNothing);
+    },
+  );
+
   testWidgets('activity route tracker stages skipped status transitions', (
     tester,
   ) async {
@@ -2744,7 +2808,8 @@ void main() {
 
     await _openActivitySurface(tester);
 
-    expect(find.text('Action needed'), findsWidgets);
+    expect(find.text('Action needed'), findsNothing);
+    expect(find.text('Incomplete deposit'), findsWidgets);
     expect(find.text('Refunded'), findsWidgets);
     expect(find.text('Failed'), findsWidgets);
 
@@ -5590,6 +5655,23 @@ class _DeferredStatusSwapProvider extends _FakeSwapProvider {
       _StatusRequest(depositAddress: intentId, depositMemo: depositMemo),
     );
     return statusCompleter.future;
+  }
+}
+
+class _FixedStatusSwapProvider extends _FakeSwapProvider {
+  _FixedStatusSwapProvider(this.snapshot);
+
+  final SwapIntentSnapshot snapshot;
+
+  @override
+  Future<SwapIntentSnapshot> getStatus(
+    String intentId, {
+    String? depositMemo,
+  }) async {
+    statusRequests.add(
+      _StatusRequest(depositAddress: intentId, depositMemo: depositMemo),
+    );
+    return snapshot;
   }
 }
 

@@ -18,6 +18,8 @@ class ActivityRowData {
     required this.timestampText,
     this.statusIconName,
     this.statusColor,
+    this.backgroundColor,
+    this.selected = false,
     this.childRows = const [],
     this.onTap,
   });
@@ -38,6 +40,8 @@ class ActivityRowData {
   final String timestampText;
   final String? statusIconName;
   final Color? statusColor;
+  final Color? backgroundColor;
+  final bool selected;
   final List<ActivityRowData> childRows;
   final VoidCallback? onTap;
 }

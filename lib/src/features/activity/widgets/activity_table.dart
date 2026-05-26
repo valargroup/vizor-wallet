@@ -194,6 +194,8 @@ const double _activityFixedColumnsWidth =
     _activityLeftCellWidth +
     (_activityMiddleCellWidth * 2) +
     _activityRightCellWidth;
+const double _activityAvatarSize = 32;
+const double _activityProgressRingSize = 37;
 
 class _ActivityTableDivider extends StatelessWidget {
   const _ActivityTableDivider();
@@ -393,6 +395,7 @@ class _ActivityTableRowState extends State<ActivityTableRow> {
     final row = widget.row;
     final isInteractive = row.onTap != null && !widget.childRow;
     final rowHeight = widget.compact ? 40.0 : 48.0;
+    final showSelectedBorder = row.selected && !widget.childRow;
     final content = Stack(
       clipBehavior: Clip.none,
       children: [
@@ -402,7 +405,7 @@ class _ActivityTableRowState extends State<ActivityTableRow> {
           decoration: BoxDecoration(
             color: isInteractive && _hovered
                 ? _neutralHoverBackgroundColor(context)
-                : null,
+                : row.backgroundColor,
             borderRadius: BorderRadius.circular(AppRadii.xSmall),
           ),
           child: _ActivityColumnLayout(
@@ -469,6 +472,21 @@ class _ActivityTableRowState extends State<ActivityTableRow> {
             ),
           ),
         ),
+        if (showSelectedBorder)
+          Positioned(
+            left: -1,
+            top: -1,
+            right: -1,
+            bottom: -1,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: colors.state.focusRing, width: 2),
+                  borderRadius: BorderRadius.circular(AppRadii.xSmall),
+                ),
+              ),
+            ),
+          ),
         if (isInteractive && _focused)
           Positioned(
             left: -1,
@@ -599,19 +617,23 @@ class _ActivityAvatar extends StatelessWidget {
     final progress = row.leadingProgressValue;
     if (progress != null) {
       return SizedBox(
-        width: 32,
-        height: 32,
-        child: CustomPaint(
-          painter: _ActivityAvatarProgressPainter(
-            progress: progress.clamp(0, 1).toDouble(),
-            trackColor: context.colors.border.subtle,
-            progressColor: context.colors.icon.brandCrimson,
-          ),
-          child: Center(
-            child: AppIcon(
-              row.leadingIconName,
-              size: 16,
-              color: row.leadingIconColor,
+        width: _activityAvatarSize,
+        height: _activityAvatarSize,
+        child: OverflowBox(
+          maxWidth: _activityProgressRingSize,
+          maxHeight: _activityProgressRingSize,
+          child: SizedBox(
+            width: _activityProgressRingSize,
+            height: _activityProgressRingSize,
+            child: CustomPaint(
+              painter: _ActivityAvatarProgressPainter(progress: progress),
+              child: Center(
+                child: AppIcon(
+                  row.leadingIconName,
+                  size: 16,
+                  color: row.leadingIconColor,
+                ),
+              ),
             ),
           ),
         ),
@@ -619,8 +641,8 @@ class _ActivityAvatar extends StatelessWidget {
     }
 
     return SizedBox(
-      width: 32,
-      height: 32,
+      width: _activityAvatarSize,
+      height: _activityAvatarSize,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: row.leadingBackgroundColor,
@@ -639,47 +661,76 @@ class _ActivityAvatar extends StatelessWidget {
 }
 
 class _ActivityAvatarProgressPainter extends CustomPainter {
-  const _ActivityAvatarProgressPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.progressColor,
-  });
+  const _ActivityAvatarProgressPainter({required this.progress});
 
   final double progress;
-  final Color trackColor;
-  final Color progressColor;
+
+  static const _segmentCount = 4;
+  static const _viewBoxSize = 37.0;
+  static const _center = Offset(18.1836, 18.1842);
+  static const _ringRadius = 17.0;
+  static const _ringStrokeWidth = 2.5;
+  static const _segmentGapAngle = 0.32;
+  static const _trackColor = Color(0xFFD4D4D4);
+  static const _progressColor = Color(0xFFC2546A);
+  static const _innerFillColor = Color(0x339A9A9A);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final strokeWidth = 2.0;
-    final rect = Offset.zero & size;
-    final arcRect = rect.deflate(strokeWidth / 2);
+    canvas.save();
+    canvas.scale(size.width / _viewBoxSize, size.height / _viewBoxSize);
+    _paintProgressRing(canvas);
+    _paintInnerCircle(canvas);
+    canvas.restore();
+  }
+
+  void _paintProgressRing(Canvas canvas) {
     final trackPaint = Paint()
-      ..color = trackColor
-      ..strokeWidth = strokeWidth
+      ..color = _trackColor
+      ..strokeWidth = _ringStrokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
     final progressPaint = Paint()
-      ..color = progressColor
-      ..strokeWidth = strokeWidth
+      ..color = _progressColor
+      ..strokeWidth = _ringStrokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    canvas.drawOval(arcRect, trackPaint);
-    canvas.drawArc(
-      arcRect,
-      -math.pi / 2,
-      math.pi * 2 * progress,
-      false,
-      progressPaint,
-    );
+    final rect = Rect.fromCircle(center: _center, radius: _ringRadius);
+    const segmentStep = math.pi * 2 / _segmentCount;
+    const segmentSweep = segmentStep - _segmentGapAngle;
+    const firstStartAngle = -math.pi + (_segmentGapAngle / 2);
+    final normalizedProgress = progress.clamp(0.0, 1.0);
+    final filledSegments = normalizedProgress <= 0
+        ? 0
+        : math.max(
+            1,
+            math.min(
+              _segmentCount,
+              (normalizedProgress * _segmentCount).ceil(),
+            ),
+          );
+
+    for (var index = 0; index < _segmentCount; index++) {
+      final startAngle = firstStartAngle + (segmentStep * index);
+      canvas.drawArc(rect, startAngle, segmentSweep, false, trackPaint);
+    }
+    for (var index = 0; index < filledSegments; index++) {
+      final startAngle = firstStartAngle + (segmentStep * index);
+      canvas.drawArc(rect, startAngle, segmentSweep, false, progressPaint);
+    }
+  }
+
+  void _paintInnerCircle(Canvas canvas) {
+    final fillPaint = Paint()
+      ..color = _innerFillColor
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(const Offset(18.1836, 18.1841), 13, fillPaint);
   }
 
   @override
   bool shouldRepaint(covariant _ActivityAvatarProgressPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.trackColor != trackColor ||
-        oldDelegate.progressColor != progressColor;
+    return oldDelegate.progress != progress;
   }
 }
 
