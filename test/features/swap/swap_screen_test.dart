@@ -12,6 +12,8 @@ import 'package:zcash_wallet/src/core/layout/app_desktop_shell.dart';
 import 'package:zcash_wallet/src/core/layout/app_main_sidebar.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/core/widgets/app_icon.dart';
+import 'package:zcash_wallet/src/features/address_book/models/address_book_contact.dart';
+import 'package:zcash_wallet/src/features/address_book/providers/address_book_provider.dart';
 import 'package:zcash_wallet/src/features/swap/domain/near_intents_one_click_swap_provider.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_intent_presentation_mapper.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
@@ -366,6 +368,153 @@ void main() {
     expect(modalRect.left, greaterThan(sidebarSwapRect.right));
     expect(modalRect.size, const Size(312, 440));
     expect(cameraRect.size, const Size(272, 220));
+  });
+
+  testWidgets('swap address modal loads recipient address from contacts', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        seedPrototypeFixtures: false,
+        addressBookRepository: _FakeAddressBookRepository([
+          _addressBookContact(
+            id: 'usdc',
+            label: 'USDC Friend',
+            network: AddressBookNetwork.ethereum,
+            address: '0xusdc-recipient',
+          ),
+          _addressBookContact(
+            id: 'zcash',
+            label: 'Zcash Friend',
+            network: AddressBookNetwork.zcash,
+            address: 'u1zcashfriend',
+          ),
+        ]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('swap_address_summary')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('swap_address_contacts_button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('address_book_contact_picker_modal')),
+      findsOneWidget,
+    );
+    expect(find.text('USDC Friend'), findsOneWidget);
+    expect(find.text('Zcash Friend'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('address_book_contact_picker_contact_usdc')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('address_book_contact_picker_modal')),
+      findsNothing,
+    );
+    expect(_destinationSummaryText(tester), '0xusdc-recipient');
+  });
+
+  testWidgets('swap address modal remembers submitted recipient', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final addressBookRepository = _FakeAddressBookRepository();
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        seedPrototypeFixtures: false,
+        addressBookRepository: addressBookRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('swap_address_summary')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_destination_field')),
+      '0xremembered-recipient',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('swap_address_remember_toggle')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('swap_address_update_button')));
+    await tester.pumpAndSettle();
+
+    expect(addressBookRepository.contacts, hasLength(1));
+    expect(
+      addressBookRepository.contacts.single.address,
+      '0xremembered-recipient',
+    );
+    expect(
+      addressBookRepository.contacts.single.network,
+      AddressBookNetwork.ethereum,
+    );
+    expect(addressBookRepository.contacts.single.label, 'USDC recipient');
+  });
+
+  testWidgets('swap address modal filters contacts by token chain ticker', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final baseUsdc = SwapAsset.live(
+      assetId: 'nep141:base-usdc.example',
+      symbol: 'USDC',
+      blockchain: 'base',
+      decimals: 6,
+    );
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        swapProvider: _FakeSwapProvider(supportedAssets: [baseUsdc]),
+        seedPrototypeFixtures: false,
+        addressBookRepository: _FakeAddressBookRepository([
+          _addressBookContact(
+            id: 'base',
+            label: 'Base USDC Friend',
+            network: AddressBookNetwork.base,
+            address: '0xbase-usdc-recipient',
+          ),
+          _addressBookContact(
+            id: 'ethereum',
+            label: 'Ethereum USDC Friend',
+            network: AddressBookNetwork.ethereum,
+            address: '0xeth-usdc-recipient',
+          ),
+        ]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('swap_address_summary')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('swap_address_contacts_button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Base USDC Friend'), findsOneWidget);
+    expect(find.text('Ethereum USDC Friend'), findsNothing);
   });
 
   testWidgets('fresh swap screen starts without preview activity or requests', (
@@ -4424,6 +4573,7 @@ Widget _routerHarness(
   bool liveFundsEnabled = true,
   AppBootstrapState? bootstrap,
   AccountNotifier Function()? accountNotifier,
+  AddressBookRepository? addressBookRepository,
 }) {
   final previewIntents = seedPrototypeFixtures
       ? _accountScopedPreviewSwapIntents()
@@ -4433,6 +4583,8 @@ Widget _routerHarness(
   return ProviderScope(
     overrides: [
       appBootstrapProvider.overrideWithValue(bootstrap ?? _bootstrap),
+      if (addressBookRepository != null)
+        addressBookRepositoryProvider.overrideWithValue(addressBookRepository),
       if (accountNotifier != null)
         accountProvider.overrideWith(accountNotifier),
       syncProvider.overrideWith(
@@ -5266,6 +5418,40 @@ class _FakeSwapPersistenceStore implements SwapActivityStore, SwapDraftStore {
   @override
   Future<void> saveDraft(SwapDraftSnapshot draft) async {
     savedDraft = draft;
+  }
+}
+
+AddressBookContact _addressBookContact({
+  required String id,
+  required String label,
+  required AddressBookNetwork network,
+  required String address,
+}) {
+  return AddressBookContact(
+    id: id,
+    label: label,
+    network: network,
+    address: address,
+    profilePictureId: 'knight',
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  );
+}
+
+class _FakeAddressBookRepository implements AddressBookRepository {
+  _FakeAddressBookRepository([List<AddressBookContact> contacts = const []])
+    : contacts = [...contacts];
+
+  final List<AddressBookContact> contacts;
+
+  @override
+  Future<List<AddressBookContact>> loadContacts() async => [...contacts];
+
+  @override
+  Future<void> saveContacts(List<AddressBookContact> contacts) async {
+    this.contacts
+      ..clear()
+      ..addAll(contacts);
   }
 }
 

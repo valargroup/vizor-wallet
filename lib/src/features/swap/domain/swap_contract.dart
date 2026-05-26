@@ -553,7 +553,9 @@ String _tokenDisplayName(String symbol) {
 
 String _chainDisplayName(String ticker) {
   return switch (ticker.toLowerCase()) {
+    'abs' => 'Abstract',
     'adi' => 'Adi',
+    'aleo' => 'Aleo',
     'aptos' => 'Aptos',
     'arb' => 'Arbitrum',
     'avax' => 'Avalanche',
@@ -563,14 +565,17 @@ String _chainDisplayName(String ticker) {
     'bsc' => 'Binance Smart Chain',
     'btc' => 'Bitcoin',
     'cardano' => 'Cardano',
+    'dash' => 'Dash',
     'doge' => 'Dogecoin',
     'eth' => 'Ethereum',
     'gnosis' => 'Gnosis',
     'ltc' => 'Litecoin',
+    'monad' => 'Monad',
     'near' => 'NEAR',
     'op' => 'Optimism',
     'plasma' => 'Plasma',
     'pol' => 'Polygon',
+    'scroll' => 'Scroll',
     'sol' => 'Solana',
     'starknet' => 'Starknet',
     'stellar' => 'Stellar',

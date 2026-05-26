@@ -146,70 +146,62 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
           key: const ValueKey('swap_amount_field'),
           controller: _amountController,
           focusNode: _amountFocusNode,
-          onChanged:
-              payInputIsFiat
-                  ? widget.onAmountFiatChanged
-                  : widget.onAmountChanged,
+          onChanged: payInputIsFiat
+              ? widget.onAmountFiatChanged
+              : widget.onAmountChanged,
           hintText: payInputIsFiat ? '0.00' : (sendsZec ? '0.0000' : '0.00'),
           prefixText: payInputIsFiat ? r'$' : null,
         ),
-        asset:
-            sendsZec
-                ? const _TokenPill(asset: SwapAsset.zec, label: 'Zcash')
-                : _ExternalAssetButton(
-                  selected: state.externalAsset,
-                  open: widget.assetSelectorOpen,
-                  onTap: widget.onOpenExternalAssetPicker,
+        asset: sendsZec
+            ? const _TokenPill(asset: SwapAsset.zec, label: 'Zcash')
+            : _ExternalAssetButton(
+                selected: state.externalAsset,
+                open: widget.assetSelectorOpen,
+                onTap: widget.onOpenExternalAssetPicker,
+              ),
+        titleTrailing: sendsZec
+            ? _MaxAmountTrigger(
+                availableText: widget.zecAvailableText,
+                loading: state.maxAmountLoading,
+                errorText: state.maxAmountError,
+                balanceExceeded: zecAmountOverAvailable,
+                onTap: widget.onUseMaxZecAmount,
+              )
+            : null,
+        footer: sendsZec
+            ? _SwapCardFooter(
+                leading: _SwapFiatValueText(
+                  text: _amountMetaText(
+                    state,
+                    asset: SwapAsset.zec,
+                    tokenAmountText: state.amountText,
+                    inputMode: state.amountInputMode,
+                  ),
+                  showModeIcon: payActive,
+                  active: payInputIsFiat,
+                  onTap: () =>
+                      widget.onToggleFiatInputMode(SwapAmountInputSide.pay),
                 ),
-        titleTrailing:
-            sendsZec
-                ? _MaxAmountTrigger(
-                  availableText: widget.zecAvailableText,
-                  loading: state.maxAmountLoading,
-                  errorText: state.maxAmountError,
-                  balanceExceeded: zecAmountOverAvailable,
-                  onTap: widget.onUseMaxZecAmount,
-                )
-                : null,
-        footer:
-            sendsZec
-                ? _SwapCardFooter(
-                  leading: _SwapFiatValueText(
-                    text: _amountMetaText(
-                      state,
-                      asset: SwapAsset.zec,
-                      tokenAmountText: state.amountText,
-                      inputMode: state.amountInputMode,
-                    ),
-                    showModeIcon: payActive,
-                    active: payInputIsFiat,
-                    onTap:
-                        () => widget.onToggleFiatInputMode(
-                          SwapAmountInputSide.pay,
-                        ),
+              )
+            : _SwapCardFooter(
+                leading: _SwapFiatValueText(
+                  text: _amountMetaText(
+                    state,
+                    asset: state.externalAsset,
+                    tokenAmountText: state.amountText,
+                    inputMode: state.amountInputMode,
                   ),
-                )
-                : _SwapCardFooter(
-                  leading: _SwapFiatValueText(
-                    text: _amountMetaText(
-                      state,
-                      asset: state.externalAsset,
-                      tokenAmountText: state.amountText,
-                      inputMode: state.amountInputMode,
-                    ),
-                    showModeIcon: payActive,
-                    active: payInputIsFiat,
-                    onTap:
-                        () => widget.onToggleFiatInputMode(
-                          SwapAmountInputSide.pay,
-                        ),
-                  ),
-                  trailing: _AddressTrigger(
-                    value: state.destinationText,
-                    emptyText: 'Add Refund address...',
-                    onTap: widget.onOpenDestinationAddress,
-                  ),
+                  showModeIcon: payActive,
+                  active: payInputIsFiat,
+                  onTap: () =>
+                      widget.onToggleFiatInputMode(SwapAmountInputSide.pay),
                 ),
+                trailing: _AddressTrigger(
+                  value: state.destinationText,
+                  emptyText: 'Add Refund address...',
+                  onTap: widget.onOpenDestinationAddress,
+                ),
+              ),
       ),
       receiveCard: _SwapAmountCard(
         label: 'You receive',
@@ -218,65 +210,57 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
           key: const ValueKey('swap_receive_amount_field'),
           controller: _receiveAmountController,
           focusNode: _receiveAmountFocusNode,
-          onChanged:
-              receiveInputIsFiat
-                  ? widget.onReceiveAmountFiatChanged
-                  : widget.onReceiveAmountChanged,
-          hintText:
-              receiveInputIsFiat
-                  ? '0.00'
-                  : (state.direction.toSymbol(state.externalAsset) == 'ZEC'
-                      ? '0.0000'
-                      : '0.00'),
+          onChanged: receiveInputIsFiat
+              ? widget.onReceiveAmountFiatChanged
+              : widget.onReceiveAmountChanged,
+          hintText: receiveInputIsFiat
+              ? '0.00'
+              : (state.direction.toSymbol(state.externalAsset) == 'ZEC'
+                    ? '0.0000'
+                    : '0.00'),
           prefixText: receiveInputIsFiat ? r'$' : null,
         ),
-        asset:
-            sendsZec
-                ? _ExternalAssetButton(
-                  selected: state.externalAsset,
-                  open: widget.assetSelectorOpen,
-                  onTap: widget.onOpenExternalAssetPicker,
-                )
-                : const _TokenPill(asset: SwapAsset.zec, label: 'Zcash'),
-        footer:
-            sendsZec
-                ? _SwapCardFooter(
-                  leading: _SwapFiatValueText(
-                    text: _amountMetaText(
-                      state,
-                      asset: state.externalAsset,
-                      tokenAmountText: state.receiveAmountText,
-                      inputMode: state.receiveAmountInputMode,
-                    ),
-                    showModeIcon: receiveActive,
-                    active: receiveInputIsFiat,
-                    onTap:
-                        () => widget.onToggleFiatInputMode(
-                          SwapAmountInputSide.receive,
-                        ),
+        asset: sendsZec
+            ? _ExternalAssetButton(
+                selected: state.externalAsset,
+                open: widget.assetSelectorOpen,
+                onTap: widget.onOpenExternalAssetPicker,
+              )
+            : const _TokenPill(asset: SwapAsset.zec, label: 'Zcash'),
+        footer: sendsZec
+            ? _SwapCardFooter(
+                leading: _SwapFiatValueText(
+                  text: _amountMetaText(
+                    state,
+                    asset: state.externalAsset,
+                    tokenAmountText: state.receiveAmountText,
+                    inputMode: state.receiveAmountInputMode,
                   ),
-                  trailing: _AddressTrigger(
-                    value: state.destinationText,
-                    emptyText: 'Add Recipient address...',
-                    onTap: widget.onOpenDestinationAddress,
-                  ),
-                )
-                : _SwapCardFooter(
-                  leading: _SwapFiatValueText(
-                    text: _amountMetaText(
-                      state,
-                      asset: SwapAsset.zec,
-                      tokenAmountText: state.receiveAmountText,
-                      inputMode: state.receiveAmountInputMode,
-                    ),
-                    showModeIcon: receiveActive,
-                    active: receiveInputIsFiat,
-                    onTap:
-                        () => widget.onToggleFiatInputMode(
-                          SwapAmountInputSide.receive,
-                        ),
-                  ),
+                  showModeIcon: receiveActive,
+                  active: receiveInputIsFiat,
+                  onTap: () =>
+                      widget.onToggleFiatInputMode(SwapAmountInputSide.receive),
                 ),
+                trailing: _AddressTrigger(
+                  value: state.destinationText,
+                  emptyText: 'Add Recipient address...',
+                  onTap: widget.onOpenDestinationAddress,
+                ),
+              )
+            : _SwapCardFooter(
+                leading: _SwapFiatValueText(
+                  text: _amountMetaText(
+                    state,
+                    asset: SwapAsset.zec,
+                    tokenAmountText: state.receiveAmountText,
+                    inputMode: state.receiveAmountInputMode,
+                  ),
+                  showModeIcon: receiveActive,
+                  active: receiveInputIsFiat,
+                  onTap: () =>
+                      widget.onToggleFiatInputMode(SwapAmountInputSide.receive),
+                ),
+              ),
       ),
       targetDirection: targetDirection,
       onToggleDirection: widget.onToggleDirection,
@@ -722,10 +706,9 @@ class _MaxAmountTrigger extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.right,
                   style: AppTypography.labelLarge.copyWith(
-                    color:
-                        hasError
-                            ? colors.text.destructive
-                            : colors.text.secondary,
+                    color: hasError
+                        ? colors.text.destructive
+                        : colors.text.secondary,
                   ),
                 ),
               ),
@@ -793,18 +776,22 @@ class _SwapDirectionButton extends StatelessWidget {
   }
 }
 
+typedef SwapAddressSubmitCallback = void Function(String value, bool remember);
+
 class SwapAddressEditModal extends StatefulWidget {
   const SwapAddressEditModal({
     required this.state,
     required this.onSubmitted,
     required this.onScan,
+    required this.onOpenContacts,
     required this.onCancel,
     super.key,
   });
 
   final SwapPrototypeState state;
-  final ValueChanged<String> onSubmitted;
+  final SwapAddressSubmitCallback onSubmitted;
   final VoidCallback onScan;
+  final VoidCallback onOpenContacts;
   final VoidCallback onCancel;
 
   @override
@@ -849,7 +836,7 @@ class _SwapAddressEditModalState extends State<SwapAddressEditModal> {
   }
 
   void _submit() {
-    widget.onSubmitted(_controller.text.trim());
+    widget.onSubmitted(_controller.text.trim(), _rememberAddress);
   }
 
   @override
@@ -857,20 +844,17 @@ class _SwapAddressEditModalState extends State<SwapAddressEditModal> {
     final colors = context.colors;
     final sendsZec = widget.state.direction.sendsZec;
     final asset = widget.state.externalAsset;
-    final title =
-        sendsZec
-            ? '${asset.symbol} Recipient Address'
-            : '${asset.symbol} Refund Address';
+    final title = sendsZec
+        ? '${asset.symbol} Recipient Address'
+        : '${asset.symbol} Refund Address';
     final fieldLabel = sendsZec ? 'Recipient' : 'Refund to';
     final hint = widget.state.destinationFieldHint;
-    final description =
-        sendsZec
-            ? 'The external asset will be delivered to this address.'
-            : 'If swap fails, or market conditions change, your transaction may be refunded minus the fee. The refund currency is ${asset.symbol} on Near.';
-    final rememberLabel =
-        sendsZec
-            ? 'Remember this address for recipients'
-            : 'Remember this address for refunds';
+    final description = sendsZec
+        ? 'The external asset will be delivered to this address.'
+        : 'If swap fails, or market conditions change, your transaction may be refunded minus the fee. The refund currency is ${asset.symbol} on Near.';
+    final rememberLabel = sendsZec
+        ? 'Remember this address for recipients'
+        : 'Remember this address for refunds';
 
     return Container(
       key: const ValueKey('swap_address_modal'),
@@ -969,8 +953,11 @@ class _SwapAddressEditModalState extends State<SwapAddressEditModal> {
                                 ),
                                 const SizedBox(width: 4),
                                 _SwapInlineIconButton(
+                                  key: const ValueKey(
+                                    'swap_address_contacts_button',
+                                  ),
                                   iconName: AppIcons.users,
-                                  onTap: () {},
+                                  onTap: widget.onOpenContacts,
                                 ),
                               ],
                             ),
@@ -1182,8 +1169,9 @@ class _SwapSlippageModalState extends State<SwapSlippageModal> {
           _SwapModalButtons(
             primaryKey: const ValueKey('swap_slippage_update_button'),
             cancelKey: const ValueKey('swap_slippage_cancel_button'),
-            primaryLabel:
-                _customValueInvalid ? 'Slippage must be 0.1 - 5%' : 'Update',
+            primaryLabel: _customValueInvalid
+                ? 'Slippage must be 0.1 - 5%'
+                : 'Update',
             primaryEnabled: canSubmit,
             onPrimary: () {
               final value = _selectedBps;
@@ -1278,20 +1266,20 @@ class _AddressRememberToggle extends StatelessWidget {
               decoration: BoxDecoration(
                 color: selected ? colors.background.inverse : null,
                 border: Border.all(
-                  color:
-                      selected ? colors.border.strong : colors.border.regular,
+                  color: selected
+                      ? colors.border.strong
+                      : colors.border.regular,
                   width: 1.5,
                 ),
                 borderRadius: BorderRadius.circular(AppRadii.xSmall),
               ),
-              child:
-                  selected
-                      ? AppIcon(
-                        AppIcons.check,
-                        size: 12,
-                        color: colors.icon.inverse,
-                      )
-                      : null,
+              child: selected
+                  ? AppIcon(
+                      AppIcons.check,
+                      size: 12,
+                      color: colors.icon.inverse,
+                    )
+                  : null,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1411,20 +1399,18 @@ class _SlippageRadioCard extends StatelessWidget {
                 height: 16,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color:
-                      selected
-                          ? colors.background.inverse
-                          : colors.background.neutralSubtleOpacity,
+                  color: selected
+                      ? colors.background.inverse
+                      : colors.background.neutralSubtleOpacity,
                   borderRadius: BorderRadius.circular(AppRadii.full),
                 ),
-                child:
-                    selected
-                        ? AppIcon(
-                          AppIcons.check,
-                          size: 12,
-                          color: colors.icon.inverse,
-                        )
-                        : null,
+                child: selected
+                    ? AppIcon(
+                        AppIcons.check,
+                        size: 12,
+                        color: colors.icon.inverse,
+                      )
+                    : null,
               ),
             ],
           ),
@@ -1454,12 +1440,11 @@ class _SlippageCustomRadioCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final borderColor =
-        invalid
-            ? colors.border.utilityDestructive
-            : selected
-            ? colors.border.strong
-            : colors.border.regular;
+    final borderColor = invalid
+        ? colors.border.utilityDestructive
+        : selected
+        ? colors.border.strong
+        : colors.border.regular;
     final valueColor = invalid ? colors.text.destructive : colors.text.accent;
     final valueStyle = AppTypography.labelLarge.copyWith(color: valueColor);
     final hintStyle = AppTypography.labelLarge.copyWith(
@@ -1543,20 +1528,18 @@ class _SlippageCustomRadioCard extends StatelessWidget {
                 height: 16,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color:
-                      selected
-                          ? colors.background.inverse
-                          : colors.background.neutralSubtleOpacity,
+                  color: selected
+                      ? colors.background.inverse
+                      : colors.background.neutralSubtleOpacity,
                   borderRadius: BorderRadius.circular(AppRadii.full),
                 ),
-                child:
-                    selected
-                        ? AppIcon(
-                          AppIcons.check,
-                          size: 12,
-                          color: colors.icon.inverse,
-                        )
-                        : null,
+                child: selected
+                    ? AppIcon(
+                        AppIcons.check,
+                        size: 12,
+                        color: colors.icon.inverse,
+                      )
+                    : null,
               ),
             ],
           ),
@@ -1577,10 +1560,9 @@ double _slippageInputWidth(
     text: '0.1-5',
     style: hintStyle,
   );
-  final valueWidth =
-      text.isEmpty
-          ? 0.0
-          : _measureSlippageInputWidth(context, text: text, style: valueStyle);
+  final valueWidth = text.isEmpty
+      ? 0.0
+      : _measureSlippageInputWidth(context, text: text, style: valueStyle);
   final measuredWidth = hintWidth > valueWidth ? hintWidth : valueWidth;
   final paddedWidth = measuredWidth.ceilToDouble() + 6;
   if (paddedWidth < 38) return 38;
@@ -1867,10 +1849,9 @@ class _SwapAssetSelectorModalState extends State<SwapAssetSelectorModal> {
     final colors = context.colors;
     final assets = _filteredAssets;
     final hasQuery = _queryController.text.isNotEmpty;
-    final searchBorderColor =
-        _focusNode.hasFocus || hasQuery
-            ? colors.border.medium
-            : colors.border.regular;
+    final searchBorderColor = _focusNode.hasFocus || hasQuery
+        ? colors.border.medium
+        : colors.border.regular;
 
     return Container(
       key: const ValueKey('swap_external_asset_menu'),
@@ -1959,55 +1940,53 @@ class _SwapAssetSelectorModalState extends State<SwapAssetSelectorModal> {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child:
-                assets.isEmpty
-                    ? Center(
-                      child: SizedBox(
-                        width: 112,
-                        child: Text(
-                          'No tokens or chains found',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.labelLarge.copyWith(
-                            color: colors.text.secondary,
-                          ),
-                        ),
-                      ),
-                    )
-                    : RawScrollbar(
-                      key: const ValueKey('swap_asset_selector_scrollbar'),
-                      controller: _scrollController,
-                      thumbVisibility: assets.length > 5,
-                      radius: const Radius.circular(AppRadii.full),
-                      thickness: 6,
-                      mainAxisMargin: 3,
-                      crossAxisMargin: 3,
-                      thumbColor: colors.background.overlay,
-                      child: Padding(
-                        key: const ValueKey('swap_asset_selector_list_gutter'),
-                        padding: const EdgeInsets.only(right: AppSpacing.sm),
-                        child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(
-                            context,
-                          ).copyWith(scrollbars: false),
-                          child: ListView.separated(
-                            controller: _scrollController,
-                            padding: EdgeInsets.zero,
-                            itemCount: assets.length,
-                            separatorBuilder:
-                                (_, _) =>
-                                    const SizedBox(height: AppSpacing.xxs),
-                            itemBuilder: (context, index) {
-                              final asset = assets[index];
-                              return _AssetMenuRow(
-                                asset: asset,
-                                selected: widget.selected == asset,
-                                onTap: () => widget.onSelected(asset),
-                              );
-                            },
-                          ),
+            child: assets.isEmpty
+                ? Center(
+                    child: SizedBox(
+                      width: 112,
+                      child: Text(
+                        'No tokens or chains found',
+                        textAlign: TextAlign.center,
+                        style: AppTypography.labelLarge.copyWith(
+                          color: colors.text.secondary,
                         ),
                       ),
                     ),
+                  )
+                : RawScrollbar(
+                    key: const ValueKey('swap_asset_selector_scrollbar'),
+                    controller: _scrollController,
+                    thumbVisibility: assets.length > 5,
+                    radius: const Radius.circular(AppRadii.full),
+                    thickness: 6,
+                    mainAxisMargin: 3,
+                    crossAxisMargin: 3,
+                    thumbColor: colors.background.overlay,
+                    child: Padding(
+                      key: const ValueKey('swap_asset_selector_list_gutter'),
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(
+                          context,
+                        ).copyWith(scrollbars: false),
+                        child: ListView.separated(
+                          controller: _scrollController,
+                          padding: EdgeInsets.zero,
+                          itemCount: assets.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: AppSpacing.xxs),
+                          itemBuilder: (context, index) {
+                            final asset = assets[index];
+                            return _AssetMenuRow(
+                              asset: asset,
+                              selected: widget.selected == asset,
+                              onTap: () => widget.onSelected(asset),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -2108,10 +2087,9 @@ class _SlippageControl extends StatelessWidget {
           alignment: Alignment.center,
           padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
           decoration: BoxDecoration(
-            color:
-                selected
-                    ? colors.state.selectedOpacity
-                    : colors.background.ground.withValues(alpha: 0),
+            color: selected
+                ? colors.state.selectedOpacity
+                : colors.background.ground.withValues(alpha: 0),
             borderRadius: BorderRadius.circular(AppRadii.full),
           ),
           child: Row(

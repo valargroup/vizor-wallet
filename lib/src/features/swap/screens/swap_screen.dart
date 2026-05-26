@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/formatting/zec_amount.dart';
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_main_sidebar.dart';
+import '../../../core/profile_pictures.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
@@ -18,6 +19,9 @@ import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
+import '../../address_book/models/address_book_contact.dart';
+import '../../address_book/providers/address_book_provider.dart';
+import '../../address_book/widgets/address_book_contact_picker_modal.dart';
 import '../models/swap_prototype_models.dart';
 import '../providers/swap_prototype_provider.dart';
 import '../widgets/redacted_receipt_drawer.dart';
@@ -38,10 +42,38 @@ enum _SwapModalSurface {
   assetSelector,
   addressEditor,
   addressScanner,
+  contactPicker,
   slippageSettings,
 }
 
 const double _swapBodyDesignHeight = 580;
+
+AddressBookNetwork? _addressBookNetworkForSwapDestination(
+  SwapPrototypeState state,
+) {
+  final asset = state.externalAsset;
+  return AddressBookNetwork.tryFromChainTicker(asset.chainTicker);
+}
+
+List<AddressBookNetwork> _swapContactPickerNetworks(SwapPrototypeState state) {
+  final network = _addressBookNetworkForSwapDestination(state);
+  return network == null ? const [] : [network];
+}
+
+String _swapContactPickerTitle(SwapPrototypeState state) {
+  final role = state.direction.sendsZec ? 'Recipients' : 'Refunds';
+  return '${state.externalAsset.symbol} $role';
+}
+
+String _swapContactPickerEmptyTitle(SwapPrototypeState state) {
+  final role = state.direction.sendsZec ? 'recipients' : 'refunds';
+  return 'No saved ${state.externalAsset.symbol} $role';
+}
+
+String _swapAddressBookLabel(SwapPrototypeState state) {
+  final role = state.direction.sendsZec ? 'recipient' : 'refund';
+  return '${state.externalAsset.symbol} $role';
+}
 
 class _SwapScreenState extends ConsumerState<SwapScreen> {
   late final ScrollController _scrollController;
@@ -106,6 +138,13 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
     });
   }
 
+  void _openAddressContactPicker() {
+    setState(() {
+      _commandPaletteOpen = false;
+      _swapModal = _SwapModalSurface.contactPicker;
+    });
+  }
+
   void _openSlippageSettings() {
     setState(() {
       _commandPaletteOpen = false;
@@ -120,6 +159,46 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
       if (!mounted) return;
       _shortcutFocusNode.requestFocus();
     });
+  }
+
+  void _selectAddressBookContact(AddressBookContact contact) {
+    ref.read(swapPrototypeProvider.notifier).updateDestination(contact.address);
+    _closeSwapModal();
+  }
+
+  Future<void> _rememberSwapAddress(
+    String value,
+    SwapPrototypeState swapState,
+  ) async {
+    final address = value.trim();
+    if (address.isEmpty) return;
+    final network = _addressBookNetworkForSwapDestination(swapState);
+    if (network == null) return;
+
+    try {
+      final current =
+          ref.read(addressBookProvider).asData?.value ??
+          await ref.read(addressBookProvider.future);
+      if (current == null) return;
+      final normalizedAddress = address.toLowerCase();
+      final alreadySaved = current.contacts.any(
+        (contact) =>
+            contact.network == network &&
+            contact.address.trim().toLowerCase() == normalizedAddress,
+      );
+      if (alreadySaved) return;
+
+      await ref
+          .read(addressBookProvider.notifier)
+          .addContact(
+            label: _swapAddressBookLabel(swapState),
+            network: network,
+            address: address,
+            profilePictureId: kDefaultProfilePictureId,
+          );
+    } catch (_) {
+      // Saving a convenience contact must not block the swap form update.
+    }
   }
 
   @override
@@ -389,11 +468,15 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
                       ),
                       _SwapModalSurface.addressEditor => SwapAddressEditModal(
                         state: swapState,
-                        onSubmitted: (value) {
+                        onSubmitted: (value, remember) {
+                          if (remember) {
+                            unawaited(_rememberSwapAddress(value, swapState));
+                          }
                           swapNotifier.updateDestination(value);
                           _closeSwapModal();
                         },
                         onScan: _openAddressScanner,
+                        onOpenContacts: _openAddressContactPicker,
                         onCancel: _closeSwapModal,
                       ),
                       _SwapModalSurface.addressScanner =>
@@ -403,6 +486,14 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
                             _closeSwapModal();
                           },
                           onCancel: _closeSwapModal,
+                        ),
+                      _SwapModalSurface.contactPicker =>
+                        AddressBookContactPickerModal(
+                          title: _swapContactPickerTitle(swapState),
+                          networks: _swapContactPickerNetworks(swapState),
+                          emptyTitle: _swapContactPickerEmptyTitle(swapState),
+                          onSelected: _selectAddressBookContact,
+                          onCancel: _openAddressEditor,
                         ),
                       _SwapModalSurface.slippageSettings => SwapSlippageModal(
                         slippageBps: swapState.slippageBps,

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
+import 'package:zcash_wallet/src/features/address_book/models/address_book_contact.dart';
+import 'package:zcash_wallet/src/features/address_book/providers/address_book_provider.dart';
 import 'package:zcash_wallet/src/features/send/models/send_prefill_args.dart';
 import 'package:zcash_wallet/src/features/send/screens/send_screen.dart';
 import 'package:zcash_wallet/src/providers/account_models.dart';
@@ -26,7 +28,7 @@ void main() {
 
     await tester.pumpWidget(
       _sendHarness(
-        const SendPrefillArgs(
+        prefill: const SendPrefillArgs(
           id: 'zip321-1',
           source: 'ZIP-321',
           address: _shieldedAddress,
@@ -51,9 +53,59 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('send_review_button')), findsOneWidget);
   });
+
+  testWidgets('contacts label fills the send address from zcash contacts', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+
+    await tester.pumpWidget(
+      _sendHarness(
+        addressBookRepository: _FakeAddressBookRepository([
+          _contact(
+            id: 'alice',
+            label: 'Alice',
+            network: AddressBookNetwork.zcash,
+            address: _shieldedAddress,
+          ),
+          _contact(
+            id: 'sol',
+            label: 'Sol Friend',
+            network: AddressBookNetwork.solana,
+            address: 'solana-address',
+          ),
+        ]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('send_contacts_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('address_book_contact_picker_modal')),
+      findsOneWidget,
+    );
+    expect(find.text('Alice'), findsOneWidget);
+    expect(find.text('Sol Friend'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('address_book_contact_picker_contact_alice')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('address_book_contact_picker_modal')),
+      findsNothing,
+    );
+    expect(_fieldText(tester, 'send_address_field'), _shieldedAddress);
+  });
 }
 
-Widget _sendHarness(SendPrefillArgs prefill) {
+Widget _sendHarness({
+  SendPrefillArgs? prefill,
+  AddressBookRepository? addressBookRepository,
+}) {
   final router = GoRouter(
     initialLocation: '/send',
     routes: [
@@ -69,12 +121,48 @@ Widget _sendHarness(SendPrefillArgs prefill) {
     overrides: [
       appBootstrapProvider.overrideWithValue(_bootstrap),
       syncProvider.overrideWith(_FakeSyncNotifier.new),
+      if (addressBookRepository != null)
+        addressBookRepositoryProvider.overrideWithValue(addressBookRepository),
     ],
     child: MaterialApp.router(
       routerConfig: router,
       builder: (_, child) => AppTheme(data: AppThemeData.light, child: child!),
     ),
   );
+}
+
+AddressBookContact _contact({
+  required String id,
+  required String label,
+  required AddressBookNetwork network,
+  required String address,
+}) {
+  return AddressBookContact(
+    id: id,
+    label: label,
+    network: network,
+    address: address,
+    profilePictureId: 'knight',
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  );
+}
+
+class _FakeAddressBookRepository implements AddressBookRepository {
+  _FakeAddressBookRepository(List<AddressBookContact> contacts)
+    : contacts = [...contacts];
+
+  final List<AddressBookContact> contacts;
+
+  @override
+  Future<List<AddressBookContact>> loadContacts() async => [...contacts];
+
+  @override
+  Future<void> saveContacts(List<AddressBookContact> contacts) async {
+    this.contacts
+      ..clear()
+      ..addAll(contacts);
+  }
 }
 
 Future<void> _setDesktopViewport(WidgetTester tester) async {

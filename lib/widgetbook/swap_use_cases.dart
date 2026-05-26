@@ -68,8 +68,9 @@ Widget buildSwapAddressModalFigmaNode7UseCase(BuildContext context) {
   return _SwapPageModalFrame(
     child: SwapAddressEditModal(
       state: _figmaNode3State,
-      onSubmitted: (_) {},
+      onSubmitted: (_, _) {},
       onScan: () {},
+      onOpenContacts: () {},
       onCancel: () {},
     ),
   );
@@ -363,10 +364,12 @@ class _SwapPageFrame extends StatelessWidget {
     final colors = context.colors;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width =
-            constraints.maxWidth.isFinite ? constraints.maxWidth : 1080.0;
-        final height =
-            constraints.maxHeight.isFinite ? constraints.maxHeight : 720.0;
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 1080.0;
+        final height = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 720.0;
 
         return SizedBox(
           width: width,
@@ -396,10 +399,9 @@ class _SwapPageFrame extends StatelessWidget {
                         ),
                         child: LayoutBuilder(
                           builder: (context, constraints) {
-                            final bodyHeight =
-                                constraints.maxHeight.isFinite
-                                    ? constraints.maxHeight
-                                    : 0.0;
+                            final bodyHeight = constraints.maxHeight.isFinite
+                                ? constraints.maxHeight
+                                : 0.0;
                             return Stack(
                               clipBehavior: Clip.none,
                               children: [
@@ -463,10 +465,12 @@ class _SwapPageModalFrame extends StatelessWidget {
     final colors = context.colors;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width =
-            constraints.maxWidth.isFinite ? constraints.maxWidth : 1080.0;
-        final height =
-            constraints.maxHeight.isFinite ? constraints.maxHeight : 720.0;
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 1080.0;
+        final height = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 720.0;
 
         return SizedBox(
           width: width,
@@ -775,10 +779,9 @@ class _SwapComposerPreviewState extends State<_SwapComposerPreview> {
     setState(() {
       _state = switch (side) {
         SwapAmountInputSide.pay => _state.copyWith(
-          amountInputMode:
-              _state.amountInputMode == SwapAmountInputMode.token
-                  ? SwapAmountInputMode.fiat
-                  : SwapAmountInputMode.token,
+          amountInputMode: _state.amountInputMode == SwapAmountInputMode.token
+              ? SwapAmountInputMode.fiat
+              : SwapAmountInputMode.token,
           amountFiatText: swapFiatInputTextFromTokenText(
             _state,
             asset: _state.direction.fromAsset(_state.externalAsset),
@@ -788,8 +791,8 @@ class _SwapComposerPreviewState extends State<_SwapComposerPreview> {
         SwapAmountInputSide.receive => _state.copyWith(
           receiveAmountInputMode:
               _state.receiveAmountInputMode == SwapAmountInputMode.token
-                  ? SwapAmountInputMode.fiat
-                  : SwapAmountInputMode.token,
+              ? SwapAmountInputMode.fiat
+              : SwapAmountInputMode.token,
           receiveFiatText: swapFiatInputTextFromTokenText(
             _state,
             asset: _state.direction.toAsset(_state.externalAsset),
@@ -859,8 +862,9 @@ class _SwapComposerPreviewState extends State<_SwapComposerPreview> {
           onOpenDestinationAddress: () {
             setState(() {
               _state = _state.copyWith(
-                destinationText:
-                    _state.direction.sendsZec ? '0xrecipient' : '0xrefund',
+                destinationText: _state.direction.sendsZec
+                    ? '0xrecipient'
+                    : '0xrefund',
               );
             });
           },
@@ -974,21 +978,19 @@ SwapPrototypeState _withDerivedFiatTexts(
   bool preserveReceiveFiatInput = false,
 }) {
   return state.copyWith(
-    amountFiatText:
-        preserveAmountFiatInput
-            ? state.amountFiatText
-            : swapFiatInputTextFromTokenText(
-              state,
-              asset: state.direction.fromAsset(state.externalAsset),
-              tokenAmountText: state.amountText,
-            ),
-    receiveFiatText:
-        preserveReceiveFiatInput
-            ? state.receiveFiatText
-            : swapFiatInputTextFromTokenText(
-              state,
-              asset: state.direction.toAsset(state.externalAsset),
-              tokenAmountText: state.receiveAmountText,
-            ),
+    amountFiatText: preserveAmountFiatInput
+        ? state.amountFiatText
+        : swapFiatInputTextFromTokenText(
+            state,
+            asset: state.direction.fromAsset(state.externalAsset),
+            tokenAmountText: state.amountText,
+          ),
+    receiveFiatText: preserveReceiveFiatInput
+        ? state.receiveFiatText
+        : swapFiatInputTextFromTokenText(
+            state,
+            asset: state.direction.toAsset(state.externalAsset),
+            tokenAmountText: state.receiveAmountText,
+          ),
   );
 }
