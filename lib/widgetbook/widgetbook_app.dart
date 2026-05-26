@@ -8,6 +8,7 @@ import 'package:widgetbook/widgetbook.dart';
 
 import '../src/core/theme/app_theme.dart';
 import 'address_book_use_cases.dart';
+import 'activity_use_cases.dart';
 import 'button_use_cases.dart';
 import 'chip_use_cases.dart';
 import 'context_menu_use_cases.dart';
@@ -303,6 +304,48 @@ class WidgetbookApp extends StatelessWidget {
                     WidgetbookUseCase(
                       name: 'Contact picker',
                       builder: buildAddressBookContactPickerModalUseCase,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            WidgetbookFolder(
+              name: 'Activity',
+              children: [
+                WidgetbookComponent(
+                  name: 'Swap Activity',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'In progress - Non-ZEC to ZEC',
+                      builder: buildActivitySwapProgressExternalToZecUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'In progress - ZEC to Non-ZEC',
+                      builder: buildActivitySwapProgressZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Sending - ZEC to Non-ZEC',
+                      builder: buildActivitySwapSendingZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Confirming - ZEC to Non-ZEC',
+                      builder: buildActivitySwapConfirmingZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Success - Non-ZEC to ZEC',
+                      builder: buildActivitySwapSuccessExternalToZecUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Success - ZEC to Non-ZEC',
+                      builder: buildActivitySwapSuccessZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Failed - Non-ZEC to ZEC',
+                      builder: buildActivitySwapFailedExternalToZecUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Failed - ZEC to Non-ZEC',
+                      builder: buildActivitySwapFailedZecToExternalUseCase,
                     ),
                   ],
                 ),
