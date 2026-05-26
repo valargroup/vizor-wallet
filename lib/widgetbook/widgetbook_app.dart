@@ -12,6 +12,7 @@ import 'chip_use_cases.dart';
 import 'color_use_cases.dart';
 import 'icon_use_cases.dart';
 import 'screen_use_cases.dart';
+import 'swap_use_cases.dart';
 import 'text_field_use_cases.dart';
 import 'token_use_cases.dart';
 import 'toast_use_cases.dart';
@@ -27,6 +28,11 @@ import 'typography_use_cases.dart';
 class WidgetbookApp extends StatelessWidget {
   const WidgetbookApp({super.key});
 
+  static const _initialRoute = String.fromEnvironment(
+    'VIZOR_WIDGETBOOK_INITIAL_ROUTE',
+    defaultValue: '/',
+  );
+
   @override
   Widget build(BuildContext context) {
     // `.material` instead of the default `Widgetbook()` because the default
@@ -35,6 +41,7 @@ class WidgetbookApp extends StatelessWidget {
     // wrapper is only chrome for Widgetbook's own navigation — use cases
     // still render inside `AppTheme` via the ThemeAddon below.
     return Widgetbook.material(
+      initialRoute: _initialRoute,
       addons: [
         ThemeAddon<AppThemeData>(
           themes: const [
@@ -93,6 +100,81 @@ class WidgetbookApp extends StatelessWidget {
                     WidgetbookUseCase(
                       name: 'Enabled',
                       builder: buildLostPasswordEnabledUseCase,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            WidgetbookFolder(
+              name: 'Swap',
+              children: [
+                WidgetbookComponent(
+                  name: 'Swap Page',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Figma 1 - In amount active',
+                      builder: buildSwapPageFigmaNode1UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 2 - Out amount active',
+                      builder: buildSwapPageFigmaNode2UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 3 - Amount entered',
+                      builder: buildSwapPageFigmaNode3UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 5 - Direction switched',
+                      builder: buildSwapPageFigmaNode5UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 6 - Fiat value input',
+                      builder: buildSwapPageFigmaNode6UseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Swap Modals',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Figma 7 - Address modal',
+                      builder: buildSwapAddressModalFigmaNode7UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 7a - Scan permission',
+                      builder: buildSwapAddressScanModalPermissionUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 7b - Scan denied',
+                      builder: buildSwapAddressScanModalDeniedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 7c - Scan active',
+                      builder: buildSwapAddressScanModalActiveUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 7d - Scan loading',
+                      builder: buildSwapAddressScanModalLoadingUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma - Slippage modal',
+                      builder: buildSwapSlippageModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma - Slippage custom',
+                      builder: buildSwapSlippageModalCustomUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma - Slippage invalid',
+                      builder: buildSwapSlippageModalInvalidUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 8 - Asset modal',
+                      builder: buildSwapAssetModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Figma 9 - Asset modal empty',
+                      builder: buildSwapAssetModalEmptyUseCase,
                     ),
                   ],
                 ),
@@ -238,6 +320,31 @@ class WidgetbookApp extends StatelessWidget {
               name: 'Toast',
               useCases: [
                 WidgetbookUseCase(name: 'All', builder: buildToastUseCase),
+              ],
+            ),
+            WidgetbookComponent(
+              name: 'Swap Widget',
+              useCases: [
+                WidgetbookUseCase(
+                  name: 'Figma 1 - In amount active',
+                  builder: buildSwapWidgetFigmaNode1UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Figma 2 - Out amount active',
+                  builder: buildSwapWidgetFigmaNode2UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Figma 3 - Amount entered',
+                  builder: buildSwapWidgetFigmaNode3UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Figma 5 - Direction switched',
+                  builder: buildSwapWidgetFigmaNode5UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Figma 6 - Fiat value input',
+                  builder: buildSwapWidgetFigmaNode6UseCase,
+                ),
               ],
             ),
           ],
