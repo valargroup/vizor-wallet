@@ -13,6 +13,7 @@ import '../../../core/layout/app_main_sidebar.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_context_menu.dart';
 import '../../../core/widgets/app_decorative_divider.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_pane_modal_overlay.dart';
@@ -740,6 +741,7 @@ class _AccountRowMenuButtonState extends State<_AccountRowMenuButton> {
 
   void _showMenu() {
     final overlay = Overlay.of(context);
+    final appTheme = AppTheme.of(context);
     _menuEntry = OverlayEntry(
       builder: (overlayContext) {
         return Stack(
@@ -756,12 +758,14 @@ class _AccountRowMenuButtonState extends State<_AccountRowMenuButton> {
               targetAnchor: Alignment.topLeft,
               followerAnchor: Alignment.topLeft,
               offset: const Offset(0, 22),
-              child: _AccountContextMenu(
-                onEditName: _handleEditName,
-                onChangePicture: _handleChangePicture,
-                onRemove: _handleRemove,
-                canRemove: widget.canRemove,
-                onDismiss: () => _hideMenu(),
+              child: AppTheme(
+                data: appTheme,
+                child: _AccountContextMenu(
+                  onEditName: _handleEditName,
+                  onChangePicture: _handleChangePicture,
+                  onRemove: _handleRemove,
+                  canRemove: widget.canRemove,
+                ),
               ),
             ),
           ],
@@ -839,6 +843,7 @@ class _AccountRowMenuButtonState extends State<_AccountRowMenuButton> {
   }
 
   void _setHovered(bool value) {
+    if (!mounted) return;
     if (_isHovered == value) return;
     setState(() {
       _isHovered = value;
@@ -852,7 +857,6 @@ class _AccountContextMenu extends StatelessWidget {
     required this.onChangePicture,
     required this.onRemove,
     required this.canRemove,
-    required this.onDismiss,
   });
 
   static const _width = 160.0;
@@ -861,170 +865,33 @@ class _AccountContextMenu extends StatelessWidget {
   final VoidCallback onChangePicture;
   final VoidCallback onRemove;
   final bool canRemove;
-  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final shadowColor = AppTheme.of(context) == AppThemeData.light
-        ? const Color(0xFFE1E1E1)
-        : const Color(0x66000000);
-
-    return DefaultTextStyle.merge(
-      style: const TextStyle(decoration: TextDecoration.none),
-      child: SizedBox(
-        width: _width,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.background.inverse,
-            borderRadius: BorderRadius.circular(AppRadii.small),
-            border: Border.all(color: colors.border.subtleOpacity),
-            boxShadow: [
-              BoxShadow(
-                color: shadowColor,
-                offset: Offset(0, 2),
-                blurRadius: 2,
-              ),
-              BoxShadow(
-                color: shadowColor,
-                offset: Offset(0, 10),
-                blurRadius: 15,
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.xxs,
-              vertical: AppSpacing.xs,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _AccountContextMenuItem(
-                  iconName: AppIcons.scroll,
-                  label: 'Edit Name',
-                  onTap: onEditName,
-                ),
-                const SizedBox(height: AppSpacing.xxs),
-                _AccountContextMenuItem(
-                  iconName: AppIcons.user,
-                  label: 'Change Picture',
-                  onTap: onChangePicture,
-                ),
-                if (canRemove) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.xxs / 2,
-                    ),
-                    child: SizedBox(
-                      height: 1,
-                      width: double.infinity,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: _contextMenuDividerColor(context),
-                        ),
-                      ),
-                    ),
-                  ),
-                  _AccountContextMenuItem(
-                    iconName: AppIcons.trash,
-                    label: 'Remove Account',
-                    destructive: true,
-                    onTap: onRemove,
-                  ),
-                ],
-              ],
-            ),
-          ),
+    return AppContextMenu(
+      width: _width,
+      children: [
+        AppContextMenuItem(
+          iconName: AppIcons.scroll,
+          label: 'Edit Name',
+          onTap: onEditName,
         ),
-      ),
+        const SizedBox(height: AppSpacing.xxs),
+        AppContextMenuItem(
+          iconName: AppIcons.user,
+          label: 'Change Picture',
+          onTap: onChangePicture,
+        ),
+        if (canRemove) ...[
+          const AppContextMenuDivider(),
+          AppContextMenuItem(
+            iconName: AppIcons.trash,
+            label: 'Remove Account',
+            destructive: true,
+            onTap: onRemove,
+          ),
+        ],
+      ],
     );
   }
-}
-
-class _AccountContextMenuItem extends StatefulWidget {
-  const _AccountContextMenuItem({
-    required this.iconName,
-    required this.label,
-    required this.onTap,
-    this.destructive = false,
-  });
-
-  final String iconName;
-  final String label;
-  final VoidCallback onTap;
-  final bool destructive;
-
-  @override
-  State<_AccountContextMenuItem> createState() =>
-      _AccountContextMenuItemState();
-}
-
-class _AccountContextMenuItemState extends State<_AccountContextMenuItem> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final isLight = AppTheme.of(context) == AppThemeData.light;
-    final itemColor = widget.destructive
-        ? (isLight ? const Color(0xFFB67CC0) : colors.text.destructive)
-        : colors.text.inverse;
-    final iconColor = widget.destructive
-        ? (isLight ? const Color(0xFFAC6CB7) : colors.icon.destructive)
-        : colors.icon.inverse;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => _setHovered(true),
-      onExit: (_) => _setHovered(false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-          height: 26,
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.xs,
-            vertical: AppSpacing.xxs,
-          ),
-          decoration: BoxDecoration(
-            color: _isHovered ? colors.state.hover : null,
-            borderRadius: BorderRadius.circular(AppSpacing.xxs),
-          ),
-          child: Row(
-            children: [
-              AppIcon(
-                widget.iconName,
-                size: AppIconSize.medium,
-                color: iconColor,
-              ),
-              const SizedBox(width: AppSpacing.xxs),
-              Expanded(
-                child: Text(
-                  widget.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.labelMedium.copyWith(color: itemColor),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _setHovered(bool value) {
-    if (_isHovered == value) return;
-    setState(() {
-      _isHovered = value;
-    });
-  }
-}
-
-Color _contextMenuDividerColor(BuildContext context) {
-  return AppTheme.of(context) == AppThemeData.light
-      ? const Color(0x1AFFFFFF)
-      : const Color(0x262D3232);
 }
