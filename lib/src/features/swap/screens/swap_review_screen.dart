@@ -8,12 +8,15 @@ import '../../../core/formatting/zec_amount.dart';
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_layout.dart';
 import '../../../core/layout/app_main_sidebar.dart';
+import '../../../core/profile_pictures.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../models/swap_prototype_models.dart';
+import '../models/swap_activity_navigation.dart';
 import '../providers/swap_prototype_provider.dart';
+import '../widgets/swap_near_intents_attribution.dart';
 import '../widgets/swap_review_page_content.dart';
 
 class SwapReviewScreen extends ConsumerStatefulWidget {
@@ -42,6 +45,19 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
       if (account.uuid == accountUuid) return account.name;
     }
     return null;
+  }
+
+  String _accountProfilePictureIdFor(
+    AccountState? accountState,
+    String? accountUuid,
+  ) {
+    if (accountUuid == null || accountUuid.trim().isEmpty) {
+      return kDefaultProfilePictureId;
+    }
+    for (final account in accountState?.accounts ?? const <AccountInfo>[]) {
+      if (account.uuid == accountUuid) return account.profilePictureId;
+    }
+    return kDefaultProfilePictureId;
   }
 
   bool _isHardwareIntent(SwapPrototypeIntent intent) {
@@ -78,24 +94,27 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
       if (!_startingIntent) {
         setState(() => _startingIntent = true);
       }
-      final started =
-          await ref.read(swapPrototypeProvider.notifier).startIntent();
+      final started = await ref
+          .read(swapPrototypeProvider.notifier)
+          .startIntent();
       if (!mounted) return;
       if (!started) {
         setState(() => _startingIntent = false);
         return;
       }
-      final startedIntent =
-          ref.read(swapPrototypeProvider).selectedIntentOrNull;
+      final startedIntent = ref
+          .read(swapPrototypeProvider)
+          .selectedIntentOrNull;
       if (startedIntent != null) {
         final needsKeystoneDeposit =
             _isHardwareIntent(startedIntent) &&
             startedIntent.direction == SwapDirection.zecToExternal &&
             !(startedIntent.depositTxHash?.trim().isNotEmpty ?? false);
         context.go(
-          Uri(
-            path: '/activity/swap/${Uri.encodeComponent(startedIntent.id)}',
-            queryParameters: {if (needsKeystoneDeposit) 'sign': 'zecDeposit'},
+          swapActivityDetailUri(
+            intentId: startedIntent.id,
+            returnTarget: SwapActivityReturnTarget.swap,
+            autoSignZecDeposit: needsKeystoneDeposit,
           ).toString(),
         );
         return;
@@ -131,10 +150,14 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
       accountState,
       swapState.reviewAccountUuid,
     );
+    final accountProfilePictureId = _accountProfilePictureIdFor(
+      accountState,
+      swapState.reviewAccountUuid,
+    );
     final startBlockedReason =
         _reviewQuoteExceedsAvailableZec(quote, sync.spendableBalance)
-            ? 'Required pay exceeds available ZEC. Review a smaller target amount.'
-            : null;
+        ? 'Required pay exceeds available ZEC. Review a smaller target amount.'
+        : null;
 
     return AppDesktopShell(
       sidebar: const AppMainSidebar(),
@@ -158,30 +181,57 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
             ),
             const SizedBox(height: AppSpacing.s),
             Expanded(
-              child: SwapReviewPageScrollArea(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: SwapReviewPageContent(
-                    quote: quote,
-                    accountLabel: accountLabel,
-                    expired: swapState.quoteExpired,
-                    amountWarning: swapState.reviewAmountDifferenceWarning,
-                    startError: swapState.statusError,
-                    startBlockedReason: startBlockedReason,
-                  ),
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.center,
-              child: SwapReviewPageActions(
-                expired: swapState.quoteExpired,
-                starting: swapState.startSubmitting,
-                startBlockedReason: startBlockedReason,
-                sendsZec: quote.direction.sendsZec,
-                onReviewAgain: _reviewAgain,
-                onCancelReview: _returnToSwap,
-                onStartIntent: _startIntent,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Stack(
+                    children: [
+                      Positioned.fill(
+                        child: SwapReviewPageScrollArea(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SwapReviewPageContent(
+                                    quote: quote,
+                                    addressPlan: addressPlan,
+                                    accountLabel: accountLabel,
+                                    accountProfilePictureId:
+                                        accountProfilePictureId,
+                                    expired: swapState.quoteExpired,
+                                    amountWarning:
+                                        swapState.reviewAmountDifferenceWarning,
+                                    startError: swapState.statusError,
+                                    startBlockedReason: startBlockedReason,
+                                  ),
+                                  const SizedBox(height: AppSpacing.base),
+                                  SwapReviewPageActions(
+                                    expired: swapState.quoteExpired,
+                                    starting: swapState.startSubmitting,
+                                    startBlockedReason: startBlockedReason,
+                                    sendsZec: quote.direction.sendsZec,
+                                    onReviewAgain: _reviewAgain,
+                                    onCancelReview: _returnToSwap,
+                                    onStartIntent: _startIntent,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (constraints.maxHeight >= 520)
+                        const Positioned(
+                          left: 0,
+                          bottom: AppSpacing.md,
+                          child: SwapNearIntentsAttribution(),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ],
