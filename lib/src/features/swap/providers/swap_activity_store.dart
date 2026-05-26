@@ -1,33 +1,18 @@
 import 'dart:convert';
-import 'dart:io';
-import 'dart:math';
 
-import 'package:crypto/crypto.dart' as crypto;
-import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/app_secure_store.dart';
-import '../../../core/storage/wallet_paths.dart';
 import '../models/swap_prototype_models.dart';
 
 const _swapActivityKey = 'zcash_swap_activities_v1';
 const _swapActivityStorageVersion = 1;
-const _swapActivityEncryptedStorageVersion = 2;
 const _swapActivityRecordsKey = 'records';
 const _swapActivityVersionKey = 'version';
-const _swapActivityMetadataKeyPrefix = 'zcash_swap_activity_metadata_key_v1';
-const _swapActivityEncryptionAlgorithm = 'AES-256-GCM-HKDF-SHA256';
-const _swapActivityEncryptionInfo = 'vizor-swap-activity-metadata-v1';
-const _swapActivityEncryptionKeyLength = 32;
-const _swapActivitySaltLength = 32;
-const _swapActivityNonceLength = 12;
 
 String _swapActivityKeyFor(String accountUuid) =>
     '$_swapActivityKey:$accountUuid';
-
-String _swapActivityMetadataKeyFor(String accountUuid) =>
-    '$_swapActivityMetadataKeyPrefix:$accountUuid';
 
 final swapActivityStoreProvider = Provider<SwapActivityStore>((ref) {
   return AppSecureStoreSwapActivityStore(AppSecureStore.instance);
@@ -75,82 +60,23 @@ abstract interface class SwapActivityStore {
 }
 
 class AppSecureStoreSwapActivityStore implements SwapActivityStore {
-  AppSecureStoreSwapActivityStore(
-    this._storage, {
-    Future<Directory> Function()? supportDirectoryProvider,
-  }) : _supportDirectoryProvider =
-           supportDirectoryProvider ?? getWalletSupportDirectory;
+  const AppSecureStoreSwapActivityStore(this._storage);
 
   final AppSecureStore _storage;
-  final Future<Directory> Function() _supportDirectoryProvider;
 
   @override
   Future<List<SwapIntentRecord>> loadRecords({
     required String accountUuid,
   }) async {
-    final file = await _storageFileFor(accountUuid);
-    if (await file.exists()) {
-      final records = await _loadEncryptedRecords(file, accountUuid);
-      if (records != null) return records;
-    }
-
-    final legacyRecords = await _loadLegacyRecords(accountUuid);
-    if (legacyRecords == null) {
-      return const [];
-    }
-
-    await saveRecords(accountUuid: accountUuid, records: legacyRecords);
-    await _deleteLegacyRecordsBestEffort(accountUuid);
-    return legacyRecords;
-  }
-
-  @override
-  Future<void> saveRecords({
-    required String accountUuid,
-    required List<SwapIntentRecord> records,
-  }) async {
-    final clearText = jsonEncode({
-      _swapActivityVersionKey: _swapActivityStorageVersion,
-      _swapActivityRecordsKey: [
-        for (final record in records)
-          _recordToJson(record.copyWith(accountUuid: accountUuid)),
-      ],
-    });
-    final encrypted = await _encryptStoragePayload(accountUuid, clearText);
-    final file = await _storageFileFor(accountUuid);
-    await file.parent.create(recursive: true);
-    await file.writeAsString(encrypted, flush: true);
-    await _deleteLegacyRecordsBestEffort(accountUuid);
-  }
-
-  Future<List<SwapIntentRecord>?> _loadEncryptedRecords(
-    File file,
-    String accountUuid,
-  ) async {
-    try {
-      final clearText = await _decryptStoragePayload(
-        accountUuid,
-        await file.readAsString(),
-      );
-      final records = _recordItemsFromStorage(jsonDecode(clearText));
-      return _recordsFromStorage(records, accountUuid);
-    } on FormatException {
-      return null;
-    } on SecretBoxAuthenticationError {
-      return null;
-    }
-  }
-
-  Future<List<SwapIntentRecord>?> _loadLegacyRecords(String accountUuid) async {
     final raw = await _storage.readString(_swapActivityKeyFor(accountUuid));
     if (raw == null || raw.trim().isEmpty) {
-      return null;
+      return const [];
     }
     try {
       final records = _recordItemsFromStorage(jsonDecode(raw));
-      return _recordsFromStorage(records, accountUuid);
+      return _recordsFromStorage(records, accountUuid) ?? const [];
     } on FormatException {
-      return null;
+      return const [];
     }
   }
 
@@ -168,139 +94,27 @@ class AppSecureStoreSwapActivityStore implements SwapActivityStore {
     ];
   }
 
-  Future<String> _encryptStoragePayload(
-    String accountUuid,
-    String clearText,
-  ) async {
-    final metadataKey = await _metadataKeyFor(accountUuid);
-    final salt = _randomBytes(_swapActivitySaltLength);
-    final nonce = _randomBytes(_swapActivityNonceLength);
-    final secretKey = await _derivePayloadKey(metadataKey, salt);
-    final secretBox = await AesGcm.with256bits().encrypt(
-      utf8.encode(clearText),
-      secretKey: secretKey,
-      nonce: nonce,
+  @override
+  Future<void> saveRecords({
+    required String accountUuid,
+    required List<SwapIntentRecord> records,
+  }) async {
+    await _storage.writeString(
+      _swapActivityKeyFor(accountUuid),
+      jsonEncode({
+        _swapActivityVersionKey: _swapActivityStorageVersion,
+        _swapActivityRecordsKey: [
+          for (final record in records)
+            _recordToJson(record.copyWith(accountUuid: accountUuid)),
+        ],
+      }),
     );
-    return jsonEncode({
-      _swapActivityVersionKey: _swapActivityEncryptedStorageVersion,
-      'algorithm': _swapActivityEncryptionAlgorithm,
-      'keyId': 'v1',
-      'salt': base64Encode(salt),
-      'nonce': base64Encode(secretBox.nonce),
-      'cipherText': base64Encode(secretBox.cipherText),
-      'mac': base64Encode(secretBox.mac.bytes),
-    });
-  }
-
-  Future<String> _decryptStoragePayload(
-    String accountUuid,
-    String encryptedText,
-  ) async {
-    final decoded = jsonDecode(encryptedText);
-    if (decoded is! Map) {
-      throw const FormatException('Swap activity payload is not an object.');
-    }
-    if (decoded[_swapActivityVersionKey] !=
-        _swapActivityEncryptedStorageVersion) {
-      throw const FormatException(
-        'Unsupported swap activity encryption version.',
-      );
-    }
-    if (decoded['algorithm'] != _swapActivityEncryptionAlgorithm) {
-      throw const FormatException('Unsupported swap activity encryption.');
-    }
-
-    final metadataKey = await _metadataKeyFor(accountUuid);
-    final salt = _decodeBase64Field(decoded['salt'], 'salt');
-    final nonce = _decodeBase64Field(decoded['nonce'], 'nonce');
-    final cipherText = _decodeBase64Field(decoded['cipherText'], 'cipherText');
-    final mac = _decodeBase64Field(decoded['mac'], 'mac');
-    final secretKey = await _derivePayloadKey(metadataKey, salt);
-    final clearBytes = await AesGcm.with256bits().decrypt(
-      SecretBox(cipherText, nonce: nonce, mac: Mac(mac)),
-      secretKey: secretKey,
-    );
-    return utf8.decode(clearBytes);
-  }
-
-  Future<SecretKey> _derivePayloadKey(List<int> metadataKey, List<int> salt) {
-    return Hkdf(
-      hmac: Hmac.sha256(),
-      outputLength: _swapActivityEncryptionKeyLength,
-    ).deriveKey(
-      secretKey: SecretKey(metadataKey),
-      nonce: salt,
-      info: utf8.encode(_swapActivityEncryptionInfo),
-    );
-  }
-
-  Future<List<int>> _metadataKeyFor(String accountUuid) async {
-    final keyName = _swapActivityMetadataKeyFor(accountUuid);
-    final existing = await _storage.readString(keyName);
-    final decoded = _tryDecodeBase64(existing);
-    if (decoded != null && decoded.length == _swapActivityEncryptionKeyLength) {
-      return decoded;
-    }
-
-    final generated = _randomBytes(_swapActivityEncryptionKeyLength);
-    await _storage.writeString(keyName, base64Encode(generated));
-    return generated;
-  }
-
-  Future<File> _storageFileFor(String accountUuid) async {
-    final supportDirectory = await _supportDirectoryProvider();
-    final dir = Directory(
-      '${supportDirectory.path}${Platform.pathSeparator}swap'
-      '${Platform.pathSeparator}activity',
-    );
-    final accountHash = crypto.sha256
-        .convert(utf8.encode(accountUuid))
-        .toString();
-    return File('${dir.path}${Platform.pathSeparator}$accountHash.json');
-  }
-
-  Future<void> _deleteLegacyRecordsBestEffort(String accountUuid) async {
-    try {
-      await _storage.delete(_swapActivityKeyFor(accountUuid));
-    } on Object {
-      // The encrypted file is already authoritative; a stale legacy secure
-      // storage value should not make the save path fail.
-    }
-  }
-}
-
-List<int> _randomBytes(int length) {
-  final random = Random.secure();
-  return List<int>.generate(length, (_) => random.nextInt(256));
-}
-
-List<int> _decodeBase64Field(Object? value, String name) {
-  if (value is! String) {
-    throw FormatException('Missing swap activity encryption $name.');
-  }
-  try {
-    return base64Decode(value);
-  } on FormatException {
-    throw FormatException('Invalid swap activity encryption $name.');
-  }
-}
-
-List<int>? _tryDecodeBase64(String? value) {
-  if (value == null || value.isEmpty) return null;
-  try {
-    return base64Decode(value);
-  } on FormatException {
-    return null;
   }
 }
 
 @visibleForTesting
-String legacySwapActivityStorageKeyForTest(String accountUuid) =>
+String swapActivityStorageKeyForTest(String accountUuid) =>
     _swapActivityKeyFor(accountUuid);
-
-@visibleForTesting
-String swapActivityMetadataKeyForTest(String accountUuid) =>
-    _swapActivityMetadataKeyFor(accountUuid);
 
 List<Object?>? _recordItemsFromStorage(Object? decoded) {
   if (decoded is List) {

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,27 +13,17 @@ void main() {
   late AppSecureStore secureStore;
   late SwapActivityStore activityStore;
   late SwapDraftStore draftStore;
-  late Directory tempDir;
 
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
-    tempDir = await Directory.systemTemp.createTemp(
-      'swap_activity_store_test_',
-    );
     secureStore = AppSecureStore.instance;
     await secureStore.deleteAll();
-    activityStore = AppSecureStoreSwapActivityStore(
-      secureStore,
-      supportDirectoryProvider: () async => tempDir,
-    );
+    activityStore = AppSecureStoreSwapActivityStore(secureStore);
     draftStore = AppSecureStoreSwapDraftStore(secureStore);
   });
 
   tearDown(() async {
     await secureStore.deleteAll();
-    if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
-    }
   });
 
   test('round-trips the swap activity fields needed for recovery', () async {
@@ -164,7 +153,7 @@ void main() {
     expect(accountTwo.single.accountUuid, 'account-2');
   });
 
-  test('persists swap activity in an encrypted local metadata file', () async {
+  test('persists swap activity in account-scoped secure storage', () async {
     final intent = _minimalIntent(
       id: 'swap-raw-record',
       accountUuid: 'account-1',
@@ -176,31 +165,27 @@ void main() {
     );
 
     final raw = await secureStore.readString(
-      legacySwapActivityStorageKeyForTest('account-1'),
+      swapActivityStorageKeyForTest('account-1'),
     );
-    final metadataKey = await secureStore.readString(
-      swapActivityMetadataKeyForTest('account-1'),
-    );
-    final files = _persistedFiles(tempDir);
-    final encryptedPayload = files.single.readAsStringSync();
+    final decoded = jsonDecode(raw!) as Map<String, dynamic>;
+    final records = decoded['records'] as List<dynamic>;
 
-    expect(raw, isNull);
-    expect(metadataKey, isNotNull);
-    expect(files, hasLength(1));
-    expect(encryptedPayload, contains('"version":2'));
-    expect(encryptedPayload, contains('"cipherText"'));
-    expect(encryptedPayload, isNot(contains('swap-raw-record')));
-    expect(encryptedPayload, isNot(contains('quote-swap-raw-record')));
-    expect(encryptedPayload, isNot(contains('"records"')));
-    expect(encryptedPayload, isNot(contains('"title"')));
-    expect(encryptedPayload, isNot(contains('"steps"')));
-    expect(encryptedPayload, isNot(contains('"exposure"')));
-    expect(encryptedPayload, isNot(contains('"receipt"')));
+    expect(decoded['version'], 1);
+    expect(records, hasLength(1));
+    expect(records.single, containsPair('id', 'swap-raw-record'));
+    expect(
+      records.single,
+      containsPair('providerQuoteId', 'quote-swap-raw-record'),
+    );
+    expect(raw, isNot(contains('"title"')));
+    expect(raw, isNot(contains('"steps"')));
+    expect(raw, isNot(contains('"exposure"')));
+    expect(raw, isNot(contains('"receipt"')));
   });
 
-  test('loads legacy raw-list swap activity records', () async {
+  test('loads raw-list swap activity records', () async {
     await secureStore.writeString(
-      legacySwapActivityStorageKeyForTest('account-1'),
+      swapActivityStorageKeyForTest('account-1'),
       jsonEncode([
         {
           'id': 'legacy-swap',
@@ -226,12 +211,9 @@ void main() {
     expect(restored.single.accountUuid, 'account-1');
     expect(restored.single.direction, SwapDirection.zecToExternal);
     expect(
-      await secureStore.readString(
-        legacySwapActivityStorageKeyForTest('account-1'),
-      ),
-      isNull,
+      await secureStore.readString(swapActivityStorageKeyForTest('account-1')),
+      isNotNull,
     );
-    expect(_persistedFiles(tempDir), hasLength(1));
   });
 
   test('round-trips only the last attempted swap pair', () async {
@@ -278,14 +260,6 @@ void main() {
       expect(restored.slippageBps, 150);
     },
   );
-}
-
-List<File> _persistedFiles(Directory directory) {
-  if (!directory.existsSync()) return const [];
-  return directory
-      .listSync(recursive: true)
-      .whereType<File>()
-      .toList(growable: false);
 }
 
 SwapPrototypeIntent _minimalIntent({
