@@ -64,20 +64,6 @@ void main() {
     expect(find.text('Swap'), findsOneWidget);
   });
 
-  testWidgets('uses Address Book when scan is pushed from address book', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _backResolverHarness(initialLocation: '/address-book'),
-    );
-    await tester.pump();
-
-    await tester.tap(find.text('Open Address Scan'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Address Book'), findsOneWidget);
-  });
-
   testWidgets('keeps send status pinned to Home', (tester) async {
     await tester.pumpWidget(_backResolverHarness(initialLocation: '/send'));
     await tester.pump();
@@ -134,18 +120,6 @@ Widget _backResolverHarness({required String initialLocation}) {
       ),
       GoRoute(
         path: '/address-book',
-        builder: (_, _) => const Column(
-          children: [
-            AppRouteBackLink(),
-            _PushRouteButton(
-              label: 'Open Address Scan',
-              location: '/address-book/scan',
-            ),
-          ],
-        ),
-      ),
-      GoRoute(
-        path: '/address-book/scan',
         builder: (_, _) => const AppRouteBackLink(),
       ),
       GoRoute(

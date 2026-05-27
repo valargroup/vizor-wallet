@@ -25,7 +25,6 @@ import 'src/features/activity/screens/activity_screen.dart';
 import 'src/features/activity/screens/activity_transaction_status_screen.dart';
 import 'src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'src/features/accounts/screens/accounts_screen.dart';
-import 'src/features/address_book/screens/address_book_scan_screen.dart';
 import 'src/features/address_book/screens/address_book_screen.dart';
 import 'src/features/home/screens/home_screen.dart';
 import 'src/features/about/screens/about_screen.dart';
@@ -551,10 +550,6 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/address-book',
         builder: (_, _) => const AddressBookScreen(),
-      ),
-      GoRoute(
-        path: '/address-book/scan',
-        builder: (_, _) => const AddressBookScanScreen(),
       ),
       GoRoute(path: '/activity', builder: (_, _) => const ActivityScreen()),
       GoRoute(

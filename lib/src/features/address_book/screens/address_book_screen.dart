@@ -20,6 +20,7 @@ import '../../../core/widgets/app_profile_picture.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../send/models/send_prefill_args.dart';
+import '../../swap/widgets/swap_address_qr_scan_modal.dart';
 import '../models/address_book_contact.dart';
 import '../providers/address_book_provider.dart';
 import '../widgets/address_book_network_icon.dart';
@@ -36,6 +37,7 @@ enum _AddressBookModalKind {
   editContact,
   avatarPicker,
   networkSelector,
+  addressScanner,
   removeContact,
 }
 
@@ -135,13 +137,24 @@ class _AddressBookScreenState extends ConsumerState<AddressBookScreen> {
     });
   }
 
-  Future<void> _scanAddress() async {
+  void _scanAddress() {
+    if (_draft == null) return;
+    setState(() => _modal = _AddressBookModalKind.addressScanner);
+  }
+
+  void _selectScannedAddress(String address) {
     final draft = _draft;
-    if (draft == null) return;
-    final scanned = await context.push<String>('/address-book/scan');
-    if (!mounted || scanned == null || scanned.trim().isEmpty) return;
+    final scanned = address.trim();
+    if (draft == null || scanned.isEmpty) {
+      _returnToDraftForm();
+      return;
+    }
     setState(() {
-      _draft = draft.copyWith(address: scanned.trim());
+      _draft = draft.copyWith(address: scanned);
+      _modal = _editingContact == null
+          ? _AddressBookModalKind.addContact
+          : _AddressBookModalKind.editContact;
+      _submitError = null;
     });
   }
 
@@ -276,6 +289,11 @@ class _AddressBookScreenState extends ConsumerState<AddressBookScreen> {
         return _NetworkSelectorModal(
           selectedNetwork: draft?.network ?? AddressBookNetwork.zcash,
           onSelected: _selectNetwork,
+          onCancel: _returnToDraftForm,
+        );
+      case _AddressBookModalKind.addressScanner:
+        return SwapAddressQrScanModal(
+          onAddressScanned: _selectScannedAddress,
           onCancel: _returnToDraftForm,
         );
       case _AddressBookModalKind.removeContact:
@@ -1069,7 +1087,7 @@ class _ContactFormModal extends StatefulWidget {
   final ValueChanged<_ContactDraft> onChanged;
   final VoidCallback onAvatarPressed;
   final VoidCallback onNetworkPressed;
-  final Future<void> Function() onScanAddress;
+  final VoidCallback onScanAddress;
   final VoidCallback onCancel;
   final Future<void> Function() onSubmit;
 
@@ -1170,7 +1188,7 @@ class _ContactFormModalState extends State<_ContactFormModal> {
               hintText: 'Add Address',
               trailing: _IconButtonLike(
                 semanticLabel: 'Scan address QR',
-                onTap: () => unawaited(widget.onScanAddress()),
+                onTap: widget.onScanAddress,
                 child: const AppIcon(AppIcons.qr),
               ),
               trailingSlotWidth: 40,

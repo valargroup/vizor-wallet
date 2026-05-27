@@ -146,6 +146,48 @@ void main() {
     expect(find.text('Zcash'), findsNothing);
   });
 
+  testWidgets('opens address scanner as an in-pane modal', (tester) async {
+    await _setDesktopViewport(tester);
+    final repo = _FakeAddressBookRepository();
+
+    await tester.pumpWidget(_addressBookHarness(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('address_book_add_contact_button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('address_book_contact_label_field')),
+      'Alice',
+    );
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Scan address QR'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('swap_address_scan_modal')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('address_book_contact_label_field')),
+      findsNothing,
+    );
+    expect(find.text('scan route'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('swap_address_scan_cancel_button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('swap_address_scan_modal')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('address_book_contact_label_field')),
+      findsOneWidget,
+    );
+    expect(find.text('Alice'), findsOneWidget);
+  });
+
   testWidgets('sends Zcash contacts with a send prefill', (tester) async {
     await _setDesktopViewport(tester);
     final repo = _FakeAddressBookRepository([
@@ -233,10 +275,6 @@ Widget _addressBookHarness(
       GoRoute(
         path: '/address-book',
         builder: (_, _) => const AddressBookScreen(),
-      ),
-      GoRoute(
-        path: '/address-book/scan',
-        builder: (_, _) => const SizedBox.shrink(),
       ),
       GoRoute(
         path: '/send',
