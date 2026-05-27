@@ -609,14 +609,20 @@ void main() {
     var expanded = false;
     await tester.pumpWidget(
       _themeHarness(
-        StatefulBuilder(
-          builder: (context, setState) {
-            return _statusTestPage(
-              activeTab: SwapStatusTab.details,
-              detailsExpanded: expanded,
-              onToggleDetails: () => setState(() => expanded = !expanded),
-            );
-          },
+        Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) => StatefulBuilder(
+                builder: (context, setState) {
+                  return _statusTestPage(
+                    activeTab: SwapStatusTab.details,
+                    detailsExpanded: expanded,
+                    onToggleDetails: () => setState(() => expanded = !expanded),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -707,6 +713,15 @@ void main() {
     );
     expect(find.text('Less Details'), findsOneWidget);
     expect(find.text('Slippage tolerance'), findsOneWidget);
+    expect(find.text('Price protection'), findsNothing);
+    expect(
+      _tooltipWithMessage('Swap fee details coming soon.'),
+      findsOneWidget,
+    );
+    expect(
+      _tooltipWithMessage('Minimum receive details coming soon.'),
+      findsOneWidget,
+    );
     expect(
       find.ancestor(
         of: find.text('Less Details'),
@@ -3881,6 +3896,14 @@ void main() {
     expect(find.text('Slippage tolerance'), findsOneWidget);
     expect(find.text('0.00001 ZEC (0.5%)'), findsOneWidget);
     expect(find.text('Price protection'), findsNothing);
+    expect(
+      _tooltipWithMessage('Swap fee details coming soon.'),
+      findsOneWidget,
+    );
+    expect(
+      _tooltipWithMessage('Minimum receive details coming soon.'),
+      findsOneWidget,
+    );
     expect(swapProvider.requests.single.slippageBps, 50);
   });
 
@@ -6138,15 +6161,11 @@ Widget _statusTestPage({
           SwapStatusDetailRowData(
             label: 'Swap fee',
             value: 'Included in shown rate',
+            help: true,
           ),
           SwapStatusDetailRowData(
             label: 'Slippage tolerance',
             value: '0.25 USDC (0.5%)',
-          ),
-          SwapStatusDetailRowData(
-            label: 'Price protection',
-            value: '0.04 ZEC (5.0%)',
-            help: true,
           ),
           SwapStatusDetailRowData(
             label: 'Minimum Receive',
@@ -7311,6 +7330,12 @@ String _destinationSummaryText(WidgetTester tester) {
   if (finder.evaluate().isEmpty) return '';
   final text = tester.widget<Text>(finder.first).data ?? '';
   return text.startsWith('Add ') ? '' : text;
+}
+
+Finder _tooltipWithMessage(String message) {
+  return find.byWidgetPredicate(
+    (widget) => widget is Tooltip && widget.message == message,
+  );
 }
 
 String _fieldText(WidgetTester tester, String keyValue) {

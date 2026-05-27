@@ -5,10 +5,17 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_profile_picture.dart';
+import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_address_plan.dart';
 import '../domain/swap_contract.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
+
+const _swapReviewMinimumReceiveTooltip = 'Minimum receive details coming soon.';
+const _swapReviewSwapFeeTooltip = 'Swap fee details coming soon.';
+const _swapReviewDetailIconSize = 14.0;
+const _swapReviewDetailIconSlotWidth =
+    AppSpacing.xxs + _swapReviewDetailIconSize;
 
 class SwapReviewPageContent extends StatelessWidget {
   const SwapReviewPageContent({
@@ -468,12 +475,14 @@ class _ReviewDetailsList extends StatelessWidget {
               label: 'Minimum Receive',
               value: compactSwapAmountText(quote.minimumReceiveText),
               trailingIcon: AppIcons.help,
+              tooltipMessage: _swapReviewMinimumReceiveTooltip,
             ),
             const SizedBox(height: AppSpacing.sm),
             _ReviewDetailRow(
               label: 'Swap fee',
               value: quote.feeLabel,
               trailingIcon: AppIcons.help,
+              tooltipMessage: _swapReviewSwapFeeTooltip,
             ),
           ],
         ),
@@ -488,12 +497,14 @@ class _ReviewDetailRow extends StatelessWidget {
     required this.value,
     this.leadingValue,
     this.trailingIcon,
+    this.tooltipMessage,
   });
 
   final String label;
   final String value;
   final Widget? leadingValue;
   final String? trailingIcon;
+  final String? tooltipMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -536,12 +547,12 @@ class _ReviewDetailRow extends StatelessWidget {
                   ),
                   if (trailingIcon != null) ...[
                     const SizedBox(width: AppSpacing.xxs),
-                    AppIcon(
-                      trailingIcon!,
-                      size: 14,
-                      color: colors.icon.regular.withValues(alpha: 0.72),
+                    _ReviewHelpIcon(
+                      icon: trailingIcon!,
+                      tooltipMessage: tooltipMessage,
                     ),
-                  ],
+                  ] else
+                    const SizedBox(width: _swapReviewDetailIconSlotWidth),
                 ],
               ),
             ),
@@ -549,6 +560,33 @@ class _ReviewDetailRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _ReviewHelpIcon extends StatelessWidget {
+  const _ReviewHelpIcon({required this.icon, required this.tooltipMessage});
+
+  final String icon;
+  final String? tooltipMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final child = MouseRegion(
+      cursor: SystemMouseCursors.help,
+      child: AppIcon(
+        icon,
+        size: _swapReviewDetailIconSize,
+        color: colors.icon.regular.withValues(alpha: 0.72),
+      ),
+    );
+    final message = tooltipMessage;
+    if (message == null ||
+        message.isEmpty ||
+        Overlay.maybeOf(context) == null) {
+      return child;
+    }
+    return AppTooltip(message: message, child: child);
   }
 }
 

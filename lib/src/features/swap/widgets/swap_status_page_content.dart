@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_profile_picture.dart';
+import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_contract.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
@@ -23,6 +24,12 @@ const _swapStatusSummaryMaxAmountChars = 10;
 const _swapStatusProgressHeight = 580.0;
 const _swapStatusSummaryCardHeight = 120.0;
 const _swapStatusBadgeOverlap = 1.0;
+const _swapStatusSwapFeeTooltip = 'Swap fee details coming soon.';
+const _swapStatusMinimumReceiveTooltip = 'Minimum receive details coming soon.';
+const _swapStatusTotalFeesTooltip = 'Total fee details coming soon.';
+const _swapStatusDetailIconSize = 14.0;
+const _swapStatusDetailIconSlotWidth =
+    AppSpacing.xxs + _swapStatusDetailIconSize;
 
 class SwapStatusStepData {
   const SwapStatusStepData({
@@ -71,6 +78,7 @@ class SwapStatusDetailRowData {
     this.copyable = false,
     this.copyText,
     this.help = false,
+    this.helpTooltip,
     this.accountProfilePictureId,
   });
 
@@ -79,6 +87,7 @@ class SwapStatusDetailRowData {
   final bool copyable;
   final String? copyText;
   final bool help;
+  final String? helpTooltip;
   final String? accountProfilePictureId;
 }
 
@@ -1239,14 +1248,19 @@ class _DetailRow extends StatelessWidget {
                             ),
                             if (row.copyable || row.help) ...[
                               const SizedBox(width: AppSpacing.xxs),
-                              AppIcon(
-                                row.copyable ? AppIcons.copy : AppIcons.help,
-                                size: 14,
-                                color: colors.icon.regular.withValues(
-                                  alpha: 0.72,
-                                ),
+                              _StatusDetailActionIcon(
+                                icon: row.copyable
+                                    ? AppIcons.copy
+                                    : AppIcons.help,
+                                tooltipMessage: row.help
+                                    ? row.helpTooltip ??
+                                          _swapStatusHelpTooltip(row.label)
+                                    : null,
                               ),
-                            ],
+                            ] else
+                              const SizedBox(
+                                width: _swapStatusDetailIconSlotWidth,
+                              ),
                           ],
                         ),
                       ),
@@ -1257,6 +1271,47 @@ class _DetailRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _StatusDetailActionIcon extends StatelessWidget {
+  const _StatusDetailActionIcon({
+    required this.icon,
+    required this.tooltipMessage,
+  });
+
+  final String icon;
+  final String? tooltipMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final child = MouseRegion(
+      cursor: tooltipMessage == null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.help,
+      child: AppIcon(
+        icon,
+        size: _swapStatusDetailIconSize,
+        color: colors.icon.regular.withValues(alpha: 0.72),
+      ),
+    );
+    final message = tooltipMessage;
+    if (message == null ||
+        message.isEmpty ||
+        Overlay.maybeOf(context) == null) {
+      return child;
+    }
+    return AppTooltip(message: message, child: child);
+  }
+}
+
+String _swapStatusHelpTooltip(String label) {
+  return switch (label) {
+    'Swap fee' => _swapStatusSwapFeeTooltip,
+    'Minimum Receive' => _swapStatusMinimumReceiveTooltip,
+    'Total fees' => _swapStatusTotalFeesTooltip,
+    _ => 'Swap detail explanation coming soon.',
+  };
 }
 
 class _NearIntentsLink extends StatelessWidget {
