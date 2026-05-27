@@ -227,7 +227,15 @@ class WidgetbookApp extends StatelessWidget {
                       builder: buildSwapStatusProgressNextStepUseCase,
                     ),
                     WidgetbookUseCase(
-                      name: 'Large amounts',
+                      name: 'Large amount - Left',
+                      builder: buildSwapStatusLargeLeftAmountUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amount - Right',
+                      builder: buildSwapStatusLargeRightAmountUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amounts - Both',
                       builder: buildSwapStatusLargeAmountsUseCase,
                     ),
                     WidgetbookUseCase(

@@ -18,6 +18,10 @@ void main() {
         depositAddress: 't1deposit',
         depositTxHash: 'deposit-txid',
         providerQuoteId: 'quote-1',
+        swapFeeText: 'Included in shown rate',
+        slippageToleranceText: '0.00003 ZEC (1.0%)',
+        priceProtectionText: '0.0021 USDC (1.0%)',
+        minimumReceiveText: '0.2079 USDC',
         providerStatusRaw: 'PROCESSING',
         providerRefundInfo: const SwapProviderRefundInfo(
           minimumDepositText: '0.0029 ZEC',
@@ -31,6 +35,10 @@ void main() {
 
     expect(intent.title, 'ZEC to USDC');
     expect(intent.steps.map((step) => step.label), contains('Processing'));
+    expect(intent.swapFeeText, 'Included in shown rate');
+    expect(intent.slippageToleranceText, '0.00003 ZEC (1.0%)');
+    expect(intent.priceProtectionText, '0.0021 USDC (1.0%)');
+    expect(intent.minimumReceiveText, '0.2079 USDC');
     expect(_receiptValue(intent, 'Deposit tx'), 'deposit-txid');
     expect(_receiptValue(intent, 'Provider status'), 'PROCESSING');
     expect(_receiptValue(intent, 'Minimum deposit'), '0.0029 ZEC');
@@ -80,6 +88,10 @@ void main() {
         providerStatusRaw: 'SUCCESS',
         nearIntentHash: 'intent-hash',
         destinationChainTxHash: 'destination-txid',
+        swapFeeText: 'Included in shown rate',
+        slippageToleranceText: '0.00003 ZEC (1.0%)',
+        priceProtectionText: '0.0021 USDC (1.0%)',
+        minimumReceiveText: '0.2079 USDC',
       ),
       updatedAt: checkedAt,
       lastStatusCheckedAt: checkedAt,
@@ -89,6 +101,10 @@ void main() {
     expect(updated.providerStatusRaw, 'SUCCESS');
     expect(updated.nearIntentHash, 'intent-hash');
     expect(updated.destinationChainTxHash, 'destination-txid');
+    expect(updated.swapFeeText, 'Included in shown rate');
+    expect(updated.slippageToleranceText, '0.00003 ZEC (1.0%)');
+    expect(updated.priceProtectionText, '0.0021 USDC (1.0%)');
+    expect(updated.minimumReceiveText, '0.2079 USDC');
     expect(updated.createdAt, createdAt);
     expect(updated.updatedAt, checkedAt);
     expect(updated.completedAt, checkedAt);

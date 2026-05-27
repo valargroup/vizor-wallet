@@ -60,6 +60,10 @@ void main() {
       depositTxHash: 'zec-txid',
       providerQuoteId: 'quote-1',
       providerSignature: 'quote-signature',
+      swapFeeText: 'Included in shown rate',
+      slippageToleranceText: '0.015 ZEC (1.0%)',
+      priceProtectionText: '1.0525 USDC (1.0%)',
+      minimumReceiveText: '104.1975 USDC',
       providerStatusRaw: 'PROCESSING',
       nearIntentHash: 'intent-hash-1',
       nearTransactionHash: 'near-tx-hash-1',
@@ -100,6 +104,10 @@ void main() {
     expect(restored.single.depositTxHash, 'zec-txid');
     expect(restored.single.providerQuoteId, 'quote-1');
     expect(restored.single.providerSignature, 'quote-signature');
+    expect(restored.single.swapFeeText, 'Included in shown rate');
+    expect(restored.single.slippageToleranceText, '0.015 ZEC (1.0%)');
+    expect(restored.single.priceProtectionText, '1.0525 USDC (1.0%)');
+    expect(restored.single.minimumReceiveText, '104.1975 USDC');
     expect(restored.single.providerStatusRaw, 'PROCESSING');
     expect(restored.single.nearIntentHash, 'intent-hash-1');
     expect(restored.single.nearTransactionHash, 'near-tx-hash-1');

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/profile_pictures.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
@@ -576,7 +577,8 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
           return _ActivityDetailScrollArea(
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Center(
+              child: Align(
+                alignment: Alignment.topCenter,
                 child: Transform.translate(
                   offset: Offset(0, flowOffsetY),
                   child: flowContent,
@@ -688,7 +690,7 @@ class _SwapActivityFlowContent extends StatelessWidget {
   }
 }
 
-class _SwapStatusForIntent extends StatefulWidget {
+class _SwapStatusForIntent extends ConsumerStatefulWidget {
   const _SwapStatusForIntent({
     required this.intent,
     required this.onOpenExplorer,
@@ -698,10 +700,11 @@ class _SwapStatusForIntent extends StatefulWidget {
   final VoidCallback onOpenExplorer;
 
   @override
-  State<_SwapStatusForIntent> createState() => _SwapStatusForIntentState();
+  ConsumerState<_SwapStatusForIntent> createState() =>
+      _SwapStatusForIntentState();
 }
 
-class _SwapStatusForIntentState extends State<_SwapStatusForIntent> {
+class _SwapStatusForIntentState extends ConsumerState<_SwapStatusForIntent> {
   SwapStatusTab _activeTab = SwapStatusTab.progress;
   bool _detailsExpanded = false;
 
@@ -720,6 +723,10 @@ class _SwapStatusForIntentState extends State<_SwapStatusForIntent> {
     final sellAsset = _activitySellAsset(intent) ?? SwapAsset.zec;
     final receiveAsset = _activityReceiveAsset(intent) ?? SwapAsset.usdc;
     final fiatText = _activityFiatText(intent, sellAsset, receiveAsset);
+    final accountInfo = _accountInfoForIntent(
+      ref.watch(accountProvider).value,
+      intent,
+    );
     return SwapStatusPageContent(
       title: _swapStatusTitle(intent),
       payAsset: sellAsset,
@@ -732,7 +739,7 @@ class _SwapStatusForIntentState extends State<_SwapStatusForIntent> {
       progressIndex: _swapStatusProgressIndex(intent),
       activeTab: _activeTab,
       steps: _swapProgressSteps(intent),
-      details: _swapStatusDetails(intent),
+      details: _swapStatusDetails(intent, accountInfo: accountInfo),
       detailsExpanded: _detailsExpanded,
       showTabs: !intent.status.isTerminal,
       onTabChanged: (tab) {
@@ -841,23 +848,30 @@ List<SwapStatusStepData> _swapProgressSteps(SwapPrototypeIntent intent) {
   ];
 }
 
-List<SwapStatusDetailRowData> _swapStatusDetails(SwapPrototypeIntent intent) {
+List<SwapStatusDetailRowData> _swapStatusDetails(
+  SwapPrototypeIntent intent, {
+  AccountInfo? accountInfo,
+}) {
   final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
   final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
   final refundAddress = intent.oneClickRefundTo?.trim();
   final recipientAddress = intent.oneClickRecipient?.trim();
   final depositAddress = intent.depositAddress?.trim();
-  final depositTxHash = intent.depositTxHash?.trim();
+  final localDepositTxHash = intent.depositTxHash?.trim();
+  final originChainTxHash = intent.originChainTxHash?.trim();
+  final destinationChainTxHash = intent.destinationChainTxHash?.trim();
+  final depositTxHash = _firstNonEmpty([localDepositTxHash, originChainTxHash]);
   final timestamp = _swapTimestampLabel(
     intent.completedAt ?? intent.updatedAt ?? intent.createdAt,
   );
   final terminal = intent.status.isTerminal;
   final failed =
       _swapStatusBadgeKind(intent.status) == SwapStatusBadgeKind.failed;
+  final sendsZec = intent.direction != SwapDirection.externalToZec;
 
   if (terminal) {
     return [
-      const SwapStatusDetailRowData(label: 'Account', value: 'Current account'),
+      _accountDetailRow(accountInfo),
       if (depositTxHash != null && depositTxHash.isNotEmpty)
         SwapStatusDetailRowData(
           label: '$sourceSymbol Deposit tx',
@@ -889,19 +903,26 @@ List<SwapStatusDetailRowData> _swapStatusDetails(SwapPrototypeIntent intent) {
         ),
       if (timestamp != null)
         SwapStatusDetailRowData(label: 'Timestamp', value: timestamp),
+      if (destinationChainTxHash != null && destinationChainTxHash.isNotEmpty)
+        SwapStatusDetailRowData(
+          label: '$receiveSymbol Delivery tx',
+          value: _compactSwapAddress(destinationChainTxHash),
+          copyable: true,
+          copyText: destinationChainTxHash,
+        ),
     ];
   }
 
   return [
-    const SwapStatusDetailRowData(label: 'Account', value: 'Current account'),
-    if (recipientAddress != null && recipientAddress.isNotEmpty)
+    _accountDetailRow(accountInfo),
+    if (sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
       SwapStatusDetailRowData(
         label: '$receiveSymbol Recipient',
         value: _compactSwapAddress(recipientAddress),
         copyable: true,
         copyText: recipientAddress,
       ),
-    if (refundAddress != null && refundAddress.isNotEmpty)
+    if (!sendsZec && refundAddress != null && refundAddress.isNotEmpty)
       SwapStatusDetailRowData(
         label: '$sourceSymbol Refund address',
         value: _compactSwapAddress(refundAddress),
@@ -913,33 +934,83 @@ List<SwapStatusDetailRowData> _swapStatusDetails(SwapPrototypeIntent intent) {
         copyable: true,
         copyText: depositAddress,
       ),
-    if (depositTxHash != null && depositTxHash.isNotEmpty)
-      SwapStatusDetailRowData(
-        label: '$sourceSymbol Deposit tx',
-        value: depositTxHash,
-        copyable: true,
-        copyText: depositTxHash,
-      ),
-    const SwapStatusDetailRowData(
+    SwapStatusDetailRowData(
       label: 'Swap fee',
-      value: 'Included in shown rate',
+      value: intent.swapFeeText ?? 'Included in shown rate',
       help: true,
     ),
-    const SwapStatusDetailRowData(
+    SwapStatusDetailRowData(
       label: 'Slippage tolerance',
-      value: 'Configured quote',
+      value: intent.slippageToleranceText ?? 'Configured quote',
     ),
-    const SwapStatusDetailRowData(
+    SwapStatusDetailRowData(
       label: 'Price protection',
-      value: 'Minimum receive protected',
+      value: intent.priceProtectionText ?? 'Minimum receive protected',
       help: true,
     ),
     SwapStatusDetailRowData(
       label: 'Minimum Receive',
-      value: intent.receiveEstimate,
+      value: intent.minimumReceiveText ?? intent.receiveEstimate,
       help: true,
     ),
+    if (sendsZec && refundAddress != null && refundAddress.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$sourceSymbol Refund address',
+        value: _compactSwapAddress(refundAddress),
+      ),
+    if (!sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$receiveSymbol Recipient',
+        value: _compactSwapAddress(recipientAddress),
+        copyable: true,
+        copyText: recipientAddress,
+      ),
+    if (depositTxHash != null && depositTxHash.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$sourceSymbol Deposit tx',
+        value: _compactSwapAddress(depositTxHash),
+        copyable: true,
+        copyText: depositTxHash,
+      ),
+    if (destinationChainTxHash != null && destinationChainTxHash.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$receiveSymbol Delivery tx',
+        value: _compactSwapAddress(destinationChainTxHash),
+        copyable: true,
+        copyText: destinationChainTxHash,
+      ),
   ];
+}
+
+AccountInfo? _accountInfoForIntent(
+  AccountState? accountState,
+  SwapPrototypeIntent intent,
+) {
+  if (accountState == null) return null;
+  final accountUuid = intent.accountUuid?.trim();
+  if (accountUuid != null && accountUuid.isNotEmpty) {
+    for (final account in accountState.accounts) {
+      if (account.uuid == accountUuid) return account;
+    }
+  }
+  return accountState.activeAccount;
+}
+
+SwapStatusDetailRowData _accountDetailRow(AccountInfo? accountInfo) {
+  return SwapStatusDetailRowData(
+    label: 'Account',
+    value: accountInfo?.name ?? 'Unknown account',
+    accountProfilePictureId:
+        accountInfo?.profilePictureId ?? kDefaultProfilePictureId,
+  );
+}
+
+String? _firstNonEmpty(Iterable<String?> values) {
+  for (final value in values) {
+    final trimmed = value?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) return trimmed;
+  }
+  return null;
 }
 
 String _activityFiatText(
@@ -1182,6 +1253,7 @@ class _ActivityDetailScrollArea extends StatefulWidget {
 
 class _ActivityDetailScrollAreaState extends State<_ActivityDetailScrollArea> {
   late final ScrollController _controller;
+  bool _hasScrollableExtent = false;
 
   @override
   void initState() {
@@ -1195,27 +1267,46 @@ class _ActivityDetailScrollAreaState extends State<_ActivityDetailScrollArea> {
     super.dispose();
   }
 
+  bool _handleScrollMetrics(ScrollMetricsNotification notification) {
+    final hasScrollableExtent = notification.metrics.maxScrollExtent > 0.5;
+    if (hasScrollableExtent != _hasScrollableExtent) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _hasScrollableExtent = hasScrollableExtent;
+        });
+      });
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-      child: RawScrollbar(
-        key: const ValueKey('swap_activity_detail_scrollbar'),
-        controller: _controller,
-        thumbVisibility: true,
-        thickness: 4,
-        radius: const Radius.circular(AppRadii.full),
-        thumbColor: colors.border.regular.withValues(alpha: 0.72),
-        mainAxisMargin: AppSpacing.xxs,
-        crossAxisMargin: AppSpacing.xxs,
-        child: SingleChildScrollView(
-          key: const ValueKey('swap_activity_detail_scroll_view'),
+      child: NotificationListener<ScrollMetricsNotification>(
+        onNotification: _handleScrollMetrics,
+        child: RawScrollbar(
+          key: const ValueKey('swap_activity_detail_scrollbar'),
           controller: _controller,
-          child: Padding(
-            key: const ValueKey('swap_activity_detail_scroll_gutter'),
-            padding: const EdgeInsets.only(right: AppSpacing.s),
-            child: widget.child,
+          thumbVisibility: _hasScrollableExtent,
+          interactive: _hasScrollableExtent,
+          thickness: 4,
+          radius: const Radius.circular(AppRadii.full),
+          thumbColor: colors.border.regular.withValues(alpha: 0.72),
+          mainAxisMargin: AppSpacing.xxs,
+          crossAxisMargin: AppSpacing.xxs,
+          child: SingleChildScrollView(
+            key: const ValueKey('swap_activity_detail_scroll_view'),
+            controller: _controller,
+            child: Padding(
+              key: const ValueKey('swap_activity_detail_scroll_gutter'),
+              padding: EdgeInsets.only(
+                right: _hasScrollableExtent ? AppSpacing.s : 0,
+              ),
+              child: widget.child,
+            ),
           ),
         ),
       ),

@@ -20,6 +20,9 @@ enum SwapStatusStepState { complete, active, pending }
 
 const swapStatusDefaultProgressAdvanceInterval = Duration(milliseconds: 520);
 const _swapStatusSummaryMaxAmountChars = 10;
+const _swapStatusProgressHeight = 580.0;
+const _swapStatusSummaryCardHeight = 120.0;
+const _swapStatusBadgeOverlap = 1.0;
 
 class SwapStatusStepData {
   const SwapStatusStepData({
@@ -68,6 +71,7 @@ class SwapStatusDetailRowData {
     this.copyable = false,
     this.copyText,
     this.help = false,
+    this.accountProfilePictureId,
   });
 
   final String label;
@@ -75,6 +79,7 @@ class SwapStatusDetailRowData {
   final bool copyable;
   final String? copyText;
   final bool help;
+  final String? accountProfilePictureId;
 }
 
 class SwapStatusPageContent extends StatefulWidget {
@@ -238,12 +243,6 @@ class _SwapStatusPageContentState extends State<SwapStatusPageContent> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final linkGap =
-        widget.showTabs &&
-            widget.activeTab == SwapStatusTab.details &&
-            widget.detailsExpanded
-        ? AppSpacing.s
-        : AppSpacing.base;
     final tabContent = widget.activeTab == SwapStatusTab.progress
         ? _SwapProgressRoute(steps: _displayedSteps())
         : _SwapTransactionDetails(
@@ -254,42 +253,57 @@ class _SwapStatusPageContentState extends State<SwapStatusPageContent> {
     return SizedBox(
       key: const ValueKey('swap_status_page_content'),
       width: 400,
+      height: _swapStatusProgressHeight,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            widget.title,
-            key: const ValueKey('swap_status_title'),
-            textAlign: TextAlign.center,
-            style: AppTypography.displaySmall.copyWith(
-              color: colors.text.accent,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.s),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    widget.title,
+                    key: const ValueKey('swap_status_title'),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.displaySmall.copyWith(
+                      color: colors.text.accent,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _StatusSummaryCard(
+                    payAsset: widget.payAsset,
+                    receiveAsset: widget.receiveAsset,
+                    payFiatText: widget.payFiatText,
+                    receiveFiatText: widget.receiveFiatText,
+                    payAmountText: widget.payAmountText,
+                    receiveAmountText: widget.receiveAmountText,
+                    badgeKind: widget.badgeKind,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  if (widget.showTabs) ...[
+                    _StatusTabs(
+                      activeTab: widget.activeTab,
+                      onChanged: widget.onTabChanged,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    tabContent,
+                  ] else
+                    _SwapFinalDetails(rows: widget.details),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          _StatusSummaryCard(
-            payAsset: widget.payAsset,
-            receiveAsset: widget.receiveAsset,
-            payFiatText: widget.payFiatText,
-            receiveFiatText: widget.receiveFiatText,
-            payAmountText: widget.payAmountText,
-            receiveAmountText: widget.receiveAmountText,
-            badgeKind: widget.badgeKind,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          if (widget.showTabs) ...[
-            _StatusTabs(
-              activeTab: widget.activeTab,
-              onChanged: widget.onTabChanged,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            tabContent,
-          ] else
-            _SwapFinalDetails(rows: widget.details),
-          SizedBox(height: linkGap),
+          const SizedBox(height: AppSpacing.sm),
           Align(
             alignment: Alignment.center,
             child: _NearIntentsLink(onPressed: widget.onOpenExplorer),
           ),
+          const SizedBox(height: AppSpacing.s),
         ],
       ),
     );
@@ -364,7 +378,7 @@ class _StatusSummaryCard extends StatelessWidget {
           Container(
             key: const ValueKey('swap_status_summary_card'),
             width: 400,
-            height: 120,
+            height: _swapStatusSummaryCardHeight,
             decoration: BoxDecoration(
               color: colors.background.homeCard,
               borderRadius: BorderRadius.circular(AppRadii.medium),
@@ -419,7 +433,10 @@ class _StatusSummaryCard extends StatelessWidget {
               ],
             ),
           ),
-          Positioned(top: 120, child: _StatusBadge(kind: badgeKind)),
+          Positioned(
+            top: _swapStatusSummaryCardHeight - _swapStatusBadgeOverlap,
+            child: _StatusBadge(kind: badgeKind),
+          ),
         ],
       ),
     );
@@ -1198,8 +1215,10 @@ class _DetailRow extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (showAccountAvatar) ...[
-                              const AppProfilePicture(
-                                profilePictureId: kDefaultProfilePictureId,
+                              AppProfilePicture(
+                                profilePictureId:
+                                    row.accountProfilePictureId ??
+                                    kDefaultProfilePictureId,
                                 size: AppProfilePictureSize.medium,
                               ),
                               const SizedBox(width: AppSpacing.xs),

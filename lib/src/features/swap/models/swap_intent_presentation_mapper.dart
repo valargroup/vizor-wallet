@@ -20,6 +20,10 @@ SwapPrototypeIntent swapPrototypeIntentFromRecord(SwapIntentRecord record) {
     depositTxHash: record.depositTxHash,
     providerQuoteId: record.providerQuoteId,
     providerSignature: record.providerSignature,
+    swapFeeText: record.swapFeeText,
+    slippageToleranceText: record.slippageToleranceText,
+    priceProtectionText: record.priceProtectionText,
+    minimumReceiveText: record.minimumReceiveText,
     providerStatusRaw: record.providerStatusRaw,
     nearIntentHash: record.nearIntentHash,
     nearTransactionHash: record.nearTransactionHash,
@@ -60,6 +64,12 @@ SwapPrototypeIntent swapIntentFromSnapshot({
     depositMemo: quote.depositInstruction.memo,
     providerQuoteId: quote.providerQuoteId,
     providerSignature: quote.providerSignature,
+    swapFeeText: snapshot.swapFeeText ?? quote.feeLabel,
+    slippageToleranceText:
+        snapshot.slippageToleranceText ?? quote.slippageToleranceText,
+    priceProtectionText:
+        snapshot.priceProtectionText ?? quote.priceProtectionText,
+    minimumReceiveText: snapshot.minimumReceiveText ?? quote.minimumReceiveText,
     providerStatusRaw: snapshot.providerStatusRaw,
     nearIntentHash: snapshot.nearIntentHash,
     nearTransactionHash: snapshot.nearTransactionHash,
@@ -95,6 +105,10 @@ SwapPrototypeIntent updateSwapIntentFromSnapshot(
     receiveEstimateText: snapshot.receiveEstimateText,
     status: status,
     nextAction: snapshot.nextAction,
+    swapFeeText: snapshot.swapFeeText,
+    slippageToleranceText: snapshot.slippageToleranceText,
+    priceProtectionText: snapshot.priceProtectionText,
+    minimumReceiveText: snapshot.minimumReceiveText,
     providerStatusRaw: snapshot.providerStatusRaw,
     nearIntentHash: snapshot.nearIntentHash,
     nearTransactionHash: snapshot.nearTransactionHash,
@@ -145,18 +159,16 @@ List<SwapPrototypeStep> swapStepsForRecord(SwapIntentRecord record) {
       evidence: 'Quote saved locally',
     ),
     SwapPrototypeStep(
-      label:
-          sendsZec
-              ? 'One-time transparent address prepared'
-              : 'One-time ${externalAsset.symbol} source address prepared',
+      label: sendsZec
+          ? 'One-time transparent address prepared'
+          : 'One-time ${externalAsset.symbol} source address prepared',
       state: SwapPrototypeStepState.active,
       evidence: '0 previous uses',
     ),
     SwapPrototypeStep(
-      label:
-          sendsZec
-              ? 'Awaiting ZEC deposit'
-              : 'Awaiting ${externalAsset.symbol} deposit',
+      label: sendsZec
+          ? 'Awaiting ZEC deposit'
+          : 'Awaiting ${externalAsset.symbol} deposit',
       state: SwapPrototypeStepState.pending,
       evidence: 'Do not reuse this address',
     ),
@@ -168,10 +180,9 @@ List<SwapPrototypeStep> swapStepsForRecord(SwapIntentRecord record) {
     SwapPrototypeStep(
       label: sendsZec ? 'Refund path monitored' : 'Shielded receive',
       state: SwapPrototypeStepState.pending,
-      evidence:
-          sendsZec
-              ? 'Wallet unified address is used only if a refund arrives'
-              : _deliverySummary(record),
+      evidence: sendsZec
+          ? 'Wallet unified address is used only if a refund arrives'
+          : _deliverySummary(record),
     ),
   ];
 }
@@ -200,20 +211,18 @@ List<SwapPrototypeStep> swapStepsForStatus(
     ),
     SwapPrototypeStep(
       label: 'Deposit observed',
-      state:
-          doneBeforeProcessing
-              ? SwapPrototypeStepState.done
-              : SwapPrototypeStepState.active,
+      state: doneBeforeProcessing
+          ? SwapPrototypeStepState.done
+          : SwapPrototypeStepState.active,
       evidence: doneBeforeProcessing ? 'Deposit confirmed' : nextAction,
     ),
     SwapPrototypeStep(
       label: status.label,
-      state:
-          failed
-              ? SwapPrototypeStepState.warning
-              : complete
-              ? SwapPrototypeStepState.done
-              : SwapPrototypeStepState.active,
+      state: failed
+          ? SwapPrototypeStepState.warning
+          : complete
+          ? SwapPrototypeStepState.done
+          : SwapPrototypeStepState.active,
       evidence: nextAction,
     ),
   ];
@@ -278,18 +287,16 @@ List<SwapPrototypeField> swapReceiptForRecord(SwapIntentRecord record) {
       ),
     if (record.oneClickRecipient != null)
       SwapPrototypeField(
-        label:
-            sendsZec
-                ? '${externalAsset?.symbol ?? 'External'} recipient'
-                : 'ZEC recipient',
+        label: sendsZec
+            ? '${externalAsset?.symbol ?? 'External'} recipient'
+            : 'ZEC recipient',
         value: record.oneClickRecipient!,
       ),
     if (record.depositAddress != null)
       SwapPrototypeField(
-        label:
-            sendsZec
-                ? 'ZEC deposit'
-                : '${externalAsset?.symbol ?? 'External'} source deposit',
+        label: sendsZec
+            ? 'ZEC deposit'
+            : '${externalAsset?.symbol ?? 'External'} source deposit',
         value: record.depositAddress!,
       ),
     if (record.depositMemo != null)

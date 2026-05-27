@@ -414,6 +414,15 @@ void main() {
       1,
     );
 
+    final completedCardRect = tester.getRect(
+      find.byKey(const ValueKey('swap_status_summary_card')),
+    );
+    final completedBadgeRect = tester.getRect(
+      find.byKey(const ValueKey('swap_status_badge_completed')),
+    );
+    expect(completedBadgeRect.top, lessThan(completedCardRect.bottom));
+    expect(completedCardRect.bottom - completedBadgeRect.top, closeTo(1, 0.1));
+
     await tester.pumpWidget(
       _themeHarness(
         _statusTestPage(
@@ -448,6 +457,14 @@ void main() {
     );
     expect(failedIcon.name, AppIcons.skull);
     expect(failedIcon.size, 16);
+    final failedCardRect = tester.getRect(
+      find.byKey(const ValueKey('swap_status_summary_card')),
+    );
+    final failedBadgeRect = tester.getRect(
+      find.byKey(const ValueKey('swap_status_badge_failed')),
+    );
+    expect(failedBadgeRect.top, lessThan(failedCardRect.bottom));
+    expect(failedCardRect.bottom - failedBadgeRect.top, closeTo(1, 0.1));
     expect(
       tester
           .widget<Opacity>(
@@ -2814,6 +2831,90 @@ void main() {
       );
     },
   );
+
+  testWidgets('activity progress detail fits without scrollbar chrome', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(1080, 720));
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/activity/swap/swap-8f29',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+      ),
+    );
+    await _pumpUntilPresent(
+      tester,
+      find.byKey(const ValueKey('swap_activity_detail_page')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Swapping ...'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('swap_status_page_content')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('swap_near_intents_attribution')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('swap_activity_detail_scrollbar')),
+      findsOneWidget,
+    );
+    final explorerButton = find.byKey(
+      const ValueKey('swap_activity_copy_near_intents_explorer_button'),
+    );
+    final progressButtonTop = tester.getRect(explorerButton).top;
+    final statusRect = tester.getRect(
+      find.byKey(const ValueKey('swap_status_page_content')),
+    );
+    final titleRect = tester.getRect(
+      find.byKey(const ValueKey('swap_status_title')),
+    );
+    final buttonRect = tester.getRect(explorerButton);
+
+    expect(statusRect.top, closeTo(76, 1));
+    expect(titleRect.top - statusRect.top, closeTo(AppSpacing.s, 1));
+    expect(buttonRect.top - statusRect.top, closeTo(524, 1));
+
+    final scrollbar = tester.widget<RawScrollbar>(
+      find.byKey(const ValueKey('swap_activity_detail_scrollbar')),
+    );
+    expect(scrollbar.thumbVisibility, isFalse);
+    expect(scrollbar.interactive, isFalse);
+
+    final gutter = tester.widget<Padding>(
+      find.byKey(const ValueKey('swap_activity_detail_scroll_gutter')),
+    );
+    expect(gutter.padding.resolve(TextDirection.ltr).right, 0);
+
+    final paneRect = tester.getRect(find.byType(AppDesktopPane));
+    final attributionRect = tester.getRect(
+      find.byKey(const ValueKey('swap_near_intents_attribution')),
+    );
+    expect(attributionRect.left, closeTo(paneRect.left + AppSpacing.md, 1));
+    expect(paneRect.bottom - attributionRect.bottom, closeTo(AppSpacing.md, 1));
+
+    await tester.tap(find.text('Transaction Details'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('swap_status_page_content')),
+        matching: find.text('Account 1'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Current account'), findsNothing);
+    expect(tester.getRect(explorerButton).top, closeTo(progressButtonTop, 1));
+
+    await tester.tap(find.text('More Details'));
+    await tester.pumpAndSettle();
+
+    expect(tester.getRect(explorerButton).top, closeTo(progressButtonTop, 1));
+  });
 
   testWidgets('activity exposes incomplete, refunded, and failed scenarios', (
     tester,

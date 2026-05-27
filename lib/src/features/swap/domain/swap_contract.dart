@@ -910,6 +910,27 @@ class SwapQuote {
       minimumReceiveTextOverride ??
       '${receiveAsset.formatAmountDown(minimumReceiveAmount)} ${receiveAsset.symbol}';
 
+  String get slippageToleranceText {
+    final percent = receiveProtectionPercent;
+    final sellBuffer = sellAmount * percent / 100;
+    return '${sellAsset.formatAmount(sellBuffer)} '
+        '${sellAsset.symbol} (${_formatSwapProtectionPercent(percent)})';
+  }
+
+  String get priceProtectionText {
+    final buffer = receiveAmount - minimumReceiveAmount;
+    final bounded = buffer.isFinite && buffer > 0 ? buffer : 0.0;
+    final percent = receiveProtectionPercent;
+    return '${receiveAsset.formatAmount(bounded)} '
+        '${receiveAsset.symbol} (${_formatSwapProtectionPercent(percent)})';
+  }
+
+  double get receiveProtectionPercent {
+    if (receiveAmount <= 0 || !receiveAmount.isFinite) return 0;
+    final buffer = receiveAmount - minimumReceiveAmount;
+    return buffer <= 0 || !buffer.isFinite ? 0 : buffer / receiveAmount * 100;
+  }
+
   String get rateText {
     final override = rateTextOverride;
     if (override != null) {
@@ -923,6 +944,11 @@ class SwapQuote {
   }
 }
 
+String _formatSwapProtectionPercent(double percent) {
+  if (!percent.isFinite || percent <= 0) return '0.0%';
+  return '${percent.toStringAsFixed(percent >= 1 ? 1 : 2)}%';
+}
+
 class SwapIntentSnapshot {
   const SwapIntentSnapshot({
     required this.id,
@@ -933,6 +959,10 @@ class SwapIntentSnapshot {
     required this.status,
     required this.nextAction,
     required this.depositInstruction,
+    this.swapFeeText,
+    this.slippageToleranceText,
+    this.priceProtectionText,
+    this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
     this.nearTransactionHash,
@@ -958,6 +988,10 @@ class SwapIntentSnapshot {
       nextAction:
           'Send ${quote.sellAsset.symbol} to the one-time deposit address',
       depositInstruction: quote.depositInstruction,
+      swapFeeText: quote.feeLabel,
+      slippageToleranceText: quote.slippageToleranceText,
+      priceProtectionText: quote.priceProtectionText,
+      minimumReceiveText: quote.minimumReceiveText,
       providerRefundInfo: quote.providerRefundInfo,
     );
   }
@@ -970,6 +1004,10 @@ class SwapIntentSnapshot {
   final SwapIntentStatus status;
   final String nextAction;
   final SwapDepositInstruction depositInstruction;
+  final String? swapFeeText;
+  final String? slippageToleranceText;
+  final String? priceProtectionText;
+  final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
   final String? nearTransactionHash;

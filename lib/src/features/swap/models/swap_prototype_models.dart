@@ -152,6 +152,10 @@ class SwapIntentRecord {
     this.depositTxHash,
     this.providerQuoteId,
     this.providerSignature,
+    this.swapFeeText,
+    this.slippageToleranceText,
+    this.priceProtectionText,
+    this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
     this.nearTransactionHash,
@@ -186,6 +190,10 @@ class SwapIntentRecord {
       depositTxHash: intent.depositTxHash,
       providerQuoteId: intent.providerQuoteId,
       providerSignature: intent.providerSignature,
+      swapFeeText: intent.swapFeeText,
+      slippageToleranceText: intent.slippageToleranceText,
+      priceProtectionText: intent.priceProtectionText,
+      minimumReceiveText: intent.minimumReceiveText,
       providerStatusRaw: intent.providerStatusRaw,
       nearIntentHash: intent.nearIntentHash,
       nearTransactionHash: intent.nearTransactionHash,
@@ -219,6 +227,10 @@ class SwapIntentRecord {
   final String? depositTxHash;
   final String? providerQuoteId;
   final String? providerSignature;
+  final String? swapFeeText;
+  final String? slippageToleranceText;
+  final String? priceProtectionText;
+  final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
   final String? nearTransactionHash;
@@ -254,6 +266,10 @@ class SwapIntentRecord {
     String? depositTxHash,
     String? providerQuoteId,
     String? providerSignature,
+    String? swapFeeText,
+    String? slippageToleranceText,
+    String? priceProtectionText,
+    String? minimumReceiveText,
     String? providerStatusRaw,
     String? nearIntentHash,
     String? nearTransactionHash,
@@ -288,6 +304,11 @@ class SwapIntentRecord {
       depositTxHash: depositTxHash ?? this.depositTxHash,
       providerQuoteId: providerQuoteId ?? this.providerQuoteId,
       providerSignature: providerSignature ?? this.providerSignature,
+      swapFeeText: swapFeeText ?? this.swapFeeText,
+      slippageToleranceText:
+          slippageToleranceText ?? this.slippageToleranceText,
+      priceProtectionText: priceProtectionText ?? this.priceProtectionText,
+      minimumReceiveText: minimumReceiveText ?? this.minimumReceiveText,
       providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
       nearIntentHash: nearIntentHash ?? this.nearIntentHash,
       nearTransactionHash: nearTransactionHash ?? this.nearTransactionHash,
@@ -331,6 +352,10 @@ class SwapPrototypeIntent {
     this.depositTxHash,
     this.providerQuoteId,
     this.providerSignature,
+    this.swapFeeText,
+    this.slippageToleranceText,
+    this.priceProtectionText,
+    this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
     this.nearTransactionHash,
@@ -367,6 +392,10 @@ class SwapPrototypeIntent {
   final String? depositTxHash;
   final String? providerQuoteId;
   final String? providerSignature;
+  final String? swapFeeText;
+  final String? slippageToleranceText;
+  final String? priceProtectionText;
+  final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
   final String? nearTransactionHash;
@@ -405,6 +434,10 @@ class SwapPrototypeIntent {
     String? depositTxHash,
     String? providerQuoteId,
     String? providerSignature,
+    String? swapFeeText,
+    String? slippageToleranceText,
+    String? priceProtectionText,
+    String? minimumReceiveText,
     String? providerStatusRaw,
     String? nearIntentHash,
     String? nearTransactionHash,
@@ -443,6 +476,11 @@ class SwapPrototypeIntent {
       depositTxHash: depositTxHash ?? this.depositTxHash,
       providerQuoteId: providerQuoteId ?? this.providerQuoteId,
       providerSignature: providerSignature ?? this.providerSignature,
+      swapFeeText: swapFeeText ?? this.swapFeeText,
+      slippageToleranceText:
+          slippageToleranceText ?? this.slippageToleranceText,
+      priceProtectionText: priceProtectionText ?? this.priceProtectionText,
+      minimumReceiveText: minimumReceiveText ?? this.minimumReceiveText,
       providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
       nearIntentHash: nearIntentHash ?? this.nearIntentHash,
       nearTransactionHash: nearTransactionHash ?? this.nearTransactionHash,

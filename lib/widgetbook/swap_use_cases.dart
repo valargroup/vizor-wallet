@@ -246,7 +246,7 @@ Widget buildSwapDepositTimeoutUseCase(BuildContext context) {
 }
 
 Widget buildSwapStatusProgressUseCase(BuildContext context) {
-  return _SwapFlowPageFrame(
+  return _SwapStatusPageFrame(
     backLabel: 'Activity',
     child: _SwapStatusPreview(
       title: 'Swapping ...',
@@ -260,7 +260,7 @@ Widget buildSwapStatusProgressUseCase(BuildContext context) {
 }
 
 Widget buildSwapStatusProgressNextStepUseCase(BuildContext context) {
-  return _SwapFlowPageFrame(
+  return _SwapStatusPageFrame(
     backLabel: 'Activity',
     child: _SwapStatusPreview(
       title: 'Swapping ...',
@@ -273,8 +273,8 @@ Widget buildSwapStatusProgressNextStepUseCase(BuildContext context) {
   );
 }
 
-Widget buildSwapStatusLargeAmountsUseCase(BuildContext context) {
-  return _SwapFlowPageFrame(
+Widget buildSwapStatusLargeLeftAmountUseCase(BuildContext context) {
+  return _SwapStatusPageFrame(
     backLabel: 'Activity',
     child: _SwapStatusPreview(
       title: 'Swapping ...',
@@ -293,22 +293,62 @@ Widget buildSwapStatusLargeAmountsUseCase(BuildContext context) {
   );
 }
 
+Widget buildSwapStatusLargeRightAmountUseCase(BuildContext context) {
+  return _SwapStatusPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Swapping ...',
+      badgeKind: SwapStatusBadgeKind.liveQuote,
+      activeTab: SwapStatusTab.progress,
+      progressIndex: 0,
+      steps: _designProgressSteps,
+      details: _designTransactionDetails,
+      payAsset: SwapAsset.zec,
+      receiveAsset: _figmaReviewLargeQuote.sellAsset,
+      payFiatText: r'$110.24',
+      receiveFiatText: r'$999.123M',
+      payAmountText: '0.251 ZEC',
+      receiveAmountText: r'999,123,000.123456 $SHIT',
+    ),
+  );
+}
+
+Widget buildSwapStatusLargeAmountsUseCase(BuildContext context) {
+  return _SwapStatusPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Swapping ...',
+      badgeKind: SwapStatusBadgeKind.liveQuote,
+      activeTab: SwapStatusTab.progress,
+      progressIndex: 0,
+      steps: _designProgressSteps,
+      details: _designTransactionDetails,
+      payAsset: _figmaReviewLargeQuote.sellAsset,
+      receiveAsset: SwapAsset.usdc,
+      payFiatText: r'$999.123M',
+      receiveFiatText: r'$999.123M',
+      payAmountText: r'999,123,000.123456 $SHIT',
+      receiveAmountText: '999,999.99 USDC',
+    ),
+  );
+}
+
 Widget buildSwapStatusDetailsCollapsedUseCase(BuildContext context) {
-  return _SwapFlowPageFrame(
+  return _SwapStatusPageFrame(
     backLabel: 'Activity',
     child: _SwapStatusDetailsTogglePreview(initiallyExpanded: false),
   );
 }
 
 Widget buildSwapStatusDetailsExpandedUseCase(BuildContext context) {
-  return _SwapFlowPageFrame(
+  return _SwapStatusPageFrame(
     backLabel: 'Activity',
     child: _SwapStatusDetailsTogglePreview(initiallyExpanded: true),
   );
 }
 
 Widget buildSwapStatusCompletedUseCase(BuildContext context) {
-  return _SwapFlowPageFrame(
+  return _SwapStatusPageFrame(
     backLabel: 'Activity',
     child: _SwapStatusPreview(
       title: 'Swap completed',
@@ -321,7 +361,7 @@ Widget buildSwapStatusCompletedUseCase(BuildContext context) {
 }
 
 Widget buildSwapStatusFailedUseCase(BuildContext context) {
-  return _SwapFlowPageFrame(
+  return _SwapStatusPageFrame(
     backLabel: 'Activity',
     child: _SwapStatusPreview(
       title: 'Swap failed',
@@ -527,8 +567,14 @@ const _designProgressSteps = <SwapStatusStepData>[
   ),
 ];
 
+const _designAccountProfilePictureId = 'knight';
+
 const _designTransactionDetails = <SwapStatusDetailRowData>[
-  SwapStatusDetailRowData(label: 'Account', value: 'John'),
+  SwapStatusDetailRowData(
+    label: 'Account',
+    value: 'John',
+    accountProfilePictureId: _designAccountProfilePictureId,
+  ),
   SwapStatusDetailRowData(
     label: 'USDC Refund address',
     value: '0x123kjhc ... 4x98g20',
@@ -560,7 +606,11 @@ const _designTransactionDetails = <SwapStatusDetailRowData>[
 ];
 
 const _designCompletedDetails = <SwapStatusDetailRowData>[
-  SwapStatusDetailRowData(label: 'Account', value: 'John'),
+  SwapStatusDetailRowData(
+    label: 'Account',
+    value: 'John',
+    accountProfilePictureId: _designAccountProfilePictureId,
+  ),
   SwapStatusDetailRowData(
     label: 'USDC Deposit to',
     value: '0x123kjhc ... 4x98g20',
@@ -575,7 +625,11 @@ const _designCompletedDetails = <SwapStatusDetailRowData>[
 ];
 
 const _designFailedDetails = <SwapStatusDetailRowData>[
-  SwapStatusDetailRowData(label: 'Account', value: 'John'),
+  SwapStatusDetailRowData(
+    label: 'Account',
+    value: 'John',
+    accountProfilePictureId: _designAccountProfilePictureId,
+  ),
   SwapStatusDetailRowData(
     label: 'USDC Refunded to',
     value: '0x123kjhc ... 4x98g20',
@@ -660,10 +714,15 @@ final _figmaNode6State = SwapPrototypeState(
 );
 
 class _SwapFlowPageFrame extends StatelessWidget {
-  const _SwapFlowPageFrame({required this.backLabel, required this.child});
+  const _SwapFlowPageFrame({
+    required this.backLabel,
+    required this.child,
+    this.childAlignment = Alignment.center,
+  });
 
   final String backLabel;
   final Widget child;
+  final Alignment childAlignment;
 
   @override
   Widget build(BuildContext context) {
@@ -714,7 +773,10 @@ class _SwapFlowPageFrame extends StatelessWidget {
                                     constraints: BoxConstraints(
                                       minHeight: constraints.maxHeight,
                                     ),
-                                    child: Center(child: child),
+                                    child: Align(
+                                      alignment: childAlignment,
+                                      child: child,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -741,6 +803,22 @@ class _SwapFlowPageFrame extends StatelessWidget {
 }
 
 typedef _SwapReviewPageFrame = _SwapFlowPageFrame;
+
+class _SwapStatusPageFrame extends StatelessWidget {
+  const _SwapStatusPageFrame({required this.backLabel, required this.child});
+
+  final String backLabel;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SwapFlowPageFrame(
+      backLabel: backLabel,
+      childAlignment: Alignment.topCenter,
+      child: child,
+    );
+  }
+}
 
 class _SwapReviewPreview extends StatelessWidget {
   const _SwapReviewPreview({
