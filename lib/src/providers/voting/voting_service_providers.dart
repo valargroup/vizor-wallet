@@ -13,6 +13,7 @@ import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_api_client.dart';
 import '../../services/voting/voting_config_loader.dart';
 import '../../services/voting/voting_endorser_client.dart';
+import '../../services/voting/voting_helper_health_tracker.dart';
 import '../../services/voting/voting_http.dart';
 
 /// Transport shared by the voting service clients.
@@ -36,6 +37,14 @@ final votingApiClientProvider = Provider.family<VotingApiClient, Uri>((
     baseUrl: baseUrl,
     httpClient: ref.watch(votingHttpClientProvider),
   );
+});
+
+/// Tracks helper servers that repeatedly fail so recovery can prefer healthier
+/// endpoints without blocking voting when every helper is degraded.
+final votingHelperHealthTrackerProvider = Provider<VotingHelperHealthTracker>((
+  ref,
+) {
+  return VotingHelperHealthTracker();
 });
 
 /// Optional off-chain endorser source for poll-list badges.

@@ -11,6 +11,7 @@ import '../../features/voting/voting_share_timing.dart';
 import '../../rust/api/voting.dart' as rust_voting;
 import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_api_client.dart';
+import '../../services/voting/voting_helper_health_tracker.dart';
 import '../../services/voting/voting_models.dart';
 import 'voting_config_provider.dart';
 import 'voting_service_providers.dart';
@@ -578,8 +579,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }) async {
     final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
     final rust = ref.read(votingRustApiProvider);
+    final helperHealth = ref.read(votingHelperHealthTrackerProvider);
     final serverUrls = context.config.voteServers
-        .map((endpoint) => endpoint.url)
+        .map((endpoint) => endpoint.url.toString())
         .toList(growable: false);
     if (serverUrls.isEmpty) {
       throw StateError('No vote servers configured for share submission.');
@@ -600,7 +602,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             submitAt: BigInt.from(submitAt),
           ),
         );
-        for (final serverUrl in serverUrls) {
+        for (final serverUrl in helperHealth.candidateServers(serverUrls)) {
           try {
             debugPrint(
               '[zcash] Voting: submitting share '
@@ -610,10 +612,11 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             );
             await api.submitShare(
               roundId: context.round.roundId,
-              serverUrl: serverUrl,
+              serverUrl: Uri.parse(serverUrl),
               share: body,
             );
-            acceptedServers.add(serverUrl.toString());
+            helperHealth.recordSuccess(serverUrl);
+            acceptedServers.add(serverUrl);
             debugPrint(
               '[zcash] Voting: share accepted '
               'proposal=${payload.proposalId} share=${payload.encryptedShare.shareIndex} '
@@ -625,8 +628,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               'proposal=${payload.proposalId} share=${payload.encryptedShare.shareIndex} '
               'server=$serverUrl error=$e',
             );
-            // Try every configured helper. A later recovery pass can resubmit
-            // to helpers that did not accept this share.
+            helperHealth.recordFailure(serverUrl);
+            // Recovery retries helpers that did not accept this share.
           }
         }
         if (acceptedServers.isEmpty) {
@@ -785,6 +788,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       );
 
       final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+      final helperHealth = ref.read(votingHelperHealthTrackerProvider);
       final configuredServerUrls = context.config.voteServers
           .map((endpoint) => endpoint.url.toString())
           .toList(growable: false);
@@ -817,6 +821,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           // helper is enough to advance the local workflow for this share.
           final confirmed = await _shareConfirmedByAnyHelper(
             api: api,
+            helperHealth: helperHealth,
             share: share,
             serverUrls: acceptedUrls,
           );
@@ -917,7 +922,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     }
     final shareId = _hexFromBytes(share.nullifier);
     final acceptedUrls = <String>[];
-    for (final serverUrl in serverUrls) {
+    final helperHealth = ref.read(votingHelperHealthTrackerProvider);
+    for (final serverUrl in helperHealth.candidateServers(serverUrls)) {
       try {
         await api.resubmitShare(
           roundId: context.round.roundId,
@@ -925,6 +931,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           shareId: shareId,
           share: body,
         );
+        helperHealth.recordSuccess(serverUrl);
         acceptedUrls.add(serverUrl);
         debugPrint(
           '[zcash] Voting: share resubmitted '
@@ -939,6 +946,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           'proposal=${share.proposalId} share=${share.shareIndex} '
           'server=$serverUrl error=$e',
         );
+        helperHealth.recordFailure(serverUrl);
       }
     }
     return acceptedUrls;
@@ -971,17 +979,19 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   Future<bool> _shareConfirmedByAnyHelper({
     required VotingApiClient api,
+    required VotingHelperHealthTracker helperHealth,
     required rust_voting.ApiShareDelegationRecord share,
     required Iterable<String> serverUrls,
   }) async {
     final shareId = _hexFromBytes(share.nullifier);
-    for (final serverUrl in serverUrls) {
+    for (final serverUrl in helperHealth.candidateServers(serverUrls)) {
       try {
         final status = await api.getShareStatus(
           roundId: share.roundId,
           serverUrl: Uri.parse(serverUrl),
           shareId: shareId,
         );
+        helperHealth.recordSuccess(serverUrl);
         if (status.status == 'confirmed') return true;
       } catch (e) {
         debugPrint(
@@ -990,6 +1000,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           'proposal=${share.proposalId} share=${share.shareIndex} '
           'server=$serverUrl error=$e',
         );
+        helperHealth.recordFailure(serverUrl);
       }
     }
     return false;
