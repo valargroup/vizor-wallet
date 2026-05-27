@@ -788,6 +788,8 @@ where
     let round_id = round_params.vote_round_id.clone();
 
     cancellation.check()?;
+    zcash_voting::validate_round_params(&round_params)
+        .map_err(|e| format!("Invalid voting round params: {e}"))?;
     on_progress(ProofEvent::SelectingNotes);
     let hotkey_raw_address =
         derive_hotkey_raw_orchard_address(seed, &round_id, account_uuid, network)?;

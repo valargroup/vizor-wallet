@@ -15,6 +15,7 @@ import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
 import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_config_source_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_session_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_service_providers.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
@@ -46,6 +47,9 @@ void main() {
         appBootstrapProvider.overrideWithValue(_bootstrap),
         syncProvider.overrideWith(_NoopSyncNotifier.new),
         accountProvider.overrideWith(_NoMnemonicAccountNotifier.new),
+        votingConfigSourceStoreProvider.overrideWithValue(
+          _FakeVotingConfigSourceStore(),
+        ),
         votingHttpClientProvider.overrideWithValue(http),
         votingConfigLoaderProvider.overrideWithValue(
           VotingConfigLoader(
@@ -69,6 +73,9 @@ void main() {
           VotingRecoveryService(api: _FakeVotingRecoveryApi()),
         ),
         votingRustApiProvider.overrideWithValue(_NoopVotingRustApi()),
+        votingWalletSyncReadinessCheckerProvider.overrideWithValue(
+          _FakeVotingWalletSyncReadinessChecker(),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -385,6 +392,9 @@ ProviderContainer _statusContainer({
       syncProvider.overrideWith(_NoopSyncNotifier.new),
       if (accountOverride != null)
         accountProvider.overrideWith(accountOverride),
+      votingConfigSourceStoreProvider.overrideWithValue(
+        _FakeVotingConfigSourceStore(),
+      ),
       votingHttpClientProvider.overrideWithValue(effectiveHttp),
       votingConfigLoaderProvider.overrideWithValue(
         VotingConfigLoader(
@@ -414,6 +424,11 @@ ProviderContainer _statusContainer({
         const _MatchedPirSnapshotResolver(),
       ),
       votingRustApiProvider.overrideWithValue(rust ?? _NoopVotingRustApi()),
+      votingWalletSyncReadinessCheckerProvider.overrideWithValue(
+        _FakeVotingWalletSyncReadinessChecker(),
+      ),
+      votingWalletSyncStarterProvider.overrideWithValue(() {}),
+      votingWalletSyncPollIntervalProvider.overrideWithValue(Duration.zero),
       if (hotkeyStore != null)
         votingHotkeyStoreProvider.overrideWithValue(hotkeyStore),
       votingTxConfirmationPollingProvider.overrideWithValue(
@@ -707,6 +722,39 @@ class _MatchedPirSnapshotResolver implements PirSnapshotResolver {
           reportedHeight: expectedSnapshotHeight,
         ),
       ],
+    );
+  }
+}
+
+class _FakeVotingConfigSourceStore implements VotingConfigSourceStore {
+  String? sourceUrl;
+
+  @override
+  Future<String?> readSourceUrl() async => sourceUrl;
+
+  @override
+  Future<void> writeSourceUrl(String sourceUrl) async {
+    this.sourceUrl = sourceUrl;
+  }
+
+  @override
+  Future<void> resetSourceUrl() async {
+    sourceUrl = null;
+  }
+}
+
+class _FakeVotingWalletSyncReadinessChecker
+    implements VotingWalletSyncReadinessChecker {
+  @override
+  Future<VotingWalletSyncReadiness> check({
+    required String dbPath,
+    required String network,
+    required int snapshotHeight,
+  }) async {
+    return VotingWalletSyncReadiness(
+      scannedHeight: snapshotHeight,
+      snapshotHeight: snapshotHeight,
+      chainTipHeight: snapshotHeight,
     );
   }
 }

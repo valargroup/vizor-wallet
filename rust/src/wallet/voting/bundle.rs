@@ -10,7 +10,10 @@ use zcash_protocol::consensus::BlockHeight;
 use zip32::Scope;
 
 use crate::wallet::{
-    keys::parse_account_uuid, network::WalletNetwork, sync::open_wallet_db_for_read, sync_engine,
+    keys::parse_account_uuid,
+    network::WalletNetwork,
+    sync::{get_sync_progress, open_wallet_db_for_read},
+    sync_engine,
 };
 
 const POOL_ORCHARD: &str = "orchard";
@@ -102,6 +105,7 @@ pub async fn select_notes_with_lwd(
     account_uuid: &str,
     snapshot_height: u64,
 ) -> Result<SelectedNotes, String> {
+    ensure_wallet_scanned_to_snapshot(db_path, network, snapshot_height)?;
     let mut client = sync_engine::open_lwd_channel(lightwalletd_url)
         .await
         .map_err(|e| e.to_string())?;
@@ -115,6 +119,21 @@ pub async fn select_notes_with_lwd(
         snapshot_height,
         anchor_tree_state,
     )
+}
+
+fn ensure_wallet_scanned_to_snapshot(
+    db_path: &str,
+    network: WalletNetwork,
+    snapshot_height: u64,
+) -> Result<(), String> {
+    let progress = get_sync_progress(db_path, network)?;
+    if progress.scanned_height >= snapshot_height {
+        return Ok(());
+    }
+    Err(format!(
+        "Wallet is not synced to voting snapshot height {snapshot_height}. Fully scanned height is {}.",
+        progress.scanned_height
+    ))
 }
 
 /// Selects voting-eligible Orchard notes with a caller-supplied anchor state.

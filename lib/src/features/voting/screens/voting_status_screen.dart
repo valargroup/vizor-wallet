@@ -86,6 +86,13 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         _setRunError('Choose at least one vote before submitting.');
         return;
       }
+      await sessionNotifier.ensureWalletReadyForVoting();
+      if (!mounted) return;
+      final afterWalletSync = ref.read(votingSessionProvider(roundId)).value;
+      if (afterWalletSync?.phase == VotingSessionPhase.error ||
+          afterWalletSync?.phase == VotingSessionPhase.waitingForWalletSync) {
+        return;
+      }
 
       if (session.isHardwareAccount) {
         _pendingDraftVotes = draftVotes;
@@ -279,6 +286,9 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
                   keystoneUrParts: _keystoneUrParts,
                   keystoneQrError: _keystoneQrError,
                   keystoneScanError: state.keystoneScanError,
+                  walletScannedHeight: state.walletScannedHeight,
+                  walletSnapshotHeight: state.walletSnapshotHeight,
+                  walletChainTipHeight: state.walletChainTipHeight,
                   errorMessage: localError ?? state.error?.message,
                   onRetry: _retry,
                   onScanKeystone: _scanKeystoneSignature,
@@ -329,6 +339,9 @@ class _StatusContent extends StatelessWidget {
     this.keystoneUrParts = const [],
     this.keystoneQrError,
     this.keystoneScanError,
+    this.walletScannedHeight,
+    this.walletSnapshotHeight,
+    this.walletChainTipHeight,
     this.errorMessage,
     this.onRetry,
     this.onScanKeystone,
@@ -342,6 +355,9 @@ class _StatusContent extends StatelessWidget {
   final List<String> keystoneUrParts;
   final String? keystoneQrError;
   final String? keystoneScanError;
+  final int? walletScannedHeight;
+  final int? walletSnapshotHeight;
+  final int? walletChainTipHeight;
   final String? errorMessage;
   final VoidCallback? onRetry;
   final VoidCallback? onScanKeystone;
@@ -376,6 +392,19 @@ class _StatusContent extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
+            if (phase == VotingSessionPhase.waitingForWalletSync) ...[
+              _WalletSyncProgressText(
+                scannedHeight: walletScannedHeight,
+                snapshotHeight: walletSnapshotHeight,
+                chainTipHeight: walletChainTipHeight,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+            _StepRow(
+              label: 'Syncing wallet to snapshot',
+              active: phase == VotingSessionPhase.waitingForWalletSync,
+              complete: _after(VotingSessionPhase.waitingForWalletSync),
+            ),
             if (phase == VotingSessionPhase.keystoneSigning &&
                 keystoneSigningRequest != null) ...[
               _KeystoneSigningPanel(
@@ -446,6 +475,69 @@ class _StatusContent extends StatelessWidget {
 
   bool _after(VotingSessionPhase target) {
     return phase.index > target.index && phase != VotingSessionPhase.error;
+  }
+}
+
+class _WalletSyncProgressText extends StatelessWidget {
+  const _WalletSyncProgressText({
+    required this.scannedHeight,
+    required this.snapshotHeight,
+    required this.chainTipHeight,
+  });
+
+  final int? scannedHeight;
+  final int? snapshotHeight;
+  final int? chainTipHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final scanned = scannedHeight;
+    final snapshot = snapshotHeight;
+    final chainTip = chainTipHeight;
+    final rawRemaining = scanned == null || snapshot == null
+        ? null
+        : snapshot - scanned;
+    final remaining = rawRemaining == null
+        ? null
+        : rawRemaining > 0
+        ? rawRemaining
+        : 0;
+    final detail = [
+      if (scanned != null) 'Synced to block $scanned',
+      if (snapshot != null) 'snapshot block $snapshot',
+      if (chainTip != null) 'chain tip $chainTip',
+    ].join(' / ');
+    return Column(
+      children: [
+        Text(
+          'Waiting for wallet sync',
+          textAlign: TextAlign.center,
+          style: AppTypography.bodyMediumStrong.copyWith(
+            color: context.colors.text.accent,
+          ),
+        ),
+        if (detail.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xxs),
+          Text(
+            detail,
+            textAlign: TextAlign.center,
+            style: AppTypography.bodySmall.copyWith(
+              color: context.colors.text.secondary,
+            ),
+          ),
+        ],
+        if (remaining != null && remaining > 0) ...[
+          const SizedBox(height: AppSpacing.xxs),
+          Text(
+            '$remaining blocks remaining',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodySmall.copyWith(
+              color: context.colors.text.secondary,
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 

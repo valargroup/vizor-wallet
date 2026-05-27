@@ -8,6 +8,8 @@ import '../../core/storage/app_secure_store.dart';
 import '../../core/storage/wallet_paths.dart';
 import '../../providers/account_provider.dart';
 import '../../providers/rpc_endpoint_provider.dart';
+import '../../providers/sync_provider.dart';
+import '../../rust/api/sync.dart' as rust_sync;
 import '../../rust/api/voting.dart' as rust_voting;
 import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_api_client.dart';
@@ -15,6 +17,7 @@ import '../../services/voting/voting_config_loader.dart';
 import '../../services/voting/voting_endorser_client.dart';
 import '../../services/voting/voting_helper_health_tracker.dart';
 import '../../services/voting/voting_http.dart';
+import 'voting_config_source_provider.dart';
 
 /// Transport shared by the voting service clients.
 final votingHttpClientProvider = Provider<VotingHttpClient>((ref) {
@@ -25,7 +28,11 @@ final votingHttpClientProvider = Provider<VotingHttpClient>((ref) {
 
 /// Loads the hash-pinned static config and dynamic voting config.
 final votingConfigLoaderProvider = Provider<VotingConfigLoader>((ref) {
-  return VotingConfigLoader(httpClient: ref.watch(votingHttpClientProvider));
+  final source = ref.watch(votingConfigSourceProvider).value;
+  return VotingConfigLoader(
+    httpClient: ref.watch(votingHttpClientProvider),
+    staticConfigSource: source?.staticConfigSource,
+  );
 });
 
 /// REST client for chain-facing vote server endpoints.
@@ -109,6 +116,71 @@ final votingAccountIsHardwareProvider = Provider<Future<bool> Function(String)>(
 final votingRpcEndpointConfigProvider = Provider<RpcEndpointConfig>((ref) {
   return ref.watch(rpcEndpointProvider);
 });
+
+/// Starts foreground wallet sync when voting needs the wallet to catch up.
+final votingWalletSyncStarterProvider = Provider<void Function()>((ref) {
+  return () => ref.read(syncProvider.notifier).startSync();
+});
+
+/// Delay between contiguous scan readiness checks while waiting to vote.
+final votingWalletSyncPollIntervalProvider = Provider<Duration>((ref) {
+  return const Duration(seconds: 2);
+});
+
+/// Checks whether wallet scan progress has reached a voting snapshot height.
+final votingWalletSyncReadinessCheckerProvider =
+    Provider<VotingWalletSyncReadinessChecker>((ref) {
+      return const FrbVotingWalletSyncReadinessChecker();
+    });
+
+class VotingWalletSyncReadiness {
+  const VotingWalletSyncReadiness({
+    required this.scannedHeight,
+    required this.snapshotHeight,
+    required this.chainTipHeight,
+  });
+
+  final int scannedHeight;
+  final int snapshotHeight;
+  final int chainTipHeight;
+
+  bool get isReady => scannedHeight >= snapshotHeight;
+
+  int get blocksRemaining {
+    final remaining = snapshotHeight - scannedHeight;
+    return remaining > 0 ? remaining : 0;
+  }
+}
+
+abstract interface class VotingWalletSyncReadinessChecker {
+  Future<VotingWalletSyncReadiness> check({
+    required String dbPath,
+    required String network,
+    required int snapshotHeight,
+  });
+}
+
+class FrbVotingWalletSyncReadinessChecker
+    implements VotingWalletSyncReadinessChecker {
+  const FrbVotingWalletSyncReadinessChecker();
+
+  @override
+  Future<VotingWalletSyncReadiness> check({
+    required String dbPath,
+    required String network,
+    required int snapshotHeight,
+  }) async {
+    final status = await rust_sync.getSyncStatus(
+      dbPath: dbPath,
+      network: network,
+    );
+    return VotingWalletSyncReadiness(
+      scannedHeight: status.scannedHeight.toInt(),
+      snapshotHeight: snapshotHeight,
+      chainTipHeight: status.chainTipHeight.toInt(),
+    );
+  }
+}
 
 abstract interface class VotingHotkeyStore {
   Future<List<int>?> readHotkey({

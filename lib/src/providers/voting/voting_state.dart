@@ -61,6 +61,7 @@ class VotingRoundView {
 /// lower-level proof progress changes.
 enum VotingSessionPhase {
   idle,
+  waitingForWalletSync,
   resolvingPir,
   loadingWitnesses,
   readyToDelegate,
@@ -228,6 +229,9 @@ class VotingSessionState {
   final VotingResumePlan? resumePlan;
   final Uri? pirEndpoint;
   final BigInt? eligibleWeightZatoshi;
+  final int? walletScannedHeight;
+  final int? walletSnapshotHeight;
+  final int? walletChainTipHeight;
   final bool isHardwareAccount;
   final UnmodifiableListView<PirSnapshotEndpointDiagnostic> pirDiagnostics;
   final UnmodifiableMapView<int, VotingSessionProgress> delegationProgress;
@@ -249,6 +253,9 @@ class VotingSessionState {
     this.resumePlan,
     this.pirEndpoint,
     this.eligibleWeightZatoshi,
+    this.walletScannedHeight,
+    this.walletSnapshotHeight,
+    this.walletChainTipHeight,
     this.isHardwareAccount = false,
     List<PirSnapshotEndpointDiagnostic> pirDiagnostics = const [],
     Map<int, VotingSessionProgress> delegationProgress = const {},
@@ -275,6 +282,10 @@ class VotingSessionState {
     VotingResumePlan? resumePlan,
     Uri? pirEndpoint,
     BigInt? eligibleWeightZatoshi,
+    int? walletScannedHeight,
+    int? walletSnapshotHeight,
+    int? walletChainTipHeight,
+    bool clearWalletSyncReadiness = false,
     bool? isHardwareAccount,
     List<PirSnapshotEndpointDiagnostic>? pirDiagnostics,
     Map<int, VotingSessionProgress>? delegationProgress,
@@ -301,6 +312,15 @@ class VotingSessionState {
       pirEndpoint: pirEndpoint ?? this.pirEndpoint,
       eligibleWeightZatoshi:
           eligibleWeightZatoshi ?? this.eligibleWeightZatoshi,
+      walletScannedHeight: clearWalletSyncReadiness
+          ? null
+          : walletScannedHeight ?? this.walletScannedHeight,
+      walletSnapshotHeight: clearWalletSyncReadiness
+          ? null
+          : walletSnapshotHeight ?? this.walletSnapshotHeight,
+      walletChainTipHeight: clearWalletSyncReadiness
+          ? null
+          : walletChainTipHeight ?? this.walletChainTipHeight,
       isHardwareAccount: isHardwareAccount ?? this.isHardwareAccount,
       pirDiagnostics: pirDiagnostics ?? this.pirDiagnostics,
       delegationProgress: delegationProgress ?? this.delegationProgress,
