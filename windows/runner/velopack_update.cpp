@@ -36,6 +36,10 @@
 #define VIZOR_UPDATE_RELEASE_BASE_URL ""
 #endif
 
+#ifndef VIZOR_UPDATE_INCLUDE_PRERELEASES
+#define VIZOR_UPDATE_INCLUDE_PRERELEASES 0
+#endif
+
 namespace {
 
 enum class UpdateStatus {
@@ -663,14 +667,18 @@ bool EnsureManagerLocked() {
     return true;
   }
 
+#if VIZOR_UPDATE_INCLUDE_PRERELEASES
+  vpkc_update_source_t* source = vpkc_new_source_github(
+      VIZOR_UPDATE_GITHUB_REPO_URL, nullptr, true);
+#else
   if (DecodeBase64(VIZOR_UPDATE_FEED_PUBLIC_KEY_B64).size() != 64) {
     SetUnavailableLocked("Signed update feed public key is not configured.");
     return false;
   }
-
   vpkc_update_source_t* source = vpkc_new_source_custom_callback(
       SignedReleaseFeedCallback, FreeSignedReleaseFeedCallback,
       SignedDownloadAssetCallback, nullptr);
+#endif
   if (source == nullptr) {
     SetUnavailableLocked(LastVelopackError());
     return false;
