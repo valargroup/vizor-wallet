@@ -11,6 +11,7 @@ import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
 import 'package:zcash_wallet/src/features/voting/voting_resume_plan.dart';
 import 'package:zcash_wallet/src/features/voting/voting_share_timing.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_config_provider.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_config_source_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_rounds_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_service_providers.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_session_provider.dart';
@@ -248,6 +249,45 @@ void main() {
     expect(state.error?.pirDiagnostics, hasLength(1));
     expect(rust.setupCalls, 0);
     expect(rust.delegationBundleCalls, isEmpty);
+  });
+
+  test('wallet sync guard waits before delegation setup', () async {
+    final rust = FakeVotingRustApi();
+    final readiness = FakeVotingWalletSyncReadinessChecker(
+      responses: const [
+        VotingWalletSyncReadiness(
+          scannedHeight: 122,
+          snapshotHeight: 123,
+          chainTipHeight: 130,
+        ),
+        VotingWalletSyncReadiness(
+          scannedHeight: 123,
+          snapshotHeight: 123,
+          chainTipHeight: 130,
+        ),
+      ],
+    );
+    var syncStartCalls = 0;
+    final container = _sessionContainer(
+      rust: rust,
+      walletSyncReadinessChecker: readiness,
+      walletSyncStarter: () {
+        syncStartCalls++;
+      },
+      walletSyncPollInterval: Duration.zero,
+    );
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .prepareDelegation();
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(readiness.calls, 2);
+    expect(syncStartCalls, 1);
+    expect(rust.setupCalls, 1);
+    expect(state.phase, VotingSessionPhase.readyToDelegate);
   });
 
   test(
@@ -1437,6 +1477,9 @@ void main() {
 ProviderContainer _container({required VotingHttpClient http}) {
   return ProviderContainer(
     overrides: [
+      votingConfigSourceStoreProvider.overrideWithValue(
+        FakeVotingConfigSourceStore(),
+      ),
       votingHttpClientProvider.overrideWithValue(http),
       votingConfigLoaderProvider.overrideWithValue(
         VotingConfigLoader(
@@ -1460,6 +1503,9 @@ ProviderContainer _sessionContainer({
   bool accountIsHardware = false,
   Set<String>? hardwareAccountUuids,
   VotingTxConfirmationPolling? txConfirmationPolling,
+  VotingWalletSyncReadinessChecker? walletSyncReadinessChecker,
+  void Function()? walletSyncStarter,
+  Duration? walletSyncPollInterval,
 }) {
   final effectiveHttp =
       http ?? FakeVotingHttpClient(responses: votingHttpResponses());
@@ -1467,6 +1513,9 @@ ProviderContainer _sessionContainer({
       hardwareAccountUuids ?? (accountIsHardware ? {'account-1'} : <String>{});
   return ProviderContainer(
     overrides: [
+      votingConfigSourceStoreProvider.overrideWithValue(
+        FakeVotingConfigSourceStore(),
+      ),
       votingHttpClientProvider.overrideWithValue(effectiveHttp),
       votingConfigLoaderProvider.overrideWithValue(
         VotingConfigLoader(
@@ -1512,6 +1561,15 @@ ProviderContainer _sessionContainer({
       votingRustApiProvider.overrideWithValue(rust ?? FakeVotingRustApi()),
       votingHotkeyStoreProvider.overrideWithValue(
         hotkeyStore ?? FakeVotingHotkeyStore([9, 9, 9]),
+      ),
+      votingWalletSyncReadinessCheckerProvider.overrideWithValue(
+        walletSyncReadinessChecker ?? FakeVotingWalletSyncReadinessChecker(),
+      ),
+      votingWalletSyncStarterProvider.overrideWithValue(
+        walletSyncStarter ?? () {},
+      ),
+      votingWalletSyncPollIntervalProvider.overrideWithValue(
+        walletSyncPollInterval ?? Duration.zero,
       ),
       if (txConfirmationPolling != null)
         votingTxConfirmationPollingProvider.overrideWithValue(
@@ -1892,6 +1950,51 @@ class FailingVotingHotkeyStore implements VotingHotkeyStore {
     required String accountUuid,
     required String roundId,
   }) async {}
+}
+
+class FakeVotingConfigSourceStore implements VotingConfigSourceStore {
+  FakeVotingConfigSourceStore({this.sourceUrl});
+
+  String? sourceUrl;
+
+  @override
+  Future<String?> readSourceUrl() async => sourceUrl;
+
+  @override
+  Future<void> writeSourceUrl(String sourceUrl) async {
+    this.sourceUrl = sourceUrl;
+  }
+
+  @override
+  Future<void> resetSourceUrl() async {
+    sourceUrl = null;
+  }
+}
+
+class FakeVotingWalletSyncReadinessChecker
+    implements VotingWalletSyncReadinessChecker {
+  FakeVotingWalletSyncReadinessChecker({this.responses = const []});
+
+  final List<VotingWalletSyncReadiness> responses;
+  int calls = 0;
+
+  @override
+  Future<VotingWalletSyncReadiness> check({
+    required String dbPath,
+    required String network,
+    required int snapshotHeight,
+  }) async {
+    final index = calls;
+    calls++;
+    if (responses.isNotEmpty) {
+      return responses[index < responses.length ? index : responses.length - 1];
+    }
+    return VotingWalletSyncReadiness(
+      scannedHeight: snapshotHeight,
+      snapshotHeight: snapshotHeight,
+      chainTipHeight: snapshotHeight,
+    );
+  }
 }
 
 class FakeVotingRustApi implements VotingRustApi {

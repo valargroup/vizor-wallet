@@ -10,10 +10,13 @@ import '../../../core/navigation/app_back_resolver.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
+import '../../../core/widgets/app_pane_modal_overlay.dart';
+import '../../../core/widgets/app_tooltip.dart';
 import '../../../providers/voting/voting_rounds_provider.dart';
 import '../../../providers/voting/voting_state.dart';
 import '../../../providers/voting/voting_tree_sync_provider.dart';
 import '../voting_routes.dart';
+import '../widgets/voting_config_settings_panel.dart';
 
 class VotingPollsScreen extends ConsumerStatefulWidget {
   const VotingPollsScreen({super.key});
@@ -23,6 +26,8 @@ class VotingPollsScreen extends ConsumerStatefulWidget {
 }
 
 class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
+  bool _showSettings = false;
+
   @override
   void initState() {
     super.initState();
@@ -46,55 +51,69 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
         padding: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
           children: [
-            const _VotingTopBar(),
-            Expanded(
-              child: rounds.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => _VotingMessage(
-                  title: "Couldn't load polls",
-                  message: error.toString(),
-                  actionLabel: 'Try Again',
-                  onAction: () =>
-                      ref.read(votingRoundsProvider.notifier).refresh(),
-                ),
-                data: (items) {
-                  if (items.isEmpty) {
-                    return const _VotingMessage(
-                      title: 'No polls available',
-                      message: 'There are no coinholder polls to display yet.',
-                    );
-                  }
-                  final sortedItems = _sortRoundsByDate(items);
-                  _preSyncVisibleRoundTrees(sortedItems);
-                  return Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 560),
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.md,
-                          AppSpacing.sm,
-                          AppSpacing.md,
-                          40,
-                        ),
-                        itemCount: sortedItems.length,
-                        separatorBuilder: (_, _) =>
-                            const SizedBox(height: AppSpacing.base),
-                        itemBuilder: (context, index) => _PollCard(
-                          round: sortedItems[index],
-                          onTap: () => context.push(
-                            votingPollRoute(sortedItems[index].roundId),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _VotingTopBar(onSettings: _openSettings),
+                Expanded(
+                  child: rounds.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (error, _) => _VotingMessage(
+                      title: "Couldn't load polls",
+                      message: error.toString(),
+                      actionLabel: 'Try Again',
+                      onAction: () =>
+                          ref.read(votingRoundsProvider.notifier).refresh(),
+                    ),
+                    data: (items) {
+                      if (items.isEmpty) {
+                        return const _VotingMessage(
+                          title: 'No polls available',
+                          message:
+                              'There are no coinholder polls to display yet.',
+                        );
+                      }
+                      final sortedItems = _sortRoundsByDate(items);
+                      _preSyncVisibleRoundTrees(sortedItems);
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 560),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.md,
+                              AppSpacing.sm,
+                              AppSpacing.md,
+                              40,
+                            ),
+                            itemCount: sortedItems.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: AppSpacing.base),
+                            itemBuilder: (context, index) => _PollCard(
+                              round: sortedItems[index],
+                              onTap: () => context.push(
+                                votingPollRoute(sortedItems[index].roundId),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
+            if (_showSettings)
+              AppPaneModalOverlay(
+                onDismiss: _closeSettings,
+                child: VotingConfigSettingsPanel(
+                  onClose: _closeSettings,
+                  onUpdated: _closeSettings,
+                ),
+              ),
           ],
         ),
       ),
@@ -127,10 +146,24 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
           }),
     );
   }
+
+  void _openSettings() {
+    setState(() {
+      _showSettings = true;
+    });
+  }
+
+  void _closeSettings() {
+    setState(() {
+      _showSettings = false;
+    });
+  }
 }
 
 class _VotingTopBar extends StatelessWidget {
-  const _VotingTopBar();
+  const _VotingTopBar({required this.onSettings});
+
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +173,15 @@ class _VotingTopBar extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           const Positioned(left: AppSpacing.md, child: _VotingBackButton()),
+          Positioned(
+            right: AppSpacing.md,
+            child: _VotingTopBarIconButton(
+              icon: AppIcons.cog,
+              tooltip: 'Voting config',
+              semanticLabel: 'Voting config settings',
+              onTap: onSettings,
+            ),
+          ),
           Text(
             'COINHOLDER POLLING',
             textAlign: TextAlign.center,
@@ -152,6 +194,74 @@ class _VotingTopBar extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _VotingTopBarIconButton extends StatefulWidget {
+  const _VotingTopBarIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.semanticLabel,
+    required this.onTap,
+  });
+
+  final String icon;
+  final String tooltip;
+  final String semanticLabel;
+  final VoidCallback onTap;
+
+  @override
+  State<_VotingTopBarIconButton> createState() =>
+      _VotingTopBarIconButtonState();
+}
+
+class _VotingTopBarIconButtonState extends State<_VotingTopBarIconButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return AppTooltip(
+      message: widget.tooltip,
+      child: Semantics(
+        button: true,
+        label: widget.semanticLabel,
+        child: ExcludeSemantics(
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => _setHovered(true),
+            onExit: (_) => _setHovered(false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _hovered ? colors.state.hover : null,
+                  borderRadius: BorderRadius.circular(AppRadii.xSmall),
+                ),
+                child: Center(
+                  child: AppIcon(
+                    widget.icon,
+                    size: 20,
+                    color: colors.icon.accent,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() {
+      _hovered = hovered;
+    });
   }
 }
 

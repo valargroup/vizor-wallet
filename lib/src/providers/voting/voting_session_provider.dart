@@ -70,8 +70,16 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return _enqueue(_prepareDelegationUnlocked);
   }
 
+  Future<void> ensureWalletReadyForVoting() {
+    return _enqueue(() async {
+      final context = await _loadContext(_roundId);
+      await _waitUntilWalletReadyForVoting(context);
+    });
+  }
+
   Future<void> precomputeDelegationPir({required List<int> seedBytes}) async {
     final context = await _loadContext(_roundId);
+    await _waitUntilWalletReadyForVoting(context);
     final pirEndpoint = await _resolvePirEndpoint(context);
     if (pirEndpoint == null) return;
 
@@ -107,7 +115,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       if (current.pirEndpoint == null) {
         await _prepareDelegationUnlocked();
         current = await future;
-        if (current.phase == VotingSessionPhase.error) return;
+        if (current.phase == VotingSessionPhase.error ||
+            current.phase == VotingSessionPhase.waitingForWalletSync) {
+          return;
+        }
       }
 
       final context = await _loadContext(_roundId);
@@ -308,7 +319,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       if (current.pirEndpoint == null) {
         await _prepareDelegationUnlocked();
         current = await future;
-        if (current.phase == VotingSessionPhase.error) return;
+        if (current.phase == VotingSessionPhase.error ||
+            current.phase == VotingSessionPhase.waitingForWalletSync) {
+          return;
+        }
       }
 
       final context = await _loadContext(_roundId);
@@ -451,6 +465,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return _enqueue(() async {
       final current = await future;
       final context = await _loadContext(_roundId);
+      await _waitUntilWalletReadyForVoting(context);
       final hotkeySeed = await ref
           .read(votingHotkeyStoreProvider)
           .readHotkey(
@@ -1418,6 +1433,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       _setError('Keystone voting is only available for hardware accounts.');
       return;
     }
+    await _waitUntilWalletReadyForVoting(context);
 
     if (current.pirEndpoint == null) {
       await _prepareDelegationUnlocked();
@@ -1507,6 +1523,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   Future<void> _prepareDelegationUnlocked() async {
     final current = await future;
     final context = await _loadContext(_roundId);
+    await _waitUntilWalletReadyForVoting(context);
     state = AsyncData(
       current.copyWith(
         phase: VotingSessionPhase.resolvingPir,
@@ -1632,6 +1649,79 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           walletId: context.accountUuid,
           roundId: context.round.roundId,
         );
+  }
+
+  Future<void> _waitUntilWalletReadyForVoting(
+    _VotingSessionContext context,
+  ) async {
+    var loggedWait = false;
+    while (true) {
+      final readiness = await ref
+          .read(votingWalletSyncReadinessCheckerProvider)
+          .check(
+            dbPath: context.dbPath,
+            network: context.network,
+            snapshotHeight: context.round.snapshotHeight,
+          );
+      if (readiness.isReady) {
+        _setWalletSyncReadinessState(
+          context: context,
+          readiness: readiness,
+          waiting: false,
+        );
+        return;
+      }
+
+      if (!loggedWait) {
+        loggedWait = true;
+        debugPrint(
+          '[zcash] Voting: waiting for wallet scan before voting '
+          'round=${context.round.roundId} '
+          'scanned=${readiness.scannedHeight} '
+          'snapshot=${readiness.snapshotHeight}',
+        );
+      }
+      _setWalletSyncReadinessState(
+        context: context,
+        readiness: readiness,
+        waiting: true,
+      );
+      try {
+        ref.read(votingWalletSyncStarterProvider).call();
+      } catch (e) {
+        debugPrint('[zcash] Voting: wallet sync start skipped: $e');
+      }
+      await Future<void>.delayed(
+        ref.read(votingWalletSyncPollIntervalProvider),
+      );
+    }
+  }
+
+  void _setWalletSyncReadinessState({
+    required _VotingSessionContext context,
+    required VotingWalletSyncReadiness readiness,
+    required bool waiting,
+  }) {
+    final current = state.value ?? VotingSessionState(roundId: _roundId);
+    final phase = waiting
+        ? VotingSessionPhase.waitingForWalletSync
+        : current.phase == VotingSessionPhase.waitingForWalletSync
+        ? VotingSessionPhase.idle
+        : current.phase;
+    state = AsyncData(
+      current.copyWith(
+        phase: phase,
+        config: context.config,
+        round: context.round,
+        resumePlan: context.resumePlan,
+        isHardwareAccount: context.isHardwareAccount,
+        walletScannedHeight: readiness.scannedHeight,
+        walletSnapshotHeight: readiness.snapshotHeight,
+        walletChainTipHeight: readiness.chainTipHeight,
+        clearWalletSyncReadiness: !waiting,
+        clearError: true,
+      ),
+    );
   }
 
   void _setError(
