@@ -10,6 +10,7 @@ import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_proposal_detail_screen.dart';
+import 'package:zcash_wallet/src/features/voting/screens/voting_review_screen.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_status_screen.dart';
 import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
@@ -156,9 +157,12 @@ void main() {
       responses: _votingHttpResponses()
         ..['/shielded-vote/v1/round/$_roundId'] = {'round': round},
     );
+    final recoveryApi = _MutableVotingRecoveryApi();
     final container = _statusContainer(
       http: http,
       accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
     );
     addTearDown(container.dispose);
 
@@ -171,7 +175,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('[TEST] Max Proposals'), findsOneWidget);
+    expect(find.text('Voting Power 0.000001 ZEC'), findsOneWidget);
+    expect(find.text('Yes'), findsOneWidget);
+    expect(find.text('Review Answers'), findsOneWidget);
+    expect(find.text('Start Voting'), findsNothing);
     expect(find.text('View more'), findsNothing);
+
+    await tester.tap(find.text('Yes'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(votingDraftProvider(_draftKey)).choices, {1: 0});
+
+    await tester.tap(find.text('Yes'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(votingDraftProvider(_draftKey)).isEmpty, true);
   });
 
   testWidgets('proposal detail shows View more when description truncates', (
@@ -191,9 +209,12 @@ void main() {
       responses: _votingHttpResponses()
         ..['/shielded-vote/v1/round/$_roundId'] = {'round': round},
     );
+    final recoveryApi = _MutableVotingRecoveryApi();
     final container = _statusContainer(
       http: http,
       accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
     );
     addTearDown(container.dispose);
 
@@ -206,6 +227,97 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('View more'), findsOneWidget);
+  });
+
+  testWidgets('poll stops preparing voting power when setup fails', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final recoveryApi = _MutableVotingRecoveryApi();
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _FailingVotingPowerRustApi(),
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _proposalHarness(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Voting Power unavailable'), findsOneWidget);
+    expect(find.text('Preparing voting power'), findsNothing);
+  });
+
+  testWidgets('reviewing partial votes warns and marks skipped rows', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final round = _roundStatusJson()
+      ..['proposals'] = [
+        {
+          'proposal_id': 1,
+          'title': 'First proposal',
+          'options': ['Yes', 'No'],
+        },
+        {
+          'proposal_id': 2,
+          'title': 'Second proposal',
+          'options': ['Aye', 'Nay'],
+        },
+      ];
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round},
+    );
+    final recoveryApi = _MutableVotingRecoveryApi();
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _NoMnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
+    );
+    addTearDown(container.dispose);
+    container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _proposalHarness(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Review Answers'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Skip unanswered questions?'), findsOneWidget);
+    expect(
+      find.textContaining('You have not answered 1 of 2 questions.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Continue to Review'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Review Your Answers'), findsOneWidget);
+    expect(find.text('Confirm & Submit'), findsOneWidget);
+    expect(find.text('First proposal'), findsOneWidget);
+    expect(find.text('Yes'), findsOneWidget);
+    expect(find.text('Second proposal'), findsOneWidget);
+    expect(find.text('Skipped'), findsOneWidget);
   });
 
   testWidgets('status screen navigates after successful submission', (
@@ -366,6 +478,11 @@ void main() {
     }
 
     expect(find.text('Sign Bundle 1 of 1'), findsOneWidget);
+    expect(find.text('Memo'), findsOneWidget);
+    expect(
+      find.textContaining('vote on Poll with 0.00000100 ZEC'),
+      findsOneWidget,
+    );
     expect(find.text('Scan Signature'), findsOneWidget);
     expect(find.text('Software Account Required'), findsNothing);
     await tester.tap(find.text('Scan Signature'));
@@ -597,7 +714,8 @@ Widget _proposalHarness() {
       ),
       GoRoute(
         path: '/voting/poll/:roundId/review',
-        builder: (_, _) => const Text('review route'),
+        builder: (_, state) =>
+            VotingReviewScreen(roundId: state.pathParameters['roundId']!),
       ),
       GoRoute(path: '/home', builder: (_, _) => const Text('home route')),
       GoRoute(path: '/send', builder: (_, _) => const Text('send route')),
@@ -730,6 +848,7 @@ Map<String, dynamic> _roundStatusJson() => {
 
 rust_voting.ApiRoundRecoveryState _recoveryState({
   List<rust_voting.ApiDelegationTxRecovery> delegationTxHashes = const [],
+  List<rust_voting.ApiVoteRecord> votes = const [],
   List<rust_voting.ApiVoteTxRecovery> voteTxHashes = const [],
 }) {
   return rust_voting.ApiRoundRecoveryState(
@@ -737,7 +856,7 @@ rust_voting.ApiRoundRecoveryState _recoveryState({
     bundleCount: 1,
     delegationWorkflows: const [],
     delegationTxHashes: delegationTxHashes,
-    votes: const [],
+    votes: votes,
     voteWorkflows: const [],
     voteTxHashes: voteTxHashes,
     commitmentBundles: const [],
@@ -839,6 +958,21 @@ class _NoopVotingRustApi implements VotingRustApi {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FailingVotingPowerRustApi extends _NoopVotingRustApi {
+  @override
+  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required rust_voting.ApiVotingRoundParams roundParams,
+    required String roundName,
+    String? sessionJson,
+    required String accountUuid,
+  }) async {
+    throw StateError('snapshot setup unavailable');
+  }
 }
 
 class _NoopSyncNotifier extends SyncNotifier {
@@ -1036,6 +1170,8 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
       pcztSighash: Uint8List.fromList(const [3]),
       rk: Uint8List.fromList(const [4]),
       actionIndex: 0,
+      displayMemo:
+          'I am authorizing this hotkey managed by my wallet to vote on $roundName with 0.00000100 ZEC.',
       eligibleWeightZatoshi: BigInt.from(100),
       delegatedWeightZatoshi: BigInt.from(100),
       bundleCount: 1,

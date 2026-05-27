@@ -595,8 +595,6 @@ class _EditorCard extends StatelessWidget {
                 label: 'Title',
                 controller: nameController,
                 autofocus: !isEditing,
-                leading: const AppIcon(AppIcons.book),
-                leadingSlotWidth: 32,
                 trailingSlotWidth: 40,
                 inputHorizontalPadding: AppSpacing.s,
                 textInputAction: TextInputAction.next,
@@ -613,8 +611,6 @@ class _EditorCard extends StatelessWidget {
               child: AppTextField(
                 label: 'Static Config URL',
                 controller: urlController,
-                leading: const AppIcon(AppIcons.endpoint),
-                leadingSlotWidth: 32,
                 trailingSlotWidth: 40,
                 inputHorizontalPadding: AppSpacing.s,
                 keyboardType: TextInputType.url,

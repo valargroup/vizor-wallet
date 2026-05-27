@@ -101,6 +101,7 @@ pub struct ApiKeystoneDelegationRequest {
     pub pczt_sighash: Vec<u8>,
     pub rk: Vec<u8>,
     pub action_index: u32,
+    pub display_memo: String,
     pub eligible_weight_zatoshi: u64,
     pub delegated_weight_zatoshi: u64,
     pub bundle_count: u32,
@@ -539,6 +540,7 @@ impl From<KeystoneDelegationRequest> for ApiKeystoneDelegationRequest {
             pczt_sighash: result.pczt_sighash,
             rk: result.rk,
             action_index: result.action_index,
+            display_memo: result.display_memo,
             eligible_weight_zatoshi: result.eligible_weight_zatoshi,
             delegated_weight_zatoshi: result.delegated_weight_zatoshi,
             bundle_count: result.bundle_count,
@@ -2103,6 +2105,26 @@ mod tests {
         assert_eq!(api.vote_round_id, "round");
         assert_eq!(api.eligible_weight_zatoshi, 20);
         assert_eq!(api.delegated_weight_zatoshi, 10);
+        assert_eq!(api.bundle_count, 2);
+        assert_eq!(api.bundle_index, 1);
+    }
+
+    #[test]
+    fn api_keystone_delegation_request_preserves_display_memo() {
+        let api = ApiKeystoneDelegationRequest::from(KeystoneDelegationRequest {
+            pczt_bytes: vec![1],
+            redacted_pczt_bytes: vec![2],
+            pczt_sighash: vec![3],
+            rk: vec![4],
+            action_index: 5,
+            display_memo: "I am authorizing this hotkey.".to_string(),
+            eligible_weight_zatoshi: 20,
+            delegated_weight_zatoshi: 10,
+            bundle_count: 2,
+            bundle_index: 1,
+        });
+
+        assert_eq!(api.display_memo, "I am authorizing this hotkey.");
         assert_eq!(api.bundle_count, 2);
         assert_eq!(api.bundle_index, 1);
     }

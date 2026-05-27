@@ -5993,18 +5993,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return ApiKeystoneDelegationRequest(
       pcztBytes: dco_decode_list_prim_u_8_strict(arr[0]),
       redactedPcztBytes: dco_decode_list_prim_u_8_strict(arr[1]),
       pcztSighash: dco_decode_list_prim_u_8_strict(arr[2]),
       rk: dco_decode_list_prim_u_8_strict(arr[3]),
       actionIndex: dco_decode_u_32(arr[4]),
-      eligibleWeightZatoshi: dco_decode_u_64(arr[5]),
-      delegatedWeightZatoshi: dco_decode_u_64(arr[6]),
-      bundleCount: dco_decode_u_32(arr[7]),
-      bundleIndex: dco_decode_u_32(arr[8]),
+      displayMemo: dco_decode_String(arr[5]),
+      eligibleWeightZatoshi: dco_decode_u_64(arr[6]),
+      delegatedWeightZatoshi: dco_decode_u_64(arr[7]),
+      bundleCount: dco_decode_u_32(arr[8]),
+      bundleIndex: dco_decode_u_32(arr[9]),
     );
   }
 
@@ -7250,6 +7251,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_pcztSighash = sse_decode_list_prim_u_8_strict(deserializer);
     var var_rk = sse_decode_list_prim_u_8_strict(deserializer);
     var var_actionIndex = sse_decode_u_32(deserializer);
+    var var_displayMemo = sse_decode_String(deserializer);
     var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
     var var_delegatedWeightZatoshi = sse_decode_u_64(deserializer);
     var var_bundleCount = sse_decode_u_32(deserializer);
@@ -7260,6 +7262,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       pcztSighash: var_pcztSighash,
       rk: var_rk,
       actionIndex: var_actionIndex,
+      displayMemo: var_displayMemo,
       eligibleWeightZatoshi: var_eligibleWeightZatoshi,
       delegatedWeightZatoshi: var_delegatedWeightZatoshi,
       bundleCount: var_bundleCount,
@@ -8859,6 +8862,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_prim_u_8_strict(self.pcztSighash, serializer);
     sse_encode_list_prim_u_8_strict(self.rk, serializer);
     sse_encode_u_32(self.actionIndex, serializer);
+    sse_encode_String(self.displayMemo, serializer);
     sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
     sse_encode_u_64(self.delegatedWeightZatoshi, serializer);
     sse_encode_u_32(self.bundleCount, serializer);

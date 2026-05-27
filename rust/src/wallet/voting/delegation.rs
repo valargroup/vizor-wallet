@@ -65,6 +65,7 @@ pub struct KeystoneDelegationRequest {
     pub pczt_sighash: Vec<u8>,
     pub rk: Vec<u8>,
     pub action_index: u32,
+    pub display_memo: String,
     pub eligible_weight_zatoshi: u64,
     pub delegated_weight_zatoshi: u64,
     pub bundle_count: u32,
@@ -912,6 +913,10 @@ pub async fn build_keystone_delegation_request(
         crate::wallet::sync::redact_pczt_for_signer(&governance_pczt.pczt_bytes)?;
     let action_index = u32::try_from(governance_pczt.action_index)
         .map_err(|_| "governance PCZT action index does not fit in u32".to_string())?;
+    let display_memo = governance_pczt_display_memo(
+        &context.round_name,
+        raw_bundle_weight_zatoshi(&context.bundle_note_infos)?,
+    );
 
     Ok(KeystoneDelegationRequest {
         pczt_bytes: governance_pczt.pczt_bytes,
@@ -919,6 +924,7 @@ pub async fn build_keystone_delegation_request(
         pczt_sighash: governance_pczt.pczt_sighash,
         rk: governance_pczt.rk,
         action_index,
+        display_memo,
         eligible_weight_zatoshi: context
             .bundle_setup
             .eligible_weight_zatoshi
@@ -1181,12 +1187,32 @@ fn bundle_notes(
 ///
 /// Fails if summing note values overflows `u64`.
 fn bundle_weight_zatoshi(notes: &[zcash_voting::NoteInfo]) -> Result<u64, String> {
+    let total = raw_bundle_weight_zatoshi(notes)?;
+    Ok((total / zcash_voting::governance::BALLOT_DIVISOR)
+        * zcash_voting::governance::BALLOT_DIVISOR)
+}
+
+fn raw_bundle_weight_zatoshi(notes: &[zcash_voting::NoteInfo]) -> Result<u64, String> {
     let total = notes.iter().try_fold(0u64, |acc, note| {
         acc.checked_add(note.value)
             .ok_or_else(|| "delegation bundle weight overflows u64".to_string())
     })?;
-    Ok((total / zcash_voting::governance::BALLOT_DIVISOR)
-        * zcash_voting::governance::BALLOT_DIVISOR)
+    Ok(total)
+}
+
+fn governance_pczt_display_memo(round_name: &str, total_weight_zatoshi: u64) -> String {
+    let zec_whole = total_weight_zatoshi / 100_000_000;
+    let zec_frac = total_weight_zatoshi % 100_000_000;
+    let memo = format!(
+        "I am authorizing this hotkey managed by my wallet to vote on {} with {}.{:08} ZEC.",
+        round_name, zec_whole, zec_frac
+    );
+
+    if memo.len() <= 512 {
+        memo
+    } else {
+        String::from_utf8_lossy(&memo.as_bytes()[..512]).into_owned()
+    }
 }
 
 /// Returns the stored bundle count for `round_id`.
@@ -1682,6 +1708,22 @@ mod tests {
             zcash_voting::BALLOT_DIVISOR
         );
         assert!(bundle_notes(&notes, 2).is_err());
+    }
+
+    #[test]
+    fn governance_pczt_display_memo_uses_raw_bundle_weight() {
+        let mut note = test_note_info(0);
+        note.value = 123_456_789;
+
+        let raw_weight = raw_bundle_weight_zatoshi(&[note.clone()]).unwrap();
+        let quantized_weight = bundle_weight_zatoshi(&[note]).unwrap();
+
+        assert_eq!(raw_weight, 123_456_789);
+        assert_ne!(raw_weight, quantized_weight);
+        assert_eq!(
+            governance_pczt_display_memo("Poll", raw_weight),
+            "I am authorizing this hotkey managed by my wallet to vote on Poll with 1.23456789 ZEC."
+        );
     }
 
     #[test]

@@ -991,6 +991,7 @@ class ApiKeystoneDelegationRequest {
   final Uint8List pcztSighash;
   final Uint8List rk;
   final int actionIndex;
+  final String displayMemo;
   final BigInt eligibleWeightZatoshi;
   final BigInt delegatedWeightZatoshi;
   final int bundleCount;
@@ -1002,6 +1003,7 @@ class ApiKeystoneDelegationRequest {
     required this.pcztSighash,
     required this.rk,
     required this.actionIndex,
+    required this.displayMemo,
     required this.eligibleWeightZatoshi,
     required this.delegatedWeightZatoshi,
     required this.bundleCount,
@@ -1015,6 +1017,7 @@ class ApiKeystoneDelegationRequest {
       pcztSighash.hashCode ^
       rk.hashCode ^
       actionIndex.hashCode ^
+      displayMemo.hashCode ^
       eligibleWeightZatoshi.hashCode ^
       delegatedWeightZatoshi.hashCode ^
       bundleCount.hashCode ^
@@ -1030,6 +1033,7 @@ class ApiKeystoneDelegationRequest {
           pcztSighash == other.pcztSighash &&
           rk == other.rk &&
           actionIndex == other.actionIndex &&
+          displayMemo == other.displayMemo &&
           eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
           delegatedWeightZatoshi == other.delegatedWeightZatoshi &&
           bundleCount == other.bundleCount &&

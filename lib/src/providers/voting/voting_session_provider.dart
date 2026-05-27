@@ -527,17 +527,19 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           message: txHash,
         );
       }
-      final pendingBundles = _pendingVoteBundleIndexes(plan);
-      final totalVoteTasks = pendingBundles.length * effectiveDraftVotes.length;
-      var completedVoteTasks = 0;
+      final pendingBundles = _pendingVoteBundleIndexes(plan).toList()..sort();
+      final totalQuestions = effectiveDraftVotes.length;
+      final totalBundleTasks = pendingBundles.length * totalQuestions;
+      var completedBundleTasks = 0;
+      var completedQuestions = 0;
       debugPrint(
         '[zcash] Voting: cast votes start '
         'round=${context.round.roundId} bundles=${pendingBundles.length} '
         'proposals=${effectiveDraftVotes.length} '
         'lastMoment=${context.round.isLastMoment()}',
       );
-      for (final bundleIndex in pendingBundles) {
-        for (final draftVote in effectiveDraftVotes) {
+      for (final draftVote in effectiveDraftVotes) {
+        for (final bundleIndex in pendingBundles) {
           final voteTimer = Stopwatch()..start();
           final key = VotingVoteKey(
             bundleIndex: bundleIndex,
@@ -548,8 +550,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               phase: VotingSessionPhase.syncingVoteTree,
               currentBundleIndex: bundleIndex,
               currentVoteKey: key,
-              voteSubmissionCompletedCount: completedVoteTasks,
-              voteSubmissionTotalCount: totalVoteTasks,
+              voteSubmissionCompletedCount: completedQuestions,
+              voteSubmissionTotalCount: totalQuestions,
+              voteSubmissionProgress: _voteSubmissionProgress(
+                completedBundleTasks: completedBundleTasks,
+                totalBundleTasks: totalBundleTasks,
+              ),
             ),
           );
           debugPrint(
@@ -599,8 +605,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               phase: VotingSessionPhase.castingVotes,
               currentBundleIndex: bundleIndex,
               currentVoteKey: key,
-              voteSubmissionCompletedCount: completedVoteTasks,
-              voteSubmissionTotalCount: totalVoteTasks,
+              voteSubmissionCompletedCount: completedQuestions,
+              voteSubmissionTotalCount: totalQuestions,
+              voteSubmissionProgress: _voteSubmissionProgress(
+                completedBundleTasks: completedBundleTasks,
+                totalBundleTasks: totalBundleTasks,
+              ),
             ),
           );
           debugPrint(
@@ -638,8 +648,13 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                   phase: VotingSessionPhase.castingVotes,
                   voteProgress: progress,
                   currentVoteKey: eventKey,
-                  voteSubmissionCompletedCount: completedVoteTasks,
-                  voteSubmissionTotalCount: totalVoteTasks,
+                  voteSubmissionCompletedCount: completedQuestions,
+                  voteSubmissionTotalCount: totalQuestions,
+                  voteSubmissionProgress: _voteSubmissionProgress(
+                    completedBundleTasks: completedBundleTasks,
+                    totalBundleTasks: totalBundleTasks,
+                    currentBundleProgress: event.proofProgress,
+                  ),
                 ),
               );
             }
@@ -654,12 +669,17 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                 commitments,
                 vcTreePositions: vcTreePositions,
                 singleShare: draftVote.singleShare,
-                completedVoteTasks: completedVoteTasks,
-                totalVoteTasks: totalVoteTasks,
+                completedQuestions: completedQuestions,
+                totalQuestions: totalQuestions,
+                voteSubmissionProgress: _voteSubmissionProgress(
+                  completedBundleTasks: completedBundleTasks,
+                  totalBundleTasks: totalBundleTasks,
+                  currentBundleProgress: 0.95,
+                ),
               );
             }
           }
-          completedVoteTasks++;
+          completedBundleTasks++;
           progress[key] = VotingSessionProgress(
             phase: 'completed',
             bundleIndex: key.bundleIndex,
@@ -670,8 +690,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               phase: VotingSessionPhase.castingVotes,
               voteProgress: progress,
               currentVoteKey: key,
-              voteSubmissionCompletedCount: completedVoteTasks,
-              voteSubmissionTotalCount: totalVoteTasks,
+              voteSubmissionCompletedCount: completedQuestions,
+              voteSubmissionTotalCount: totalQuestions,
+              voteSubmissionProgress: _voteSubmissionProgress(
+                completedBundleTasks: completedBundleTasks,
+                totalBundleTasks: totalBundleTasks,
+              ),
             ),
           );
           debugPrint(
@@ -681,6 +705,24 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             'total=${_formatElapsed(voteTimer.elapsed)}',
           );
         }
+        if (pendingBundles.isNotEmpty) {
+          completedQuestions++;
+          state = AsyncData(
+            (state.value ?? current).copyWith(
+              phase: VotingSessionPhase.castingVotes,
+              voteProgress: progress,
+              voteSubmissionCompletedCount: completedQuestions,
+              voteSubmissionTotalCount: totalQuestions,
+              voteSubmissionProgress: _voteSubmissionProgress(
+                completedBundleTasks: completedBundleTasks,
+                totalBundleTasks: totalBundleTasks,
+              ),
+            ),
+          );
+        }
+      }
+      if (pendingBundles.isEmpty) {
+        completedQuestions = totalQuestions;
       }
 
       final resumeTimer = Stopwatch()..start();
@@ -701,8 +743,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           phase: VotingSessionPhase.submittingShares,
           resumePlan: refreshedPlan,
           voteProgress: progress,
-          voteSubmissionCompletedCount: completedVoteTasks,
-          voteSubmissionTotalCount: totalVoteTasks,
+          voteSubmissionCompletedCount: completedQuestions,
+          voteSubmissionTotalCount: totalQuestions,
+          voteSubmissionProgress: _voteSubmissionProgress(
+            completedBundleTasks: completedBundleTasks,
+            totalBundleTasks: totalBundleTasks,
+          ),
           clearCurrentBundleIndex: true,
           clearCurrentVoteKey: true,
         ),
@@ -761,8 +807,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     rust_voting.ApiSignedVoteCommitments commitments, {
     Map<int, BigInt> vcTreePositions = const {},
     required bool singleShare,
-    required int completedVoteTasks,
-    required int totalVoteTasks,
+    required int completedQuestions,
+    required int totalQuestions,
+    required double? voteSubmissionProgress,
   }) async {
     final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
     final rust = ref.read(votingRustApiProvider);
@@ -830,8 +877,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           bundleIndex: commitments.bundleIndex,
           proposalId: payload.proposalId,
           message: bundleProgressMessage,
-          completedVoteTasks: completedVoteTasks,
-          totalVoteTasks: totalVoteTasks,
+          completedQuestions: completedQuestions,
+          totalQuestions: totalQuestions,
+          voteSubmissionProgress: voteSubmissionProgress,
         );
         for (final serverUrl in candidateServers) {
           if (acceptedServers.length >= targetCount) break;
@@ -907,6 +955,18 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return '${bundleIndex + 1}/$bundleCount';
   }
 
+  double? _voteSubmissionProgress({
+    required int completedBundleTasks,
+    required int totalBundleTasks,
+    double? currentBundleProgress,
+  }) {
+    if (totalBundleTasks <= 0) return null;
+    final currentProgress = (currentBundleProgress ?? 0).clamp(0.0, 1.0);
+    return ((completedBundleTasks + currentProgress) / totalBundleTasks)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
   List<String> _plannedShareServers({
     required List<String> plannedServers,
     required Iterable<String> fallbackServers,
@@ -925,8 +985,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     required int bundleIndex,
     required int proposalId,
     required String? message,
-    required int completedVoteTasks,
-    required int totalVoteTasks,
+    required int completedQuestions,
+    required int totalQuestions,
+    required double? voteSubmissionProgress,
   }) {
     final current = state.value;
     if (current == null) return;
@@ -945,8 +1006,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         phase: VotingSessionPhase.castingVotes,
         voteProgress: progress,
         currentVoteKey: key,
-        voteSubmissionCompletedCount: completedVoteTasks,
-        voteSubmissionTotalCount: totalVoteTasks,
+        voteSubmissionCompletedCount: completedQuestions,
+        voteSubmissionTotalCount: totalQuestions,
+        voteSubmissionProgress: voteSubmissionProgress,
       ),
     );
   }

@@ -15,6 +15,7 @@ import '../../../core/widgets/app_tooltip.dart';
 import '../../../providers/voting/voting_rounds_provider.dart';
 import '../../../providers/voting/voting_state.dart';
 import '../../../providers/voting/voting_tree_sync_provider.dart';
+import '../voting_poll_ordering.dart';
 import '../voting_routes.dart';
 import '../widgets/voting_config_settings_panel.dart';
 
@@ -76,7 +77,7 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
                               'There are no coinholder polls to display yet.',
                         );
                       }
-                      final sortedItems = _sortRoundsByDate(items);
+                      final sortedItems = sortVotingRoundsForPollList(items);
                       _preSyncVisibleRoundTrees(sortedItems);
                       return Align(
                         alignment: Alignment.topCenter,
@@ -339,8 +340,8 @@ class _PollCard extends StatelessWidget {
     final colors = context.colors;
     final title = round.title.isEmpty ? round.roundId : round.title;
     final description = _roundDescription(round.rawJson);
-    final dateRange = _roundDateRange(round.rawJson);
     final state = _pollCardState(round);
+    final dateLabel = _roundDateLabel(round.rawJson, state);
 
     return Material(
       color: const Color(0x00000000),
@@ -367,11 +368,11 @@ class _PollCard extends StatelessWidget {
               children: [
                 _StatusBadge(state: state),
                 const Spacer(),
-                if (dateRange != null)
+                if (dateLabel != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      dateRange,
+                      dateLabel,
                       textAlign: TextAlign.right,
                       style: AppTypography.bodyMediumStrong.copyWith(
                         color: colors.text.secondary,
@@ -524,159 +525,18 @@ String _roundDescription(Map<String, dynamic> json) {
   return '';
 }
 
-List<VotingRoundView> _sortRoundsByDate(List<VotingRoundView> rounds) {
-  return [...rounds]..sort((a, b) {
-    final aDate = _roundSortDate(a.rawJson);
-    final bDate = _roundSortDate(b.rawJson);
-    if (aDate == null && bDate == null) {
-      return a.title.compareTo(b.title);
-    }
-    if (aDate == null) return 1;
-    if (bDate == null) return -1;
-    return bDate.compareTo(aDate);
-  });
-}
-
-String? _roundDateRange(Map<String, dynamic> json) {
-  final start = _dateFromJson(json, const [
-    'start_date',
-    'startDate',
-    'starts_at',
-    'startsAt',
-    'open_date',
-    'openDate',
-    'opens_at',
-    'opensAt',
-    'start_time',
-    'startTime',
-    'starts',
-    'start',
-    'voting_start',
-    'votingStart',
-    'poll_start',
-    'pollStart',
-    'vote_start_time',
-    'voteStartTime',
-    'ceremony_phase_start',
-    'ceremonyPhaseStart',
-  ]);
-  final end = _dateFromJson(json, const [
-    'end_date',
-    'endDate',
-    'ends_at',
-    'endsAt',
-    'close_date',
-    'closeDate',
-    'closes_at',
-    'closesAt',
-    'end_time',
-    'endTime',
-    'ends',
-    'end',
-    'deadline',
-    'voting_end',
-    'votingEnd',
-    'poll_end',
-    'pollEnd',
-    'vote_end_time',
-    'voteEndTime',
-  ]);
-  if (start == null && end == null) return null;
-  if (start == null) return 'Ends ${_formatPollDate(end!)}';
-  if (end == null) return 'Starts ${_formatPollDate(start)}';
-  if (_isSameDay(start, end)) return _formatPollDate(end);
-  return '${_formatPollDate(start)} - ${_formatPollDate(end)}';
-}
-
-DateTime? _roundSortDate(Map<String, dynamic> json) {
-  final start = _dateFromJson(json, const [
-    'start_date',
-    'startDate',
-    'starts_at',
-    'startsAt',
-    'open_date',
-    'openDate',
-    'opens_at',
-    'opensAt',
-    'start_time',
-    'startTime',
-    'starts',
-    'start',
-    'voting_start',
-    'votingStart',
-    'poll_start',
-    'pollStart',
-    'vote_start_time',
-    'voteStartTime',
-    'ceremony_phase_start',
-    'ceremonyPhaseStart',
-    'created_at',
-    'createdAt',
-    'published_at',
-    'publishedAt',
-  ]);
-  final end = _dateFromJson(json, const [
-    'end_date',
-    'endDate',
-    'ends_at',
-    'endsAt',
-    'close_date',
-    'closeDate',
-    'closes_at',
-    'closesAt',
-    'end_time',
-    'endTime',
-    'ends',
-    'end',
-    'deadline',
-    'voting_end',
-    'votingEnd',
-    'poll_end',
-    'pollEnd',
-    'vote_end_time',
-    'voteEndTime',
-  ]);
-  return start ?? end;
-}
-
-DateTime? _dateFromJson(Map<String, dynamic> json, List<String> keys) {
-  for (final key in keys) {
-    final value = _valueFromJson(json, key);
-    final date = _parseDate(value);
-    if (date != null) return date;
+String? _roundDateLabel(Map<String, dynamic> json, _PollCardState state) {
+  final start = votingRoundStartDate(json);
+  final end = votingRoundEndDate(json);
+  if (end != null) {
+    final label = switch (state) {
+      _PollCardState.active || _PollCardState.voted => 'Closes',
+      _PollCardState.tallying || _PollCardState.closed => 'Closed',
+    };
+    return '$label ${_formatPollDate(end)}';
   }
+  if (start != null) return 'Starts ${_formatPollDate(start)}';
   return null;
-}
-
-Object? _valueFromJson(Object? value, String key) {
-  if (value is! Map) return null;
-  if (value.containsKey(key)) return value[key];
-  for (final entry in value.entries) {
-    if (entry.key.toString() == key) return entry.value;
-  }
-  for (final entry in value.entries) {
-    final nested = entry.value;
-    if (nested is Map) {
-      final match = _valueFromJson(nested, key);
-      if (match != null) return match;
-    }
-  }
-  return null;
-}
-
-DateTime? _parseDate(Object? value) {
-  if (value == null) return null;
-  if (value is DateTime) return value;
-  if (value is num) {
-    final milliseconds = value > 100000000000
-        ? value.toInt()
-        : (value * 1000).toInt();
-    return DateTime.fromMillisecondsSinceEpoch(milliseconds);
-  }
-  final text = value.toString().trim();
-  final numeric = num.tryParse(text);
-  if (numeric != null) return _parseDate(numeric);
-  return DateTime.tryParse(text);
 }
 
 String _formatPollDate(DateTime date) {
@@ -696,14 +556,6 @@ String _formatPollDate(DateTime date) {
   ];
   final local = date.toLocal();
   return '${months[local.month - 1]} ${local.day}';
-}
-
-bool _isSameDay(DateTime a, DateTime b) {
-  final localA = a.toLocal();
-  final localB = b.toLocal();
-  return localA.year == localB.year &&
-      localA.month == localB.month &&
-      localA.day == localB.day;
 }
 
 String _statusLabel(_PollCardState state) {
@@ -765,30 +617,11 @@ AppButtonVariant _actionButtonVariant(_PollCardState state) {
 
 enum _PollCardState { active, voted, tallying, closed }
 
-enum _PollStatus { active, tallying, closed }
-
 _PollCardState _pollCardState(VotingRoundView round) {
-  return switch (_pollStatus(round.status)) {
-    _PollStatus.active =>
+  return switch (votingPollListStatus(round.status)) {
+    VotingPollListStatus.active =>
       round.voted ? _PollCardState.voted : _PollCardState.active,
-    _PollStatus.tallying => _PollCardState.tallying,
-    _PollStatus.closed => _PollCardState.closed,
+    VotingPollListStatus.tallying => _PollCardState.tallying,
+    VotingPollListStatus.closed => _PollCardState.closed,
   };
-}
-
-_PollStatus _pollStatus(String value) {
-  final status = value.trim().toLowerCase();
-  if (status == '1') return _PollStatus.active;
-  if (status == '2') return _PollStatus.tallying;
-  if (status == '3') return _PollStatus.closed;
-  if (status.contains('tally')) return _PollStatus.tallying;
-  if (status.contains('closed') ||
-      status.contains('complete') ||
-      status.contains('done') ||
-      status.contains('ended') ||
-      status.contains('final') ||
-      status.contains('result')) {
-    return _PollStatus.closed;
-  }
-  return _PollStatus.active;
 }
