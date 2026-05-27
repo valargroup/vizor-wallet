@@ -808,6 +808,7 @@ class SwapQuote {
     required this.minimumReceiveAmount,
     required this.providerLabel,
     required this.feeLabel,
+    this.totalFeesText,
     required this.expiryLabel,
     required this.depositInstruction,
     this.quoteExpiresAt,
@@ -888,6 +889,7 @@ class SwapQuote {
   final double minimumReceiveAmount;
   final String providerLabel;
   final String feeLabel;
+  final String? totalFeesText;
   final String expiryLabel;
   final DateTime? quoteExpiresAt;
   final SwapDepositInstruction depositInstruction;
@@ -913,16 +915,16 @@ class SwapQuote {
   String get slippageToleranceText {
     final percent = receiveProtectionPercent;
     final sellBuffer = sellAmount * percent / 100;
-    return '${sellAsset.formatAmount(sellBuffer)} '
-        '${sellAsset.symbol} (${_formatSwapProtectionPercent(percent)})';
+    return '${formatSwapProtectionAmount(sellAsset, sellBuffer)} '
+        '${sellAsset.symbol} (${formatSwapProtectionPercent(percent)})';
   }
 
   String get priceProtectionText {
     final buffer = receiveAmount - minimumReceiveAmount;
     final bounded = buffer.isFinite && buffer > 0 ? buffer : 0.0;
     final percent = receiveProtectionPercent;
-    return '${receiveAsset.formatAmount(bounded)} '
-        '${receiveAsset.symbol} (${_formatSwapProtectionPercent(percent)})';
+    return '${formatSwapProtectionAmount(receiveAsset, bounded)} '
+        '${receiveAsset.symbol} (${formatSwapProtectionPercent(percent)})';
   }
 
   double get receiveProtectionPercent {
@@ -944,9 +946,57 @@ class SwapQuote {
   }
 }
 
-String _formatSwapProtectionPercent(double percent) {
+String formatSwapProtectionPercent(double percent) {
   if (!percent.isFinite || percent <= 0) return '0.0%';
-  return '${percent.toStringAsFixed(percent >= 1 ? 1 : 2)}%';
+  if (percent >= 1) return '${percent.toStringAsFixed(1)}%';
+  var text = percent.toStringAsFixed(2);
+  while (text.endsWith('0') && text.contains('.')) {
+    text = text.substring(0, text.length - 1);
+  }
+  return '$text%';
+}
+
+String formatSwapProtectionAmount(SwapAsset asset, double amount) {
+  if (!amount.isFinite || amount <= 0) return asset.formatAmount(0);
+  final displayFractionDigits = asset._displayFractionDigits;
+  final maxFractionDigits = _swapProtectionMaxFractionDigits(asset);
+  var fractionDigits = displayFractionDigits;
+  while (fractionDigits < maxFractionDigits &&
+      amount < _minimumVisibleDisplayAmount(fractionDigits)) {
+    fractionDigits++;
+  }
+  final minimumVisibleAmount = _minimumVisibleDisplayAmount(fractionDigits);
+  if (amount < minimumVisibleAmount) {
+    return '<${minimumVisibleAmount.toStringAsFixed(fractionDigits)}';
+  }
+  return _trimSwapFixedAmount(amount, fractionDigits);
+}
+
+int _swapProtectionMaxFractionDigits(SwapAsset asset) {
+  const maxReadableFractionDigits = 8;
+  final tokenFractionDigits = asset.decimals < maxReadableFractionDigits
+      ? asset.decimals
+      : maxReadableFractionDigits;
+  return tokenFractionDigits > asset._displayFractionDigits
+      ? tokenFractionDigits
+      : asset._displayFractionDigits;
+}
+
+String _trimSwapFixedAmount(double amount, int fractionDigits) {
+  var text = amount.toStringAsFixed(fractionDigits);
+  while (text.contains('.') && text.endsWith('0')) {
+    text = text.substring(0, text.length - 1);
+  }
+  if (text.endsWith('.')) text = text.substring(0, text.length - 1);
+  return text;
+}
+
+double _minimumVisibleDisplayAmount(int fractionDigits) {
+  var value = 1.0;
+  for (var i = 0; i < fractionDigits; i++) {
+    value /= 10;
+  }
+  return value;
 }
 
 class SwapIntentSnapshot {
@@ -960,6 +1010,8 @@ class SwapIntentSnapshot {
     required this.nextAction,
     required this.depositInstruction,
     this.swapFeeText,
+    this.totalFeesText,
+    this.realisedSlippageText,
     this.slippageToleranceText,
     this.priceProtectionText,
     this.minimumReceiveText,
@@ -989,6 +1041,7 @@ class SwapIntentSnapshot {
           'Send ${quote.sellAsset.symbol} to the one-time deposit address',
       depositInstruction: quote.depositInstruction,
       swapFeeText: quote.feeLabel,
+      totalFeesText: quote.totalFeesText,
       slippageToleranceText: quote.slippageToleranceText,
       priceProtectionText: quote.priceProtectionText,
       minimumReceiveText: quote.minimumReceiveText,
@@ -1005,6 +1058,8 @@ class SwapIntentSnapshot {
   final String nextAction;
   final SwapDepositInstruction depositInstruction;
   final String? swapFeeText;
+  final String? totalFeesText;
+  final String? realisedSlippageText;
   final String? slippageToleranceText;
   final String? priceProtectionText;
   final String? minimumReceiveText;

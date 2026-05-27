@@ -319,13 +319,18 @@ class NearIntentsOneClickSwapProvider
         : SwapDirection.externalToZec;
     final externalAsset = sellAsset == SwapAsset.zec ? receiveAsset : sellAsset;
     final sellToken = _requireToken(sellAsset, tokens, operation: 'status');
+    final receiveToken = _requireToken(
+      receiveAsset,
+      tokens,
+      operation: 'status',
+    );
     final quote = _quoteFromOneClick(
       response.quoteResponse,
       direction: direction,
       externalAsset: externalAsset,
       mode: request.mode,
       sellToken: sellToken,
-      receiveToken: _requireToken(receiveAsset, tokens, operation: 'status'),
+      receiveToken: receiveToken,
     );
     final status = _statusFromOneClick(response.status, quote, _now());
     final statusRefundInfo = _statusRefundInfo(
@@ -335,17 +340,48 @@ class NearIntentsOneClickSwapProvider
     );
     final providerRefundInfo =
         quote.providerRefundInfo?.merge(statusRefundInfo) ?? statusRefundInfo;
+    final details = response.swapDetails;
+    final sellAmountText =
+        _statusAmountText(
+          formatted: details?.amountInFormatted,
+          baseUnits: details?.amountIn,
+          asset: sellAsset,
+          token: sellToken,
+        ) ??
+        quote.sellAmountText;
+    final receiveEstimateText =
+        _statusAmountText(
+          formatted: details?.amountOutFormatted,
+          baseUnits: details?.amountOut,
+          asset: receiveAsset,
+          token: receiveToken,
+        ) ??
+        quote.receiveEstimateText;
 
     return SwapIntentSnapshot(
       id: quote.depositInstruction.address,
       providerLabel: quote.providerLabel,
       pairText: quote.pairText,
-      sellAmountText: quote.sellAmountText,
-      receiveEstimateText: quote.receiveEstimateText,
+      sellAmountText: sellAmountText,
+      receiveEstimateText: receiveEstimateText,
       status: status,
       nextAction: _nextAction(status, quote),
       depositInstruction: quote.depositInstruction,
       swapFeeText: quote.feeLabel,
+      totalFeesText: _statusTotalFeesText(
+        response,
+        status: status,
+        sellAsset: sellAsset,
+        sellToken: sellToken,
+        providerRefundInfo: providerRefundInfo,
+      ),
+      realisedSlippageText: _realisedSlippageText(
+        response,
+        sellAsset: sellAsset,
+        sellToken: sellToken,
+        receiveAsset: receiveAsset,
+        receiveToken: receiveToken,
+      ),
       slippageToleranceText: quote.slippageToleranceText,
       priceProtectionText: quote.priceProtectionText,
       minimumReceiveText: quote.minimumReceiveText,
@@ -397,6 +433,13 @@ class NearIntentsOneClickSwapProvider
       minimumReceiveAmount: minimumReceiveAmount,
       providerLabel: providerLabel,
       feeLabel: 'Included in shown rate',
+      totalFeesText: _appFeesText(
+        appFeeBps: response.quoteRequest.appFeeBpsOrNull,
+        amountInFormatted: quote.amountInFormatted,
+        amountInBaseUnits: quote.amountIn,
+        sellAsset: sellAsset,
+        sellToken: sellToken,
+      ),
       expiryLabel: quoteExpiryLabel,
       quoteExpiresAt: quoteExpiresAt,
       depositInstruction: SwapDepositInstruction(
@@ -500,6 +543,162 @@ class NearIntentsOneClickSwapProvider
       return '${_trimDecimal(formattedValue)} ${asset.symbol}';
     }
     return _baseUnitAmountText(baseUnits, asset: asset, token: token);
+  }
+
+  double? _statusDecimalAmount({
+    required String? formatted,
+    required String? baseUnits,
+    required _OneClickToken token,
+  }) {
+    final formattedValue = _cleanOptionalText(formatted);
+    if (formattedValue != null) {
+      final parsed = double.tryParse(formattedValue);
+      if (parsed != null) return parsed;
+    }
+    final raw = _cleanOptionalText(baseUnits);
+    if (raw == null || !_isIntegerAmount(raw)) return null;
+    return double.tryParse(_baseUnitsToDecimal(raw, token.decimals));
+  }
+
+  String? _appFeesText({
+    required int? appFeeBps,
+    required String amountInFormatted,
+    required String? amountInBaseUnits,
+    required SwapAsset sellAsset,
+    required _OneClickToken sellToken,
+  }) {
+    if (appFeeBps == null) return null;
+    final amountIn =
+        _statusDecimalAmount(
+          formatted: amountInFormatted,
+          baseUnits: amountInBaseUnits,
+          token: sellToken,
+        ) ??
+        0;
+    final fee = amountIn * appFeeBps / 10000;
+    return _feeAmountText(sellAsset, fee);
+  }
+
+  String? _statusTotalFeesText(
+    _OneClickStatusResponse response, {
+    required SwapIntentStatus status,
+    required SwapAsset sellAsset,
+    required _OneClickToken sellToken,
+    required SwapProviderRefundInfo? providerRefundInfo,
+  }) {
+    final details = response.swapDetails;
+    if (status == SwapIntentStatus.refunded ||
+        status == SwapIntentStatus.failed) {
+      final deposited = _statusDecimalAmount(
+        formatted: details?.depositedAmountFormatted,
+        baseUnits: details?.depositedAmount,
+        token: sellToken,
+      );
+      final refunded = _statusDecimalAmount(
+        formatted: details?.refundedAmountFormatted,
+        baseUnits: details?.refundedAmount,
+        token: sellToken,
+      );
+      if (deposited != null && refunded != null && deposited >= refunded) {
+        return _feeAmountText(sellAsset, deposited - refunded);
+      }
+      final refundFee = providerRefundInfo?.refundFeeText;
+      if (refundFee != null && refundFee.isNotEmpty) return refundFee;
+    }
+
+    return _appFeesText(
+      appFeeBps: response.quoteResponse.quoteRequest.appFeeBpsOrNull,
+      amountInFormatted:
+          details?.amountInFormatted ??
+          response.quoteResponse.quote.amountInFormatted,
+      amountInBaseUnits:
+          details?.amountIn ?? response.quoteResponse.quote.amountIn,
+      sellAsset: sellAsset,
+      sellToken: sellToken,
+    );
+  }
+
+  String? _realisedSlippageText(
+    _OneClickStatusResponse response, {
+    required SwapAsset sellAsset,
+    required _OneClickToken sellToken,
+    required SwapAsset receiveAsset,
+    required _OneClickToken receiveToken,
+  }) {
+    final slippageBps = response.swapDetails?.slippageBps;
+    if (slippageBps == null) return null;
+    final percentText = formatSwapProtectionPercent(slippageBps / 100);
+    final delta = _realisedSlippageDelta(
+      response,
+      sellToken: sellToken,
+      receiveToken: receiveToken,
+    );
+    if (delta == null) return percentText;
+    final asset =
+        response.quoteResponse.quoteRequest.mode == SwapQuoteMode.exactOutput
+        ? sellAsset
+        : receiveAsset;
+    return '${_feeAmountText(asset, delta)} ($percentText)';
+  }
+
+  double? _realisedSlippageDelta(
+    _OneClickStatusResponse response, {
+    required _OneClickToken sellToken,
+    required _OneClickToken receiveToken,
+  }) {
+    final details = response.swapDetails;
+    if (details == null) return null;
+    final quote = response.quoteResponse.quote;
+    if (response.quoteResponse.quoteRequest.mode == SwapQuoteMode.exactOutput) {
+      final expected = _statusDecimalAmount(
+        formatted: quote.amountInFormatted,
+        baseUnits: quote.amountIn,
+        token: sellToken,
+      );
+      final actual = _statusDecimalAmount(
+        formatted: details.amountInFormatted,
+        baseUnits: details.amountIn,
+        token: sellToken,
+      );
+      if (expected == null || actual == null) return null;
+      return (actual - expected).clamp(0, double.infinity).toDouble();
+    }
+
+    final expected = _statusDecimalAmount(
+      formatted: quote.amountOutFormatted,
+      baseUnits: quote.amountOut,
+      token: receiveToken,
+    );
+    final actual = _statusDecimalAmount(
+      formatted: details.amountOutFormatted,
+      baseUnits: details.amountOut,
+      token: receiveToken,
+    );
+    if (expected == null || actual == null) return null;
+    return (expected - actual).clamp(0, double.infinity).toDouble();
+  }
+
+  String _feeAmountText(SwapAsset asset, double amount) {
+    if (!amount.isFinite || amount <= 0) return '0 ${asset.symbol}';
+    return '${_preciseAmountText(asset, amount)} ${asset.symbol}';
+  }
+
+  String _preciseAmountText(SwapAsset asset, double amount) {
+    final fractionDigits = asset.decimals.clamp(0, 8).toInt();
+    if (fractionDigits == 0) return amount.toStringAsFixed(0);
+    final visibleMinimum = _minimumDecimalAmount(fractionDigits);
+    if (amount < visibleMinimum) {
+      return '<${visibleMinimum.toStringAsFixed(fractionDigits)}';
+    }
+    return _trimDecimal(amount.toStringAsFixed(fractionDigits));
+  }
+
+  double _minimumDecimalAmount(int fractionDigits) {
+    var value = 1.0;
+    for (var i = 0; i < fractionDigits; i++) {
+      value /= 10;
+    }
+    return value;
   }
 
   void _validateQuoteRequest(SwapQuoteRequest request) {
@@ -660,6 +859,7 @@ class _OneClickQuoteRequest {
     required this.originAsset,
     required this.destinationAsset,
     required this.mode,
+    required this.appFeeBpsOrNull,
     this.deadline,
   });
 
@@ -668,6 +868,7 @@ class _OneClickQuoteRequest {
       originAsset: _string(json, 'originAsset'),
       destinationAsset: _string(json, 'destinationAsset'),
       mode: _oneClickSwapMode(_optionalString(json, 'swapType')),
+      appFeeBpsOrNull: _appFeeBpsOrNull(json['appFees']),
       deadline: _optionalString(json, 'deadline'),
     );
   }
@@ -675,12 +876,15 @@ class _OneClickQuoteRequest {
   final String originAsset;
   final String destinationAsset;
   final SwapQuoteMode mode;
+  final int? appFeeBpsOrNull;
   final String? deadline;
 }
 
 class _OneClickQuote {
   const _OneClickQuote({
+    this.amountIn,
     required this.amountInFormatted,
+    this.amountOut,
     required this.amountOutFormatted,
     this.minAmountIn,
     this.minAmountOut,
@@ -693,7 +897,9 @@ class _OneClickQuote {
 
   factory _OneClickQuote.fromJson(Map<String, dynamic> json) {
     return _OneClickQuote(
+      amountIn: _optionalString(json, 'amountIn'),
       amountInFormatted: _string(json, 'amountInFormatted'),
+      amountOut: _optionalString(json, 'amountOut'),
       amountOutFormatted: _string(json, 'amountOutFormatted'),
       minAmountIn: _optionalString(json, 'minAmountIn'),
       minAmountOut: _optionalString(json, 'minAmountOut'),
@@ -705,7 +911,9 @@ class _OneClickQuote {
     );
   }
 
+  final String? amountIn;
   final String amountInFormatted;
+  final String? amountOut;
   final String amountOutFormatted;
   final String? minAmountIn;
   final String? minAmountOut;
@@ -786,6 +994,11 @@ class _OneClickSwapDetails {
   const _OneClickSwapDetails({
     this.intentHash,
     this.nearTransactionHash,
+    this.amountIn,
+    this.amountInFormatted,
+    this.amountOut,
+    this.amountOutFormatted,
+    this.slippageBps,
     this.refundedAmount,
     this.refundedAmountFormatted,
     this.refundFee,
@@ -805,6 +1018,11 @@ class _OneClickSwapDetails {
           _firstTransactionHash(json, 'near_swap_transactions') ??
           _firstTransactionHash(json, 'nearDepositTransactions') ??
           _firstTransactionHash(json, 'near_deposit_transactions'),
+      amountIn: _optionalString(json, 'amountIn'),
+      amountInFormatted: _optionalString(json, 'amountInFormatted'),
+      amountOut: _optionalString(json, 'amountOut'),
+      amountOutFormatted: _optionalString(json, 'amountOutFormatted'),
+      slippageBps: _optionalInt(json, 'slippage'),
       refundedAmount: _optionalString(json, 'refundedAmount'),
       refundedAmountFormatted: _optionalString(json, 'refundedAmountFormatted'),
       refundFee: _optionalString(json, 'refundFee'),
@@ -825,6 +1043,11 @@ class _OneClickSwapDetails {
 
   final String? intentHash;
   final String? nearTransactionHash;
+  final String? amountIn;
+  final String? amountInFormatted;
+  final String? amountOut;
+  final String? amountOutFormatted;
+  final int? slippageBps;
   final String? refundedAmount;
   final String? refundedAmountFormatted;
   final String? refundFee;
@@ -978,6 +1201,32 @@ double? _optionalDouble(Map<String, dynamic> json, String key) {
     return double.tryParse(value);
   }
   throw OneClickApiException('Invalid number field: $key');
+}
+
+int? _optionalInt(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  throw OneClickApiException('Invalid integer field: $key');
+}
+
+int? _appFeeBpsOrNull(Object? value) {
+  if (value is! List || value.isEmpty) return null;
+  var total = 0;
+  for (final item in value) {
+    if (item is! Map) continue;
+    final fee = item['fee'];
+    if (fee is int) {
+      total += fee;
+    } else if (fee is num) {
+      total += fee.toInt();
+    } else if (fee is String) {
+      total += int.tryParse(fee) ?? 0;
+    }
+  }
+  return total > 0 ? total : null;
 }
 
 double _parseAmount(String value, String fieldName) {

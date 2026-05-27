@@ -61,6 +61,8 @@ void main() {
       providerQuoteId: 'quote-1',
       providerSignature: 'quote-signature',
       swapFeeText: 'Included in shown rate',
+      totalFeesText: '0.01005 ZEC',
+      realisedSlippageText: '0.0525 USDC (0.05%)',
       slippageToleranceText: '0.015 ZEC (1.0%)',
       priceProtectionText: '1.0525 USDC (1.0%)',
       minimumReceiveText: '104.1975 USDC',
@@ -105,6 +107,8 @@ void main() {
     expect(restored.single.providerQuoteId, 'quote-1');
     expect(restored.single.providerSignature, 'quote-signature');
     expect(restored.single.swapFeeText, 'Included in shown rate');
+    expect(restored.single.totalFeesText, '0.01005 ZEC');
+    expect(restored.single.realisedSlippageText, '0.0525 USDC (0.05%)');
     expect(restored.single.slippageToleranceText, '0.015 ZEC (1.0%)');
     expect(restored.single.priceProtectionText, '1.0525 USDC (1.0%)');
     expect(restored.single.minimumReceiveText, '104.1975 USDC');

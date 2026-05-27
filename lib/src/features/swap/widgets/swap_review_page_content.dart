@@ -649,23 +649,5 @@ String _trimFixed(double value, int fractionDigits) {
 }
 
 String _slippageToleranceText(SwapQuote quote) {
-  final percent = _receiveProtectionPercent(quote);
-  final sellBuffer = quote.sellAmount * percent / 100;
-  return compactSwapAmountText(
-    '${quote.sellAsset.formatAmount(sellBuffer)} '
-    '${quote.sellAsset.symbol} (${_formatProtectionPercent(percent)})',
-  );
-}
-
-double _receiveProtectionPercent(SwapQuote quote) {
-  if (quote.receiveAmount <= 0 || !quote.receiveAmount.isFinite) return 0;
-  final buffer = quote.receiveAmount - quote.minimumReceiveAmount;
-  return buffer <= 0 || !buffer.isFinite
-      ? 0
-      : buffer / quote.receiveAmount * 100;
-}
-
-String _formatProtectionPercent(double percent) {
-  if (!percent.isFinite || percent <= 0) return '0.0%';
-  return '${percent.toStringAsFixed(percent >= 1 ? 1 : 2)}%';
+  return compactSwapAmountText(quote.slippageToleranceText);
 }

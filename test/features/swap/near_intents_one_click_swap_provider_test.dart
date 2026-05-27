@@ -1014,6 +1014,121 @@ void main() {
     expect(status.providerRefundInfo?.refundReason, 'UNUSED_INPUT');
   });
 
+  test('computes refunded total fees from status amounts', () async {
+    final transport = _FakeOneClickTransport([
+      _FakeResponse.get('/v0/tokens', _tokens),
+      _FakeResponse.get(
+        '/v0/status',
+        _quoteResponse(
+          originAsset: 'nep141:zec.omft.near',
+          destinationAsset: 'nep141:usdc.example',
+          amountInFormatted: '1.5',
+          amountOutFormatted: '70',
+          minAmountOut: '69650000',
+          depositAddress: 'status-deposit',
+          status: 'REFUNDED',
+          swapDetails: {
+            'depositedAmountFormatted': '1.5',
+            'refundedAmountFormatted': '1.49953',
+            'refundFee': '47000',
+          },
+        ),
+      ),
+    ]);
+    final provider = NearIntentsOneClickSwapProvider(
+      transport: transport,
+      now: () => DateTime.utc(2026, 5, 7, 10, 2),
+    );
+
+    final status = await provider.getStatus('status-deposit');
+
+    expect(status.totalFeesText, '0.00047 ZEC');
+  });
+
+  test(
+    'uses status details for actual amounts fees and realised slippage',
+    () async {
+      final transport = _FakeOneClickTransport([
+        _FakeResponse.get('/v0/tokens', _tokens),
+        _FakeResponse.get(
+          '/v0/status',
+          _quoteResponse(
+            originAsset: 'nep141:zec.omft.near',
+            destinationAsset: 'nep141:usdc.example',
+            amountIn: '200000',
+            amountInFormatted: '0.002',
+            amountOut: '1143483',
+            amountOutFormatted: '1.143483',
+            minAmountOut: '1137765',
+            depositAddress: 'status-deposit',
+            status: 'SUCCESS',
+            appFees: const [
+              {'recipient': 'vizor.near', 'fee': 67},
+            ],
+            swapDetails: {
+              'amountIn': '200000',
+              'amountInFormatted': '0.002',
+              'amountOut': '1142725',
+              'amountOutFormatted': '1.142725',
+              'slippage': 7,
+            },
+          ),
+        ),
+      ]);
+      final provider = NearIntentsOneClickSwapProvider(
+        transport: transport,
+        now: () => DateTime.utc(2026, 5, 27, 7, 25),
+      );
+
+      final status = await provider.getStatus('status-deposit');
+
+      expect(status.status, SwapIntentStatus.complete);
+      expect(status.sellAmountText, '0.002 ZEC');
+      expect(status.receiveEstimateText, '1.142725 USDC');
+      expect(status.totalFeesText, '0.0000134 ZEC');
+      expect(status.realisedSlippageText, '0.000758 USDC (0.07%)');
+    },
+  );
+
+  test('uses sell-asset delta for exact-output realised slippage', () async {
+    final transport = _FakeOneClickTransport([
+      _FakeResponse.get('/v0/tokens', _tokens),
+      _FakeResponse.get(
+        '/v0/status',
+        _quoteResponse(
+          originAsset: 'nep141:zec.omft.near',
+          destinationAsset: 'nep141:usdc.example',
+          swapType: 'EXACT_OUTPUT',
+          amountIn: '200000',
+          amountInFormatted: '0.002',
+          amountOut: '1200000',
+          amountOutFormatted: '1.2',
+          minAmountIn: '198000',
+          minAmountOut: '1200000',
+          depositAddress: 'status-deposit',
+          status: 'SUCCESS',
+          swapDetails: {
+            'amountIn': '201000',
+            'amountInFormatted': '0.00201',
+            'amountOut': '1200000',
+            'amountOutFormatted': '1.2',
+            'slippage': '5',
+          },
+        ),
+      ),
+    ]);
+    final provider = NearIntentsOneClickSwapProvider(
+      transport: transport,
+      now: () => DateTime.utc(2026, 5, 27, 7, 25),
+    );
+
+    final status = await provider.getStatus('status-deposit');
+
+    expect(status.sellAmountText, '0.00201 ZEC');
+    expect(status.receiveEstimateText, '1.2 USDC');
+    expect(status.realisedSlippageText, '0.00001 ZEC (0.05%)');
+  });
+
   test(
     'captures snake-case NEAR Intents hashes from status swap details',
     () async {
@@ -1227,13 +1342,16 @@ Map<String, Object?> _quoteResponse({
   required String originAsset,
   required String destinationAsset,
   String swapType = 'EXACT_INPUT',
+  String amountIn = '100000000',
   required String amountInFormatted,
+  String amountOut = '105250000',
   required String amountOutFormatted,
   required String minAmountOut,
   required String depositAddress,
   required String? status,
   String? depositMemo,
   String? minAmountIn,
+  List<Map<String, Object?>> appFees = const [],
   bool includeNestedCorrelationId = true,
   String? refundFee,
   String quoteRequestDeadline = '2026-05-07T12:00:00Z',
@@ -1258,12 +1376,13 @@ Map<String, Object?> _quoteResponse({
       'recipient': 'recipient-address',
       'recipientType': 'DESTINATION_CHAIN',
       'deadline': quoteRequestDeadline,
+      'appFees': appFees,
     },
     'quote': {
-      'amountIn': '100000000',
+      'amountIn': amountIn,
       'amountInFormatted': amountInFormatted,
       'minAmountIn': ?minAmountIn,
-      'amountOut': '105250000',
+      'amountOut': amountOut,
       'amountOutFormatted': amountOutFormatted,
       'minAmountOut': minAmountOut,
       'timeEstimate': 120,

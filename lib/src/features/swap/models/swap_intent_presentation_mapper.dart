@@ -21,6 +21,8 @@ SwapPrototypeIntent swapPrototypeIntentFromRecord(SwapIntentRecord record) {
     providerQuoteId: record.providerQuoteId,
     providerSignature: record.providerSignature,
     swapFeeText: record.swapFeeText,
+    totalFeesText: record.totalFeesText,
+    realisedSlippageText: record.realisedSlippageText,
     slippageToleranceText: record.slippageToleranceText,
     priceProtectionText: record.priceProtectionText,
     minimumReceiveText: record.minimumReceiveText,
@@ -65,6 +67,8 @@ SwapPrototypeIntent swapIntentFromSnapshot({
     providerQuoteId: quote.providerQuoteId,
     providerSignature: quote.providerSignature,
     swapFeeText: snapshot.swapFeeText ?? quote.feeLabel,
+    totalFeesText: snapshot.totalFeesText ?? quote.totalFeesText,
+    realisedSlippageText: snapshot.realisedSlippageText,
     slippageToleranceText:
         snapshot.slippageToleranceText ?? quote.slippageToleranceText,
     priceProtectionText:
@@ -106,6 +110,8 @@ SwapPrototypeIntent updateSwapIntentFromSnapshot(
     status: status,
     nextAction: snapshot.nextAction,
     swapFeeText: snapshot.swapFeeText,
+    totalFeesText: snapshot.totalFeesText,
+    realisedSlippageText: snapshot.realisedSlippageText,
     slippageToleranceText: snapshot.slippageToleranceText,
     priceProtectionText: snapshot.priceProtectionText,
     minimumReceiveText: snapshot.minimumReceiveText,

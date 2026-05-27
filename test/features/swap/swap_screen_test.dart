@@ -630,6 +630,28 @@ void main() {
     expect(find.text('Slippage tolerance'), findsNothing);
     expect(
       find.ancestor(
+        of: find.text('Swap Progress'),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is MouseRegion &&
+              widget.cursor == SystemMouseCursors.click,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(
+        of: find.text('Transaction Details'),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is MouseRegion &&
+              widget.cursor == SystemMouseCursors.click,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(
         of: find.text('More Details'),
         matching: find.byWidgetPredicate(
           (widget) =>
@@ -3407,6 +3429,108 @@ void main() {
       expect(find.text('Technical details'), findsNothing);
     },
   );
+
+  testWidgets('completed swap detail keeps final status details compact', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final sessionStore = _FakeSwapPersistenceStore(
+      initialIntents: [
+        _persistedIntent(
+          id: 'completed-deposit',
+          txHash: 'completed-deposit-txid',
+          status: SwapIntentStatus.complete,
+          nextAction: 'Complete',
+        ).copyWith(
+          depositAddress: 't1completed-deposit',
+          destinationChainTxHash: 'usdc-delivery-txid',
+          swapFeeText: '~0.25 USDC',
+          totalFeesText: '0.0000134 ZEC',
+          realisedSlippageText: '0.000758 USDC (0.07%)',
+          completedAt: DateTime.utc(2026, 5, 20, 13, 20),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        sessionStore: sessionStore,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _openActivityDetail(tester, 'completed-deposit');
+
+    expect(find.text('Swap completed'), findsOneWidget);
+    expect(find.byKey(const ValueKey('swap_final_details')), findsOneWidget);
+    expect(find.text('ZEC Deposit to'), findsOneWidget);
+    expect(find.text('Total fees'), findsOneWidget);
+    expect(find.text('0.0000134 ZEC'), findsOneWidget);
+    expect(find.text('Realised slippage'), findsOneWidget);
+    expect(find.text('0.000758 USDC (0.07%)'), findsOneWidget);
+    expect(find.text('Timestamp'), findsOneWidget);
+    expect(find.text('ZEC Deposit tx'), findsNothing);
+    expect(find.text('completed-deposit-txid'), findsNothing);
+    expect(find.text('USDC Delivery tx'), findsNothing);
+    expect(find.text('usdc-delivery-txid'), findsNothing);
+    expect(find.text('Slippage tolerance'), findsNothing);
+    expect(find.text('Minimum Receive'), findsNothing);
+  });
+
+  testWidgets('failed swap detail keeps final status details compact', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final sessionStore = _FakeSwapPersistenceStore(
+      initialIntents: [
+        _persistedExternalToZecIntent(
+          id: 'failed-usdc-deposit',
+          stagingAddress: 'u1failed-recipient',
+        ).copyWith(
+          status: SwapIntentStatus.failed,
+          nextAction: 'Failed',
+          oneClickRefundTo: '0xusdc-refund-address',
+          depositTxHash: 'failed-deposit-txid',
+          destinationChainTxHash: 'failed-delivery-txid',
+          swapFeeText: '~0.25 USDC',
+          totalFeesText: '0.19 USDC',
+          completedAt: DateTime.utc(2026, 5, 20, 13, 20),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        sessionStore: sessionStore,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _openActivityDetail(tester, 'failed-usdc-deposit');
+
+    expect(find.text('Swap failed'), findsWidgets);
+    expect(find.byKey(const ValueKey('swap_final_details')), findsOneWidget);
+    expect(find.text('USDC Refunded to'), findsOneWidget);
+    expect(find.text('Total fees'), findsOneWidget);
+    expect(find.text('0.19 USDC'), findsOneWidget);
+    expect(find.text('Timestamp'), findsOneWidget);
+    expect(find.text('USDC Deposit to'), findsNothing);
+    expect(find.text('USDC Deposit tx'), findsNothing);
+    expect(find.text('failed-deposit-txid'), findsNothing);
+    expect(find.text('ZEC Delivery tx'), findsNothing);
+    expect(find.text('failed-delivery-txid'), findsNothing);
+    expect(find.text('Realised slippage'), findsNothing);
+    expect(find.text('Slippage tolerance'), findsNothing);
+    expect(find.text('Minimum Receive'), findsNothing);
+  });
 
   testWidgets('open swap sessions poll status after the configured interval', (
     tester,

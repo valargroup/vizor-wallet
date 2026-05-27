@@ -19,6 +19,8 @@ void main() {
         depositTxHash: 'deposit-txid',
         providerQuoteId: 'quote-1',
         swapFeeText: 'Included in shown rate',
+        totalFeesText: '0.00002 ZEC',
+        realisedSlippageText: '0.000758 USDC (0.07%)',
         slippageToleranceText: '0.00003 ZEC (1.0%)',
         priceProtectionText: '0.0021 USDC (1.0%)',
         minimumReceiveText: '0.2079 USDC',
@@ -36,6 +38,8 @@ void main() {
     expect(intent.title, 'ZEC to USDC');
     expect(intent.steps.map((step) => step.label), contains('Processing'));
     expect(intent.swapFeeText, 'Included in shown rate');
+    expect(intent.totalFeesText, '0.00002 ZEC');
+    expect(intent.realisedSlippageText, '0.000758 USDC (0.07%)');
     expect(intent.slippageToleranceText, '0.00003 ZEC (1.0%)');
     expect(intent.priceProtectionText, '0.0021 USDC (1.0%)');
     expect(intent.minimumReceiveText, '0.2079 USDC');
@@ -89,6 +93,8 @@ void main() {
         nearIntentHash: 'intent-hash',
         destinationChainTxHash: 'destination-txid',
         swapFeeText: 'Included in shown rate',
+        totalFeesText: '0.00002 ZEC',
+        realisedSlippageText: '0.000758 USDC (0.07%)',
         slippageToleranceText: '0.00003 ZEC (1.0%)',
         priceProtectionText: '0.0021 USDC (1.0%)',
         minimumReceiveText: '0.2079 USDC',
@@ -102,6 +108,8 @@ void main() {
     expect(updated.nearIntentHash, 'intent-hash');
     expect(updated.destinationChainTxHash, 'destination-txid');
     expect(updated.swapFeeText, 'Included in shown rate');
+    expect(updated.totalFeesText, '0.00002 ZEC');
+    expect(updated.realisedSlippageText, '0.000758 USDC (0.07%)');
     expect(updated.slippageToleranceText, '0.00003 ZEC (1.0%)');
     expect(updated.priceProtectionText, '0.0021 USDC (1.0%)');
     expect(updated.minimumReceiveText, '0.2079 USDC');

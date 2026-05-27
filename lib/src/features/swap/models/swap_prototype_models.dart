@@ -153,6 +153,8 @@ class SwapIntentRecord {
     this.providerQuoteId,
     this.providerSignature,
     this.swapFeeText,
+    this.totalFeesText,
+    this.realisedSlippageText,
     this.slippageToleranceText,
     this.priceProtectionText,
     this.minimumReceiveText,
@@ -191,6 +193,8 @@ class SwapIntentRecord {
       providerQuoteId: intent.providerQuoteId,
       providerSignature: intent.providerSignature,
       swapFeeText: intent.swapFeeText,
+      totalFeesText: intent.totalFeesText,
+      realisedSlippageText: intent.realisedSlippageText,
       slippageToleranceText: intent.slippageToleranceText,
       priceProtectionText: intent.priceProtectionText,
       minimumReceiveText: intent.minimumReceiveText,
@@ -228,6 +232,8 @@ class SwapIntentRecord {
   final String? providerQuoteId;
   final String? providerSignature;
   final String? swapFeeText;
+  final String? totalFeesText;
+  final String? realisedSlippageText;
   final String? slippageToleranceText;
   final String? priceProtectionText;
   final String? minimumReceiveText;
@@ -267,6 +273,8 @@ class SwapIntentRecord {
     String? providerQuoteId,
     String? providerSignature,
     String? swapFeeText,
+    String? totalFeesText,
+    String? realisedSlippageText,
     String? slippageToleranceText,
     String? priceProtectionText,
     String? minimumReceiveText,
@@ -305,6 +313,8 @@ class SwapIntentRecord {
       providerQuoteId: providerQuoteId ?? this.providerQuoteId,
       providerSignature: providerSignature ?? this.providerSignature,
       swapFeeText: swapFeeText ?? this.swapFeeText,
+      totalFeesText: totalFeesText ?? this.totalFeesText,
+      realisedSlippageText: realisedSlippageText ?? this.realisedSlippageText,
       slippageToleranceText:
           slippageToleranceText ?? this.slippageToleranceText,
       priceProtectionText: priceProtectionText ?? this.priceProtectionText,
@@ -353,6 +363,8 @@ class SwapPrototypeIntent {
     this.providerQuoteId,
     this.providerSignature,
     this.swapFeeText,
+    this.totalFeesText,
+    this.realisedSlippageText,
     this.slippageToleranceText,
     this.priceProtectionText,
     this.minimumReceiveText,
@@ -393,6 +405,8 @@ class SwapPrototypeIntent {
   final String? providerQuoteId;
   final String? providerSignature;
   final String? swapFeeText;
+  final String? totalFeesText;
+  final String? realisedSlippageText;
   final String? slippageToleranceText;
   final String? priceProtectionText;
   final String? minimumReceiveText;
@@ -435,6 +449,8 @@ class SwapPrototypeIntent {
     String? providerQuoteId,
     String? providerSignature,
     String? swapFeeText,
+    String? totalFeesText,
+    String? realisedSlippageText,
     String? slippageToleranceText,
     String? priceProtectionText,
     String? minimumReceiveText,
@@ -477,6 +493,8 @@ class SwapPrototypeIntent {
       providerQuoteId: providerQuoteId ?? this.providerQuoteId,
       providerSignature: providerSignature ?? this.providerSignature,
       swapFeeText: swapFeeText ?? this.swapFeeText,
+      totalFeesText: totalFeesText ?? this.totalFeesText,
+      realisedSlippageText: realisedSlippageText ?? this.realisedSlippageText,
       slippageToleranceText:
           slippageToleranceText ?? this.slippageToleranceText,
       priceProtectionText: priceProtectionText ?? this.priceProtectionText,

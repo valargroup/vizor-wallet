@@ -760,22 +760,25 @@ class _StatusTabLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return GestureDetector(
-      key: ValueKey(
-        label == 'Transaction Details'
-            ? 'swap_status_tab_details'
-            : 'swap_status_tab_progress',
-      ),
-      behavior: HitTestBehavior.opaque,
-      onTap: active ? null : onTap,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: minWidth),
-        child: Text(
-          label,
-          maxLines: 1,
-          softWrap: false,
-          style: AppTypography.bodyMediumStrong.copyWith(
-            color: active ? colors.text.accent : colors.text.secondary,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        key: ValueKey(
+          label == 'Transaction Details'
+              ? 'swap_status_tab_details'
+              : 'swap_status_tab_progress',
+        ),
+        behavior: HitTestBehavior.opaque,
+        onTap: active ? null : onTap,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: minWidth),
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            style: AppTypography.bodyMediumStrong.copyWith(
+              color: active ? colors.text.accent : colors.text.secondary,
+            ),
           ),
         ),
       ),

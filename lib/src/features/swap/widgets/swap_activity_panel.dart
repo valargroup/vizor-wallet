@@ -931,19 +931,12 @@ List<SwapStatusDetailRowData> _swapStatusDetails(
   if (terminal) {
     return [
       _accountDetailRow(accountInfo),
-      if (depositTxHash != null && depositTxHash.isNotEmpty)
-        SwapStatusDetailRowData(
-          label: '$sourceSymbol Deposit tx',
-          value: depositTxHash,
-          copyable: true,
-          copyText: depositTxHash,
-        ),
       if (failed && refundAddress != null && refundAddress.isNotEmpty)
         SwapStatusDetailRowData(
           label: '$sourceSymbol Refunded to',
           value: _compactSwapAddress(refundAddress),
         )
-      else if (depositAddress != null && depositAddress.isNotEmpty)
+      else if (!failed && depositAddress != null && depositAddress.isNotEmpty)
         SwapStatusDetailRowData(
           label: '$sourceSymbol Deposit to',
           value: _compactSwapAddress(depositAddress),
@@ -952,23 +945,20 @@ List<SwapStatusDetailRowData> _swapStatusDetails(
         ),
       SwapStatusDetailRowData(
         label: 'Total fees',
-        value: intent.providerRefundInfo?.refundFeeText ?? 'Included',
+        value:
+            intent.totalFeesText ??
+            intent.swapFeeText ??
+            intent.providerRefundInfo?.refundFeeText ??
+            'Included',
         help: true,
       ),
       if (!failed)
-        const SwapStatusDetailRowData(
+        SwapStatusDetailRowData(
           label: 'Realised slippage',
-          value: 'Not reported',
+          value: intent.realisedSlippageText ?? 'Not reported',
         ),
       if (timestamp != null)
         SwapStatusDetailRowData(label: 'Timestamp', value: timestamp),
-      if (destinationChainTxHash != null && destinationChainTxHash.isNotEmpty)
-        SwapStatusDetailRowData(
-          label: '$receiveSymbol Delivery tx',
-          value: _compactSwapAddress(destinationChainTxHash),
-          copyable: true,
-          copyText: destinationChainTxHash,
-        ),
     ];
   }
 
