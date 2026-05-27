@@ -70,7 +70,6 @@ def windows_release_metadata(flavor: "mainnet")
   velopack_dir = File.join(dist_dir, "velopack")
   output_dir = File.join(VizorRelease.workspace_root, output_dir_arg)
   release_repository = ENV.fetch("RELEASE_REPOSITORY")
-  internal_update_enabled = tag_info.fetch(:is_internal)
 
   {
     flavor: flavor,
@@ -81,8 +80,7 @@ def windows_release_metadata(flavor: "mainnet")
     version: version,
     asset_version: asset_version,
     is_prerelease: tag_info.fetch(:is_prerelease),
-    update_enabled: !tag_info.fetch(:is_prerelease) || internal_update_enabled,
-    include_prereleases: internal_update_enabled,
+    update_enabled: !tag_info.fetch(:is_prerelease),
     build_number: VizorRelease.release_build_number,
     tag: tag,
     release_name: ENV["RELEASE_NAME"] || tag,
@@ -120,7 +118,7 @@ def windows_validate_update_feed_environment!(metadata_items)
   return unless metadata_items.any? { |metadata| metadata.fetch(:update_enabled) }
 
   signing_key = ENV["VIZOR_UPDATE_FEED_SIGNING_KEY_B64"].to_s.strip
-  UI.user_error!("VIZOR_UPDATE_FEED_SIGNING_KEY_B64 is required for Windows release builds with updates enabled") if signing_key.empty?
+  UI.user_error!("VIZOR_UPDATE_FEED_SIGNING_KEY_B64 is required for stable Windows release builds") if signing_key.empty?
 end
 
 def windows_code_signing_params_for(metadata)
@@ -152,14 +150,12 @@ def windows_validate_code_signing_environment!(metadata_items)
   end
 end
 
-def with_windows_update_environment(update_enabled:, include_prereleases:)
+def with_windows_update_environment(update_enabled:)
   previous_signing_key = ENV["VIZOR_UPDATE_FEED_SIGNING_KEY_B64"]
   previous_public_key = ENV["VIZOR_UPDATE_FEED_PUBLIC_KEY_B64"]
   previous_release_base_url = ENV["VIZOR_UPDATE_RELEASE_BASE_URL"]
-  previous_include_prereleases = ENV["VIZOR_UPDATE_INCLUDE_PRERELEASES"]
 
   ENV["VIZOR_UPDATE_RELEASE_BASE_URL"] = ""
-  ENV["VIZOR_UPDATE_INCLUDE_PRERELEASES"] = update_enabled && include_prereleases ? "1" : "0"
   unless update_enabled
     ENV["VIZOR_UPDATE_FEED_SIGNING_KEY_B64"] = ""
     ENV["VIZOR_UPDATE_FEED_PUBLIC_KEY_B64"] = ""
@@ -170,7 +166,6 @@ ensure
   previous_signing_key.nil? ? ENV.delete("VIZOR_UPDATE_FEED_SIGNING_KEY_B64") : ENV["VIZOR_UPDATE_FEED_SIGNING_KEY_B64"] = previous_signing_key
   previous_public_key.nil? ? ENV.delete("VIZOR_UPDATE_FEED_PUBLIC_KEY_B64") : ENV["VIZOR_UPDATE_FEED_PUBLIC_KEY_B64"] = previous_public_key
   previous_release_base_url.nil? ? ENV.delete("VIZOR_UPDATE_RELEASE_BASE_URL") : ENV["VIZOR_UPDATE_RELEASE_BASE_URL"] = previous_release_base_url
-  previous_include_prereleases.nil? ? ENV.delete("VIZOR_UPDATE_INCLUDE_PRERELEASES") : ENV["VIZOR_UPDATE_INCLUDE_PRERELEASES"] = previous_include_prereleases
 end
 
 def windows_verify_velopack_outputs!(metadata)
@@ -233,10 +228,7 @@ platform :windows do
       ]
     end
 
-    with_windows_update_environment(
-      update_enabled: metadata.fetch(:update_enabled),
-      include_prereleases: metadata.fetch(:include_prereleases)
-    ) do
+    with_windows_update_environment(update_enabled: metadata.fetch(:update_enabled)) do
       sh(command.join(" "))
     end
     windows_verify_velopack_outputs!(metadata)
