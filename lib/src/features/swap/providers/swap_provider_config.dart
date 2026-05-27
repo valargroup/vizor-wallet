@@ -5,7 +5,7 @@ import '../models/swap_prototype_models.dart';
 
 const _oneClickBaseUrl = String.fromEnvironment(
   'ZCASH_SWAP_1CLICK_BASE_URL',
-  defaultValue: 'https://config-lambda.keplr.app/api/near-intents/1click',
+  defaultValue: 'https://functions.vizor.cash/api/near-intents/1click',
 );
 
 final swapIntentProvider = Provider<SwapProvider>((ref) {

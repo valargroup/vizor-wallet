@@ -51,7 +51,12 @@ void main() {
     final provider = container.read(swapIntentProvider);
 
     expect(provider, isA<NearIntentsOneClickSwapProvider>());
-    expect((provider as NearIntentsOneClickSwapProvider).referral, 'vizor');
+    final oneClickProvider = provider as NearIntentsOneClickSwapProvider;
+    expect(
+      oneClickProvider.baseUri.toString(),
+      'https://functions.vizor.cash/api/near-intents/1click',
+    );
+    expect(oneClickProvider.referral, 'vizor');
   });
 
   test('compactSwapAmountText truncates visible decimals without ellipsis', () {
