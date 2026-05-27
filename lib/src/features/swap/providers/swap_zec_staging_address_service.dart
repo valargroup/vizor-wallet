@@ -85,22 +85,10 @@ class SwapZecStagingAddressService {
   const SwapZecStagingAddressService({
     required LoadShieldedAddress loadCurrentShieldedAddress,
     LoadShieldedAddress? prepareFreshShieldedAddress,
-  }) : _loadCurrentShieldedAddress = loadCurrentShieldedAddress,
-       _prepareFreshShieldedAddress =
+  }) : _prepareFreshShieldedAddress =
            prepareFreshShieldedAddress ?? loadCurrentShieldedAddress;
 
-  final LoadShieldedAddress _loadCurrentShieldedAddress;
   final LoadShieldedAddress _prepareFreshShieldedAddress;
-
-  Future<SwapZecStagingAddress> prepareForPreviewQuote({
-    required String accountUuid,
-  }) async {
-    return _prepareShieldedRecipient(
-      accountUuid,
-      loadShieldedAddress: _loadCurrentShieldedAddress,
-      operationLabel: 'preview',
-    );
-  }
 
   Future<SwapZecStagingAddress> prepareForQuote({
     required String accountUuid,

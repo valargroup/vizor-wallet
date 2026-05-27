@@ -66,32 +66,4 @@ void main() {
     expect(plan.oneClickRefundTo, '0xrefund');
     expect(plan.zecDeliveryIsDirectShielded, isTrue);
   });
-
-  test(
-    'preview quote uses current address while live quote can use fresh address',
-    () async {
-      var currentLoads = 0;
-      var freshLoads = 0;
-      final service = SwapZecStagingAddressService(
-        loadCurrentShieldedAddress: ({required accountUuid}) async {
-          currentLoads++;
-          return 'u1current-shielded';
-        },
-        prepareFreshShieldedAddress: ({required accountUuid}) async {
-          freshLoads++;
-          return 'u1fresh-shielded';
-        },
-      );
-
-      final preview = await service.prepareForPreviewQuote(
-        accountUuid: 'account-1',
-      );
-      final live = await service.prepareForQuote(accountUuid: 'account-1');
-
-      expect(preview.address, 'u1current-shielded');
-      expect(live.address, 'u1fresh-shielded');
-      expect(currentLoads, 1);
-      expect(freshLoads, 1);
-    },
-  );
 }

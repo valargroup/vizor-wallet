@@ -778,7 +778,7 @@ class _SwapReviewPreview extends StatelessWidget {
           payFiatTextOverride: payFiatText,
           receiveFiatTextOverride: receiveFiatText,
         ),
-        const SizedBox(height: AppSpacing.base),
+        const SizedBox(height: AppSpacing.sm),
         SwapReviewPageActions(
           expired: false,
           starting: false,

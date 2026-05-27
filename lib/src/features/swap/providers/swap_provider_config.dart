@@ -23,10 +23,6 @@ final swapPriceRefreshIntervalProvider = Provider<Duration>((ref) {
   return const Duration(seconds: 30);
 });
 
-final swapPreviewQuoteDebounceProvider = Provider<Duration>((ref) {
-  return const Duration(milliseconds: 500);
-});
-
 const _liveFundsEnabled = bool.fromEnvironment(
   'ZCASH_SWAP_ENABLE_LIVE_FUNDS',
   defaultValue: true,

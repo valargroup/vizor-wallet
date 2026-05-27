@@ -206,8 +206,20 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
                                         swapState.reviewAmountDifferenceWarning,
                                     startError: swapState.statusError,
                                     startBlockedReason: startBlockedReason,
+                                    payFiatTextOverride:
+                                        _reviewFiatTextForAsset(
+                                          swapState,
+                                          asset: quote.sellAsset,
+                                          amount: quote.sellAmount,
+                                        ),
+                                    receiveFiatTextOverride:
+                                        _reviewFiatTextForAsset(
+                                          swapState,
+                                          asset: quote.receiveAsset,
+                                          amount: quote.receiveAmount,
+                                        ),
                                   ),
-                                  const SizedBox(height: AppSpacing.base),
+                                  const SizedBox(height: AppSpacing.sm),
                                   SwapReviewPageActions(
                                     expired: swapState.quoteExpired,
                                     starting: swapState.startSubmitting,
@@ -239,6 +251,56 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
       ),
     );
   }
+}
+
+String? _reviewFiatTextForAsset(
+  SwapPrototypeState state, {
+  required SwapAsset asset,
+  required double amount,
+}) {
+  final usdValue = _reviewUsdValueForAsset(state, asset: asset, amount: amount);
+  return usdValue == null ? null : _formatReviewUsd(usdValue);
+}
+
+double? _reviewUsdValueForAsset(
+  SwapPrototypeState state, {
+  required SwapAsset asset,
+  required double amount,
+}) {
+  if (!amount.isFinite || amount <= 0) return 0;
+  if (_isUsdLike(asset)) return amount;
+  if (asset.isNativeZec && _isUsdLike(state.externalAsset)) {
+    final zecUsd =
+        state.indicativeExternalPerZec[state.externalAsset] ??
+        state.externalAsset.fallbackExternalPerZec;
+    return amount * zecUsd;
+  }
+  return null;
+}
+
+bool _isUsdLike(SwapAsset asset) {
+  final symbol = asset.symbol.toUpperCase();
+  return symbol == 'USDC' || symbol == 'USDT' || symbol == 'DAI';
+}
+
+String _formatReviewUsd(double value) {
+  if (!value.isFinite || value <= 0) return r'$0.00';
+  if (value >= 1000000) {
+    return '\$${_trimFixed(value / 1000000, 3)}M';
+  }
+  if (value >= 1000) {
+    return '\$${_trimFixed(value / 1000, 2)}K';
+  }
+  return '\$${value.toStringAsFixed(2)}';
+}
+
+String _trimFixed(double value, int fractionDigits) {
+  var text = value.toStringAsFixed(fractionDigits);
+  while (text.contains('.') && text.endsWith('0')) {
+    text = text.substring(0, text.length - 1);
+  }
+  if (text.endsWith('.')) text = text.substring(0, text.length - 1);
+  return text;
 }
 
 bool _reviewQuoteExceedsAvailableZec(SwapQuote quote, BigInt availableZatoshi) {

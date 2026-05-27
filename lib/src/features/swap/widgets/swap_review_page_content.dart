@@ -182,6 +182,8 @@ class SwapReviewPageActions extends StatelessWidget {
         : starting
         ? startingLabel
         : 'Review & Swap';
+    final showPrimaryArrow =
+        !expired && !starting && startBlockedReason == null;
     return SizedBox(
       key: const ValueKey('swap_review_actions'),
       width: 256,
@@ -203,9 +205,9 @@ class SwapReviewPageActions extends StatelessWidget {
             variant: AppButtonVariant.primary,
             size: AppButtonSize.large,
             minWidth: 256,
-            trailing: expired || sendsZec || starting
-                ? null
-                : const AppIcon(AppIcons.arrowForwardIos),
+            trailing: showPrimaryArrow
+                ? const AppIcon(AppIcons.arrowForwardIos)
+                : null,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 184),
               child: Text(

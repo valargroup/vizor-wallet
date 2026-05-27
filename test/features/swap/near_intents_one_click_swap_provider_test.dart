@@ -46,6 +46,7 @@ void main() {
     expect(request.headers['authorization'], 'Bearer jwt-token');
     expect(request.body?['dry'], isFalse);
     expect(request.body?['swapType'], 'EXACT_INPUT');
+    expect(request.body?['slippageTolerance'], 100);
     expect(request.body?['amount'], '150000000');
     expect(request.body?['originAsset'], 'nep141:zec.omft.near');
     expect(request.body?['destinationAsset'], 'nep141:usdc.example');
@@ -109,6 +110,7 @@ void main() {
       final request = transport.requests.last;
       expect(request.body?['dry'], isTrue);
       expect(request.body?['swapType'], 'EXACT_OUTPUT');
+      expect(request.body?['slippageTolerance'], 100);
       expect(request.body?['amount'], '105250000');
       expect(request.body?['originAsset'], 'nep141:zec.omft.near');
       expect(request.body?['destinationAsset'], 'nep141:usdc.example');
@@ -117,6 +119,59 @@ void main() {
       expect(quote.mode, SwapQuoteMode.exactOutput);
       expect(quote.providerRefundInfo?.minimumDepositText, '1.485 ZEC');
       expect(quote.providerRefundInfo?.refundFeeText, '0.0001 ZEC');
+    },
+  );
+
+  test(
+    'quote posts external-asset exact-output payload using ZEC receive decimals',
+    () async {
+      final transport = _FakeOneClickTransport([
+        _FakeResponse.get('/v0/tokens', _tokensWithNearUsdcFirst),
+        _FakeResponse.post(
+          '/v0/quote',
+          _quoteResponse(
+            originAsset: 'nep141:usdc.example',
+            destinationAsset: 'nep141:zec.omft.near',
+            swapType: 'EXACT_OUTPUT',
+            amountInFormatted: '140.36',
+            amountOutFormatted: '2',
+            minAmountIn: '139650000',
+            minAmountOut: '199000000',
+            depositAddress: '0xexternal-deposit',
+            status: null,
+          ),
+        ),
+      ]);
+      final provider = NearIntentsOneClickSwapProvider(
+        transport: transport,
+        now: () => DateTime.utc(2026, 5, 7, 10),
+      );
+
+      final quote = await provider.quote(
+        const SwapQuoteRequest(
+          direction: SwapDirection.externalToZec,
+          externalAsset: SwapAsset.usdc,
+          mode: SwapQuoteMode.exactOutput,
+          amount: 2,
+          amountText: '2',
+          destination: 'u1fresh-shielded-recipient',
+          refundAddress: '0xexternal-refund',
+        ),
+      );
+
+      final request = transport.requests.last;
+      expect(request.body?['dry'], isFalse);
+      expect(request.body?['swapType'], 'EXACT_OUTPUT');
+      expect(request.body?['amount'], '200000000');
+      expect(request.body?['originAsset'], 'nep141:usdc.example');
+      expect(request.body?['destinationAsset'], 'nep141:zec.omft.near');
+      expect(request.body?['refundTo'], '0xexternal-refund');
+      expect(request.body?['recipient'], 'u1fresh-shielded-recipient');
+      expect(quote.pairText, 'USDC -> ZEC');
+      expect(quote.sellAmountText, '140.36 USDC');
+      expect(quote.receiveEstimateText, '2 ZEC');
+      expect(quote.minimumReceiveText, '1.99 ZEC');
+      expect(quote.providerRefundInfo?.minimumDepositText, '139.65 USDC');
     },
   );
 

@@ -3419,6 +3419,26 @@ void main() {
 
     expect(find.byKey(const ValueKey('swap_review_panel')), findsOneWidget);
     expect(find.byKey(const ValueKey('swap_review_actions')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('swap_start_button')),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is AppIcon && widget.name == AppIcons.arrowForwardIos,
+        ),
+      ),
+      findsOneWidget,
+    );
+    final reviewPanelRect = tester.getRect(
+      find.byKey(const ValueKey('swap_review_panel')),
+    );
+    final reviewActionsRect = tester.getRect(
+      find.byKey(const ValueKey('swap_review_actions')),
+    );
+    expect(
+      reviewActionsRect.top - reviewPanelRect.bottom,
+      closeTo(AppSpacing.sm, 0.1),
+    );
     final reviewScrollbar = tester.widget<RawScrollbar>(
       find.byKey(const ValueKey('swap_review_scrollbar')),
     );
@@ -3615,7 +3635,7 @@ void main() {
     expect(liveRequest.destination, '0xrecipient');
   });
 
-  testWidgets('fiat receive input previews an exact-output quote', (
+  testWidgets('fiat receive input estimates exact-output locally', (
     tester,
   ) async {
     await _setDesktopViewport(tester);
@@ -3629,7 +3649,6 @@ void main() {
         ),
         swapProvider: swapProvider,
         seedPrototypeFixtures: false,
-        previewQuoteDebounce: Duration.zero,
       ),
     );
     await tester.pumpAndSettle();
@@ -3646,17 +3665,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_fieldText(tester, 'swap_receive_amount_field'), '105.26');
-    expect(swapProvider.requests, hasLength(1));
-    final previewRequest = swapProvider.requests.single;
-    expect(previewRequest.dryRun, isFalse);
-    expect(previewRequest.mode, SwapQuoteMode.exactOutput);
-    expect(previewRequest.amount, 105.26);
-    expect(previewRequest.amountText, '105.26');
-    expect(previewRequest.amountAsset, SwapAsset.usdc);
+    expect(_fieldText(tester, 'swap_amount_field'), '105');
+    expect(find.text('1.5000 ZEC'), findsOneWidget);
+    expect(swapProvider.requests, isEmpty);
   });
 
   testWidgets(
-    'editing receive amount previews and reviews exact-output quote',
+    'editing receive amount estimates locally and reviews exact-output quote',
     (tester) async {
       await _setDesktopViewport(tester);
       final swapProvider = _FakeSwapProvider();
@@ -3669,7 +3684,6 @@ void main() {
           ),
           swapProvider: swapProvider,
           seedPrototypeFixtures: false,
-          previewQuoteDebounce: Duration.zero,
         ),
       );
       await tester.pumpAndSettle();
@@ -3683,19 +3697,13 @@ void main() {
 
       expect(_fieldText(tester, 'swap_receive_amount_field'), '105.27');
       expect(_fieldText(tester, 'swap_amount_field'), '1.5002');
-      expect(swapProvider.requests, hasLength(1));
-      final previewRequest = swapProvider.requests.single;
-      expect(previewRequest.dryRun, isFalse);
-      expect(previewRequest.mode, SwapQuoteMode.exactOutput);
-      expect(previewRequest.amount, 105.27);
-      expect(previewRequest.amountText, '105.27');
-      expect(previewRequest.amountAsset, SwapAsset.usdc);
+      expect(swapProvider.requests, isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('swap_review_button')));
       await tester.pumpAndSettle();
 
-      expect(swapProvider.requests, hasLength(2));
-      final liveRequest = swapProvider.requests.last;
+      expect(swapProvider.requests, hasLength(1));
+      final liveRequest = swapProvider.requests.single;
       expect(liveRequest.dryRun, isFalse);
       expect(liveRequest.mode, SwapQuoteMode.exactOutput);
       expect(liveRequest.amount, 105.27);
@@ -3722,8 +3730,7 @@ void main() {
             routes: [_swapRoute(), _swapActivityRoute()],
           ),
           swapProvider: swapProvider,
-          spendableBalance: BigInt.from(100000000),
-          previewQuoteDebounce: Duration.zero,
+          spendableBalance: BigInt.from(155000000),
         ),
       );
       await tester.pumpAndSettle();
@@ -3738,6 +3745,21 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('swap_review_button')));
       await tester.pumpAndSettle();
 
+      final reviewSummary = find.byKey(
+        const ValueKey('swap_review_trade_summary'),
+      );
+      expect(
+        find.descendant(of: reviewSummary, matching: find.text('1.6000 ZEC')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: reviewSummary, matching: find.text(r'$105.26')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: reviewSummary, matching: find.text(r'$112.28')),
+        findsOneWidget,
+      );
       expect(
         find.text(
           'Required pay exceeds available ZEC. Review a smaller target amount.',
@@ -3748,6 +3770,51 @@ void main() {
       expect(swapProvider.startedQuotes, isEmpty);
     },
   );
+
+  testWidgets('review summary fiat values use the live exact-input quote', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final swapProvider = _DriftingExactInputSwapProvider();
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        swapProvider: swapProvider,
+        seedPrototypeFixtures: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_amount_field')),
+      '1.5',
+    );
+    await _enterDestinationText(tester, '0xrecipient');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('swap_review_button')));
+    await tester.pumpAndSettle();
+
+    final reviewSummary = find.byKey(
+      const ValueKey('swap_review_trade_summary'),
+    );
+    expect(
+      find.descendant(of: reviewSummary, matching: find.text('123.45 USDC')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: reviewSummary, matching: find.text(r'$123.45')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: reviewSummary, matching: find.text(r'$105.26')),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('review quote can be cancelled without clearing the draft', (
     tester,
@@ -5130,7 +5197,6 @@ Widget _routerHarness(
   BigInt? spendableBalance,
   Duration? statusPollInterval,
   Duration? priceRefreshInterval,
-  Duration? previewQuoteDebounce,
   LoadShieldedAddress? loadShieldedAddress,
   bool seedPrototypeFixtures = true,
   bool liveFundsEnabled = true,
@@ -5203,10 +5269,6 @@ Widget _routerHarness(
         ),
       if (statusPollInterval != null)
         swapStatusPollIntervalProvider.overrideWithValue(statusPollInterval),
-      if (previewQuoteDebounce != null)
-        swapPreviewQuoteDebounceProvider.overrideWithValue(
-          previewQuoteDebounce,
-        ),
     ],
     child: MaterialApp.router(
       routerConfig: router,
@@ -5615,14 +5677,11 @@ class _FakeSwapProvider implements SwapProvider {
 }
 
 class _DriftingExactOutputSwapProvider extends _FakeSwapProvider {
-  var _exactOutputQuotes = 0;
-
   @override
   Future<SwapQuote> quote(SwapQuoteRequest request) async {
     final quote = await super.quote(request);
     if (request.mode != SwapQuoteMode.exactOutput) return quote;
-    _exactOutputQuotes += 1;
-    final sellAmount = _exactOutputQuotes == 1 ? 0.5 : 1.5;
+    const sellAmount = 1.6;
     return SwapQuote(
       direction: quote.direction,
       sellAsset: quote.sellAsset,
@@ -5643,6 +5702,40 @@ class _DriftingExactOutputSwapProvider extends _FakeSwapProvider {
       receiveEstimateTextOverride: quote.receiveEstimateText,
       minimumReceiveTextOverride: quote.minimumReceiveText,
       rateTextOverride: quote.rateText,
+      providerRefundInfo: quote.providerRefundInfo,
+    );
+  }
+}
+
+class _DriftingExactInputSwapProvider extends _FakeSwapProvider {
+  @override
+  Future<SwapQuote> quote(SwapQuoteRequest request) async {
+    final quote = await super.quote(request);
+    if (request.mode != SwapQuoteMode.exactInput ||
+        request.direction != SwapDirection.zecToExternal) {
+      return quote;
+    }
+    const receiveAmount = 123.45;
+    return SwapQuote(
+      direction: quote.direction,
+      sellAsset: quote.sellAsset,
+      receiveAsset: quote.receiveAsset,
+      externalAsset: quote.externalAsset,
+      mode: quote.mode,
+      sellAmount: quote.sellAmount,
+      receiveAmount: receiveAmount,
+      minimumReceiveAmount: 122.83,
+      providerLabel: quote.providerLabel,
+      feeLabel: quote.feeLabel,
+      expiryLabel: quote.expiryLabel,
+      quoteExpiresAt: quote.quoteExpiresAt,
+      depositInstruction: quote.depositInstruction,
+      providerQuoteId: quote.providerQuoteId,
+      providerSignature: quote.providerSignature,
+      sellAmountTextOverride: quote.sellAmountText,
+      receiveEstimateTextOverride: '123.45 USDC',
+      minimumReceiveTextOverride: '122.83 USDC',
+      rateTextOverride: '1 ZEC = 82.30 USDC',
       providerRefundInfo: quote.providerRefundInfo,
     );
   }
