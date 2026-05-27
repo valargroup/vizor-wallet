@@ -14,8 +14,6 @@ import 'swap_asset_icon.dart';
 const _swapReviewMinimumReceiveTooltip = 'Minimum receive details coming soon.';
 const _swapReviewSwapFeeTooltip = 'Swap fee details coming soon.';
 const _swapReviewDetailIconSize = 14.0;
-const _swapReviewDetailIconSlotWidth =
-    AppSpacing.xxs + _swapReviewDetailIconSize;
 
 class SwapReviewPageContent extends StatelessWidget {
   const SwapReviewPageContent({
@@ -551,8 +549,7 @@ class _ReviewDetailRow extends StatelessWidget {
                       icon: trailingIcon!,
                       tooltipMessage: tooltipMessage,
                     ),
-                  ] else
-                    const SizedBox(width: _swapReviewDetailIconSlotWidth),
+                  ],
                 ],
               ),
             ),

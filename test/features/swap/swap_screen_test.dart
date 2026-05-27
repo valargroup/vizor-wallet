@@ -291,6 +291,49 @@ void main() {
     },
   );
 
+  testWidgets('swap status summary calculates fiat per asset side', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(1080, 720));
+    final sessionStore = _FakeSwapPersistenceStore(
+      initialIntents: [
+        _persistedIntent(
+          id: 'status-fiat',
+          txHash: '',
+          status: SwapIntentStatus.complete,
+          nextAction: 'Swap complete',
+        ).copyWith(receiveEstimate: '123.45 USDC'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/activity/swap/status-fiat?from=swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        swapProvider: _PricingSwapProvider([70.1733333333]),
+        seedPrototypeFixtures: false,
+        sessionStore: sessionStore,
+      ),
+    );
+    await _pumpUntilPresent(
+      tester,
+      find.byKey(const ValueKey('swap_status_summary_card')),
+    );
+    await tester.pumpAndSettle();
+
+    final summary = find.byKey(const ValueKey('swap_status_summary_card'));
+    expect(
+      find.descendant(of: summary, matching: find.text(r'$105.26')),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(of: summary, matching: find.text(r'$123.45')),
+      findsWidgets,
+    );
+  });
+
   testWidgets(
     'status page blinks live quote signal and cycles loader highlight',
     (tester) async {
@@ -586,8 +629,26 @@ void main() {
 
     final feeLabelRect = tester.getRect(find.text('Total fees'));
     final feeValueRect = tester.getRect(find.text('~0.25 USDC'));
+    final finalDetailsRect = tester.getRect(
+      find.byKey(const ValueKey('swap_final_details')),
+    );
+    final feeHelpIconRect = tester.getRect(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('swap_final_details')),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is AppIcon && widget.name == AppIcons.help,
+            ),
+          )
+          .first,
+    );
     expect(feeLabelRect.left, lessThan(feeValueRect.left));
     expect(feeValueRect.right, greaterThan(feeLabelRect.right));
+    expect(feeValueRect.right, lessThan(feeHelpIconRect.left));
+    expect(
+      feeHelpIconRect.right,
+      closeTo(finalDetailsRect.right - AppSpacing.sm, 1),
+    );
   });
 
   testWidgets('status progress advances skipped steps one at a time', (
@@ -736,6 +797,16 @@ void main() {
     );
     final feeLabelRect = tester.getRect(find.text('Swap fee'));
     final feeValueRect = tester.getRect(find.text('Included in shown rate'));
+    final feeHelpIconRect = tester.getRect(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('swap_transaction_details_collapsed')),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is AppIcon && widget.name == AppIcons.help,
+            ),
+          )
+          .first,
+    );
 
     expect(accountLabelRect.left, lessThan(accountValueRect.left));
     expect(accountValueRect.right, greaterThan(accountLabelRect.right));
@@ -744,7 +815,8 @@ void main() {
     expect((refundLabelRect.left - accountLabelRect.left).abs(), lessThan(1));
     expect((depositLabelRect.left - accountLabelRect.left).abs(), lessThan(1));
     expect((feeLabelRect.left - accountLabelRect.left).abs(), lessThan(1));
-    expect((refundValueRect.right - feeValueRect.right).abs(), lessThan(1));
+    expect(feeValueRect.right, lessThan(feeHelpIconRect.left));
+    expect((refundValueRect.right - feeHelpIconRect.right).abs(), lessThan(1));
 
     await tester.tap(find.text('More Details'));
     await tester.pump();
@@ -4263,6 +4335,37 @@ void main() {
         findsNothing,
       );
       expect(find.text('Expires in'), findsNothing);
+
+      final reviewDetails = find.byKey(const ValueKey('swap_review_details'));
+      final reviewDetailsRect = tester.getRect(reviewDetails);
+      final recipientValueRect = tester.getRect(
+        find.descendant(of: reviewDetails, matching: find.text('0xrecipient')),
+      );
+      final feeValueRect = tester.getRect(
+        find.descendant(
+          of: reviewDetails,
+          matching: find.text('Included in shown rate'),
+        ),
+      );
+      final feeHelpIconRect = tester.getRect(
+        find
+            .descendant(
+              of: reviewDetails,
+              matching: find.byWidgetPredicate(
+                (widget) => widget is AppIcon && widget.name == AppIcons.help,
+              ),
+            )
+            .last,
+      );
+      expect(
+        recipientValueRect.right,
+        closeTo(reviewDetailsRect.right - AppSpacing.sm, 1),
+      );
+      expect(feeValueRect.right, lessThan(feeHelpIconRect.left));
+      expect(
+        feeHelpIconRect.right,
+        closeTo(reviewDetailsRect.right - AppSpacing.sm, 1),
+      );
     },
   );
 

@@ -779,9 +779,21 @@ class _SwapStatusForIntentState extends ConsumerState<_SwapStatusForIntent> {
   @override
   Widget build(BuildContext context) {
     final intent = widget.intent;
+    final state = ref.watch(swapPrototypeProvider);
     final sellAsset = _activitySellAsset(intent) ?? SwapAsset.zec;
     final receiveAsset = _activityReceiveAsset(intent) ?? SwapAsset.usdc;
-    final fiatText = _activityFiatText(intent, sellAsset, receiveAsset);
+    final payFiatText = _activityFiatTextForAsset(
+      state,
+      intent: intent,
+      asset: sellAsset,
+      amountText: intent.sellAmount,
+    );
+    final receiveFiatText = _activityFiatTextForAsset(
+      state,
+      intent: intent,
+      asset: receiveAsset,
+      amountText: intent.receiveEstimate,
+    );
     final accountInfo = _accountInfoForIntent(
       ref.watch(accountProvider).value,
       intent,
@@ -790,8 +802,8 @@ class _SwapStatusForIntentState extends ConsumerState<_SwapStatusForIntent> {
       title: _swapStatusTitle(intent),
       payAsset: sellAsset,
       receiveAsset: receiveAsset,
-      payFiatText: fiatText,
-      receiveFiatText: fiatText,
+      payFiatText: payFiatText,
+      receiveFiatText: receiveFiatText,
       payAmountText: intent.sellAmount,
       receiveAmountText: intent.receiveEstimate,
       badgeKind: _swapStatusBadgeKind(intent.status),
@@ -1057,27 +1069,40 @@ String? _firstNonEmpty(Iterable<String?> values) {
   return null;
 }
 
-String _activityFiatText(
-  SwapPrototypeIntent intent,
-  SwapAsset sellAsset,
-  SwapAsset receiveAsset,
-) {
-  final sellFiat = _usdTextForStableAmount(intent.sellAmount, sellAsset);
-  if (sellFiat != null) return sellFiat;
-  final receiveFiat = _usdTextForStableAmount(
-    intent.receiveEstimate,
-    receiveAsset,
-  );
-  if (receiveFiat != null) return receiveFiat;
+String _activityFiatTextForAsset(
+  SwapPrototypeState state, {
+  required SwapPrototypeIntent intent,
+  required SwapAsset asset,
+  required String amountText,
+}) {
+  final amount = _numericAmount(amountText);
+  if (amount == null || amount <= 0) return r'$--';
+  if (_isUsdLikeSwapAsset(asset)) return _formatActivityUsd(amount);
+  final externalAsset = intent.externalAsset ?? state.externalAsset;
+  if (asset.isNativeZec && _isUsdLikeSwapAsset(externalAsset)) {
+    final zecUsd =
+        state.indicativeExternalPerZec[externalAsset] ??
+        externalAsset.fallbackExternalPerZec;
+    if (zecUsd.isFinite && zecUsd > 0) {
+      return _formatActivityUsd(amount * zecUsd);
+    }
+  }
   return r'$--';
 }
 
-String? _usdTextForStableAmount(String amountText, SwapAsset asset) {
+bool _isUsdLikeSwapAsset(SwapAsset asset) {
   final symbol = asset.symbol.toUpperCase();
-  if (symbol != 'USDC' && symbol != 'USDT' && symbol != 'DAI') return null;
+  return symbol == 'USDC' || symbol == 'USDT' || symbol == 'DAI';
+}
+
+double? _numericAmount(String amountText) {
   final raw = amountText.split(RegExp(r'\s+')).first.replaceAll(',', '').trim();
-  final value = double.tryParse(raw);
-  if (value == null || !value.isFinite) return null;
+  final amount = double.tryParse(raw);
+  return amount == null || !amount.isFinite ? null : amount;
+}
+
+String _formatActivityUsd(double value) {
+  if (!value.isFinite || value <= 0) return r'$0.00';
   if (value >= 1000000) return '\$${(value / 1000000).toStringAsFixed(2)}M';
   if (value >= 1000) return '\$${(value / 1000).toStringAsFixed(2)}K';
   return '\$${value.toStringAsFixed(2)}';

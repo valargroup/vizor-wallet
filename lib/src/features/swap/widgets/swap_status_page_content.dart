@@ -28,8 +28,6 @@ const _swapStatusSwapFeeTooltip = 'Swap fee details coming soon.';
 const _swapStatusMinimumReceiveTooltip = 'Minimum receive details coming soon.';
 const _swapStatusTotalFeesTooltip = 'Total fee details coming soon.';
 const _swapStatusDetailIconSize = 14.0;
-const _swapStatusDetailIconSlotWidth =
-    AppSpacing.xxs + _swapStatusDetailIconSize;
 
 class SwapStatusStepData {
   const SwapStatusStepData({
@@ -1257,10 +1255,7 @@ class _DetailRow extends StatelessWidget {
                                           _swapStatusHelpTooltip(row.label)
                                     : null,
                               ),
-                            ] else
-                              const SizedBox(
-                                width: _swapStatusDetailIconSlotWidth,
-                              ),
+                            ],
                           ],
                         ),
                       ),
