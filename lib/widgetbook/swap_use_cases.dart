@@ -178,7 +178,6 @@ Widget buildSwapReviewDefaultUseCase(BuildContext context) {
       addressPlan: _figmaExternalToZecAddressPlan,
       accountLabel: 'John',
       slippageToleranceText: '0.25 USDC (0.5%)',
-      priceProtectionText: '0.04 ZEC (5.0%)',
     ),
   );
 }
@@ -191,7 +190,6 @@ Widget buildSwapReviewZecToExternalUseCase(BuildContext context) {
       addressPlan: _figmaZecToExternalAddressPlan,
       accountLabel: 'John',
       slippageToleranceText: '0.001 ZEC (0.5%)',
-      priceProtectionText: '0.25 USDC (0.5%)',
     ),
   );
 }
@@ -204,7 +202,6 @@ Widget buildSwapReviewLargeAmountsUseCase(BuildContext context) {
       addressPlan: _figmaExternalToZecAddressPlan,
       accountLabel: 'John',
       slippageToleranceText: '0.25 USDC (0.5%)',
-      priceProtectionText: '0.04 ZEC (5.0%)',
       payFiatText: r'$999.123M',
       receiveFiatText: r'$110.24',
     ),
@@ -234,6 +231,19 @@ Widget buildSwapDepositCountdownUseCase(BuildContext context) {
       expiresInLabel: '14:59',
       expiresAt: DateTime.now().add(const Duration(minutes: 14, seconds: 59)),
       onDeposited: () {},
+    ),
+  );
+}
+
+Widget buildSwapDepositHardwareZecUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Review',
+    child: SwapHardwareZecDepositPageContent(
+      asset: SwapAsset.zec,
+      amountText: '0.251 ZEC',
+      depositAddress: 't1figmareviewdepositaddress',
+      expiresInLabel: '2hrs',
+      onDepositZec: () {},
     ),
   );
 }
@@ -594,11 +604,6 @@ const _designTransactionDetails = <SwapStatusDetailRowData>[
     value: '0.25 USDC (0.5%)',
   ),
   SwapStatusDetailRowData(
-    label: 'Price protection',
-    value: '0.04 ZEC (5.0%)',
-    help: true,
-  ),
-  SwapStatusDetailRowData(
     label: 'Minimum Receive',
     value: '0.249 ZEC',
     help: true,
@@ -826,7 +831,6 @@ class _SwapReviewPreview extends StatelessWidget {
     required this.addressPlan,
     required this.accountLabel,
     this.slippageToleranceText,
-    this.priceProtectionText,
     this.payFiatText,
     this.receiveFiatText,
   });
@@ -835,7 +839,6 @@ class _SwapReviewPreview extends StatelessWidget {
   final SwapAddressPlan addressPlan;
   final String accountLabel;
   final String? slippageToleranceText;
-  final String? priceProtectionText;
   final String? payFiatText;
   final String? receiveFiatText;
 
@@ -852,7 +855,6 @@ class _SwapReviewPreview extends StatelessWidget {
           amountWarning: null,
           startError: null,
           slippageToleranceTextOverride: slippageToleranceText,
-          priceProtectionTextOverride: priceProtectionText,
           payFiatTextOverride: payFiatText,
           receiveFiatTextOverride: receiveFiatText,
         ),
@@ -1217,20 +1219,8 @@ class _PreviewSwapSidebar extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
-                    label: 'Wallet',
-                    iconName: AppIcons.wallet,
-                    onTap: () {},
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppSidebarItem(
-                    label: 'Send',
-                    iconName: AppIcons.plane,
-                    onTap: () {},
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppSidebarItem(
-                    label: 'Receive',
-                    iconName: AppIcons.arrowDownCircle,
+                    label: 'Home',
+                    iconName: AppIcons.home,
                     onTap: () {},
                   ),
                   const SizedBox(height: AppSpacing.xs),
@@ -1261,13 +1251,7 @@ class _PreviewSwapSidebar extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
-                    label: 'About Vizor',
-                    iconName: AppIcons.vizor,
-                    onTap: () {},
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppSidebarItem(
-                    label: 'Sign Out',
+                    label: 'Sign out',
                     iconName: AppIcons.logOut,
                     onTap: () {},
                   ),

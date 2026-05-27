@@ -60,17 +60,6 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
     return kDefaultProfilePictureId;
   }
 
-  bool _isHardwareIntent(SwapPrototypeIntent intent) {
-    final accountUuid = intent.accountUuid;
-    if (accountUuid == null || accountUuid.trim().isEmpty) return false;
-    final accountState = ref.read(accountProvider).value;
-    final accountHardwareByUuid = {
-      for (final account in accountState?.accounts ?? const <AccountInfo>[])
-        account.uuid: account.isHardware,
-    };
-    return accountHardwareByUuid[accountUuid] ?? false;
-  }
-
   void _returnToSwap() {
     ref.read(swapPrototypeProvider.notifier).cancelReviewQuote();
     context.go('/swap');
@@ -106,15 +95,10 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
           .read(swapPrototypeProvider)
           .selectedIntentOrNull;
       if (startedIntent != null) {
-        final needsKeystoneDeposit =
-            _isHardwareIntent(startedIntent) &&
-            startedIntent.direction == SwapDirection.zecToExternal &&
-            !(startedIntent.depositTxHash?.trim().isNotEmpty ?? false);
         context.go(
           swapActivityDetailUri(
             intentId: startedIntent.id,
             returnTarget: SwapActivityReturnTarget.swap,
-            autoSignZecDeposit: needsKeystoneDeposit,
           ).toString(),
         );
         return;

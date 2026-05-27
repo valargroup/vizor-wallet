@@ -21,7 +21,6 @@ class SwapReviewPageContent extends StatelessWidget {
     this.startBlockedReason,
     this.accountProfilePictureId = kDefaultProfilePictureId,
     this.slippageToleranceTextOverride,
-    this.priceProtectionTextOverride,
     this.payFiatTextOverride,
     this.receiveFiatTextOverride,
     super.key,
@@ -36,7 +35,6 @@ class SwapReviewPageContent extends StatelessWidget {
   final String? startError;
   final String? startBlockedReason;
   final String? slippageToleranceTextOverride;
-  final String? priceProtectionTextOverride;
   final String? payFiatTextOverride;
   final String? receiveFiatTextOverride;
 
@@ -70,7 +68,6 @@ class SwapReviewPageContent extends StatelessWidget {
             accountLabel: accountLabel,
             accountProfilePictureId: accountProfilePictureId,
             slippageToleranceTextOverride: slippageToleranceTextOverride,
-            priceProtectionTextOverride: priceProtectionTextOverride,
           ),
           if (amountWarning != null) ...[
             const SizedBox(height: AppSpacing.xs),
@@ -431,7 +428,6 @@ class _ReviewDetailsList extends StatelessWidget {
     required this.accountLabel,
     required this.accountProfilePictureId,
     required this.slippageToleranceTextOverride,
-    required this.priceProtectionTextOverride,
   });
 
   final SwapQuote quote;
@@ -439,7 +435,6 @@ class _ReviewDetailsList extends StatelessWidget {
   final String? accountLabel;
   final String accountProfilePictureId;
   final String? slippageToleranceTextOverride;
-  final String? priceProtectionTextOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -468,11 +463,6 @@ class _ReviewDetailsList extends StatelessWidget {
               value:
                   slippageToleranceTextOverride ??
                   _slippageToleranceText(quote),
-            ),
-            _ReviewDetailRow(
-              label: 'Price protection',
-              value: priceProtectionTextOverride ?? _priceProtectionText(quote),
-              trailingIcon: AppIcons.help,
             ),
             _ReviewDetailRow(
               label: 'Minimum Receive',
@@ -664,16 +654,6 @@ String _slippageToleranceText(SwapQuote quote) {
   return compactSwapAmountText(
     '${quote.sellAsset.formatAmount(sellBuffer)} '
     '${quote.sellAsset.symbol} (${_formatProtectionPercent(percent)})',
-  );
-}
-
-String _priceProtectionText(SwapQuote quote) {
-  final buffer = quote.receiveAmount - quote.minimumReceiveAmount;
-  final bounded = buffer.isFinite && buffer > 0 ? buffer : 0.0;
-  final percent = _receiveProtectionPercent(quote);
-  return compactSwapAmountText(
-    '${quote.receiveAsset.formatAmount(bounded)} '
-    '${quote.receiveAsset.symbol} (${_formatProtectionPercent(percent)})',
   );
 }
 

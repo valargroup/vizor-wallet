@@ -10,6 +10,7 @@ import '../primitives.dart';
 /// * [nav] — Navigation rail background.
 /// * [navActive] — Active nav item indicator.
 /// * [tooltip] — Tooltip / popover background. Theme-invariant.
+/// * [qrCode] — QR code backing surface. Theme-invariant for scan contrast.
 class AppSurfaceColors {
   const AppSurfaceColors({
     required this.card,
@@ -18,6 +19,7 @@ class AppSurfaceColors {
     required this.nav,
     required this.navActive,
     required this.tooltip,
+    required this.qrCode,
   });
 
   final Color card;
@@ -26,6 +28,7 @@ class AppSurfaceColors {
   final Color nav;
   final Color navActive;
   final Color tooltip;
+  final Color qrCode;
 
   static const dark = AppSurfaceColors(
     card: Primitives.p100Dark,
@@ -34,6 +37,7 @@ class AppSurfaceColors {
     nav: Primitives.p50Dark,
     navActive: Primitives.p150Dark,
     tooltip: Primitives.p200Dark,
+    qrCode: Primitives.p0Light,
   );
 
   static const light = AppSurfaceColors(
@@ -45,5 +49,6 @@ class AppSurfaceColors {
     // Tooltip is the same concrete value in both modes; picking p800Light here
     // keeps the expression inside the light-face lookup.
     tooltip: Primitives.p800Light,
+    qrCode: Primitives.p0Light,
   );
 }

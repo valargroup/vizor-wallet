@@ -488,11 +488,11 @@ class _SwapActivityStack extends StatelessWidget {
           _ActivityHardwareActionPanel(
             key: const ValueKey('swap_hardware_deposit_action_panel'),
             iconName: AppIcons.qr,
-            title: 'Sign ZEC deposit',
+            title: 'Deposit ZEC',
             message:
                 'Use Keystone to approve one ZEC transaction to the swap deposit address.',
             buttonKey: const ValueKey('swap_hardware_deposit_button'),
-            buttonLabel: 'Sign with Keystone',
+            buttonLabel: 'Deposit ZEC',
             onPressed: () => onSignZecDeposit(selectedIntent),
           ),
         ],
@@ -567,7 +567,10 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
       onCopyExplorerLink: onCopyExplorerLink,
       intentIsHardware: intentIsHardware,
     );
-    final flowOffsetY = _showsExternalDepositPage(intent) ? AppSpacing.sm : 0.0;
+    final isDepositPage = _showsDepositPage(
+      intent,
+      intentIsHardware: intentIsHardware,
+    );
 
     return Container(
       key: const ValueKey('swap_activity_detail_page'),
@@ -578,11 +581,10 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: Align(
-                alignment: Alignment.topCenter,
-                child: Transform.translate(
-                  offset: Offset(0, flowOffsetY),
-                  child: flowContent,
-                ),
+                alignment: isDepositPage
+                    ? Alignment.center
+                    : Alignment.topCenter,
+                child: flowContent,
               ),
             ),
           );
@@ -625,32 +627,37 @@ class _SwapActivityFlowContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final depositInstruction = _ActivityDepositInstruction.fromIntent(intent);
     final statusError = intent.statusError ?? state.statusError;
-    final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
-    final showHardwareDepositAction =
-        intentIsHardware &&
-        intent.direction == SwapDirection.zecToExternal &&
-        intent.status == SwapIntentStatus.awaitingDeposit &&
-        !hasDepositTx;
-    final showDepositPage =
-        intent.direction == SwapDirection.externalToZec &&
-        intent.status == SwapIntentStatus.awaitingExternalDeposit &&
-        depositInstruction != null;
-
+    final showExternalDepositPage = _showsExternalDepositPage(intent);
+    final showHardwareDepositPage = _showsHardwareZecDepositPage(
+      intent,
+      intentIsHardware: intentIsHardware,
+    );
     final primaryContent = switch (intent.status) {
       SwapIntentStatus.expired => SwapDepositTimeoutPageContent(
         onRestart: onReviewFreshQuote,
       ),
-      _ when showDepositPage => SwapDepositTokensPageContent(
-        asset: _activitySellAsset(intent) ?? SwapAsset.usdc,
-        amountText: intent.sellAmount,
-        depositAddress: depositInstruction.address,
-        expiresInLabel: _depositDeadlineLabel(intent) ?? '2hrs',
-        expiresAt: intent.depositDeadline,
-        memo: depositInstruction.memo,
-        checking: depositChecking || state.statusRefreshing,
-        checkWarning: depositCheckWarning,
-        onDeposited: onRefreshStatus,
-      ),
+      _ when showExternalDepositPage && depositInstruction != null =>
+        SwapDepositTokensPageContent(
+          asset: _activitySellAsset(intent) ?? SwapAsset.zec,
+          amountText: intent.sellAmount,
+          depositAddress: depositInstruction.address,
+          expiresInLabel: _depositDeadlineLabel(intent) ?? '2hrs',
+          expiresAt: intent.depositDeadline,
+          memo: depositInstruction.memo,
+          checking: depositChecking || state.statusRefreshing,
+          checkWarning: depositCheckWarning,
+          onDeposited: onRefreshStatus,
+        ),
+      _ when showHardwareDepositPage && depositInstruction != null =>
+        SwapHardwareZecDepositPageContent(
+          asset: _activitySellAsset(intent) ?? SwapAsset.zec,
+          amountText: intent.sellAmount,
+          depositAddress: depositInstruction.address,
+          expiresInLabel: _depositDeadlineLabel(intent) ?? '2hrs',
+          expiresAt: intent.depositDeadline,
+          memo: depositInstruction.memo,
+          onDepositZec: () => onSignZecDeposit(intent),
+        ),
       _ => _SwapStatusForIntent(
         intent: intent,
         onOpenExplorer: () => onCopyExplorerLink(intent),
@@ -667,22 +674,6 @@ class _SwapActivityFlowContent extends StatelessWidget {
           SizedBox(
             width: 400,
             child: _ActivityStatusErrorPanel(message: statusError),
-          ),
-        ],
-        if (showHardwareDepositAction) ...[
-          const SizedBox(height: AppSpacing.md),
-          SizedBox(
-            width: 400,
-            child: _ActivityHardwareActionPanel(
-              key: const ValueKey('swap_hardware_deposit_action_panel'),
-              iconName: AppIcons.qr,
-              title: 'Sign ZEC deposit',
-              message:
-                  'Use Keystone to approve one ZEC transaction to the swap deposit address.',
-              buttonKey: const ValueKey('swap_hardware_deposit_button'),
-              buttonLabel: 'Sign with Keystone',
-              onPressed: () => onSignZecDeposit(intent),
-            ),
           ),
         ],
       ],
@@ -944,11 +935,6 @@ List<SwapStatusDetailRowData> _swapStatusDetails(
       value: intent.slippageToleranceText ?? 'Configured quote',
     ),
     SwapStatusDetailRowData(
-      label: 'Price protection',
-      value: intent.priceProtectionText ?? 'Minimum receive protected',
-      help: true,
-    ),
-    SwapStatusDetailRowData(
       label: 'Minimum Receive',
       value: intent.minimumReceiveText ?? intent.receiveEstimate,
       help: true,
@@ -1044,8 +1030,14 @@ String? _depositDeadlineLabel(SwapPrototypeIntent intent) {
   if (deadline == null) return null;
   final remaining = deadline.difference(DateTime.now());
   if (remaining.isNegative) return '00:00';
-  if (remaining.inHours >= 1) return '${remaining.inHours}hrs';
-  if (remaining.inMinutes >= 15) return '${remaining.inMinutes}mins';
+  if (remaining.inHours >= 1) {
+    final hours = (remaining.inSeconds / Duration.secondsPerHour).ceil();
+    return hours == 1 ? '1hr' : '${hours}hrs';
+  }
+  if (remaining.inMinutes >= 15) {
+    final minutes = remaining.inMinutes;
+    return minutes == 1 ? '1min' : '${minutes}mins';
+  }
   final minutes = remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
   final seconds = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
   return '$minutes:$seconds';
@@ -2590,6 +2582,25 @@ bool _showsExternalDepositPage(SwapPrototypeIntent intent) {
   return intent.direction == SwapDirection.externalToZec &&
       intent.status == SwapIntentStatus.awaitingExternalDeposit &&
       _ActivityDepositInstruction.fromIntent(intent) != null;
+}
+
+bool _showsHardwareZecDepositPage(
+  SwapPrototypeIntent intent, {
+  required bool intentIsHardware,
+}) {
+  return intentIsHardware &&
+      intent.direction == SwapDirection.zecToExternal &&
+      intent.status == SwapIntentStatus.awaitingDeposit &&
+      !(intent.depositTxHash?.trim().isNotEmpty ?? false) &&
+      _ActivityDepositInstruction.fromIntent(intent) != null;
+}
+
+bool _showsDepositPage(
+  SwapPrototypeIntent intent, {
+  required bool intentIsHardware,
+}) {
+  return _showsExternalDepositPage(intent) ||
+      _showsHardwareZecDepositPage(intent, intentIsHardware: intentIsHardware);
 }
 
 const _depositConfirmationPendingMessage =

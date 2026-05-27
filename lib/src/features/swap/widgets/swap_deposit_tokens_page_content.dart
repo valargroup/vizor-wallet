@@ -6,9 +6,9 @@ import 'package:pretty_qr_code/pretty_qr_code.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
+import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_contract.dart';
 import 'swap_copy_feedback.dart';
-import 'swap_asset_icon.dart';
 
 class SwapDepositTokensPageContent extends StatelessWidget {
   const SwapDepositTokensPageContent({
@@ -35,6 +35,89 @@ class SwapDepositTokensPageContent extends StatelessWidget {
   final VoidCallback onDeposited;
   final bool checking;
   final String? checkWarning;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SwapDepositPageShell(
+      asset: asset,
+      amountText: amountText,
+      depositAddress: depositAddress,
+      expiresInLabel: expiresInLabel,
+      expiresAt: expiresAt,
+      now: now,
+      memo: memo,
+      actionArea: _DepositConfirmActionArea(
+        checking: checking,
+        warning: checkWarning,
+        buttonLabel: "I've deposited",
+        onDeposited: onDeposited,
+      ),
+    );
+  }
+}
+
+class SwapHardwareZecDepositPageContent extends StatelessWidget {
+  const SwapHardwareZecDepositPageContent({
+    required this.asset,
+    required this.amountText,
+    required this.depositAddress,
+    required this.expiresInLabel,
+    required this.onDepositZec,
+    this.expiresAt,
+    this.now,
+    this.memo,
+    super.key,
+  });
+
+  final SwapAsset asset;
+  final String amountText;
+  final String depositAddress;
+  final String expiresInLabel;
+  final DateTime? expiresAt;
+  final DateTime Function()? now;
+  final String? memo;
+  final VoidCallback onDepositZec;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SwapDepositPageShell(
+      asset: asset,
+      amountText: amountText,
+      depositAddress: depositAddress,
+      expiresInLabel: expiresInLabel,
+      expiresAt: expiresAt,
+      now: now,
+      memo: memo,
+      actionArea: _DepositConfirmActionArea(
+        checking: false,
+        warning: null,
+        buttonLabel: 'Deposit ZEC',
+        onDeposited: onDepositZec,
+      ),
+    );
+  }
+}
+
+class _SwapDepositPageShell extends StatelessWidget {
+  const _SwapDepositPageShell({
+    required this.asset,
+    required this.amountText,
+    required this.depositAddress,
+    required this.expiresInLabel,
+    required this.actionArea,
+    this.expiresAt,
+    this.now,
+    this.memo,
+  });
+
+  final SwapAsset asset;
+  final String amountText;
+  final String depositAddress;
+  final String expiresInLabel;
+  final DateTime? expiresAt;
+  final DateTime Function()? now;
+  final String? memo;
+  final Widget actionArea;
 
   @override
   Widget build(BuildContext context) {
@@ -70,11 +153,7 @@ class SwapDepositTokensPageContent extends StatelessWidget {
             amountText: amountText,
             depositAddress: depositAddress,
           ),
-          _DepositConfirmActionArea(
-            checking: checking,
-            warning: checkWarning,
-            onDeposited: onDeposited,
-          ),
+          actionArea,
         ],
       ),
     );
@@ -85,6 +164,7 @@ class _DepositConfirmActionArea extends StatelessWidget {
   const _DepositConfirmActionArea({
     required this.checking,
     required this.warning,
+    required this.buttonLabel,
     required this.onDeposited,
   });
 
@@ -95,6 +175,7 @@ class _DepositConfirmActionArea extends StatelessWidget {
 
   final bool checking;
   final String? warning;
+  final String buttonLabel;
   final VoidCallback onDeposited;
 
   @override
@@ -126,7 +207,10 @@ class _DepositConfirmActionArea extends StatelessWidget {
             size: AppButtonSize.large,
             minWidth: _buttonWidth,
             trailing: checking ? null : const AppIcon(AppIcons.arrowForwardIos),
-            child: _DepositConfirmButtonLabel(checking: checking),
+            child: _DepositConfirmButtonLabel(
+              checking: checking,
+              buttonLabel: buttonLabel,
+            ),
           ),
         ],
       ),
@@ -135,16 +219,20 @@ class _DepositConfirmActionArea extends StatelessWidget {
 }
 
 class _DepositConfirmButtonLabel extends StatelessWidget {
-  const _DepositConfirmButtonLabel({required this.checking});
+  const _DepositConfirmButtonLabel({
+    required this.checking,
+    required this.buttonLabel,
+  });
 
   final bool checking;
+  final String buttonLabel;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(checking ? 'Checking' : "I've deposited", maxLines: 1),
+        Text(checking ? 'Checking' : buttonLabel, maxLines: 1),
         if (checking) ...[
           const SizedBox(width: AppSpacing.xxs),
           const AppIcon(
@@ -440,8 +528,10 @@ class _DepositExpiryLineState extends State<_DepositExpiryLine> {
     if (_remaining < _countdownThreshold) {
       return _formatCountdown(_remaining);
     }
-    if (_remaining.inHours >= 1) return '${_remaining.inHours}hrs';
-    return '${_remaining.inMinutes}mins';
+    if (_remaining.inHours >= 1) {
+      return _formatDepositDurationLabel(_remaining);
+    }
+    return _formatMinuteLabel(_remaining.inMinutes);
   }
 
   @override
@@ -475,13 +565,14 @@ class _DepositQrCode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       key: const ValueKey('swap_deposit_tokens_qr_code'),
       width: 194,
       height: 194,
       padding: const EdgeInsets.all(AppSpacing.s),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
+        color: colors.surface.qrCode,
         borderRadius: BorderRadius.circular(AppRadii.small),
       ),
       child: Stack(
@@ -495,18 +586,66 @@ class _DepositQrCode extends StatelessWidget {
               shape: PrettyQrSmoothSymbol(roundFactor: 0.75),
             ),
           ),
-          Container(
-            key: const ValueKey('swap_deposit_qr_logo'),
-            width: 34,
-            height: 34,
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFFFF),
-              borderRadius: BorderRadius.circular(AppRadii.full),
-            ),
-            child: SwapAssetIcon(asset: asset, size: 30, showChainBadge: false),
-          ),
+          _DepositQrNetworkLogo(asset: asset),
         ],
+      ),
+    );
+  }
+}
+
+class _DepositQrNetworkLogo extends StatelessWidget {
+  const _DepositQrNetworkLogo({required this.asset});
+
+  final SwapAsset asset;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final logo = Container(
+      key: const ValueKey('swap_deposit_qr_logo'),
+      width: 34,
+      height: 34,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: colors.surface.qrCode,
+        borderRadius: BorderRadius.circular(AppRadii.full),
+      ),
+      child: ClipOval(
+        child: Image.asset(
+          asset.chainIconAsset,
+          fit: BoxFit.cover,
+          semanticLabel: asset.chainLabel,
+          errorBuilder: (context, _, _) =>
+              _DepositQrNetworkLogoFallback(asset: asset),
+        ),
+      ),
+    );
+    if (Overlay.maybeOf(context) == null) return logo;
+    return AppTooltip(message: asset.chainLabel, child: logo);
+  }
+}
+
+class _DepositQrNetworkLogoFallback extends StatelessWidget {
+  const _DepositQrNetworkLogoFallback({required this.asset});
+
+  final SwapAsset asset;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final label = asset.chainLabel.trim().isEmpty
+        ? asset.chainTicker
+        : asset.chainLabel;
+    return Container(
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.background.raised,
+        border: Border.all(color: colors.border.subtle),
+        borderRadius: BorderRadius.circular(AppRadii.full),
+      ),
+      child: Text(
+        label.trim().isEmpty ? '?' : label.trim().substring(0, 1).toUpperCase(),
+        style: AppTypography.labelSmall.copyWith(color: colors.text.muted),
       ),
     );
   }
@@ -640,6 +779,23 @@ String _formatCountdown(Duration remaining) {
   final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
   final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
   return '$minutes:$seconds';
+}
+
+String _formatDepositDurationLabel(Duration remaining) {
+  if (remaining <= Duration.zero) return '00:00';
+  if (remaining.inHours >= 1) {
+    final hours = (remaining.inSeconds / Duration.secondsPerHour).ceil();
+    return _formatHourLabel(hours);
+  }
+  return _formatMinuteLabel(remaining.inMinutes);
+}
+
+String _formatHourLabel(int hours) {
+  return hours == 1 ? '1hr' : '${hours}hrs';
+}
+
+String _formatMinuteLabel(int minutes) {
+  return minutes == 1 ? '1min' : '${minutes}mins';
 }
 
 String _compactAddress(String address) {

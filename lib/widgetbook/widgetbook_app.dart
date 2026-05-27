@@ -210,6 +210,10 @@ class WidgetbookApp extends StatelessWidget {
                       builder: buildSwapDepositCountdownUseCase,
                     ),
                     WidgetbookUseCase(
+                      name: 'Hardware ZEC',
+                      builder: buildSwapDepositHardwareZecUseCase,
+                    ),
+                    WidgetbookUseCase(
                       name: 'Timeout',
                       builder: buildSwapDepositTimeoutUseCase,
                     ),
