@@ -8,12 +8,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/profile_pictures.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
 import '../domain/near_intents_explorer.dart';
+import '../models/swap_activity_navigation.dart';
 import '../models/swap_prototype_models.dart';
 import '../providers/swap_prototype_provider.dart';
 import 'swap_amount_text.dart';
@@ -22,17 +24,20 @@ import 'swap_copy_feedback.dart';
 import 'swap_deposit_tokens_page_content.dart';
 import 'swap_deposit_qr_panel.dart';
 import 'swap_keystone_signing_overlay.dart';
+import 'swap_near_intents_attribution.dart';
 import 'swap_queue_panel.dart';
 import 'swap_status_page_content.dart';
 
 class SwapActivityDetailSurface extends ConsumerStatefulWidget {
   const SwapActivityDetailSurface({
     required this.intentId,
+    this.returnTarget,
     this.autoSignZecDeposit = false,
     super.key,
   });
 
   final String intentId;
+  final SwapActivityReturnTarget? returnTarget;
   final bool autoSignZecDeposit;
 
   @override
@@ -267,13 +272,9 @@ class _SwapActivityDetailSurfaceState
       keystoneSigningRequest?.intentId,
     );
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        if (activityDetailIntent == null)
-          const _SwapActivityMissingPanel()
-        else
-          SwapActivityDetailPagePanel(
+    final Widget pageContent = activityDetailIntent == null
+        ? const _SwapActivityMissingPanel()
+        : SwapActivityDetailPagePanel(
             state: state,
             intent: activityDetailIntent,
             liveFundsEnabled: liveFundsEnabled,
@@ -292,7 +293,18 @@ class _SwapActivityDetailSurfaceState
             onSignZecDeposit: _signZecDeposit,
             onCopyExplorerLink: _openNearIntentsExplorerLink,
             intentIsHardware: _isHardwareIntent(activityDetailIntent),
+          );
+
+    return Stack(
+      key: const ValueKey('swap_activity_detail_surface'),
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(
+          child: _SwapActivityDetailPaneContent(
+            returnTarget: widget.returnTarget,
+            child: pageContent,
           ),
+        ),
         if (keystoneSigningRequest != null && keystoneSigningIntent != null)
           Positioned.fill(
             child: SwapKeystoneSigningOverlay(
@@ -312,6 +324,62 @@ class _SwapActivityDetailSurfaceState
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SwapActivityDetailPaneContent extends StatelessWidget {
+  const _SwapActivityDetailPaneContent({
+    required this.child,
+    required this.returnTarget,
+  });
+
+  final Widget child;
+  final SwapActivityReturnTarget? returnTarget;
+
+  @override
+  Widget build(BuildContext context) {
+    final returnTarget = this.returnTarget;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (returnTarget != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AppBackLink(
+                label: returnTarget.label,
+                minWidth: 60,
+                onTap: () => context.go(returnTarget.path),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.s),
+          ],
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Stack(
+                  children: [
+                    Positioned.fill(child: child),
+                    if (constraints.maxHeight >= 520)
+                      const Positioned(
+                        left: 0,
+                        bottom: AppSpacing.md,
+                        child: SwapNearIntentsAttribution(),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -263,6 +263,7 @@ class _SwapKeystoneSigningOverlayState
     const action = 'ZEC deposit';
 
     return Stack(
+      key: const ValueKey('swap_keystone_signing_overlay_surface'),
       fit: StackFit.expand,
       children: [
         AppPaneModalOverlay(

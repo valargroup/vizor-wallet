@@ -5340,6 +5340,16 @@ void main() {
 
     expect(hardwareSigningService.depositDrafts, ['t1live-deposit']);
     expect(find.text('Sign ZEC deposit on Keystone'), findsWidgets);
+    final paneRect = tester.getRect(
+      find.byKey(const ValueKey('swap_activity_detail_pane')),
+    );
+    final signingOverlayRect = tester.getRect(
+      find.byKey(const ValueKey('swap_keystone_signing_overlay_surface')),
+    );
+    expect(signingOverlayRect.left, closeTo(paneRect.left, 1));
+    expect(signingOverlayRect.top, closeTo(paneRect.top, 1));
+    expect(signingOverlayRect.right, closeTo(paneRect.right, 1));
+    expect(signingOverlayRect.bottom, closeTo(paneRect.bottom, 1));
   });
 
   testWidgets(
