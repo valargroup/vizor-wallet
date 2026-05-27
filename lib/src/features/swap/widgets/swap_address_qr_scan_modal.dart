@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -283,6 +284,8 @@ class SwapAddressQrScanModalContent extends StatelessWidget {
   static const height = 440.0;
   static const cameraWidth = 272.0;
   static const cameraHeight = 220.0;
+  static const cameraModalHeight = 276.0;
+  static const cameraFooterHeight = 40.0;
 
   final SwapAddressQrCameraStatus status;
   final Widget? cameraView;
@@ -423,7 +426,7 @@ class _SwapAddressQrCameraModal extends StatelessWidget {
     return SizedBox(
       key: const ValueKey('swap_address_scan_camera_modal'),
       width: SwapAddressQrScanModalContent.cameraWidth,
-      height: 276,
+      height: SwapAddressQrScanModalContent.cameraModalHeight,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -435,10 +438,14 @@ class _SwapAddressQrCameraModal extends StatelessWidget {
           ),
           if (_showsCameraFooter) ...[
             const SizedBox(height: 16),
-            _SwapAddressQrCameraFooter(
-              label: cameraLabel,
-              enabled: canChooseCamera,
-              onTap: onCameraTap,
+            SizedBox(
+              key: const ValueKey('swap_address_scan_camera_footer_slot'),
+              height: SwapAddressQrScanModalContent.cameraFooterHeight,
+              child: _SwapAddressQrCameraFooter(
+                label: cameraLabel,
+                enabled: canChooseCamera,
+                onTap: onCameraTap,
+              ),
             ),
           ],
         ],
@@ -463,6 +470,9 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final showsCameraSurface =
+        status == SwapAddressQrCameraStatus.active ||
+        status == SwapAddressQrCameraStatus.loading;
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadii.large),
       clipBehavior: Clip.antiAliasWithSaveLayer,
@@ -474,7 +484,11 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             DecoratedBox(
-              decoration: BoxDecoration(color: colors.background.base),
+              decoration: BoxDecoration(
+                color: showsCameraSurface
+                    ? colors.background.base
+                    : colors.background.ground,
+              ),
             ),
             ?cameraView,
             if (status == SwapAddressQrCameraStatus.requesting)
@@ -490,6 +504,7 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
                 title: _cameraDeniedTitle,
                 description: _cameraDeniedDescription,
                 action: AppButton(
+                  key: const ValueKey('swap_address_scan_retry_button'),
                   onPressed: onRetry,
                   variant: AppButtonVariant.secondary,
                   size: AppButtonSize.medium,
@@ -508,6 +523,7 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
                 action: onRetry == null
                     ? null
                     : AppButton(
+                        key: const ValueKey('swap_address_scan_retry_button'),
                         onPressed: onRetry,
                         variant: AppButtonVariant.secondary,
                         size: AppButtonSize.medium,
@@ -518,19 +534,21 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
               ),
             if (status == SwapAddressQrCameraStatus.loading)
               const _SwapAddressQrLoadingOverlay(),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(AppRadii.large),
-                    border: Border.all(
-                      color: colors.border.subtleOpacity,
-                      width: 3,
+            if (showsCameraSurface)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    key: const ValueKey('swap_address_scan_camera_border'),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadii.large),
+                      border: Border.all(
+                        color: colors.border.subtleOpacity,
+                        width: 3,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -563,7 +581,8 @@ class _SwapAddressQrCameraMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return ColoredBox(
-      color: colors.background.base,
+      key: const ValueKey('swap_address_scan_camera_message'),
+      color: colors.background.ground,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -589,17 +608,16 @@ class _SwapAddressQrCameraMessage extends StatelessWidget {
               Text(
                 title,
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: AppTypography.bodyMediumStrong.copyWith(
                   color: colors.text.accent,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: AppTypography.bodyMedium.copyWith(
-                  color: colors.text.secondary,
-                ),
+              _SwapAddressQrCameraDescription(
+                description: description,
+                color: colors.text.secondary,
               ),
               if (action != null) ...[const SizedBox(height: 24), action!],
             ],
@@ -610,29 +628,76 @@ class _SwapAddressQrCameraMessage extends StatelessWidget {
   }
 }
 
+class _SwapAddressQrCameraDescription extends StatelessWidget {
+  const _SwapAddressQrCameraDescription({
+    required this.description,
+    required this.color,
+  });
+
+  final String description;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = description.split('\n');
+    final style = AppTypography.bodyMedium.copyWith(color: color);
+
+    if (lines.length <= 1) {
+      return Text(
+        description,
+        textAlign: TextAlign.center,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final line in lines)
+          Text(
+            line,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+      ],
+    );
+  }
+}
+
 class _SwapAddressQrLoadingOverlay extends StatelessWidget {
   const _SwapAddressQrLoadingOverlay();
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.background.inverse.withValues(alpha: 0.3),
-      ),
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppIcon(AppIcons.loader, size: 20, color: colors.icon.inverse),
-            const SizedBox(width: 4),
-            Text(
-              'Loading...',
-              style: AppTypography.bodyMediumStrong.copyWith(
-                color: colors.text.inverse,
-              ),
+    return ClipRect(
+      key: const ValueKey('swap_address_scan_loading_overlay'),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 37, sigmaY: 37),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.background.inverse.withValues(alpha: 0.3),
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppIcon(AppIcons.loader, size: 20, color: colors.icon.inverse),
+                const SizedBox(width: 4),
+                Text(
+                  'Loading...',
+                  style: AppTypography.bodyMediumStrong.copyWith(
+                    color: colors.text.inverse,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

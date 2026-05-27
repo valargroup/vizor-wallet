@@ -112,7 +112,7 @@ Widget buildSwapAddressScanModalLoadingUseCase(BuildContext context) {
   return _SwapPageModalFrame(
     child: SwapAddressQrScanModalContent(
       status: SwapAddressQrCameraStatus.loading,
-      cameraView: const _SwapAddressQrCameraPreview(dimmed: true),
+      cameraView: const _SwapAddressQrCameraPreview(),
       onCancel: () {},
     ),
   );
@@ -1572,15 +1572,11 @@ class _SwapComposerPreviewState extends State<_SwapComposerPreview> {
 }
 
 class _SwapAddressQrCameraPreview extends StatelessWidget {
-  const _SwapAddressQrCameraPreview({this.dimmed = false});
-
-  final bool dimmed;
+  const _SwapAddressQrCameraPreview();
 
   @override
   Widget build(BuildContext context) {
-    final overlayColor = const Color(
-      0xFF141818,
-    ).withValues(alpha: dimmed ? 0.42 : 0.18);
+    final overlayColor = const Color(0xFF141818).withValues(alpha: 0.18);
     return DecoratedBox(
       decoration: const BoxDecoration(color: Color(0xFF2E3232)),
       child: Stack(

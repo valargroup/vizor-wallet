@@ -32,6 +32,7 @@ import 'package:zcash_wallet/src/features/swap/screens/swap_address_scan_screen.
 import 'package:zcash_wallet/src/features/swap/screens/swap_review_screen.dart';
 import 'package:zcash_wallet/src/features/swap/screens/swap_screen.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_amount_text.dart';
+import 'package:zcash_wallet/src/features/swap/widgets/swap_address_qr_scan_modal.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_asset_icon.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_deposit_tokens_page_content.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_queue_panel.dart';
@@ -995,6 +996,129 @@ void main() {
     expect(modalRect.left, greaterThan(sidebarSwapRect.right));
     expect(modalRect.size, const Size(312, 440));
     expect(cameraRect.size, const Size(272, 220));
+  });
+
+  testWidgets('address scan modal content matches camera state layouts', (
+    tester,
+  ) async {
+    Future<void> pumpStatus(
+      SwapAddressQrCameraStatus status, {
+      Widget? cameraView,
+      bool canChooseCamera = false,
+      VoidCallback? onCameraTap,
+      VoidCallback? onRetry,
+    }) async {
+      await tester.pumpWidget(
+        _themeHarness(
+          Center(
+            child: SwapAddressQrScanModalContent(
+              status: status,
+              cameraView: cameraView,
+              canChooseCamera: canChooseCamera,
+              onCameraTap: onCameraTap,
+              onRetry: onRetry,
+              onCancel: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await pumpStatus(SwapAddressQrCameraStatus.requesting);
+
+    expect(
+      tester.getSize(find.byKey(const ValueKey('swap_address_scan_modal'))),
+      const Size(312, 440),
+    );
+    expect(
+      tester.getSize(
+        find.byKey(const ValueKey('swap_address_scan_camera_modal')),
+      ),
+      const Size(272, 276),
+    );
+    expect(
+      tester.getSize(
+        find.byKey(const ValueKey('swap_address_scan_camera_viewport')),
+      ),
+      const Size(272, 220),
+    );
+    expect(find.text('Grant access to your Camera'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('swap_address_scan_camera_border')),
+      findsNothing,
+    );
+
+    await pumpStatus(SwapAddressQrCameraStatus.denied, onRetry: () {});
+
+    expect(find.text("You've denied Camera access"), findsOneWidget);
+    expect(find.text('Request again'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('swap_address_scan_retry_button')))
+          .height,
+      32,
+    );
+    expect(
+      find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
+      findsNothing,
+    );
+
+    await pumpStatus(
+      SwapAddressQrCameraStatus.active,
+      cameraView: const ColoredBox(color: Color(0xFF2E3232)),
+      canChooseCamera: true,
+      onCameraTap: () {},
+    );
+
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
+          )
+          .height,
+      40,
+    );
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey('swap_address_scan_camera_footer')),
+          )
+          .height,
+      32,
+    );
+    expect(
+      find.byKey(const ValueKey('swap_address_scan_camera_border')),
+      findsOneWidget,
+    );
+
+    await pumpStatus(
+      SwapAddressQrCameraStatus.loading,
+      cameraView: const ColoredBox(color: Color(0xFF2E3232)),
+    );
+
+    expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('swap_address_scan_loading_overlay')),
+      findsOneWidget,
+    );
+    expect(find.text('Loading...'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('swap_address_scan_camera_border')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
+          )
+          .height,
+      40,
+    );
   });
 
   testWidgets('swap address modal loads recipient address from contacts', (
