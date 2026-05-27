@@ -168,6 +168,15 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
+                    label: 'About Vizor',
+                    iconName: AppIcons.vizor,
+                    active: _matches('/about'),
+                    onTap: _matches('/about')
+                        ? null
+                        : () => context.go('/about'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  AppSidebarItem(
                     label: 'Sign out',
                     iconName: AppIcons.logOut,
                     onTap: _isSigningOut ? null : _handleSignOut,
