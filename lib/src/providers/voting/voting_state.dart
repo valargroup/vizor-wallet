@@ -249,6 +249,7 @@ class VotingSessionState {
   final VotingVoteKey? currentVoteKey;
   final int voteSubmissionCompletedCount;
   final int voteSubmissionTotalCount;
+  final double? voteSubmissionProgress;
   final VotingSessionError? error;
 
   VotingSessionState({
@@ -275,6 +276,7 @@ class VotingSessionState {
     this.currentVoteKey,
     this.voteSubmissionCompletedCount = 0,
     this.voteSubmissionTotalCount = 0,
+    this.voteSubmissionProgress,
     this.error,
   }) : pirDiagnostics = UnmodifiableListView(pirDiagnostics),
        delegationProgress = UnmodifiableMapView(delegationProgress),
@@ -310,6 +312,7 @@ class VotingSessionState {
     bool clearCurrentVoteKey = false,
     int? voteSubmissionCompletedCount,
     int? voteSubmissionTotalCount,
+    double? voteSubmissionProgress,
     bool clearVoteSubmissionProgress = false,
     VotingSessionError? error,
     bool clearError = false,
@@ -356,6 +359,9 @@ class VotingSessionState {
       voteSubmissionTotalCount: clearVoteSubmissionProgress
           ? 0
           : voteSubmissionTotalCount ?? this.voteSubmissionTotalCount,
+      voteSubmissionProgress: clearVoteSubmissionProgress
+          ? null
+          : voteSubmissionProgress ?? this.voteSubmissionProgress,
       error: clearError ? null : error ?? this.error,
     );
   }

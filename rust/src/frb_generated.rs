@@ -4919,6 +4919,7 @@ impl SseDecode for crate::api::voting::ApiKeystoneDelegationRequest {
         let mut var_pcztSighash = <Vec<u8>>::sse_decode(deserializer);
         let mut var_rk = <Vec<u8>>::sse_decode(deserializer);
         let mut var_actionIndex = <u32>::sse_decode(deserializer);
+        let mut var_displayMemo = <String>::sse_decode(deserializer);
         let mut var_eligibleWeightZatoshi = <u64>::sse_decode(deserializer);
         let mut var_delegatedWeightZatoshi = <u64>::sse_decode(deserializer);
         let mut var_bundleCount = <u32>::sse_decode(deserializer);
@@ -4929,6 +4930,7 @@ impl SseDecode for crate::api::voting::ApiKeystoneDelegationRequest {
             pczt_sighash: var_pcztSighash,
             rk: var_rk,
             action_index: var_actionIndex,
+            display_memo: var_displayMemo,
             eligible_weight_zatoshi: var_eligibleWeightZatoshi,
             delegated_weight_zatoshi: var_delegatedWeightZatoshi,
             bundle_count: var_bundleCount,
@@ -6586,6 +6588,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiKeystoneDelegation
             self.pczt_sighash.into_into_dart().into_dart(),
             self.rk.into_into_dart().into_dart(),
             self.action_index.into_into_dart().into_dart(),
+            self.display_memo.into_into_dart().into_dart(),
             self.eligible_weight_zatoshi.into_into_dart().into_dart(),
             self.delegated_weight_zatoshi.into_into_dart().into_dart(),
             self.bundle_count.into_into_dart().into_dart(),
@@ -7792,6 +7795,7 @@ impl SseEncode for crate::api::voting::ApiKeystoneDelegationRequest {
         <Vec<u8>>::sse_encode(self.pczt_sighash, serializer);
         <Vec<u8>>::sse_encode(self.rk, serializer);
         <u32>::sse_encode(self.action_index, serializer);
+        <String>::sse_encode(self.display_memo, serializer);
         <u64>::sse_encode(self.eligible_weight_zatoshi, serializer);
         <u64>::sse_encode(self.delegated_weight_zatoshi, serializer);
         <u32>::sse_encode(self.bundle_count, serializer);

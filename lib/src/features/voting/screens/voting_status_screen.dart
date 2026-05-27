@@ -281,6 +281,8 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
                   phase: phase,
                   shareSummary: _shareSummary(state),
                   voteSubmissionDetail: _voteSubmissionDetail(state),
+                  voteSubmissionProgress: _voteSubmissionProgress(state),
+                  delegationProgress: _delegationProgress(state),
                   softwareAccountRequired: _softwareAccountRequired,
                   isHardwareAccount: state.isHardwareAccount,
                   keystoneSigningRequest: state.keystoneSigningRequest,
@@ -341,9 +343,36 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     if (total > 0) {
       final completed = state.voteSubmissionCompletedCount.clamp(0, total);
       final current = completed >= total ? total : completed + 1;
-      return '$current/$total';
+      final bundleDetail = _voteSubmissionBundleDetail(state);
+      final questionDetail = 'Question $current/$total';
+      return bundleDetail == null
+          ? questionDetail
+          : '$questionDetail · $bundleDetail';
     }
     return _shareSubmissionDetail(state);
+  }
+
+  String? _voteSubmissionBundleDetail(VotingSessionState state) {
+    final bundleIndex = state.currentVoteKey?.bundleIndex;
+    final bundleCount = state.resumePlan?.bundleCount ?? 0;
+    if (bundleIndex == null || bundleCount <= 1) return null;
+    return 'Bundle ${bundleIndex + 1}/$bundleCount';
+  }
+
+  double? _voteSubmissionProgress(VotingSessionState state) {
+    if (state.phase == VotingSessionPhase.done) return 1;
+    final progress = state.voteSubmissionProgress;
+    if (progress == null) return null;
+    return progress.clamp(0.0, 1.0).toDouble();
+  }
+
+  double? _delegationProgress(VotingSessionState state) {
+    if (state.phase != VotingSessionPhase.delegating) return null;
+    final bundleIndex = state.currentBundleIndex;
+    if (bundleIndex == null) return null;
+    return state.delegationProgress[bundleIndex]?.proofProgress
+        ?.clamp(0.0, 1.0)
+        .toDouble();
   }
 
   void _retry() {
@@ -363,6 +392,8 @@ class _StatusContent extends StatelessWidget {
     required this.phase,
     this.shareSummary,
     this.voteSubmissionDetail,
+    this.voteSubmissionProgress,
+    this.delegationProgress,
     this.softwareAccountRequired = false,
     this.isHardwareAccount = false,
     this.keystoneSigningRequest,
@@ -380,6 +411,8 @@ class _StatusContent extends StatelessWidget {
   final VotingSessionPhase phase;
   final VotingShareTrackingSummary? shareSummary;
   final String? voteSubmissionDetail;
+  final double? voteSubmissionProgress;
+  final double? delegationProgress;
   final bool softwareAccountRequired;
   final bool isHardwareAccount;
   final rust_voting.ApiKeystoneDelegationRequest? keystoneSigningRequest;
@@ -453,22 +486,11 @@ class _StatusContent extends StatelessWidget {
                             VotingSessionPhase.waitingForWalletSync,
                           ),
                         ),
-                        if (phase == VotingSessionPhase.keystoneSigning &&
-                            keystoneSigningRequest != null) ...[
-                          _KeystoneSigningPanel(
-                            request: keystoneSigningRequest!,
-                            urParts: keystoneUrParts,
-                            qrError: keystoneQrError,
-                            scanError: keystoneScanError,
-                            onScan: onScanKeystone,
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                        ],
                         _StepRow(
                           label: 'Selecting notes',
                           complete: _after(VotingSessionPhase.loadingWitnesses),
                         ),
-                        if (isHardwareAccount)
+                        if (isHardwareAccount) ...[
                           _StepRow(
                             label: 'Signing with Keystone',
                             active: phase == VotingSessionPhase.keystoneSigning,
@@ -476,14 +498,24 @@ class _StatusContent extends StatelessWidget {
                               VotingSessionPhase.keystoneSigning,
                             ),
                           ),
+                          if (phase == VotingSessionPhase.keystoneSigning &&
+                              keystoneSigningRequest != null) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            _KeystoneSigningPanel(
+                              request: keystoneSigningRequest!,
+                              urParts: keystoneUrParts,
+                              qrError: keystoneQrError,
+                              scanError: keystoneScanError,
+                              onScan: onScanKeystone,
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                          ],
+                        ],
                         _StepRow(
                           label: 'Delegating voting authority',
                           active: phase == VotingSessionPhase.delegating,
                           complete: _after(VotingSessionPhase.delegating),
-                        ),
-                        _StepRow(
-                          label: 'Submitting delegation',
-                          complete: _after(VotingSessionPhase.delegated),
+                          progressValue: delegationProgress,
                         ),
                         _StepRow(
                           label: 'Casting votes and submitting shares',
@@ -493,6 +525,7 @@ class _StatusContent extends StatelessWidget {
                               phase == VotingSessionPhase.submittingShares,
                           complete: phase == VotingSessionPhase.done,
                           detail: voteSubmissionDetail,
+                          progressValue: voteSubmissionProgress,
                         ),
                         if (shareSummary case final summary?
                             when summary.hasShares) ...[
@@ -642,6 +675,10 @@ class _KeystoneSigningPanel extends StatelessWidget {
                 color: colors.text.secondary,
               ),
             ),
+            if (request.displayMemo.trim().isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _KeystoneSigningMemo(displayMemo: request.displayMemo),
+            ],
             const SizedBox(height: AppSpacing.sm),
             KeystonePcztQrStage(
               phase: qrPhase,
@@ -666,6 +703,48 @@ class _KeystoneSigningPanel extends StatelessWidget {
               child: const Text('Scan Signature'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KeystoneSigningMemo extends StatelessWidget {
+  const _KeystoneSigningMemo({required this.displayMemo});
+
+  final String displayMemo;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return SizedBox(
+      width: double.infinity,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface.input,
+          border: Border.all(color: colors.border.subtle),
+          borderRadius: BorderRadius.circular(AppRadii.small),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xs),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Memo',
+                style: AppTypography.labelSmall.copyWith(
+                  color: colors.text.secondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxs),
+              SelectableText(
+                displayMemo,
+                style: AppTypography.bodySmall.copyWith(
+                  color: colors.text.accent,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -781,16 +860,19 @@ class _StepRow extends StatelessWidget {
     this.active = false,
     this.complete = false,
     this.detail,
+    this.progressValue,
   });
 
   final String label;
   final bool active;
   final bool complete;
   final String? detail;
+  final double? progressValue;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final progress = progressValue?.clamp(0.0, 1.0).toDouble();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
       child: Row(
@@ -799,7 +881,7 @@ class _StepRow extends StatelessWidget {
             width: 24,
             height: 24,
             child: active
-                ? const CircularProgressIndicator(strokeWidth: 2)
+                ? CircularProgressIndicator(strokeWidth: 2, value: progress)
                 : Icon(
                     complete
                         ? Icons.check_circle

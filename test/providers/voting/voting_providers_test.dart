@@ -987,7 +987,7 @@ void main() {
   });
 
   test(
-    'vote submission progress counts bundle proposal work without phase bouncing',
+    'vote submission progress displays questions while bundle work advances',
     () async {
       final rust = FakeVotingRustApi(emitCommitments: true, bundleCount: 2);
       final recoveryApi = FakeVotingRecoveryApi(
@@ -1041,21 +1041,29 @@ void main() {
       final state = container.read(votingSessionProvider(kRoundId)).value!;
 
       expect(state.phase, VotingSessionPhase.submittingShares);
-      expect(state.voteSubmissionCompletedCount, 4);
-      expect(state.voteSubmissionTotalCount, 4);
-      expect(rust.voteCommitBundleCalls, [0, 0, 1, 1]);
+      expect(state.voteSubmissionCompletedCount, 2);
+      expect(state.voteSubmissionTotalCount, 2);
+      expect(state.voteSubmissionProgress, 1);
+      expect(rust.voteCommitBundleCalls, [0, 1, 0, 1]);
 
       final activeProgressCounts = observed
-          .where((state) => state.voteSubmissionTotalCount == 4)
+          .where((state) => state.voteSubmissionTotalCount == 2)
           .map((state) => state.voteSubmissionCompletedCount)
           .toSet();
-      expect(activeProgressCounts, containsAll(<int>{0, 1, 2, 3, 4}));
+      expect(activeProgressCounts, containsAll(<int>{0, 1, 2}));
+      expect(
+        observed
+            .where((state) => state.voteSubmissionTotalCount == 2)
+            .map((state) => state.voteSubmissionProgress)
+            .whereType<double>(),
+        containsAll(<double>[0, 0.25, 0.5, 0.75, 1]),
+      );
 
       final submittingShareStates = observed
           .where((state) => state.phase == VotingSessionPhase.submittingShares)
           .toList(growable: false);
       expect(submittingShareStates, hasLength(1));
-      expect(submittingShareStates.single.voteSubmissionCompletedCount, 4);
+      expect(submittingShareStates.single.voteSubmissionCompletedCount, 2);
     },
   );
 
@@ -2428,6 +2436,8 @@ class FakeVotingRustApi implements VotingRustApi {
       pcztSighash: Uint8List.fromList([10, bundleIndex]),
       rk: Uint8List.fromList([2, bundleIndex]),
       actionIndex: 0,
+      displayMemo:
+          'I am authorizing this hotkey managed by my wallet to vote on $roundName with 0.00000100 ZEC.',
       eligibleWeightZatoshi: BigInt.from(100),
       delegatedWeightZatoshi: BigInt.from(100),
       bundleCount: bundleCount,
