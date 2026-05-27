@@ -3843,6 +3843,47 @@ void main() {
     expect(find.text('Slippage tolerance'), findsOneWidget);
   });
 
+  testWidgets('review panel formats tiny slippage and omits price protection', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final swapProvider = _FakeSwapProvider();
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        swapProvider: swapProvider,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('swap_settings_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('swap_slippage_50bps')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('swap_slippage_update_button')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_amount_field')),
+      '0.002',
+    );
+    await _enterDestinationText(tester, '0xrecipient');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('swap_review_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('swap_review_panel')), findsOneWidget);
+    expect(find.text('Slippage tolerance'), findsOneWidget);
+    expect(find.text('0.00001 ZEC (0.5%)'), findsOneWidget);
+    expect(find.text('Price protection'), findsNothing);
+    expect(swapProvider.requests.single.slippageBps, 50);
+  });
+
   testWidgets('swap composer previews, reviews, and starts a preview intent', (
     tester,
   ) async {
