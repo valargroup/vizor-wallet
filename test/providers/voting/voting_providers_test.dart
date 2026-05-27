@@ -1323,8 +1323,8 @@ Map<String, dynamic> roundStatusJson({
   'ea_pk': _hex32,
   'nc_root': _hex32,
   'nullifier_imt_root': _hex32,
-  if (ceremonyStart != null) 'ceremony_phase_start': ceremonyStart,
-  if (voteEnd != null) 'vote_end_time': voteEnd,
+  'ceremony_phase_start': ?ceremonyStart,
+  'vote_end_time': ?voteEnd,
 };
 
 rust_voting.ApiRoundRecoveryState recoveryState({

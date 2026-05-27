@@ -793,6 +793,7 @@ class _WindowsUpdatePromptHost extends ConsumerStatefulWidget {
 class _WindowsUpdatePromptHostState
     extends ConsumerState<_WindowsUpdatePromptHost> {
   final Set<String> _dismissedPromptKeys = {};
+  var _routeRebuildScheduled = false;
 
   @override
   void initState() {
@@ -815,8 +816,13 @@ class _WindowsUpdatePromptHostState
   }
 
   void _handleRouteChanged() {
-    if (!mounted) return;
-    setState(() {});
+    if (!mounted || _routeRebuildScheduled) return;
+    _routeRebuildScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _routeRebuildScheduled = false;
+      setState(() {});
+    });
   }
 
   String get _currentPath {

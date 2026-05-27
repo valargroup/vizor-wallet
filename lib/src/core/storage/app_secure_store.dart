@@ -507,11 +507,6 @@ class AppSecureStore {
     return '$_votingHotkeyKeyPrefix${accountUuid}_';
   }
 
-  static bool _isAppManagedEncryptedSecretKey(String key) {
-    return key.startsWith(_accountMnemonicKeyPrefix) ||
-        key.startsWith(_votingHotkeyKeyPrefix);
-  }
-
   Future<void> recoverInterruptedPasswordRotation() async {
     final raw = await readPlain(_passwordRotationInProgressKey);
     if (raw == null || raw.isEmpty) return;
@@ -855,10 +850,9 @@ class AppSecureStore {
     for (final entry in rotation.entries) {
       await _runStorageOperation(
         'write rotated secret "${entry.key}"',
-        () => _encryptedSecretStorageForKey(entry.key).write(
-          key: entry.key,
-          value: entry.rotatedValue,
-        ),
+        () => _encryptedSecretStorageForKey(
+          entry.key,
+        ).write(key: entry.key, value: entry.rotatedValue),
       );
     }
     await writePlain(_passwordVerifierSaltKey, rotation.newVerifierSalt);
@@ -873,10 +867,9 @@ class AppSecureStore {
       for (final entry in rollback.entries) {
         await _runStorageOperation(
           'restore secret "${entry.key}"',
-          () => _encryptedSecretStorageForKey(entry.key).write(
-            key: entry.key,
-            value: entry.originalValue,
-          ),
+          () => _encryptedSecretStorageForKey(
+            entry.key,
+          ).write(key: entry.key, value: entry.originalValue),
         );
       }
       if (rollback.oldVerifierSalt == null) {
