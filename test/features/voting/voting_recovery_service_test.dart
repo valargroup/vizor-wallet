@@ -401,6 +401,32 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   }
 
   @override
+  Future<rust_voting.ApiRoundPlan> getRoundPlan({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required List<int> proposalIds,
+  }) async {
+    return rust_voting.ApiRoundPlan(
+      roundId: roundId,
+      pendingRecovery: false,
+      nextSteps: const [],
+      openProposals: Uint32List(0),
+      allDecided: false,
+    );
+  }
+
+  @override
+  Future<void> setBallotIntent({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int proposalId,
+    required bool skipped,
+    int? choice,
+  }) async {}
+
+  @override
   Future<void> clearRecoveryState({
     required String dbPath,
     required String walletId,

@@ -232,6 +232,13 @@ class VotingSessionState {
   final VotingConfig? config;
   final VotingRoundDetails? round;
   final VotingResumePlan? resumePlan;
+
+  /// Crate planner's derived resume plan for this round.
+  ///
+  /// Null when loading, or when the plan load failed (best-effort).
+  /// When [pendingRecovery] is true the proposal-detail screen shows a
+  /// "Continue voting" button instead of the dead-end _PendingVoteContent.
+  final rust_voting.ApiRoundPlan? roundPlan;
   final Uri? pirEndpoint;
   final BigInt? eligibleWeightZatoshi;
   final int? walletScannedHeight;
@@ -259,6 +266,7 @@ class VotingSessionState {
     this.config,
     this.round,
     this.resumePlan,
+    this.roundPlan,
     this.pirEndpoint,
     this.eligibleWeightZatoshi,
     this.walletScannedHeight,
@@ -309,6 +317,8 @@ class VotingSessionState {
     VotingConfig? config,
     VotingRoundDetails? round,
     VotingResumePlan? resumePlan,
+    rust_voting.ApiRoundPlan? roundPlan,
+    bool clearRoundPlan = false,
     Uri? pirEndpoint,
     BigInt? eligibleWeightZatoshi,
     int? walletScannedHeight,
@@ -342,6 +352,7 @@ class VotingSessionState {
       config: config ?? this.config,
       round: round ?? this.round,
       resumePlan: resumePlan ?? this.resumePlan,
+      roundPlan: clearRoundPlan ? null : roundPlan ?? this.roundPlan,
       pirEndpoint: pirEndpoint ?? this.pirEndpoint,
       eligibleWeightZatoshi:
           eligibleWeightZatoshi ?? this.eligibleWeightZatoshi,
