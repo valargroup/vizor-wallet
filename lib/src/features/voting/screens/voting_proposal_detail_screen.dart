@@ -77,10 +77,9 @@ class _VotingProposalDetailScreenState
                 ? const VotingDraftState()
                 : ref.watch(votingDraftProvider(draftKey));
             final proposals = proposalsFromRound(round);
-            final completedVote = _CompletedVote.fromPlan(
-              state.resumePlan,
-              proposals,
-            );
+            final completedVote = draft.isEmpty
+                ? _CompletedVote.fromPlan(state.resumePlan, proposals)
+                : null;
             _maybePrepareVotingPower(state);
             if (completedVote != null) {
               return Padding(
