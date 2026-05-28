@@ -98,6 +98,22 @@ class _VotingProposalDetailScreenState
                 ),
               );
             }
+            // Crate planner gate: takes precedence over the old dead-end.
+            // When the planner reports pending recovery work the vote can be
+            // resumed, so show a "Continue voting" button instead.
+            if (state.roundPlan?.pendingRecovery == true) {
+              return Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: _PendingVoteContent(
+                  roundTitle: round.title.isEmpty
+                      ? 'Coinholder Poll'
+                      : round.title,
+                  snapshotHeight: round.snapshotHeight,
+                  description: _roundDescription(round.rawJson),
+                  roundId: roundId,
+                ),
+              );
+            }
             final pendingVote = _PendingVoteRecovery.fromPlan(state.resumePlan);
             if (pendingVote != null) {
               return Padding(
@@ -108,7 +124,7 @@ class _VotingProposalDetailScreenState
                       : round.title,
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
-                  recovery: pendingVote,
+                  roundId: roundId,
                 ),
               );
             }
@@ -739,13 +755,13 @@ class _PendingVoteContent extends StatelessWidget {
     required this.roundTitle,
     required this.snapshotHeight,
     required this.description,
-    required this.recovery,
+    required this.roundId,
   });
 
   final String roundTitle;
   final int snapshotHeight;
   final String description;
-  final _PendingVoteRecovery recovery;
+  final String roundId;
 
   @override
   Widget build(BuildContext context) {
@@ -801,23 +817,25 @@ class _PendingVoteContent extends StatelessWidget {
                   ],
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'Vote still finalizing',
+                    'Vote in progress',
                     style: AppTypography.headlineSmall.copyWith(
                       color: colors.text.accent,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xxs),
                   Text(
-                    recovery.message,
+                    'You have an unfinished vote for this round. '
+                    'Resume to complete the submission.',
                     style: AppTypography.bodyMedium.copyWith(
                       color: colors.text.secondary,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   AppButton(
-                    onPressed: () => context.go('/voting'),
-                    variant: AppButtonVariant.secondary,
-                    child: const Text('Back to polls'),
+                    onPressed: () =>
+                        context.go(votingStatusRoute(roundId)),
+                    variant: AppButtonVariant.primary,
+                    child: const Text('Continue voting'),
                   ),
                 ],
               ),
