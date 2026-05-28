@@ -73,13 +73,15 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         _setRunError('No active account for voting session.');
         return;
       }
-      final draftVotes = ref
-          .read(
-            votingDraftProvider(
-              VotingSessionKey(roundId: roundId, accountUuid: accountUuid),
-            ),
-          )
-          .toDraftVotes(proposals);
+      final draftKey = VotingSessionKey(
+        roundId: roundId,
+        accountUuid: accountUuid,
+      );
+      final draft = await ref
+          .read(votingDraftProvider(draftKey).notifier)
+          .ensureLoaded();
+      if (!mounted) return;
+      final draftVotes = draft.toDraftVotes(proposals);
       if (draftVotes.isEmpty) {
         _setRunError('Choose at least one vote before submitting.');
         return;
@@ -534,7 +536,7 @@ class _StatusContent extends StatelessWidget {
                           ),
                           const SizedBox(height: AppSpacing.md),
                         ],
-                        if (isHardwareAccount) ...[
+                        if (isHardwareAccount)
                           _StepRow(
                             label: 'Signing with Keystone',
                             active: phase == VotingSessionPhase.keystoneSigning,
@@ -542,7 +544,6 @@ class _StatusContent extends StatelessWidget {
                               VotingSessionPhase.keystoneSigning,
                             ),
                           ),
-                        ],
                         _StepRow(
                           label: 'Delegating voting authority',
                           active: phase == VotingSessionPhase.delegating,

@@ -1160,6 +1160,138 @@ void main() {
     },
   );
 
+  test('draft votes persist and can be cleared proposal by proposal', () async {
+    final persistence = FakeVotingDraftPersistence();
+    final key = const VotingSessionKey(
+      roundId: kRoundId,
+      accountUuid: 'account-1',
+    );
+    await persistence.save(key, const VotingDraftState(choices: {7: 1, 8: 0}));
+    final container = ProviderContainer(
+      overrides: [
+        votingDraftPersistenceProvider.overrideWithValue(persistence),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final notifier = container.read(votingDraftProvider(key).notifier);
+    final loaded = await notifier.ensureLoaded();
+    expect(loaded.choices, {7: 1, 8: 0});
+
+    notifier.clearChoice(7);
+    await Future<void>.delayed(Duration.zero);
+
+    expect((await persistence.load(key)).choices, {8: 0});
+  });
+
+  test(
+    'partial vote resume submits persisted drafts not already on chain',
+    () async {
+      final rust = FakeVotingRustApi(emitCommitments: true, bundleCount: 2);
+      final recoveryApi = FakeVotingRecoveryApi(
+        state: recoveryState(
+          bundleCount: 2,
+          delegationTxHashes: [
+            rust_voting.ApiDelegationTxRecovery(
+              bundleIndex: 0,
+              txHash: 'delegation-0',
+            ),
+            rust_voting.ApiDelegationTxRecovery(
+              bundleIndex: 1,
+              txHash: 'delegation-1',
+            ),
+          ],
+          votes: [
+            vote(bundleIndex: 0, proposalId: 7),
+            vote(bundleIndex: 1, proposalId: 7),
+          ],
+          voteTxHashes: [
+            rust_voting.ApiVoteTxRecovery(
+              bundleIndex: 0,
+              proposalId: 7,
+              txHash: 'vote-tx-0-7',
+            ),
+            rust_voting.ApiVoteTxRecovery(
+              bundleIndex: 1,
+              proposalId: 7,
+              txHash: 'vote-tx-1-7',
+            ),
+          ],
+          commitmentBundles: [
+            rust_voting.ApiCommitmentBundleRecovery(
+              bundleIndex: 0,
+              proposalId: 7,
+              commitmentBundleJson: commitmentBundleRecoveryJson(proposalId: 7),
+              vcTreePosition: BigInt.from(2),
+            ),
+            rust_voting.ApiCommitmentBundleRecovery(
+              bundleIndex: 1,
+              proposalId: 7,
+              commitmentBundleJson: commitmentBundleRecoveryJson(proposalId: 7),
+              vcTreePosition: BigInt.from(3),
+            ),
+          ],
+        ),
+      );
+      final persistence = FakeVotingDraftPersistence();
+      const draftKey = VotingSessionKey(
+        roundId: kRoundId,
+        accountUuid: 'account-1',
+      );
+      await persistence.save(
+        draftKey,
+        const VotingDraftState(choices: {7: 1, 8: 0, 9: 1}),
+      );
+      final container = _sessionContainer(
+        rust: rust,
+        recoveryApi: recoveryApi,
+        draftPersistence: persistence,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      final loadedDraft = await container
+          .read(votingDraftProvider(draftKey).notifier)
+          .ensureLoaded();
+      await container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .castVotes(
+            draftVotes: loadedDraft.toDraftVotes([
+              VotingProposalView(
+                id: 7,
+                title: 'One',
+                description: '',
+                options: [
+                  VotingOptionView(index: 0, label: 'No'),
+                  VotingOptionView(index: 1, label: 'Yes'),
+                ],
+              ),
+              VotingProposalView(
+                id: 8,
+                title: 'Two',
+                description: '',
+                options: [
+                  VotingOptionView(index: 0, label: 'No'),
+                  VotingOptionView(index: 1, label: 'Yes'),
+                ],
+              ),
+              VotingProposalView(
+                id: 9,
+                title: 'Three',
+                description: '',
+                options: [
+                  VotingOptionView(index: 0, label: 'No'),
+                  VotingOptionView(index: 1, label: 'Yes'),
+                ],
+              ),
+            ]),
+          );
+
+      expect(rust.voteCommitmentKeys, ['0:8', '1:8', '0:9', '1:9']);
+      expect((await persistence.load(draftKey)).choices, isEmpty);
+    },
+  );
+
   test('submitted vote timeout surfaces resumable tx context', () async {
     final httpResponses = votingHttpResponses()
       ..['/shielded-vote/v1/tx/submitted-vote-tx'] = jsonResponse({
@@ -1788,6 +1920,42 @@ void main() {
     expect(rust.precomputeSeedRefs.single, [0, 0, 0]);
   });
 
+  test('delegation phase activates while waiting for PIR warmup', () async {
+    final precomputeGate = Completer<void>();
+    final rust = FakeVotingRustApi(precomputeGate: precomputeGate);
+    final container = _sessionContainer(rust: rust);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    final notifier = container.read(votingSessionProvider(kRoundId).notifier);
+    await notifier.precomputeDelegationPir(seedBytes: [1, 2, 3]);
+    await rust.precomputeStarted.future;
+
+    final delegationFuture = notifier.delegatePendingBundles(
+      seedBytes: [1, 2, 3],
+    );
+
+    VotingSessionState? activeState;
+    for (var i = 0; i < 10; i++) {
+      await Future<void>.delayed(Duration.zero);
+      final state = container.read(votingSessionProvider(kRoundId)).value;
+      if (state?.phase == VotingSessionPhase.delegating) {
+        activeState = state;
+        break;
+      }
+    }
+
+    expect(activeState?.currentBundleIndex, 0);
+    expect(rust.delegationBundleCalls, isEmpty);
+
+    precomputeGate.complete();
+    await delegationFuture;
+
+    final finalState = container.read(votingSessionProvider(kRoundId)).value!;
+    expect(finalState.phase, VotingSessionPhase.delegated);
+    expect(rust.delegationBundleCalls, [0]);
+  });
+
   test('delegation PIR warmup failure is a non-fatal cache miss', () async {
     final rust = FakeVotingRustApi(failPrecompute: true);
     final container = _sessionContainer(rust: rust);
@@ -1883,6 +2051,7 @@ ProviderContainer _sessionContainer({
   FakeVotingHttpClient? http,
   FakeVotingRustApi? rust,
   FakeVotingRecoveryApi? recoveryApi,
+  VotingDraftPersistence? draftPersistence,
   PirSnapshotResolver? pirResolver,
   VotingHotkeyStore? hotkeyStore,
   Future<String?> Function()? activeAccountUuid,
@@ -1928,6 +2097,9 @@ ProviderContainer _sessionContainer({
         VotingRecoveryService(
           api: recoveryApi ?? FakeVotingRecoveryApi(state: recoveryState()),
         ),
+      ),
+      votingDraftPersistenceProvider.overrideWithValue(
+        draftPersistence ?? FakeVotingDraftPersistence(),
       ),
       votingPirResolverProvider.overrideWithValue(
         pirResolver ??
@@ -2222,6 +2394,24 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   }
 }
 
+class FakeVotingDraftPersistence implements VotingDraftPersistence {
+  final _stored = <VotingSessionKey, VotingDraftState>{};
+
+  @override
+  Future<VotingDraftState> load(VotingSessionKey key) async {
+    return _stored[key] ?? const VotingDraftState();
+  }
+
+  @override
+  Future<void> save(VotingSessionKey key, VotingDraftState draft) async {
+    if (draft.choices.isEmpty) {
+      _stored.remove(key);
+    } else {
+      _stored[key] = VotingDraftState(choices: Map.of(draft.choices));
+    }
+  }
+}
+
 class _AddedSentServers {
   const _AddedSentServers(
     this.bundleIndex,
@@ -2415,6 +2605,7 @@ class FakeVotingRustApi implements VotingRustApi {
   int maxConcurrentSetups = 0;
   final delegationBundleCalls = <int>[];
   final voteCommitBundleCalls = <int>[];
+  final voteCommitmentKeys = <String>[];
   final storedDelegationTxHashes = <String>[];
   final storedVoteTxHashes = <String>[];
   final storedCommitmentBundles = <String>[];
@@ -2799,6 +2990,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }) async* {
     voteCommitBundleCalls.add(bundleIndex);
     for (final draft in draftVotes) {
+      voteCommitmentKeys.add('$bundleIndex:${draft.proposalId}');
       draftSingleShareValues.add(draft.singleShare);
       yield rust_voting.ApiVoteCommitEvent(
         phase: 'result',

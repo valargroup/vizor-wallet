@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/voting/voting_flow_models.dart';
 import '../../features/voting/voting_resume_plan.dart';
 import '../../features/voting/voting_share_timing.dart';
 import '../../rust/api/voting.dart' as rust_voting;
@@ -128,6 +129,16 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       if (pirEndpoint == null) {
         _setError('PIR endpoint has not been resolved.');
         return;
+      }
+      if (plan.pendingDelegationBundleIndexes.isNotEmpty) {
+        final nextState = (state.value ?? current).copyWith(
+          phase: VotingSessionPhase.delegating,
+          resumePlan: plan,
+          currentBundleIndex: plan.pendingDelegationBundleIndexes.first,
+          clearError: true,
+        );
+        state = AsyncData(nextState);
+        current = nextState;
       }
       await _ensureHotkey(context, seedBytes: seedBytes);
 
@@ -603,19 +614,45 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           message: txHash,
         );
       }
-      final pendingBundles = _pendingVoteBundleIndexes(plan).toList()..sort();
-      final totalQuestions = effectiveDraftVotes.length;
-      final totalBundleTasks = pendingBundles.length * totalQuestions;
+      final bundleIndexesByProposal = <int, List<int>>{
+        for (final draftVote in effectiveDraftVotes)
+          draftVote.proposalId: _pendingVoteBundleIndexesForProposal(
+            plan,
+            draftVote.proposalId,
+          ).toList()..sort(),
+      };
+      for (final draftVote in effectiveDraftVotes) {
+        if (bundleIndexesByProposal[draftVote.proposalId]?.isEmpty == true &&
+            _proposalHasVoteArtifact(plan, draftVote.proposalId)) {
+          await _clearPersistedDraftChoice(
+            context,
+            proposalId: draftVote.proposalId,
+          );
+        }
+      }
+      final voteWork = [
+        for (final draftVote in effectiveDraftVotes)
+          _DraftVoteWork(
+            draftVote: draftVote,
+            bundleIndexes: bundleIndexesByProposal[draftVote.proposalId]!,
+          ),
+      ].where((work) => work.bundleIndexes.isNotEmpty).toList();
+      final totalQuestions = voteWork.length;
+      final totalBundleTasks = voteWork.fold<int>(
+        0,
+        (total, work) => total + work.bundleIndexes.length,
+      );
       var completedBundleTasks = 0;
       var completedQuestions = 0;
       debugPrint(
         '[zcash] Voting: cast votes start '
-        'round=${context.round.roundId} bundles=${pendingBundles.length} '
-        'proposals=${effectiveDraftVotes.length} '
+        'round=${context.round.roundId} bundleTasks=$totalBundleTasks '
+        'proposals=$totalQuestions '
         'lastMoment=${context.round.isLastMoment()}',
       );
-      for (final draftVote in effectiveDraftVotes) {
-        for (final bundleIndex in pendingBundles) {
+      for (final work in voteWork) {
+        final draftVote = work.draftVote;
+        for (final bundleIndex in work.bundleIndexes) {
           final voteTimer = Stopwatch()..start();
           final key = VotingVoteKey(
             bundleIndex: bundleIndex,
@@ -788,24 +825,23 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             'total=${_formatElapsed(voteTimer.elapsed)}',
           );
         }
-        if (pendingBundles.isNotEmpty) {
-          completedQuestions++;
-          state = AsyncData(
-            (state.value ?? current).copyWith(
-              phase: VotingSessionPhase.castingVotes,
-              voteProgress: progress,
-              voteSubmissionCompletedCount: completedQuestions,
-              voteSubmissionTotalCount: totalQuestions,
-              voteSubmissionProgress: _voteSubmissionProgress(
-                completedBundleTasks: completedBundleTasks,
-                totalBundleTasks: totalBundleTasks,
-              ),
+        completedQuestions++;
+        await _clearPersistedDraftChoice(
+          context,
+          proposalId: draftVote.proposalId,
+        );
+        state = AsyncData(
+          (state.value ?? current).copyWith(
+            phase: VotingSessionPhase.castingVotes,
+            voteProgress: progress,
+            voteSubmissionCompletedCount: completedQuestions,
+            voteSubmissionTotalCount: totalQuestions,
+            voteSubmissionProgress: _voteSubmissionProgress(
+              completedBundleTasks: completedBundleTasks,
+              totalBundleTasks: totalBundleTasks,
             ),
-          );
-        }
-      }
-      if (pendingBundles.isEmpty) {
-        completedQuestions = totalQuestions;
+          ),
+        );
       }
 
       final resumeTimer = Stopwatch()..start();
@@ -2102,19 +2138,53 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return VotingSessionPhase.done;
   }
 
-  static Set<int> _pendingVoteBundleIndexes(VotingResumePlan plan) {
-    if (plan.pendingVoteSubmissionKeys.isNotEmpty) {
-      return plan.pendingVoteSubmissionKeys
-          .map((key) => key.bundleIndex)
-          .toSet();
-    }
-    if (plan.votesByKey.isNotEmpty ||
-        plan.submittedVoteConfirmationKeys.isNotEmpty) {
-      return const {};
-    }
+  Future<void> _clearPersistedDraftChoice(
+    _VotingSessionContext context, {
+    required int proposalId,
+  }) async {
+    final draftKey = VotingSessionKey(
+      roundId: context.round.roundId,
+      accountUuid: context.accountUuid,
+    );
+    final notifier = ref.read(votingDraftProvider(draftKey).notifier);
+    await notifier.ensureLoaded();
+    notifier.clearChoice(proposalId);
+  }
+
+  static Set<int> _pendingVoteBundleIndexesForProposal(
+    VotingResumePlan plan,
+    int proposalId,
+  ) {
     final bundleCount = plan.bundleCount;
     if (bundleCount == 0) return const {};
-    return {for (var i = 0; i < bundleCount; i++) i};
+    return {
+      for (var bundleIndex = 0; bundleIndex < bundleCount; bundleIndex++)
+        if (_shouldSubmitVoteBundle(
+          plan,
+          VotingVoteKey(bundleIndex: bundleIndex, proposalId: proposalId),
+        ))
+          bundleIndex,
+    };
+  }
+
+  static bool _shouldSubmitVoteBundle(
+    VotingResumePlan plan,
+    VotingVoteKey key,
+  ) {
+    final phase = plan.votePhasesByKey[key];
+    if (phase == VotingWorkflowPhase.confirmed ||
+        phase == VotingWorkflowPhase.submittedVote) {
+      return false;
+    }
+    return !plan.voteTxHashesByKey.containsKey(key);
+  }
+
+  static bool _proposalHasVoteArtifact(VotingResumePlan plan, int proposalId) {
+    bool matches(VotingVoteKey key) => key.proposalId == proposalId;
+    return plan.votesByKey.keys.any(matches) ||
+        plan.votePhasesByKey.keys.any(matches) ||
+        plan.voteTxHashesByKey.keys.any(matches) ||
+        plan.commitmentBundlesByKey.keys.any(matches);
   }
 
   static String _hexFromBytes(List<int> bytes) {
@@ -2198,6 +2268,13 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   static String _formatElapsed(Duration duration) {
     return '${(duration.inMicroseconds / Duration.microsecondsPerSecond).toStringAsFixed(2)}s';
   }
+}
+
+class _DraftVoteWork {
+  const _DraftVoteWork({required this.draftVote, required this.bundleIndexes});
+
+  final rust_voting.ApiDraftVote draftVote;
+  final List<int> bundleIndexes;
 }
 
 class _VotingSessionContext {
