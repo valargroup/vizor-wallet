@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/storage/app_secure_store.dart';
 import '../../rust/api/voting.dart' as rust_voting;
 import '../../services/voting/voting_models.dart';
 import '../../providers/voting/voting_state.dart';
@@ -88,16 +92,47 @@ class VotingDraftNotifier extends Notifier<VotingDraftState> {
 
   /// Round/account owner for this in-memory draft.
   final VotingSessionKey key;
+  Future<VotingDraftState>? _loadFuture;
+  bool _loaded = false;
+  bool _mutatedBeforeLoad = false;
 
   @override
-  VotingDraftState build() => const VotingDraftState();
+  VotingDraftState build() {
+    unawaited(ensureLoaded());
+    return const VotingDraftState();
+  }
+
+  Future<VotingDraftState> ensureLoaded() {
+    if (_loaded) return Future.value(state);
+    return _loadFuture ??= _loadPersisted();
+  }
 
   void setChoice(int proposalId, int choice) {
-    state = state.setChoice(proposalId, choice);
+    _mutatedBeforeLoad = !_loaded;
+    final next = state.setChoice(proposalId, choice);
+    state = next;
+    unawaited(_persist(next));
   }
 
   void clearChoice(int proposalId) {
-    state = state.clearChoice(proposalId);
+    _mutatedBeforeLoad = !_loaded;
+    final next = state.clearChoice(proposalId);
+    state = next;
+    unawaited(_persist(next));
+  }
+
+  Future<VotingDraftState> _loadPersisted() async {
+    final persisted = await ref.read(votingDraftPersistenceProvider).load(key);
+    _loaded = true;
+    if (!_mutatedBeforeLoad && ref.mounted) {
+      state = persisted;
+      return persisted;
+    }
+    return state;
+  }
+
+  Future<void> _persist(VotingDraftState draft) {
+    return ref.read(votingDraftPersistenceProvider).save(key, draft);
   }
 }
 
@@ -107,6 +142,55 @@ final votingDraftProvider =
       VotingDraftState,
       VotingSessionKey
     >(VotingDraftNotifier.new);
+
+abstract interface class VotingDraftPersistence {
+  Future<VotingDraftState> load(VotingSessionKey key);
+
+  Future<void> save(VotingSessionKey key, VotingDraftState draft);
+}
+
+final votingDraftPersistenceProvider = Provider<VotingDraftPersistence>(
+  (_) => const SecureVotingDraftPersistence(),
+);
+
+class SecureVotingDraftPersistence implements VotingDraftPersistence {
+  const SecureVotingDraftPersistence();
+
+  static const _keyPrefix = 'zcash_voting_draft_votes_';
+
+  @override
+  Future<VotingDraftState> load(VotingSessionKey key) async {
+    final raw = await AppSecureStore.instance.readPlain(_storageKey(key));
+    if (raw == null || raw.isEmpty) return const VotingDraftState();
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return const VotingDraftState();
+    final choices = <int, int>{};
+    for (final entry in decoded.entries) {
+      final proposalId = int.tryParse(entry.key);
+      final choice = entry.value;
+      if (proposalId != null && choice is int) {
+        choices[proposalId] = choice;
+      }
+    }
+    return VotingDraftState(choices: choices);
+  }
+
+  @override
+  Future<void> save(VotingSessionKey key, VotingDraftState draft) async {
+    final storageKey = _storageKey(key);
+    if (draft.choices.isEmpty) {
+      await AppSecureStore.instance.delete(storageKey);
+      return;
+    }
+    final encoded = <String, int>{
+      for (final entry in draft.choices.entries) '${entry.key}': entry.value,
+    };
+    await AppSecureStore.instance.writePlain(storageKey, jsonEncode(encoded));
+  }
+
+  static String _storageKey(VotingSessionKey key) =>
+      '$_keyPrefix${key.accountUuid}|${key.roundId}';
+}
 
 List<VotingProposalView> proposalsFromRound(VotingRoundDetails round) {
   return proposalsFromJson(round.rawJson);

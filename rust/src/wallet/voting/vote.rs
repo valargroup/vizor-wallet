@@ -688,13 +688,10 @@ mod tests {
         let json = commitment_bundle_recovery_json(&commitment, &payloads, &[0x99; 64]).unwrap();
 
         workflow::store_signed_vote_commitment(&db, "round-1", 0, 1, &json).unwrap();
-        let err = db
-            .get_commitment_bundle("round-1", 0, 1)
-            .expect_err("vc_tree_position is not known until vote confirmation");
-        assert!(
-            err.to_string().contains("refusing to assume position 0"),
-            "{err}"
-        );
+        let (commitment_bundle_json, vc_tree_position) =
+            db.get_commitment_bundle("round-1", 0, 1).unwrap().unwrap();
+        assert_eq!(commitment_bundle_json, json);
+        assert_eq!(vc_tree_position, 0);
 
         let conn = db.conn();
         let stored_json: String = conn
