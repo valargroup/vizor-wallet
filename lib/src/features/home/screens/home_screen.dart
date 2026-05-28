@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../main.dart' show log;
 import '../../../app_bootstrap.dart';
 import '../../../core/config/rpc_endpoint_config.dart';
+import '../../../core/config/swap_feature_config.dart';
 import '../../../core/formatting/zec_amount.dart';
 import '../../../core/layout/app_main_sidebar.dart';
 import '../../../core/layout/app_desktop_shell.dart';
@@ -446,6 +447,11 @@ class _HomePaneState extends ConsumerState<_HomePane> {
   }
 
   void _syncSwapActivityStatusRefresh() {
+    if (!ref.read(swapFeatureEnabledProvider)) {
+      _swapActivityRefreshTimer?.cancel();
+      _swapActivityRefreshAccountUuid = null;
+      return;
+    }
     final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
     if (accountUuid == _swapActivityRefreshAccountUuid &&
         _swapActivityRefreshTimer?.isActive == true) {
@@ -621,7 +627,8 @@ class _HomePaneState extends ConsumerState<_HomePane> {
 
   List<ActivityRowData> _activityRows(BuildContext context) {
     final accountUuid = ref.watch(accountProvider).value?.activeAccountUuid;
-    final swapRecords = accountUuid == null
+    final swapFeatureEnabled = ref.watch(swapFeatureEnabledProvider);
+    final swapRecords = accountUuid == null || !swapFeatureEnabled
         ? const <SwapIntentRecord>[]
         : ref.watch(swapActivityRecordsProvider(accountUuid)).value ??
               const <SwapIntentRecord>[];

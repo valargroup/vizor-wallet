@@ -367,6 +367,7 @@ class NearIntentsOneClickSwapProvider
       status: status,
       nextAction: _nextAction(status, quote),
       depositInstruction: quote.depositInstruction,
+      sellAmountBaseUnits: quote.sellAmountBaseUnits,
       swapFeeText: quote.feeLabel,
       totalFeesText: _statusTotalFeesText(
         response,
@@ -452,6 +453,7 @@ class NearIntentsOneClickSwapProvider
       ),
       providerQuoteId: response.correlationId,
       providerSignature: response.signature,
+      sellAmountBaseUnits: _parseBaseUnits(quote.amountIn, 'amountIn'),
       sellAmountTextOverride:
           '${_trimDecimal(quote.amountInFormatted)} ${sellAsset.symbol}',
       receiveEstimateTextOverride:
@@ -1242,6 +1244,17 @@ String _toBaseUnits(String amount, int decimals) {
     throw const OneClickApiException('Invalid token decimals');
   }
   return _decimalStringToBaseUnits(amount, decimals);
+}
+
+BigInt _parseBaseUnits(String? value, String fieldName) {
+  if (value == null) {
+    throw OneClickApiException('Missing $fieldName amount');
+  }
+  final parsed = BigInt.tryParse(value);
+  if (parsed == null || parsed < BigInt.zero) {
+    throw OneClickApiException('Invalid $fieldName amount');
+  }
+  return parsed;
 }
 
 String _decimalStringToBaseUnits(String value, int decimals) {

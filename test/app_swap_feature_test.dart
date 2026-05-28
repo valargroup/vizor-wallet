@@ -26,6 +26,73 @@ void main() {
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
+  testWidgets('disabled swap activity detail redirects to home', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _appHarness(
+        '/activity/swap/swap-disabled',
+        swapEnabled: false,
+        swapActivityStore: _FakeSwapActivityStore([
+          _swapActivityRecord(id: 'swap-disabled'),
+        ]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SwapActivityDetailScreen), findsNothing);
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  testWidgets('disabled swap hides home swap activity surface', (tester) async {
+    final store = _CountingSwapActivityStore([
+      _swapActivityRecord(id: 'swap-hidden-home'),
+    ]);
+
+    await tester.pumpWidget(
+      _appHarness('/home', swapEnabled: false, swapActivityStore: store),
+    );
+    await tester.pumpAndSettle();
+
+    expect(store.loadCount, 0);
+    expect(find.text('Swapping...'), findsNothing);
+  });
+
+  testWidgets('disabled swap hides activity swap surface', (tester) async {
+    final store = _CountingSwapActivityStore([
+      _swapActivityRecord(id: 'swap-hidden-activity'),
+    ]);
+
+    await tester.pumpWidget(
+      _appHarness('/activity', swapEnabled: false, swapActivityStore: store),
+    );
+    await tester.pumpAndSettle();
+
+    expect(store.loadCount, 0);
+    expect(find.text('Swapping...'), findsNothing);
+  });
+
+  testWidgets('testnet wallet disables swap route and activity loading', (
+    tester,
+  ) async {
+    final store = _CountingSwapActivityStore([
+      _swapActivityRecord(id: 'swap-hidden-testnet'),
+    ]);
+
+    await tester.pumpWidget(
+      _appHarness(
+        '/activity/swap/swap-hidden-testnet',
+        network: 'test',
+        swapActivityStore: store,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SwapActivityDetailScreen), findsNothing);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(store.loadCount, 0);
+  });
+
   testWidgets('home recent activity includes persisted swap activity', (
     tester,
   ) async {
@@ -104,14 +171,18 @@ SwapIntentRecord _swapActivityRecord({required String id}) {
 
 Widget _appHarness(
   String initialLocation, {
-  required bool swapEnabled,
+  bool? swapEnabled,
+  String network = 'main',
   SwapActivityStore? swapActivityStore,
 }) {
   return ProviderScope(
     overrides: [
-      appBootstrapProvider.overrideWithValue(_bootstrap(initialLocation)),
+      appBootstrapProvider.overrideWithValue(
+        _bootstrap(initialLocation, network: network),
+      ),
       syncProvider.overrideWith(FakeSyncNotifier.new),
-      swapFeatureEnabledProvider.overrideWithValue(swapEnabled),
+      if (swapEnabled != null)
+        swapFeatureEnabledProvider.overrideWithValue(swapEnabled),
       swapIntentProvider.overrideWithValue(const _FakeSwapProvider()),
       if (swapActivityStore != null)
         swapActivityStoreProvider.overrideWithValue(swapActivityStore),
@@ -134,7 +205,10 @@ Future<void> _pumpUntilAbsent(WidgetTester tester, Finder finder) async {
   }
 }
 
-AppBootstrapState _bootstrap(String initialLocation) {
+AppBootstrapState _bootstrap(
+  String initialLocation, {
+  required String network,
+}) {
   return AppBootstrapState(
     initialLocation: initialLocation,
     initialAccountState: const AccountState(
@@ -143,8 +217,8 @@ AppBootstrapState _bootstrap(String initialLocation) {
       activeAddress: 'u1testaddress',
     ),
     initialSyncSnapshot: AppSyncSnapshot.empty,
-    network: 'main',
-    rpcEndpointConfig: defaultRpcEndpointConfig('main'),
+    network: network,
+    rpcEndpointConfig: defaultRpcEndpointConfig(network),
     themeMode: ThemeMode.system,
     privacyModeEnabled: false,
     isPasswordConfigured: true,
@@ -173,6 +247,18 @@ class _FakeSwapActivityStore implements SwapActivityStore {
     required String accountUuid,
     required List<SwapIntentRecord> records,
   }) async {}
+}
+
+class _CountingSwapActivityStore extends _FakeSwapActivityStore {
+  _CountingSwapActivityStore(super.records);
+
+  int loadCount = 0;
+
+  @override
+  Future<List<SwapIntentRecord>> loadRecords({required String accountUuid}) {
+    loadCount++;
+    return super.loadRecords(accountUuid: accountUuid);
+  }
 }
 
 class _FakeSwapProvider implements SwapProvider {

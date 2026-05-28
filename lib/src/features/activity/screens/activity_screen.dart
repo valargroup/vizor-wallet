@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
+import '../../../core/config/swap_feature_config.dart';
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_layout.dart';
 import '../../../core/layout/app_main_sidebar.dart';
@@ -194,6 +195,11 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   }
 
   void _syncSwapActivityStatusRefresh() {
+    if (!ref.read(swapFeatureEnabledProvider)) {
+      _swapActivityRefreshTimer?.cancel();
+      _swapActivityRefreshAccountUuid = null;
+      return;
+    }
     final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
     if (accountUuid == _swapActivityRefreshAccountUuid &&
         _swapActivityRefreshTimer?.isActive == true) {
@@ -308,7 +314,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final canRenderTransactions =
         accountUuid != null &&
         (loadedTransactions != null || hasSyncForActiveAccount);
-    final swapRecords = accountUuid == null
+    final swapFeatureEnabled = ref.watch(swapFeatureEnabledProvider);
+    final swapRecords = accountUuid == null || !swapFeatureEnabled
         ? const <SwapIntentRecord>[]
         : ref.watch(swapActivityRecordsProvider(accountUuid)).value ??
               const <SwapIntentRecord>[];

@@ -31,6 +31,7 @@ final swapInitialExternalRequestsProvider = Provider<List<SwapExternalRequest>>(
 
 class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   var _quoteGeneration = 0;
+  var _accountScopeGeneration = 0;
   var _statusRefreshInFlight = false;
 
   String? get _activeAccountUuidOrNull =>
@@ -328,6 +329,8 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     }
 
     _clearReviewState();
+    final quoteGeneration = _quoteGeneration;
+    final accountScopeGeneration = _accountScopeGeneration;
     state = state.copyWith(
       maxAmountLoading: true,
       reviewVisible: false,
@@ -340,6 +343,14 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       final maxZatoshi = await ref
           .read(swapMaxAmountEstimatorProvider)
           .estimateMaxZecSellAmount(accountUuid: accountUuid);
+      if (accountScopeGeneration != _accountScopeGeneration ||
+          !_isAccountActive(accountUuid)) {
+        return;
+      }
+      if (quoteGeneration != _quoteGeneration) {
+        state = state.copyWith(maxAmountLoading: false);
+        return;
+      }
       if (maxZatoshi <= BigInt.zero) {
         state = state.copyWith(
           maxAmountLoading: false,
@@ -368,6 +379,14 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       );
       _clearPreviewQuoteState();
     } catch (e) {
+      if (accountScopeGeneration != _accountScopeGeneration ||
+          !_isAccountActive(accountUuid)) {
+        return;
+      }
+      if (quoteGeneration != _quoteGeneration) {
+        state = state.copyWith(maxAmountLoading: false);
+        return;
+      }
       final msg = e.toString().toLowerCase();
       state = state.copyWith(
         maxAmountLoading: false,
@@ -1392,6 +1411,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
 
   void _clearAccountScopedTransientState() {
     _quoteGeneration++;
+    _accountScopeGeneration++;
     state = state.copyWith(
       amountText: '',
       receiveAmountText: '',
@@ -1423,7 +1443,8 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     required String? accountUuid,
     bool replaceExisting = false,
   }) async {
-    if (accountUuid == null) {
+    final scopedAccountUuid = accountUuid?.trim();
+    if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) {
       if (replaceExisting) {
         state = state.copyWith(
           intents: const [],
@@ -1436,10 +1457,15 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       }
       return;
     }
+    final accountScopeGeneration = _accountScopeGeneration;
     try {
       final persisted = await ref
           .read(swapActivityTrackerProvider)
-          .loadIntents(accountUuid: accountUuid);
+          .loadIntents(accountUuid: scopedAccountUuid);
+      if (accountScopeGeneration != _accountScopeGeneration ||
+          !_isAccountActive(scopedAccountUuid)) {
+        return;
+      }
       if (persisted.isEmpty && !replaceExisting) return;
       state = state.copyWith(
         intents: persisted,
@@ -1542,16 +1568,55 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
         return;
       }
 
-      _logStatusTransitions(state.intents, result.intents);
+      final reconciledIntents = _reconcileRefreshedIntents(
+        currentIntents: state.intents,
+        refreshedIntents: result.intents,
+        refreshedIds: ids,
+      );
+      final refreshedCurrentIds = {
+        for (final intent in state.intents)
+          if (ids.contains(intent.id)) intent.id,
+      };
+      final hasRefreshedCurrentIntent = refreshedCurrentIds.isNotEmpty;
+      final staleRefreshReintroducedRemovedIntent = result.intents.any(
+        (intent) =>
+            ids.contains(intent.id) && !refreshedCurrentIds.contains(intent.id),
+      );
+
+      _logStatusTransitions(state.intents, reconciledIntents);
       state = state.copyWith(
         statusRefreshing: false,
-        intents: result.intents,
-        statusError: showBusy ? result.refreshError : null,
-        clearStatusError: result.refreshError == null,
+        intents: reconciledIntents,
+        statusError: showBusy && hasRefreshedCurrentIntent
+            ? result.refreshError
+            : null,
+        clearStatusError:
+            result.refreshError == null || !hasRefreshedCurrentIntent,
       );
+      if (staleRefreshReintroducedRemovedIntent) {
+        await _persistCurrentIntents(accountUuid: refreshAccountUuid);
+      }
     } finally {
       _statusRefreshInFlight = false;
     }
+  }
+
+  List<SwapPrototypeIntent> _reconcileRefreshedIntents({
+    required List<SwapPrototypeIntent> currentIntents,
+    required List<SwapPrototypeIntent> refreshedIntents,
+    required Set<String> refreshedIds,
+  }) {
+    final refreshedById = {
+      for (final intent in refreshedIntents)
+        if (refreshedIds.contains(intent.id)) intent.id: intent,
+    };
+    return [
+      for (final current in currentIntents)
+        if (refreshedIds.contains(current.id))
+          refreshedById[current.id] ?? current
+        else
+          current,
+    ];
   }
 
   void _logStatusTransitions(

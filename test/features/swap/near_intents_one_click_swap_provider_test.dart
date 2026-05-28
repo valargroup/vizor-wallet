@@ -14,6 +14,7 @@ void main() {
         _quoteResponse(
           originAsset: 'nep141:zec.omft.near',
           destinationAsset: 'nep141:usdc.example',
+          amountIn: '150000000',
           amountInFormatted: '1.5',
           amountOutFormatted: '105.25',
           minAmountOut: '104750000',
@@ -59,6 +60,7 @@ void main() {
     expect(quote.providerSignature, 'quote-signature');
     expect(quote.pairText, 'ZEC -> USDC');
     expect(quote.sellAmountText, '1.5 ZEC');
+    expect(quote.sellAmountBaseUnits, BigInt.from(150000000));
     expect(quote.receiveEstimateText, '105.25 USDC');
     expect(quote.minimumReceiveText, '104.75 USDC');
     expect(quote.rateText, '1 ZEC = 70.17 USDC');

@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app_bootstrap.dart';
 import 'network_config.dart';
 
 final swapFeatureEnabledProvider = Provider<bool>((ref) {
-  return isSwapFeatureEnabledForNetwork(kZcashDefaultNetworkName);
+  final networkName = ref.watch(appBootstrapProvider).network;
+  return isSwapFeatureEnabledForNetwork(networkName);
 });
 
 bool isSwapFeatureEnabledForNetwork(String networkName) {

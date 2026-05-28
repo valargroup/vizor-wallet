@@ -216,7 +216,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
       final isUnlock = state.matchedLocation == '/unlock';
       final isLostPassword = state.matchedLocation == '/lost-password';
       final isUnlockFlow = isUnlock || isLostPassword;
-      final isSwap = state.matchedLocation.startsWith('/swap');
+      final isSwap =
+          state.matchedLocation.startsWith('/swap') ||
+          state.matchedLocation.startsWith('/activity/swap');
 
       log(
         'router redirect: location=${state.matchedLocation}, hasWallet=$hasWallet, '

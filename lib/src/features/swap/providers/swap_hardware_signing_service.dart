@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../main.dart' show log;
-import '../../../core/formatting/zec_amount.dart';
 import '../../../core/storage/wallet_paths.dart';
 import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
@@ -67,7 +66,7 @@ class RustSwapHardwareSigningService implements SwapHardwareSigningService {
       throw StateError('Swap deposit address is missing');
     }
 
-    final amountZatoshi = _zecAmountFromIntent(intent);
+    final amountZatoshi = zecDepositAmountZatoshiForIntent(intent);
     final dbPath = await getWalletDbPath();
     final endpoint = _ref.read(rpcEndpointProvider);
     final sendFlowId = _newSwapHardwareFlowId('deposit');
@@ -178,11 +177,13 @@ class RustSwapHardwareSigningService implements SwapHardwareSigningService {
   }
 }
 
-BigInt _zecAmountFromIntent(SwapPrototypeIntent intent) {
-  final amountText = intent.sellAmount.split(' ').first.trim();
-  final zatoshi = parseZecAmount(amountText);
+BigInt zecDepositAmountZatoshiForIntent(SwapPrototypeIntent intent) {
+  if (intent.direction != SwapDirection.zecToExternal) {
+    throw StateError('Only ZEC deposit swaps can create a deposit PCZT');
+  }
+  final zatoshi = intent.sellAmountBaseUnits;
   if (zatoshi == null || zatoshi <= BigInt.zero) {
-    throw FormatException('Invalid ZEC swap amount: $amountText');
+    throw StateError('Swap intent is missing executable ZEC amount');
   }
   return zatoshi;
 }

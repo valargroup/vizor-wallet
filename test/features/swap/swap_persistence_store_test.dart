@@ -32,6 +32,7 @@ void main() {
       title: 'ZEC to USDC',
       pair: 'ZEC -> USDC',
       sellAmount: '1.5000 ZEC',
+      sellAmountBaseUnits: BigInt.from(150000000),
       receiveEstimate: '105.25 USDC',
       provider: 'NEAR Intents',
       status: SwapIntentStatus.processing,
@@ -100,6 +101,7 @@ void main() {
     expect(restored.single.externalAsset, SwapAsset.usdc);
     expect(restored.single.pairText, 'ZEC -> USDC');
     expect(restored.single.sellAmountText, '1.5000 ZEC');
+    expect(restored.single.sellAmountBaseUnits, BigInt.from(150000000));
     expect(restored.single.receiveEstimateText, '105.25 USDC');
     expect(restored.single.depositAddress, 't1deposit');
     expect(restored.single.depositMemo, 'memo-7');

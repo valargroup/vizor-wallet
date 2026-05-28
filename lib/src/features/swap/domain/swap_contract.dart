@@ -814,6 +814,7 @@ class SwapQuote {
     this.quoteExpiresAt,
     this.providerQuoteId,
     this.providerSignature,
+    this.sellAmountBaseUnits,
     this.sellAmountTextOverride,
     this.receiveEstimateTextOverride,
     this.minimumReceiveTextOverride,
@@ -895,6 +896,7 @@ class SwapQuote {
   final SwapDepositInstruction depositInstruction;
   final String? providerQuoteId;
   final String? providerSignature;
+  final BigInt? sellAmountBaseUnits;
   final String? sellAmountTextOverride;
   final String? receiveEstimateTextOverride;
   final String? minimumReceiveTextOverride;
@@ -1021,6 +1023,7 @@ class SwapIntentSnapshot {
     this.originChainTxHash,
     this.destinationChainTxHash,
     this.providerRefundInfo,
+    this.sellAmountBaseUnits,
   });
 
   factory SwapIntentSnapshot.fromQuote(
@@ -1040,6 +1043,7 @@ class SwapIntentSnapshot {
       nextAction:
           'Send ${quote.sellAsset.symbol} to the one-time deposit address',
       depositInstruction: quote.depositInstruction,
+      sellAmountBaseUnits: quote.sellAmountBaseUnits,
       swapFeeText: quote.feeLabel,
       totalFeesText: quote.totalFeesText,
       slippageToleranceText: quote.slippageToleranceText,
@@ -1069,6 +1073,7 @@ class SwapIntentSnapshot {
   final String? originChainTxHash;
   final String? destinationChainTxHash;
   final SwapProviderRefundInfo? providerRefundInfo;
+  final BigInt? sellAmountBaseUnits;
 }
 
 class SwapPricingSnapshot {

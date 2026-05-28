@@ -3,7 +3,6 @@ import 'dart:io' show Platform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../main.dart' show log;
-import '../../../core/formatting/zec_amount.dart';
 import '../../../core/storage/wallet_paths.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
@@ -42,7 +41,7 @@ class RustSwapDepositSender implements SwapDepositSender {
       throw StateError('Only ZEC deposits can be sent by this wallet');
     }
 
-    final amountZatoshi = _quoteZatoshi(quote);
+    final amountZatoshi = zecDepositAmountZatoshiForQuote(quote);
     final dbPath = await getWalletDbPath();
     final endpoint = _ref.read(rpcEndpointProvider);
 
@@ -71,7 +70,7 @@ class RustSwapDepositSender implements SwapDepositSender {
       throw StateError('Only ZEC deposits can be sent by this wallet');
     }
 
-    final amountZatoshi = _quoteZatoshi(quote);
+    final amountZatoshi = zecDepositAmountZatoshiForQuote(quote);
     final dbPath = await getWalletDbPath();
     final endpoint = _ref.read(rpcEndpointProvider);
     final sendFlowId = _newSwapSendFlowId();
@@ -186,11 +185,13 @@ class RustSwapDepositSender implements SwapDepositSender {
   }
 }
 
-BigInt _quoteZatoshi(SwapQuote quote) {
-  final amountText = quote.sellAmountText.split(' ').first.trim();
-  final zatoshi = parseZecAmount(amountText);
+BigInt zecDepositAmountZatoshiForQuote(SwapQuote quote) {
+  if (quote.sellAsset != SwapAsset.zec) {
+    throw StateError('Only ZEC deposits can be sent by this wallet');
+  }
+  final zatoshi = quote.sellAmountBaseUnits;
   if (zatoshi == null || zatoshi <= BigInt.zero) {
-    throw FormatException('Invalid ZEC swap amount: $amountText');
+    throw StateError('Swap quote is missing executable ZEC amount');
   }
   return zatoshi;
 }

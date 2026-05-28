@@ -145,6 +145,7 @@ class SwapIntentRecord {
     required this.receiveEstimateText,
     required this.status,
     required this.nextAction,
+    this.sellAmountBaseUnits,
     this.direction,
     this.externalAsset,
     this.depositAddress,
@@ -185,6 +186,7 @@ class SwapIntentRecord {
       receiveEstimateText: intent.receiveEstimate,
       status: intent.status,
       nextAction: intent.nextAction,
+      sellAmountBaseUnits: intent.sellAmountBaseUnits,
       direction: intent.direction,
       externalAsset: intent.externalAsset,
       depositAddress: intent.depositAddress,
@@ -224,6 +226,7 @@ class SwapIntentRecord {
   final String receiveEstimateText;
   final SwapIntentStatus status;
   final String nextAction;
+  final BigInt? sellAmountBaseUnits;
   final SwapDirection? direction;
   final SwapAsset? externalAsset;
   final String? depositAddress;
@@ -265,6 +268,7 @@ class SwapIntentRecord {
     String? receiveEstimateText,
     SwapIntentStatus? status,
     String? nextAction,
+    BigInt? sellAmountBaseUnits,
     SwapDirection? direction,
     SwapAsset? externalAsset,
     String? depositAddress,
@@ -305,6 +309,7 @@ class SwapIntentRecord {
       receiveEstimateText: receiveEstimateText ?? this.receiveEstimateText,
       status: status ?? this.status,
       nextAction: nextAction ?? this.nextAction,
+      sellAmountBaseUnits: sellAmountBaseUnits ?? this.sellAmountBaseUnits,
       direction: direction ?? this.direction,
       externalAsset: externalAsset ?? this.externalAsset,
       depositAddress: depositAddress ?? this.depositAddress,
@@ -355,6 +360,7 @@ class SwapPrototypeIntent {
     required this.steps,
     required this.exposure,
     required this.receipt,
+    this.sellAmountBaseUnits,
     this.direction,
     this.externalAsset,
     this.depositAddress,
@@ -397,6 +403,7 @@ class SwapPrototypeIntent {
   final List<SwapPrototypeStep> steps;
   final List<SwapPrototypeField> exposure;
   final List<SwapPrototypeField> receipt;
+  final BigInt? sellAmountBaseUnits;
   final SwapDirection? direction;
   final SwapAsset? externalAsset;
   final String? depositAddress;
@@ -441,6 +448,7 @@ class SwapPrototypeIntent {
     List<SwapPrototypeStep>? steps,
     List<SwapPrototypeField>? exposure,
     List<SwapPrototypeField>? receipt,
+    BigInt? sellAmountBaseUnits,
     SwapDirection? direction,
     SwapAsset? externalAsset,
     String? depositAddress,
@@ -485,6 +493,7 @@ class SwapPrototypeIntent {
       steps: steps ?? this.steps,
       exposure: exposure ?? this.exposure,
       receipt: receipt ?? this.receipt,
+      sellAmountBaseUnits: sellAmountBaseUnits ?? this.sellAmountBaseUnits,
       direction: direction ?? this.direction,
       externalAsset: externalAsset ?? this.externalAsset,
       depositAddress: depositAddress ?? this.depositAddress,

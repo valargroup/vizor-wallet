@@ -142,6 +142,7 @@ Map<String, Object?> _recordToJson(SwapIntentRecord record) {
     'receiveEstimate': record.receiveEstimateText,
     'status': record.status.name,
     'nextAction': record.nextAction,
+    'sellAmountBaseUnits': record.sellAmountBaseUnits?.toString(),
     'direction': record.direction?.name,
     'externalAsset': record.externalAsset?.toPersistedJson(),
     'depositAddress': record.depositAddress,
@@ -189,6 +190,7 @@ SwapIntentRecord _recordFromJson(Map<String, dynamic> json) {
       SwapIntentStatus.processing,
     ),
     nextAction: _string(json['nextAction']),
+    sellAmountBaseUnits: _optionalBigInt(json['sellAmountBaseUnits']),
     direction: _optionalEnumByName(SwapDirection.values, json['direction']),
     externalAsset: SwapAsset.fromPersistedJson(json['externalAsset']),
     depositAddress: _optionalString(json['depositAddress']),
@@ -247,6 +249,12 @@ SwapProviderRefundInfo? _providerRefundInfoFromJson(Object? value) {
 String _string(Object? value) => value is String ? value : '';
 
 String? _optionalString(Object? value) => value is String ? value : null;
+
+BigInt? _optionalBigInt(Object? value) {
+  if (value is int) return BigInt.from(value);
+  if (value is! String) return null;
+  return BigInt.tryParse(value);
+}
 
 DateTime? _optionalDateTime(Object? value) {
   if (value is! String) return null;

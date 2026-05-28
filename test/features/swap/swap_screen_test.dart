@@ -800,7 +800,9 @@ void main() {
     final feeHelpIconRect = tester.getRect(
       find
           .descendant(
-            of: find.byKey(const ValueKey('swap_transaction_details_collapsed')),
+            of: find.byKey(
+              const ValueKey('swap_transaction_details_collapsed'),
+            ),
             matching: find.byWidgetPredicate(
               (widget) => widget is AppIcon && widget.name == AppIcons.help,
             ),
@@ -1546,6 +1548,66 @@ void main() {
     expect(find.text('other-account-txid'), findsNothing);
   });
 
+  testWidgets('account switch ignores stale persisted intent restore', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final sessionStore = _DelayedLoadSwapPersistenceStore(
+      delayedAccounts: {'account-1'},
+      initialIntents: [
+        _persistedIntent(
+          id: 'account-one-stale-swap',
+          txHash: 'account-one-stale-txid',
+          accountUuid: 'account-1',
+        ),
+        _persistedIntent(
+          id: 'account-two-current-swap',
+          txHash: 'account-two-current-txid',
+          accountUuid: 'account-2',
+        ),
+      ],
+    );
+    final accountNotifier = _FakeSwapAccountNotifier(
+      _twoAccountBootstrap.initialAccountState,
+    );
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        bootstrap: _twoAccountBootstrap,
+        accountNotifier: () => accountNotifier,
+        sessionStore: sessionStore,
+        seedPrototypeFixtures: false,
+      ),
+    );
+    await tester.pump();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SwapScreen)),
+      listen: false,
+    );
+    await container.read(accountProvider.notifier).switchAccount('account-2');
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      container.read(swapPrototypeProvider).intents.map((intent) => intent.id),
+      ['account-two-current-swap'],
+    );
+
+    sessionStore.completeLoad('account-1');
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      container.read(swapPrototypeProvider).intents.map((intent) => intent.id),
+      ['account-two-current-swap'],
+    );
+  });
+
   testWidgets('account switch cancels in-flight quote review', (tester) async {
     await _setDesktopViewport(tester);
     final swapProvider = _DelayedQuoteSwapProvider();
@@ -1789,6 +1851,51 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_fieldText(tester, 'swap_amount_field'), '1.2339');
+  });
+
+  testWidgets('ZEC max amount ignores stale result after account switch', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final maxEstimator = _CompletingSwapMaxAmountEstimator();
+    final accountNotifier = _FakeSwapAccountNotifier(
+      _twoAccountBootstrap.initialAccountState,
+    );
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        bootstrap: _twoAccountBootstrap,
+        accountNotifier: () => accountNotifier,
+        seedPrototypeFixtures: false,
+        sessionStore: _FakeSwapPersistenceStore(),
+        spendableBalance: BigInt.from(123450000),
+        maxAmountEstimator: maxEstimator,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SwapScreen)),
+      listen: false,
+    );
+    unawaited(container.read(swapPrototypeProvider.notifier).useMaxZecAmount());
+    await tester.pump();
+
+    expect(maxEstimator.requests, ['account-1']);
+
+    await container.read(accountProvider.notifier).switchAccount('account-2');
+    await tester.pump();
+
+    maxEstimator.complete(BigInt.from(123390000));
+    await tester.pumpAndSettle();
+
+    final swapState = container.read(swapPrototypeProvider);
+    expect(swapState.amountText, isEmpty);
+    expect(swapState.maxAmountLoading, isFalse);
   });
 
   testWidgets(
@@ -3112,14 +3219,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('activity_screen_row_5')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('activity_screen_row_6')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('activity_screen_row_5')), findsOneWidget);
+    expect(find.byKey(const ValueKey('activity_screen_row_6')), findsNothing);
     expect(find.byType(ActivityTablePagination), findsOneWidget);
   });
 
@@ -3852,6 +3953,64 @@ void main() {
       sessionStore.savedIntents.single.depositAddress,
       't1restored-deposit',
     );
+  });
+
+  testWidgets('delayed status refresh does not resurrect removed intent', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final swapProvider = _DeferredStatusSwapProvider(
+      _statusSnapshot(id: 'hardware-cancelled-swap'),
+    );
+    final sessionStore = _FakeSwapPersistenceStore(
+      initialIntents: [
+        _persistedIntent(
+          id: 'hardware-cancelled-swap',
+          txHash: '',
+          status: SwapIntentStatus.awaitingDeposit,
+          nextAction: 'Waiting for hardware deposit',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        swapProvider: swapProvider,
+        sessionStore: sessionStore,
+        seedPrototypeFixtures: false,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SwapScreen)),
+      listen: false,
+    );
+    expect(
+      container.read(swapPrototypeProvider).intents.map((intent) => intent.id),
+      ['hardware-cancelled-swap'],
+    );
+    expect(swapProvider.statusRequests, hasLength(1));
+
+    await container
+        .read(swapPrototypeProvider.notifier)
+        .removeIntent('hardware-cancelled-swap');
+    await tester.pump();
+
+    expect(container.read(swapPrototypeProvider).intents, isEmpty);
+    expect(sessionStore.savedIntents, isEmpty);
+
+    swapProvider.completeStatus();
+    await tester.pump();
+    await tester.pump();
+
+    expect(container.read(swapPrototypeProvider).intents, isEmpty);
+    expect(sessionStore.savedIntents, isEmpty);
   });
 
   testWidgets('deposit transaction submit uses the stored deposit address', (
@@ -5494,6 +5653,10 @@ void main() {
     expect(depositSender.requests.single.accountUuid, 'account-1');
     expect(depositSender.requests.single.depositAddress, 't1live-deposit');
     expect(depositSender.requests.single.sellAmountText, '1.5000 ZEC');
+    expect(
+      depositSender.requests.single.sellAmountBaseUnits,
+      BigInt.from(150000000),
+    );
     expect(swapProvider.submittedDeposits, hasLength(1));
     expect(swapProvider.submittedDeposits.single.txHash, 'zec-auto-txid');
     expect(
@@ -6535,6 +6698,10 @@ class _FakeSwapProvider implements SwapProvider {
       providerLabel: estimate.providerLabel,
       feeLabel: estimate.feeLabel,
       expiryLabel: estimate.expiryLabel,
+      sellAmountBaseUnits: _fakeBaseUnits(
+        estimate.sellAsset,
+        estimate.sellAmount,
+      ),
       providerQuoteId: 'quote-live',
       providerSignature: 'sig-live',
       providerRefundInfo: request.mode == SwapQuoteMode.exactOutput
@@ -6645,6 +6812,20 @@ class _FakeSwapProvider implements SwapProvider {
   }
 }
 
+BigInt _fakeBaseUnits(SwapAsset asset, double amount) {
+  final fixed = amount.toStringAsFixed(asset.decimals);
+  final parts = fixed.split('.');
+  final whole = BigInt.parse(parts.first);
+  final fraction = parts.length == 1
+      ? BigInt.zero
+      : BigInt.parse(parts[1].padRight(asset.decimals, '0'));
+  var scale = BigInt.one;
+  for (var i = 0; i < asset.decimals; i++) {
+    scale *= BigInt.from(10);
+  }
+  return whole * scale + fraction;
+}
+
 class _PendingExternalDepositSwapProvider extends _FakeSwapProvider {
   _PendingExternalDepositSwapProvider({Completer<void>? statusGate})
     : _statusGate = statusGate;
@@ -6708,6 +6889,7 @@ class _DriftingExactOutputSwapProvider extends _FakeSwapProvider {
       depositInstruction: quote.depositInstruction,
       providerQuoteId: quote.providerQuoteId,
       providerSignature: quote.providerSignature,
+      sellAmountBaseUnits: _fakeBaseUnits(quote.sellAsset, sellAmount),
       sellAmountTextOverride: '${sellAmount.toStringAsFixed(4)} ZEC',
       receiveEstimateTextOverride: quote.receiveEstimateText,
       minimumReceiveTextOverride: quote.minimumReceiveText,
@@ -6742,6 +6924,7 @@ class _DriftingExactInputSwapProvider extends _FakeSwapProvider {
       depositInstruction: quote.depositInstruction,
       providerQuoteId: quote.providerQuoteId,
       providerSignature: quote.providerSignature,
+      sellAmountBaseUnits: quote.sellAmountBaseUnits,
       sellAmountTextOverride: quote.sellAmountText,
       receiveEstimateTextOverride: '123.45 USDC',
       minimumReceiveTextOverride: '122.83 USDC',
@@ -6922,6 +7105,7 @@ class _LongQuoteSwapProvider extends _FakeSwapProvider {
       expiryLabel: estimate.expiryLabel,
       providerQuoteId: 'quote-long-provider-reference',
       providerSignature: 'signature-long-provider-reference',
+      sellAmountBaseUnits: estimate.sellAmountBaseUnits,
       sellAmountTextOverride: '12345.678901 ${estimate.sellAsset.symbol}',
       receiveEstimateTextOverride: '175.942100 ${estimate.receiveAsset.symbol}',
       minimumReceiveTextOverride: '174.812300 ${estimate.receiveAsset.symbol}',
@@ -7035,6 +7219,7 @@ class _FakeSwapDepositSender implements SwapDepositSender {
         accountUuid: accountUuid,
         depositAddress: quote.depositInstruction.address,
         sellAmountText: quote.sellAmountText,
+        sellAmountBaseUnits: quote.sellAmountBaseUnits,
       ),
     );
     final error = preflightError;
@@ -7052,6 +7237,7 @@ class _FakeSwapDepositSender implements SwapDepositSender {
         accountUuid: accountUuid,
         depositAddress: quote.depositInstruction.address,
         sellAmountText: quote.sellAmountText,
+        sellAmountBaseUnits: quote.sellAmountBaseUnits,
       ),
     );
     return 'zec-auto-txid';
@@ -7077,6 +7263,7 @@ class _DelayedSwapDepositSender extends _FakeSwapDepositSender {
         accountUuid: accountUuid,
         depositAddress: quote.depositInstruction.address,
         sellAmountText: quote.sellAmountText,
+        sellAmountBaseUnits: quote.sellAmountBaseUnits,
       ),
     );
     return _sendGate.future;
@@ -7276,6 +7463,35 @@ class _FakeSwapPersistenceStore
   }
 }
 
+class _DelayedLoadSwapPersistenceStore extends _FakeSwapPersistenceStore {
+  _DelayedLoadSwapPersistenceStore({
+    required this.delayedAccounts,
+    super.initialIntents,
+  });
+
+  final Set<String> delayedAccounts;
+  final _loadGates = <String, Completer<void>>{};
+
+  void completeLoad(String accountUuid) {
+    final gate = _loadGates[accountUuid];
+    if (gate != null && !gate.isCompleted) {
+      gate.complete();
+    }
+  }
+
+  @override
+  Future<List<SwapIntentRecord>> loadRecords({
+    required String accountUuid,
+  }) async {
+    final records = await super.loadRecords(accountUuid: accountUuid);
+    if (!delayedAccounts.contains(accountUuid)) return records;
+
+    final gate = _loadGates.putIfAbsent(accountUuid, Completer<void>.new);
+    await gate.future;
+    return records;
+  }
+}
+
 AddressBookContact _addressBookContact({
   required String id,
   required String label,
@@ -7355,6 +7571,25 @@ SwapPrototypeIntent _persistedIntent({
   );
 }
 
+SwapIntentSnapshot _statusSnapshot({required String id}) {
+  return SwapIntentSnapshot(
+    id: id,
+    providerLabel: 'NEAR Intents',
+    pairText: 'ZEC -> USDC',
+    sellAmountText: '1.5000 ZEC',
+    receiveEstimateText: '105.25 USDC',
+    status: SwapIntentStatus.processing,
+    nextAction: 'Swap is processing',
+    depositInstruction: SwapDepositInstruction(
+      asset: SwapAsset.zec,
+      address: id,
+      expiresInLabel: '07:12',
+      reuseWarning: 'Do not reuse this address',
+      memo: 'memo-7',
+    ),
+  );
+}
+
 SwapPrototypeIntent _persistedExternalToZecIntent({
   required String id,
   required String stagingAddress,
@@ -7398,11 +7633,13 @@ class _DepositSendRequest {
     required this.accountUuid,
     required this.depositAddress,
     required this.sellAmountText,
+    required this.sellAmountBaseUnits,
   });
 
   final String accountUuid;
   final String depositAddress;
   final String sellAmountText;
+  final BigInt? sellAmountBaseUnits;
 }
 
 Future<void> _setDesktopViewport(WidgetTester tester) async {
