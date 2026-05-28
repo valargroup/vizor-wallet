@@ -893,7 +893,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1824,7 +1824,7 @@ version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a1886916523694cd6ea3d175f03a1e5010699a2a4cc13696d83d7bea1d80638"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2936,7 +2936,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3359,7 +3359,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3856,7 +3856,7 @@ dependencies = [
 [[package]]
 name = "vote-commitment-tree"
 version = "0.3.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98#bed14351a5152ce0203176e092e465887ef3ad98"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=9777d4adb9221c52cc2c45a7d5237e05f18987f6#9777d4adb9221c52cc2c45a7d5237e05f18987f6"
 dependencies = [
  "anyhow",
  "ff",
@@ -3872,7 +3872,7 @@ dependencies = [
 [[package]]
 name = "vote-commitment-tree-client"
 version = "0.5.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98#bed14351a5152ce0203176e092e465887ef3ad98"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=9777d4adb9221c52cc2c45a7d5237e05f18987f6#9777d4adb9221c52cc2c45a7d5237e05f18987f6"
 dependencies = [
  "base64",
  "ff",
@@ -3881,7 +3881,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98)",
+ "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=9777d4adb9221c52cc2c45a7d5237e05f18987f6)",
 ]
 
 [[package]]
@@ -4593,7 +4593,7 @@ dependencies = [
 [[package]]
 name = "zcash_voting"
 version = "0.10.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98#bed14351a5152ce0203176e092e465887ef3ad98"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=9777d4adb9221c52cc2c45a7d5237e05f18987f6#9777d4adb9221c52cc2c45a7d5237e05f18987f6"
 dependencies = [
  "anyhow",
  "blake2b_simd",
@@ -4619,6 +4619,7 @@ dependencies = [
  "prost 0.14.3",
  "rand",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "sinsemilla",
@@ -4628,7 +4629,7 @@ dependencies = [
  "uuid",
  "valar-spiral-rs",
  "valar-ypir",
- "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98)",
+ "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=9777d4adb9221c52cc2c45a7d5237e05f18987f6)",
  "vote-commitment-tree-client",
  "voting-circuits",
  "zcash_client_backend",
