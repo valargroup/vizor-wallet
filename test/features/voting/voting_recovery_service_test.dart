@@ -280,6 +280,60 @@ void main() {
   );
 
   test(
+    'share-only round planner work does not block accepted share completion',
+    () async {
+      final accepted = share(shareIndex: 0, confirmed: false);
+      final plan = VotingRecoveryService().buildResumePlan(
+        recoveryState(
+          shareDelegations: [accepted],
+          unconfirmedShareDelegations: [accepted],
+        ),
+      );
+      final roundPlan = rust_voting.ApiRoundPlan(
+        roundId: 'round-1',
+        pendingRecovery: true,
+        nextSteps: const [
+          rust_voting.ApiNextStep(
+            kind: 'confirm_share',
+            bundleIndex: 0,
+            proposalId: 1,
+            shareIndex: 0,
+          ),
+        ],
+        openProposals: Uint32List(0),
+        allDecided: true,
+      );
+
+      expect(
+        hasBlockingRoundRecoveryWork(roundPlan: roundPlan, resumePlan: plan),
+        isFalse,
+      );
+    },
+  );
+
+  test('round planner vote work blocks foreground completion', () {
+    final roundPlan = rust_voting.ApiRoundPlan(
+      roundId: 'round-1',
+      pendingRecovery: true,
+      nextSteps: const [
+        rust_voting.ApiNextStep(
+          kind: 'poll_vote',
+          bundleIndex: 0,
+          proposalId: 1,
+          shareIndex: 0,
+        ),
+      ],
+      openProposals: Uint32List(0),
+      allDecided: false,
+    );
+
+    expect(
+      hasBlockingRoundRecoveryWork(roundPlan: roundPlan, resumePlan: null),
+      isTrue,
+    );
+  });
+
+  test(
     'unaccepted share recovery still blocks foreground completion',
     () async {
       final unaccepted = share(

@@ -81,10 +81,13 @@ class _VotingProposalDetailScreenState
                 ? _CompletedVote.fromPlan(state.resumePlan, proposals)
                 : null;
             _maybePrepareVotingPower(state);
-            // Crate planner gate: takes precedence over the old voted view.
-            // When the planner reports pending recovery work the vote can be
-            // resumed, so show a "Continue voting" button instead.
-            if (state.roundPlan?.pendingRecovery == true) {
+            // Foreground recovery takes precedence over the read-only voted view.
+            // Accepted helper shares may still be tracked after submission, but
+            // that background work should not keep this screen resumable.
+            if (hasBlockingRoundRecoveryWork(
+              roundPlan: state.roundPlan,
+              resumePlan: state.resumePlan,
+            )) {
               return Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _PendingVoteContent(

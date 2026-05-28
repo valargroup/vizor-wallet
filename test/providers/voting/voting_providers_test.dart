@@ -201,6 +201,34 @@ void main() {
               createdAt: BigInt.zero,
             ),
           ],
+          unconfirmedShareDelegations: [
+            rust_voting.ApiShareDelegationRecord(
+              roundId: kRoundId,
+              bundleIndex: 0,
+              proposalId: 7,
+              shareIndex: 0,
+              sentToUrls: const ['https://voting.example'],
+              nullifier: Uint8List.fromList(List.filled(32, 1)),
+              phase: VotingWorkflowPhase.submittedShare,
+              confirmed: false,
+              submitAt: BigInt.zero,
+              createdAt: BigInt.zero,
+            ),
+          ],
+        ),
+        roundPlan: rust_voting.ApiRoundPlan(
+          roundId: kRoundId,
+          pendingRecovery: true,
+          nextSteps: const [
+            rust_voting.ApiNextStep(
+              kind: 'confirm_share',
+              bundleIndex: 0,
+              proposalId: 7,
+              shareIndex: 0,
+            ),
+          ],
+          openProposals: Uint32List(0),
+          allDecided: true,
         ),
       );
       final container = _sessionContainer(http: http, recoveryApi: recoveryApi);
@@ -2362,11 +2390,12 @@ List<int> _bytesFromHex(String hex) {
 
 class FakeVotingRecoveryApi implements VotingRecoveryApi {
   rust_voting.ApiRoundRecoveryState state;
+  rust_voting.ApiRoundPlan? roundPlan;
   final walletIds = <String>[];
   final addedSentServers = <_AddedSentServers>[];
   final ballotIntents = <String>[];
 
-  FakeVotingRecoveryApi({required this.state});
+  FakeVotingRecoveryApi({required this.state, this.roundPlan});
 
   @override
   Future<void> addSentServers({
@@ -2407,13 +2436,14 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
     required String roundId,
     required List<int> proposalIds,
   }) async {
-    return rust_voting.ApiRoundPlan(
-      roundId: roundId,
-      pendingRecovery: false,
-      nextSteps: const [],
-      openProposals: Uint32List(0),
-      allDecided: false,
-    );
+    return roundPlan ??
+        rust_voting.ApiRoundPlan(
+          roundId: roundId,
+          pendingRecovery: false,
+          nextSteps: const [],
+          openProposals: Uint32List(0),
+          allDecided: false,
+        );
   }
 
   @override
