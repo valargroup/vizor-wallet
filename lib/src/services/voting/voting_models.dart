@@ -87,6 +87,31 @@ class TrustedVotingKey {
   }
 }
 
+enum VotingConfigSwitchKind {
+  unchanged,
+  initialLoad,
+  sameChainServiceUpdate,
+  newChainOrRound,
+  protocolChanged;
+
+  static VotingConfigSwitchKind fromWireName(String value) {
+    switch (value) {
+      case 'unchanged':
+        return VotingConfigSwitchKind.unchanged;
+      case 'initial_load':
+        return VotingConfigSwitchKind.initialLoad;
+      case 'same_chain_service_update':
+        return VotingConfigSwitchKind.sameChainServiceUpdate;
+      case 'new_chain_or_round':
+        return VotingConfigSwitchKind.newChainOrRound;
+      case 'protocol_changed':
+        return VotingConfigSwitchKind.protocolChanged;
+      default:
+        throw VotingConfigDecodeException('unknown config switch kind: $value');
+    }
+  }
+}
+
 /// Dynamic voting service configuration.
 ///
 /// This is the network-fetched registry for vote servers, PIR endpoints,
@@ -101,6 +126,10 @@ class VotingConfig {
   final List<VotingServiceEndpoint> pirEndpoints;
   final VotingSupportedVersions supportedVersions;
   final Map<String, VotingRoundEntry> rounds;
+  final Set<String> authenticatedRoundIds;
+  final String? summaryJson;
+  final String? dynamicConfigFingerprint;
+  final VotingConfigSwitchKind switchKind;
 
   const VotingConfig({
     required this.configVersion,
@@ -108,11 +137,24 @@ class VotingConfig {
     required this.pirEndpoints,
     required this.supportedVersions,
     required this.rounds,
+    required this.authenticatedRoundIds,
+    this.summaryJson,
+    this.dynamicConfigFingerprint,
+    this.switchKind = VotingConfigSwitchKind.initialLoad,
   });
 
-  factory VotingConfig.fromJson(Map<String, dynamic> json) {
+  factory VotingConfig.fromJson(
+    Map<String, dynamic> json, {
+    Iterable<String>? authenticatedRoundIds,
+    String? summaryJson,
+    String? dynamicConfigFingerprint,
+    VotingConfigSwitchKind switchKind = VotingConfigSwitchKind.initialLoad,
+  }) {
     final roundMap = _objectFromValue(
       _requiredValueFromJson(json, const ['rounds']),
+    );
+    final normalizedAuthenticatedRoundIds = Set<String>.unmodifiable(
+      (authenticatedRoundIds ?? roundMap.keys).map(normalizeVotingRoundId),
     );
     return VotingConfig(
       configVersion: _intFromJson(json, const [
@@ -141,6 +183,10 @@ class VotingConfig {
         (key, value) =>
             MapEntry(key, VotingRoundEntry.fromJson(_objectFromValue(value))),
       ),
+      authenticatedRoundIds: normalizedAuthenticatedRoundIds,
+      summaryJson: summaryJson,
+      dynamicConfigFingerprint: dynamicConfigFingerprint,
+      switchKind: switchKind,
     );
   }
 
@@ -148,6 +194,16 @@ class VotingConfig {
 
   List<Uri> get pirEndpointUrls =>
       pirEndpoints.map((endpoint) => endpoint.url).toList(growable: false);
+
+  bool isRoundAuthenticated(String roundId) {
+    return authenticatedRoundIds.contains(normalizeVotingRoundId(roundId));
+  }
+
+  VotingRoundEntry? authenticatedRoundEntry(String roundId) {
+    final normalized = normalizeVotingRoundId(roundId);
+    if (!authenticatedRoundIds.contains(normalized)) return null;
+    return rounds[normalized];
+  }
 
   void validate() {
     if (configVersion != supportedVersion) {
@@ -175,6 +231,13 @@ class VotingConfig {
       if (!_isLowercaseHexRoundId(roundId)) {
         throw VotingConfigDecodeException(
           'rounds key must be 64 lowercase hex characters: $roundId',
+        );
+      }
+    }
+    for (final roundId in authenticatedRoundIds) {
+      if (!rounds.containsKey(roundId)) {
+        throw VotingConfigDecodeException(
+          'authenticated round is missing from rounds: $roundId',
         );
       }
     }
@@ -431,6 +494,30 @@ class VotingConfigUnsupportedVersion implements Exception {
   @override
   String toString() =>
       'VotingConfigUnsupportedVersion($component: $advertised)';
+}
+
+/// Thrown when remote config bytes fail hash-pin or signature authentication.
+class VotingConfigRemoteAuthenticationFailed implements Exception {
+  final String message;
+
+  const VotingConfigRemoteAuthenticationFailed(this.message);
+
+  @override
+  String toString() => 'VotingConfigRemoteAuthenticationFailed: $message';
+}
+
+/// Thrown when a round is not authenticated by the resolved dynamic config.
+class VotingRoundAuthenticationException implements Exception {
+  final String roundId;
+  final String message;
+
+  const VotingRoundAuthenticationException({
+    required this.roundId,
+    required this.message,
+  });
+
+  @override
+  String toString() => 'VotingRoundAuthenticationException($roundId): $message';
 }
 
 /// Lightweight round summary returned by list endpoints.

@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+import 'package:zcash_wallet/src/services/voting/voting_config_loader.dart';
 import 'package:zcash_wallet/src/services/voting/voting_http.dart';
+import 'package:zcash_wallet/src/services/voting/voting_models.dart';
 
 class FakeVotingHttpClient implements VotingHttpClient {
   final Map<String, Object> responses;
@@ -98,3 +101,72 @@ VotingHttpResponse textResponse(String body, {int statusCode = 200}) {
 }
 
 TimeoutException timeoutResponse() => TimeoutException('timed out');
+
+class FakeVotingConfigResolver implements VotingConfigResolver {
+  const FakeVotingConfigResolver({
+    this.staticError,
+    this.dynamicError,
+    this.authenticatedRoundIds,
+    this.switchKind = VotingConfigSwitchKind.initialLoad,
+  });
+
+  final Object? staticError;
+  final Object? dynamicError;
+  final List<String>? authenticatedRoundIds;
+  final VotingConfigSwitchKind switchKind;
+
+  @override
+  Future<ResolvedStaticVotingConfig> resolveStaticConfig({
+    required StaticVotingConfigSource source,
+    required List<int> staticConfigBytes,
+  }) async {
+    final error = staticError;
+    if (error != null) throw error;
+    final expected = source.sha256Hex;
+    if (expected != null) {
+      final actual = sha256.convert(staticConfigBytes).toString();
+      if (actual != expected) {
+        throw VotingConfigRemoteAuthenticationFailed(
+          'static config hash-pin mismatch: expected $expected, got $actual',
+        );
+      }
+    }
+    final staticConfig = StaticVotingConfig.fromJson(
+      decodeVotingJsonObject(utf8.decode(staticConfigBytes)),
+    );
+    staticConfig.validate();
+    return ResolvedStaticVotingConfig(
+      staticConfig: staticConfig,
+      dynamicConfigUrl: staticConfig.dynamicConfigUrl.toString(),
+      sourceFingerprint: 'source',
+      trustedKeyFingerprint: 'keys',
+      resolvedStaticJson: '{}',
+    );
+  }
+
+  @override
+  Future<ResolvedDynamicVotingConfig> resolveDynamicConfig({
+    required String resolvedStaticJson,
+    required List<int> dynamicConfigBytes,
+    String? previousSummaryJson,
+  }) async {
+    final error = dynamicError;
+    if (error != null) throw error;
+    final dynamicConfig = decodeVotingJsonObject(
+      utf8.decode(dynamicConfigBytes),
+    );
+    final rounds = dynamicConfig['rounds'];
+    final ids =
+        authenticatedRoundIds ??
+        (rounds is Map
+            ? rounds.keys.map((key) => key.toString()).toList(growable: false)
+            : const <String>[]);
+    return ResolvedDynamicVotingConfig(
+      authenticatedRoundIds: ids,
+      dynamicConfigFingerprint: sha256.convert(dynamicConfigBytes).toString(),
+      summaryJson: jsonEncode({'authenticated_round_ids': ids}),
+      switchKind: switchKind,
+      resolvedConfigJson: jsonEncode({'authenticated_round_ids': ids}),
+    );
+  }
+}

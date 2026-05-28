@@ -226,6 +226,27 @@ pub struct ApiShareSubmissionPlan {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+/// Resolved static voting config returned after Rust hash-pin validation.
+pub struct ApiResolvedStaticVotingConfig {
+    pub dynamic_config_url: String,
+    pub source_fingerprint: String,
+    pub trusted_key_fingerprint: String,
+    /// Opaque JSON for passing the validated static trust anchor back to Rust.
+    pub resolved_static_json: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// Resolved dynamic voting config returned after Rust signature validation.
+pub struct ApiResolvedVotingConfig {
+    pub authenticated_round_ids: Vec<String>,
+    pub dynamic_config_fingerprint: String,
+    pub summary_json: String,
+    pub switch_kind: String,
+    /// Opaque JSON for diagnostics and parity with the Rust resolved object.
+    pub resolved_config_json: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// Stored vote row keyed by `(round_id, wallet_id, bundle_index, proposal_id)`.
 pub struct ApiVoteRecord {
     pub proposal_id: u32,
@@ -398,6 +419,68 @@ pub fn plan_share_submissions(
                 })
             })
             .collect()
+    })
+}
+
+/// Resolve and authenticate the static voting config trust anchor.
+pub fn resolve_static_voting_config(
+    source: String,
+    static_config_bytes: Vec<u8>,
+) -> Result<ApiResolvedStaticVotingConfig, String> {
+    catch(|| {
+        let resolved =
+            zcash_voting::config::resolve_static_voting_config(&source, &static_config_bytes)
+                .map_err(format_voting_config_error)?;
+        let resolved_static_json = serde_json::to_string(&resolved)
+            .map_err(|e| format!("serialize resolved static config failed: {e}"))?;
+
+        Ok(ApiResolvedStaticVotingConfig {
+            dynamic_config_url: resolved.dynamic_config_url,
+            source_fingerprint: resolved.source_fingerprint,
+            trusted_key_fingerprint: resolved.trusted_key_fingerprint,
+            resolved_static_json,
+        })
+    })
+}
+
+/// Resolve and authenticate the dynamic voting config and classify the switch.
+pub fn resolve_dynamic_voting_config(
+    resolved_static_json: String,
+    dynamic_config_bytes: Vec<u8>,
+    previous_summary_json: Option<String>,
+) -> Result<ApiResolvedVotingConfig, String> {
+    catch(|| {
+        let resolved_static: zcash_voting::config::ResolvedStaticVotingConfig =
+            serde_json::from_str(&resolved_static_json)
+                .map_err(|e| format!("resolved static config JSON is malformed: {e}"))?;
+        let resolved = zcash_voting::config::resolve_voting_config(
+            resolved_static,
+            &dynamic_config_bytes,
+            zcash_voting::config::ResolveVotingConfigOptions::default(),
+        )
+        .map_err(format_voting_config_error)?;
+        let summary = zcash_voting::config::ResolvedVotingConfigSummary::from(&resolved);
+        let previous_summary = previous_summary_json
+            .as_deref()
+            .map(str::trim)
+            .filter(|json| !json.is_empty())
+            .map(serde_json::from_str)
+            .transpose()
+            .map_err(|e| format!("previous voting config summary JSON is malformed: {e}"))?;
+        let switch =
+            zcash_voting::config::decide_config_switch(previous_summary, summary.clone());
+        let summary_json = serde_json::to_string(&summary)
+            .map_err(|e| format!("serialize resolved voting config summary failed: {e}"))?;
+        let resolved_config_json = serde_json::to_string(&resolved)
+            .map_err(|e| format!("serialize resolved voting config failed: {e}"))?;
+
+        Ok(ApiResolvedVotingConfig {
+            authenticated_round_ids: resolved.authenticated_round_ids,
+            dynamic_config_fingerprint: resolved.dynamic_config_fingerprint,
+            summary_json,
+            switch_kind: config_switch_kind_name(&switch.kind).to_string(),
+            resolved_config_json,
+        })
     })
 }
 
@@ -1111,6 +1194,34 @@ fn u32_field(object: &serde_json::Value, key: &str) -> Result<u32, String> {
         .ok_or_else(|| format!("stored share payload field {key} is not an unsigned integer"))?;
     u32::try_from(value)
         .map_err(|_| format!("stored share payload field {key} does not fit in u32"))
+}
+
+fn format_voting_config_error(error: zcash_voting::config::VotingConfigError) -> String {
+    use zcash_voting::config::VotingConfigError;
+
+    match error {
+        VotingConfigError::InvalidInput { message } => format!("invalid_input: {message}"),
+        VotingConfigError::DecodeFailed { message } => format!("decode_failed: {message}"),
+        VotingConfigError::UnsupportedVersion {
+            component,
+            advertised,
+        } => format!("unsupported_version: {component}: {advertised}"),
+        VotingConfigError::RemoteAuthenticationFailed { message } => {
+            format!("remote_authentication_failed: {message}")
+        }
+    }
+}
+
+fn config_switch_kind_name(kind: &zcash_voting::config::ConfigSwitchKind) -> &'static str {
+    use zcash_voting::config::ConfigSwitchKind;
+
+    match kind {
+        ConfigSwitchKind::Unchanged => "unchanged",
+        ConfigSwitchKind::InitialLoad => "initial_load",
+        ConfigSwitchKind::SameChainServiceUpdate => "same_chain_service_update",
+        ConfigSwitchKind::NewChainOrRound => "new_chain_or_round",
+        ConfigSwitchKind::ProtocolChanged => "protocol_changed",
+    }
 }
 
 fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result<T, String> {

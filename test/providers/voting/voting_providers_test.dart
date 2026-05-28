@@ -36,7 +36,8 @@ void main() {
             dynamicConfigJson(),
       },
     );
-    final container = _container(http: http);
+    final store = FakeVotingConfigSourceStore();
+    final container = _container(http: http, sourceStore: store);
     addTearDown(container.dispose);
 
     final first = await container.read(votingConfigProvider.future);
@@ -45,6 +46,7 @@ void main() {
 
     expect(first.apiBaseUrl, Uri.parse('https://voting.example'));
     expect(second?.apiBaseUrl, first.apiBaseUrl);
+    expect(store.summaryJson, isNotNull);
     expect(
       http.requests
           .where(
@@ -129,38 +131,39 @@ void main() {
     expect(store.sourceUrl, isNull);
   });
 
-  test('rounds provider merges endorsed and unverified rows', () async {
-    final http = FakeVotingHttpClient(
-      responses: {
-        'https://voting.example/static-voting-config.json': staticConfigJson(),
-        'https://voting.example/dynamic-voting-config.json':
-            dynamicConfigJson(),
-        '/shielded-vote/v1/rounds': [
-          {'vote_round_id': kRoundId, 'title': 'Poll', 'status': 'active'},
-          {
-            'vote_round_id': kOtherRoundId,
-            'title': 'Other',
-            'status': 'active',
+  test(
+    'rounds provider hides rounds missing from authenticated config',
+    () async {
+      final http = FakeVotingHttpClient(
+        responses: {
+          'https://voting.example/static-voting-config.json':
+              staticConfigJson(),
+          'https://voting.example/dynamic-voting-config.json':
+              dynamicConfigJson(),
+          '/shielded-vote/v1/rounds': [
+            {'vote_round_id': kRoundId, 'title': 'Poll', 'status': 'active'},
+            {
+              'vote_round_id': kOtherRoundId,
+              'title': 'Other',
+              'status': 'active',
+            },
+          ],
+          '/shielded-vote/v1/endorsed-rounds/zodl': {
+            'endorsed_round_ids': [kRoundId],
           },
-        ],
-        '/shielded-vote/v1/endorsed-rounds/zodl': {
-          'endorsed_round_ids': [kRoundId],
         },
-      },
-    );
-    final container = _container(http: http);
-    addTearDown(container.dispose);
+      );
+      final container = _container(http: http);
+      addTearDown(container.dispose);
 
-    final rounds = await container.read(votingRoundsProvider.future);
+      final rounds = await container.read(votingRoundsProvider.future);
 
-    expect(rounds, hasLength(2));
-    expect(rounds.first.endorsed, isTrue);
-    expect(rounds.first.unverified, isFalse);
-    expect(rounds.first.roundId, kRoundId);
-    expect(rounds.last.endorsed, isFalse);
-    expect(rounds.last.unverified, isTrue);
-    expect(rounds.last.roundId, kOtherRoundId);
-  });
+      expect(rounds, hasLength(1));
+      expect(rounds.single.endorsed, isTrue);
+      expect(rounds.single.unverified, isFalse);
+      expect(rounds.single.roundId, kRoundId);
+    },
+  );
 
   test(
     'rounds provider marks locally completed active rounds as voted',
@@ -211,6 +214,26 @@ void main() {
       expect(rounds.single.voted, isTrue);
     },
   );
+
+  test('session rejects round payload with unauthenticated ea_pk', () async {
+    final round = roundStatusJson(roundId: kRoundId)
+      ..['ea_pk'] =
+          '0202020202020202020202020202020202020202020202020202020202020202';
+    final http = FakeVotingHttpClient(
+      responses: votingHttpResponses(roundStatus: round),
+    );
+    final container = _sessionContainer(http: http);
+    addTearDown(container.dispose);
+
+    final provider = votingSessionProvider(kRoundId);
+    container.read(provider);
+    for (var i = 0; i < 10 && container.read(provider).isLoading; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    final state = container.read(provider);
+    expect(state.error, isA<VotingRoundAuthenticationException>());
+  });
 
   test('rounds refresh keeps previous data when polling fails', () async {
     final responses = {
@@ -2040,6 +2063,7 @@ ProviderContainer _container({
           staticConfigSource: StaticVotingConfigSource.parse(
             'https://voting.example/static-voting-config.json',
           ),
+          resolver: const FakeVotingConfigResolver(),
         ),
       ),
       votingActiveAccountUuidProvider.overrideWithValue(() async => null),
@@ -2078,6 +2102,7 @@ ProviderContainer _sessionContainer({
           staticConfigSource: StaticVotingConfigSource.parse(
             'https://voting.example/static-voting-config.json',
           ),
+          resolver: const FakeVotingConfigResolver(),
         ),
       ),
       votingWalletDbPathProvider.overrideWithValue(() async => 'wallet.db'),
@@ -2529,10 +2554,15 @@ class FailingVotingHotkeyStore implements VotingHotkeyStore {
 }
 
 class FakeVotingConfigSourceStore implements VotingConfigSourceStore {
-  FakeVotingConfigSourceStore({this.sourceUrl, this.savedSourcesJson});
+  FakeVotingConfigSourceStore({
+    this.sourceUrl,
+    this.savedSourcesJson,
+    this.summaryJson,
+  });
 
   String? sourceUrl;
   String? savedSourcesJson;
+  String? summaryJson;
 
   @override
   Future<String?> readSourceUrl() async => sourceUrl;
@@ -2553,6 +2583,14 @@ class FakeVotingConfigSourceStore implements VotingConfigSourceStore {
   @override
   Future<void> writeSavedSourcesJson(String savedSourcesJson) async {
     this.savedSourcesJson = savedSourcesJson;
+  }
+
+  @override
+  Future<String?> readResolvedSummaryJson() async => summaryJson;
+
+  @override
+  Future<void> writeResolvedSummaryJson(String summaryJson) async {
+    this.summaryJson = summaryJson;
   }
 }
 

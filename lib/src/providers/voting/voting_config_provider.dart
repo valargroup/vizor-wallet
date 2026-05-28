@@ -31,7 +31,15 @@ class VotingConfigNotifier extends AsyncNotifier<VotingConfig> {
 
   Future<VotingConfig> _load() async {
     await ref.read(votingConfigSourceProvider.future);
-    return ref.read(votingConfigLoaderProvider).load();
+    final store = ref.read(votingConfigSourceStoreProvider);
+    final config = await ref
+        .read(votingConfigLoaderProvider)
+        .load(previousSummaryJson: await store.readResolvedSummaryJson());
+    final summaryJson = config.summaryJson;
+    if (summaryJson != null) {
+      await store.writeResolvedSummaryJson(summaryJson);
+    }
+    return config;
   }
 }
 

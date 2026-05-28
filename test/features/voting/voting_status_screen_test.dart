@@ -53,6 +53,9 @@ void main() {
         votingConfigSourceStoreProvider.overrideWithValue(
           _FakeVotingConfigSourceStore(),
         ),
+        votingDraftPersistenceProvider.overrideWithValue(
+          _FakeVotingDraftPersistence(),
+        ),
         votingHttpClientProvider.overrideWithValue(http),
         votingConfigLoaderProvider.overrideWithValue(
           VotingConfigLoader(
@@ -60,6 +63,7 @@ void main() {
             staticConfigSource: StaticVotingConfigSource.parse(
               'https://voting.example/static-voting-config.json',
             ),
+            resolver: const FakeVotingConfigResolver(),
           ),
         ),
         votingWalletDbPathProvider.overrideWithValue(() async => 'wallet.db'),
@@ -852,6 +856,9 @@ ProviderContainer _statusContainer({
       votingConfigSourceStoreProvider.overrideWithValue(
         _FakeVotingConfigSourceStore(),
       ),
+      votingDraftPersistenceProvider.overrideWithValue(
+        _FakeVotingDraftPersistence(),
+      ),
       votingHttpClientProvider.overrideWithValue(effectiveHttp),
       votingConfigLoaderProvider.overrideWithValue(
         VotingConfigLoader(
@@ -859,6 +866,7 @@ ProviderContainer _statusContainer({
           staticConfigSource: StaticVotingConfigSource.parse(
             'https://voting.example/static-voting-config.json',
           ),
+          resolver: const FakeVotingConfigResolver(),
         ),
       ),
       votingWalletDbPathProvider.overrideWithValue(() async => 'wallet.db'),
@@ -1267,6 +1275,7 @@ class _MatchedPirSnapshotResolver implements PirSnapshotResolver {
 class _FakeVotingConfigSourceStore implements VotingConfigSourceStore {
   String? sourceUrl;
   String? savedSourcesJson;
+  String? summaryJson;
 
   @override
   Future<String?> readSourceUrl() async => sourceUrl;
@@ -1287,6 +1296,28 @@ class _FakeVotingConfigSourceStore implements VotingConfigSourceStore {
   @override
   Future<void> writeSavedSourcesJson(String savedSourcesJson) async {
     this.savedSourcesJson = savedSourcesJson;
+  }
+
+  @override
+  Future<String?> readResolvedSummaryJson() async => summaryJson;
+
+  @override
+  Future<void> writeResolvedSummaryJson(String summaryJson) async {
+    this.summaryJson = summaryJson;
+  }
+}
+
+class _FakeVotingDraftPersistence implements VotingDraftPersistence {
+  final _drafts = <VotingSessionKey, VotingDraftState>{};
+
+  @override
+  Future<VotingDraftState> load(VotingSessionKey key) async {
+    return _drafts[key] ?? const VotingDraftState();
+  }
+
+  @override
+  Future<void> save(VotingSessionKey key, VotingDraftState draft) async {
+    _drafts[key] = draft;
   }
 }
 

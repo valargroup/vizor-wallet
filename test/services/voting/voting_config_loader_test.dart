@@ -68,6 +68,7 @@ void main() {
     final loader = VotingConfigLoader(
       httpClient: http,
       staticConfigSource: staticSource,
+      resolver: const FakeVotingConfigResolver(),
     );
 
     final config = await loader.load();
@@ -91,7 +92,7 @@ void main() {
           'https://voting.example/dynamic-voting-config.json':
               dynamicConfigJson(
                 voteServers: [
-                  {'url': ' HTTPS://VOTING.EXAMPLE/base/../api/ '},
+                  {'url': 'https://voting.example/base/../api/'},
                 ],
                 pirEndpoints: [
                   {'url': 'https://pir.example/snapshot/'},
@@ -100,6 +101,7 @@ void main() {
         },
       ),
       staticConfigSource: staticSource,
+      resolver: const FakeVotingConfigResolver(),
     );
 
     final config = await loader.load();
@@ -136,6 +138,7 @@ void main() {
           },
         ),
         staticConfigSource: staticSource,
+        resolver: const FakeVotingConfigResolver(),
       );
 
       expect(
@@ -176,6 +179,7 @@ void main() {
         responses: {staticSource.uri.toString(): body},
       ),
       staticConfigSource: staticSource,
+      resolver: const FakeVotingConfigResolver(),
     );
 
     final config = await loader.loadStaticConfig();
@@ -196,9 +200,13 @@ void main() {
         responses: {staticSource.uri.toString(): staticConfigJson()},
       ),
       staticConfigSource: staticSource,
+      resolver: const FakeVotingConfigResolver(),
     );
 
-    expect(loader.load(), throwsA(isA<VotingConfigChecksumMismatch>()));
+    expect(
+      loader.load(),
+      throwsA(isA<VotingConfigRemoteAuthenticationFailed>()),
+    );
   });
 
   test(
@@ -215,6 +223,7 @@ void main() {
           },
         ),
         staticConfigSource: staticSource,
+        resolver: const FakeVotingConfigResolver(),
       );
       expect(malformedLoader.load(), throwsA(isA<FormatException>()));
 
@@ -227,6 +236,7 @@ void main() {
           },
         ),
         staticConfigSource: staticSource,
+        resolver: const FakeVotingConfigResolver(),
       );
       expect(
         unsupportedLoader.load(),
@@ -249,6 +259,7 @@ void main() {
         },
       ),
       staticConfigSource: staticSource,
+      resolver: const FakeVotingConfigResolver(),
     );
 
     expect(loader.load(), throwsA(isA<VotingConfigDecodeException>()));

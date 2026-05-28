@@ -6,8 +6,8 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `b64_hex_field`, `b64_hex`, `b64`, `catch`, `delegation_submission_wire_json_inner`, `hex_list_field`, `json_safe_u64`, `recovered_share_payload_json`, `recovered_vote_share_wire_json_inner`, `recovered_wire_share_json`, `recovered_wire_shares_json`, `selection_result`, `u32_field`, `vote_commitment_wire_json_inner`, `vote_share_wire_json_inner`, `wire_share_json`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `b64_hex_field`, `b64_hex`, `b64`, `catch`, `config_switch_kind_name`, `delegation_submission_wire_json_inner`, `format_voting_config_error`, `hex_list_field`, `json_safe_u64`, `recovered_share_payload_json`, `recovered_vote_share_wire_json_inner`, `recovered_wire_share_json`, `recovered_wire_shares_json`, `require_len`, `selection_result`, `u32_field`, `vote_commitment_wire_json_inner`, `vote_share_wire_json_inner`, `wire_share_json`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Returns the vote-chain delegation submission body as validated wire JSON.
 ///
@@ -59,6 +59,26 @@ Future<List<ApiShareSubmissionPlan>> planShareSubmissions({
   voteEndTimeSeconds: voteEndTimeSeconds,
   lastMomentBufferSeconds: lastMomentBufferSeconds,
   singleShare: singleShare,
+);
+
+/// Resolve and authenticate the static voting config trust anchor.
+Future<ApiResolvedStaticVotingConfig> resolveStaticVotingConfig({
+  required String source,
+  required List<int> staticConfigBytes,
+}) => RustLib.instance.api.crateApiVotingResolveStaticVotingConfig(
+  source: source,
+  staticConfigBytes: staticConfigBytes,
+);
+
+/// Resolve and authenticate the dynamic voting config and classify the switch.
+Future<ApiResolvedVotingConfig> resolveDynamicVotingConfig({
+  required String resolvedStaticJson,
+  required List<int> dynamicConfigBytes,
+  String? previousSummaryJson,
+}) => RustLib.instance.api.crateApiVotingResolveDynamicVotingConfig(
+  resolvedStaticJson: resolvedStaticJson,
+  dynamicConfigBytes: dynamicConfigBytes,
+  previousSummaryJson: previousSummaryJson,
 );
 
 /// Extract and validate one helper-share payload from stored recovery JSON.
@@ -1067,6 +1087,78 @@ class ApiKeystoneSignatureRecord {
           sig == other.sig &&
           sighash == other.sighash &&
           rk == other.rk;
+}
+
+/// Resolved static voting config returned after Rust hash-pin validation.
+class ApiResolvedStaticVotingConfig {
+  final String dynamicConfigUrl;
+  final String sourceFingerprint;
+  final String trustedKeyFingerprint;
+
+  /// Opaque JSON for passing the validated static trust anchor back to Rust.
+  final String resolvedStaticJson;
+
+  const ApiResolvedStaticVotingConfig({
+    required this.dynamicConfigUrl,
+    required this.sourceFingerprint,
+    required this.trustedKeyFingerprint,
+    required this.resolvedStaticJson,
+  });
+
+  @override
+  int get hashCode =>
+      dynamicConfigUrl.hashCode ^
+      sourceFingerprint.hashCode ^
+      trustedKeyFingerprint.hashCode ^
+      resolvedStaticJson.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiResolvedStaticVotingConfig &&
+          runtimeType == other.runtimeType &&
+          dynamicConfigUrl == other.dynamicConfigUrl &&
+          sourceFingerprint == other.sourceFingerprint &&
+          trustedKeyFingerprint == other.trustedKeyFingerprint &&
+          resolvedStaticJson == other.resolvedStaticJson;
+}
+
+/// Resolved dynamic voting config returned after Rust signature validation.
+class ApiResolvedVotingConfig {
+  final List<String> authenticatedRoundIds;
+  final String dynamicConfigFingerprint;
+  final String summaryJson;
+  final String switchKind;
+
+  /// Opaque JSON for diagnostics and parity with the Rust resolved object.
+  final String resolvedConfigJson;
+
+  const ApiResolvedVotingConfig({
+    required this.authenticatedRoundIds,
+    required this.dynamicConfigFingerprint,
+    required this.summaryJson,
+    required this.switchKind,
+    required this.resolvedConfigJson,
+  });
+
+  @override
+  int get hashCode =>
+      authenticatedRoundIds.hashCode ^
+      dynamicConfigFingerprint.hashCode ^
+      summaryJson.hashCode ^
+      switchKind.hashCode ^
+      resolvedConfigJson.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiResolvedVotingConfig &&
+          runtimeType == other.runtimeType &&
+          authenticatedRoundIds == other.authenticatedRoundIds &&
+          dynamicConfigFingerprint == other.dynamicConfigFingerprint &&
+          summaryJson == other.summaryJson &&
+          switchKind == other.switchKind &&
+          resolvedConfigJson == other.resolvedConfigJson;
 }
 
 /// Recovery summary for resuming one voting round after app restart.

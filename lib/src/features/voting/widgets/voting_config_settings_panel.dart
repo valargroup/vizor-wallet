@@ -286,6 +286,9 @@ class _VotingConfigSettingsPanelState
     if (error is VotingConfigChecksumMismatch) {
       return 'Static config checksum did not match.';
     }
+    if (error is VotingConfigRemoteAuthenticationFailed) {
+      return 'Voting config remote authentication failed.';
+    }
     if (error is VotingHttpException) {
       return "Couldn't load voting config from that source.";
     }

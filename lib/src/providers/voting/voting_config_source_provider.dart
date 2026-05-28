@@ -84,6 +84,10 @@ abstract interface class VotingConfigSourceStore {
   Future<String?> readSavedSourcesJson();
 
   Future<void> writeSavedSourcesJson(String savedSourcesJson);
+
+  Future<String?> readResolvedSummaryJson();
+
+  Future<void> writeResolvedSummaryJson(String summaryJson);
 }
 
 final votingConfigSourceStoreProvider = Provider<VotingConfigSourceStore>((
@@ -120,6 +124,16 @@ class AppSecureStoreVotingConfigSourceStore implements VotingConfigSourceStore {
   @override
   Future<void> writeSavedSourcesJson(String savedSourcesJson) {
     return _store.writePlain(kVotingConfigSavedSourcesKey, savedSourcesJson);
+  }
+
+  @override
+  Future<String?> readResolvedSummaryJson() {
+    return _store.readPlain(kVotingConfigSummaryKey);
+  }
+
+  @override
+  Future<void> writeResolvedSummaryJson(String summaryJson) {
+    return _store.writePlain(kVotingConfigSummaryKey, summaryJson);
   }
 }
 

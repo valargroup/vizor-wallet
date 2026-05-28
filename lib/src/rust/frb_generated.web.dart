@@ -94,6 +94,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ApiMempoolTxEvent dco_decode_api_mempool_tx_event(dynamic raw);
 
   @protected
+  ApiResolvedStaticVotingConfig dco_decode_api_resolved_static_voting_config(
+    dynamic raw,
+  );
+
+  @protected
+  ApiResolvedVotingConfig dco_decode_api_resolved_voting_config(dynamic raw);
+
+  @protected
   ApiRoundRecoveryState dco_decode_api_round_recovery_state(dynamic raw);
 
   @protected
@@ -495,6 +503,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ApiMempoolTxEvent sse_decode_api_mempool_tx_event(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ApiResolvedStaticVotingConfig sse_decode_api_resolved_static_voting_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ApiResolvedVotingConfig sse_decode_api_resolved_voting_config(
     SseDeserializer deserializer,
   );
 
@@ -999,6 +1017,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_api_mempool_tx_event(
     ApiMempoolTxEvent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_api_resolved_static_voting_config(
+    ApiResolvedStaticVotingConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_api_resolved_voting_config(
+    ApiResolvedVotingConfig self,
     SseSerializer serializer,
   );
 

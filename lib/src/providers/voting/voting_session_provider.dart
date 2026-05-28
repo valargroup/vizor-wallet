@@ -1923,6 +1923,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     final round = VotingRoundDetails.fromStatus(
       await api.getRoundStatus(roundId),
     );
+    _verifyRoundAuthentication(config: config, round: round);
     final accountUuid = await _accountUuidForSession();
     final isHardwareAccount = await _isHardwareAccountForSession();
     final endpoint = ref.read(votingRpcEndpointConfigProvider);
@@ -1944,6 +1945,25 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           ),
     );
     return context;
+  }
+
+  void _verifyRoundAuthentication({
+    required VotingConfig config,
+    required VotingRoundDetails round,
+  }) {
+    final entry = config.authenticatedRoundEntry(round.roundId);
+    if (entry == null) {
+      throw VotingRoundAuthenticationException(
+        roundId: round.roundId,
+        message: 'round is not authenticated by the resolved voting config',
+      );
+    }
+    if (!listEquals(entry.eaPk, round.eaPk)) {
+      throw VotingRoundAuthenticationException(
+        roundId: round.roundId,
+        message: 'round ea_pk does not match the signed voting config',
+      );
+    }
   }
 
   Future<String> _accountUuidForSession() async {

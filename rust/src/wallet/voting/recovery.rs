@@ -608,7 +608,7 @@ mod tests {
     use crate::wallet::voting::{state, workflow};
 
     const WALLET_ID: &str = "wallet-recovery";
-    const ROUND_ID: &str = "round-recovery";
+    const ROUND_ID: &str = "0000000000000000000000000000000000000000000000000000000000000001";
 
     #[test]
     fn vote_tx_hashes_are_isolated_by_bundle_and_proposal() {

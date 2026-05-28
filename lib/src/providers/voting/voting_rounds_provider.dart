@@ -62,12 +62,16 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
     final endorser = ref.read(votingEndorserClientProvider(config.apiBaseUrl));
 
     final rounds = await api.listRounds();
+    final authenticatedRounds = [
+      for (final round in rounds)
+        if (config.isRoundAuthenticated(round.roundId)) round,
+    ];
     final endorsedIds = await endorser.getEndorsedSet();
     final votedIds = await _completedVoteRoundIds(
-      rounds.map((round) => round.roundId),
+      authenticatedRounds.map((round) => round.roundId),
     );
     return [
-      for (final round in rounds)
+      for (final round in authenticatedRounds)
         VotingRoundView.fromSummary(
           round,
           endorsed: endorsedIds.contains(round.roundId),
