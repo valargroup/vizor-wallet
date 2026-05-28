@@ -1141,7 +1141,8 @@ pub fn add_proofs_to_pczt(
 /// (witnesses, proprietary metadata). The returned bytes are what is sent
 /// to the Keystone device for signing.
 pub fn redact_pczt_for_signer(pczt_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
-    wallet_sync::redact_pczt_for_signer(&pczt_bytes)
+    zcash_voting::delegate::redact_for_signer(&pczt_bytes)
+        .map_err(|e| format!("redact_for_signer failed: {e}"))
 }
 
 /// Combine a PCZT-with-proofs and a PCZT-with-signatures, extract the final
