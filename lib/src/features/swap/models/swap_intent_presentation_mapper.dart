@@ -1,18 +1,18 @@
 import 'swap_models.dart';
 
-SwapIntent swapIntentFromRecord(SwapIntentRecord record) {
+SwapIntent _swapIntentFromRecord(SwapIntentRecord record) {
   return SwapIntent(
     id: record.id,
-    title: swapIntentTitle(record),
+    title: _swapIntentTitle(record),
     pair: record.pairText,
     sellAmount: record.sellAmountText,
     receiveEstimate: record.receiveEstimateText,
     provider: record.providerLabel,
     status: record.status,
     nextAction: record.nextAction,
-    steps: swapStepsForRecord(record),
-    exposure: swapExposureForRecord(record),
-    receipt: swapReceiptForRecord(record),
+    steps: _swapStepsForRecord(record),
+    exposure: _swapExposureForRecord(record),
+    receipt: _swapReceiptForRecord(record),
     sellAmountBaseUnits: record.sellAmountBaseUnits,
     direction: record.direction,
     externalAsset: record.externalAsset,
@@ -47,7 +47,7 @@ SwapIntent swapIntentFromRecord(SwapIntentRecord record) {
 }
 
 List<SwapIntent> swapIntentsFromRecords(Iterable<SwapIntentRecord> records) {
-  return [for (final record in records) swapIntentFromRecord(record)];
+  return [for (final record in records) _swapIntentFromRecord(record)];
 }
 
 SwapIntentRecord swapIntentRecordForPersistence(
@@ -102,7 +102,7 @@ SwapIntent swapIntentFromSnapshot({
     updatedAt: now,
     completedAt: snapshot.status.isTerminal ? now : null,
   );
-  return swapIntentFromRecord(record);
+  return _swapIntentFromRecord(record);
 }
 
 SwapIntent swapIntentWithBroadcastNotice(
@@ -110,7 +110,7 @@ SwapIntent swapIntentWithBroadcastNotice(
   required String notice,
   DateTime? updatedAt,
 }) {
-  return swapIntentFromRecord(
+  return _swapIntentFromRecord(
     SwapIntentRecord.fromIntent(intent).copyWith(
       statusError: notice,
       broadcastNotice: notice,
@@ -128,7 +128,7 @@ SwapIntent swapIntentWithDepositCheckpoint(
   required bool clearBroadcastNotice,
   DateTime? updatedAt,
 }) {
-  return swapIntentFromRecord(
+  return _swapIntentFromRecord(
     SwapIntentRecord.fromIntent(intent).copyWith(
       depositTxHash: txHash,
       statusError: statusError ?? broadcastNotice,
@@ -154,7 +154,7 @@ SwapIntent swapIntentWithDepositSnapshot(
     snapshot,
     updatedAt: timestamp,
   );
-  return swapIntentFromRecord(
+  return _swapIntentFromRecord(
     SwapIntentRecord.fromIntent(updated).copyWith(
       depositTxHash: txHash,
       statusError: effectiveBroadcastNotice,
@@ -206,10 +206,10 @@ SwapIntent updateSwapIntentFromSnapshot(
     updatedAt: timestamp,
     completedAt: intent.completedAt ?? (status.isTerminal ? timestamp : null),
   );
-  return swapIntentFromRecord(record);
+  return _swapIntentFromRecord(record);
 }
 
-String swapIntentTitle(SwapIntentRecord record) {
+String _swapIntentTitle(SwapIntentRecord record) {
   final direction = record.direction;
   final externalAsset = record.externalAsset;
   if (direction != null && externalAsset != null) {
@@ -220,7 +220,7 @@ String swapIntentTitle(SwapIntentRecord record) {
   return record.pairText.replaceAll(' -> ', ' to ');
 }
 
-List<SwapStep> swapStepsForRecord(SwapIntentRecord record) {
+List<SwapStep> _swapStepsForRecord(SwapIntentRecord record) {
   final direction = record.direction;
   final externalAsset = record.externalAsset;
   final useInitialSteps =
@@ -305,7 +305,7 @@ List<SwapStep> swapStepsForStatus(SwapIntentStatus status, String nextAction) {
   ];
 }
 
-List<SwapDetailField> swapExposureForRecord(SwapIntentRecord record) {
+List<SwapDetailField> _swapExposureForRecord(SwapIntentRecord record) {
   final direction = record.direction;
   final externalAsset = record.externalAsset;
   if (direction == null || externalAsset == null) return const [];
@@ -351,7 +351,7 @@ List<SwapDetailField> swapExposureForRecord(SwapIntentRecord record) {
   ];
 }
 
-List<SwapDetailField> swapReceiptForRecord(SwapIntentRecord record) {
+List<SwapDetailField> _swapReceiptForRecord(SwapIntentRecord record) {
   final direction = record.direction;
   final externalAsset = record.externalAsset;
   final sendsZec = direction?.sendsZec ?? true;
@@ -377,7 +377,7 @@ List<SwapDetailField> swapReceiptForRecord(SwapIntentRecord record) {
       SwapDetailField(label: 'Memo', value: record.depositMemo!),
     if (record.oneClickRefundTo != null)
       SwapDetailField(label: 'Refund to', value: record.oneClickRefundTo!),
-    ...swapProviderRefundFields(record.providerRefundInfo),
+    ..._swapProviderRefundFields(record.providerRefundInfo),
     if (record.providerStatusRaw != null)
       SwapDetailField(
         label: 'Provider status',
@@ -395,7 +395,7 @@ List<SwapDetailField> swapReceiptForRecord(SwapIntentRecord record) {
   return fields;
 }
 
-List<SwapDetailField> swapProviderRefundFields(SwapProviderRefundInfo? info) {
+List<SwapDetailField> _swapProviderRefundFields(SwapProviderRefundInfo? info) {
   if (info == null || !info.hasAny) return const [];
   return [
     if (info.minimumDepositText != null)

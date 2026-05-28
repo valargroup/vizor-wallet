@@ -4,7 +4,7 @@ import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 
 void main() {
   test('builds presentation rows from raw swap intent records', () {
-    final intent = swapIntentFromRecord(
+    final intent = _intentFromRecord(
       SwapIntentRecord(
         id: 'swap-record',
         providerLabel: 'NEAR Intents',
@@ -56,7 +56,7 @@ void main() {
   test('updates raw lifecycle facts from provider status snapshots', () {
     final createdAt = DateTime.utc(2026, 5, 7, 10);
     final checkedAt = DateTime.utc(2026, 5, 7, 10, 30);
-    final intent = swapIntentFromRecord(
+    final intent = _intentFromRecord(
       SwapIntentRecord(
         id: 'swap-record',
         providerLabel: 'NEAR Intents',
@@ -124,7 +124,7 @@ void main() {
     final createdAt = DateTime.utc(2026, 5, 7, 10);
     final checkpointedAt = DateTime.utc(2026, 5, 7, 10, 5);
     final completedAt = DateTime.utc(2026, 5, 7, 10, 30);
-    final intent = swapIntentFromRecord(
+    final intent = _intentFromRecord(
       SwapIntentRecord(
         id: 'swap-record',
         providerLabel: 'NEAR Intents',
@@ -193,7 +193,7 @@ void main() {
   });
 
   test('persistence records force the scoped account uuid', () {
-    final intent = swapIntentFromRecord(
+    final intent = _intentFromRecord(
       SwapIntentRecord(
         id: 'swap-record',
         providerLabel: 'NEAR Intents',
@@ -221,4 +221,8 @@ void main() {
 
 String _receiptValue(SwapIntent intent, String label) {
   return intent.receipt.where((field) => field.label == label).single.value;
+}
+
+SwapIntent _intentFromRecord(SwapIntentRecord record) {
+  return swapIntentsFromRecords([record]).single;
 }

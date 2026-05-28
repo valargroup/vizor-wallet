@@ -17,6 +17,7 @@ import 'package:zcash_wallet/src/features/address_book/models/address_book_conta
 import 'package:zcash_wallet/src/features/address_book/providers/address_book_provider.dart';
 import 'package:zcash_wallet/src/features/swap/integrations/near_intents/near_intents_one_click_swap_adapter.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_activity_navigation.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_detail_tooltips.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_intent_presentation_mapper.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_hardware_signing_service.dart';
@@ -848,12 +849,9 @@ void main() {
     expect(find.text('Less details'), findsOneWidget);
     expect(find.text('Slippage tolerance'), findsOneWidget);
     expect(find.text('Price protection'), findsNothing);
+    expect(_tooltipWithMessage(swapFeeTooltip), findsOneWidget);
     expect(
-      _tooltipWithMessage('Swap fee details coming soon.'),
-      findsOneWidget,
-    );
-    expect(
-      _tooltipWithMessage('Minimum receive details coming soon.'),
+      _tooltipWithMessage(swapGenericMinimumReceiveTooltip),
       findsOneWidget,
     );
     expect(
@@ -7336,10 +7334,9 @@ class _FakeSwapPersistenceStore
     savedAccounts.add(accountUuid);
     final recordIds = records.map((record) => record.id).toSet();
     _legacyIntents.removeWhere((intent) => recordIds.contains(intent.id));
-    savedIntents = [
-      for (final record in records)
-        swapIntentFromRecord(record.copyWith(accountUuid: accountUuid)),
-    ];
+    savedIntents = swapIntentsFromRecords(
+      records.map((record) => record.copyWith(accountUuid: accountUuid)),
+    );
     _intentsByAccount[accountUuid] = [...savedIntents];
     saveSnapshots.add(savedIntents);
   }

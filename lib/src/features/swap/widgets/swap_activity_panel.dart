@@ -6,7 +6,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/profile_pictures.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
@@ -16,6 +15,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
 import '../domain/near_intents_explorer.dart';
 import '../models/swap_activity_navigation.dart';
+import '../models/swap_activity_status_mapper.dart';
 import '../models/swap_models.dart';
 import '../providers/swap_state_provider.dart';
 import 'swap_amount_text.dart';
@@ -156,7 +156,7 @@ class _SwapActivityDetailSurfaceState
     final state = ref.read(swapStateProvider);
     final refreshed = state.selectedIntentOrNull;
     final shouldWarn =
-        _showsExternalDepositPage(selected) &&
+        swapActivityShowsExternalDepositPage(selected) &&
         refreshed != null &&
         refreshed.id == selected.id &&
         refreshed.status == SwapIntentStatus.awaitingExternalDeposit &&
@@ -511,12 +511,14 @@ class _SwapActivityStack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final depositInstruction = _ActivityDepositInstruction.fromIntent(
+    final depositInstruction = SwapActivityDepositInstruction.fromIntent(
       selectedIntent,
     );
-    final statusPlan = _ActivityStatusPlan.fromIntent(selectedIntent);
-    final resolution = _ActivityResolution.fromIntent(selectedIntent);
-    final showDepositControls = _showDepositControls(selectedIntent.status);
+    final statusPlan = SwapActivityStatusPlan.fromIntent(selectedIntent);
+    final resolution = SwapActivityResolution.fromIntent(selectedIntent);
+    final showDepositControls = swapActivityShowDepositControls(
+      selectedIntent.status,
+    );
     final statusError = selectedIntent.statusError ?? state.statusError;
     final hasDepositTx =
         selectedIntent.depositTxHash?.trim().isNotEmpty ?? false;
@@ -617,7 +619,7 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
       onCopyExplorerLink: onCopyExplorerLink,
       intentIsHardware: intentIsHardware,
     );
-    final isDepositPage = _showsDepositPage(
+    final isDepositPage = swapActivityShowsDepositPage(
       intent,
       intentIsHardware: intentIsHardware,
     );
@@ -673,10 +675,14 @@ class _SwapActivityFlowContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final depositInstruction = _ActivityDepositInstruction.fromIntent(intent);
+    final depositInstruction = SwapActivityDepositInstruction.fromIntent(
+      intent,
+    );
     final statusError = intent.statusError ?? state.statusError;
-    final showExternalDepositPage = _showsExternalDepositPage(intent);
-    final showHardwareDepositPage = _showsHardwareZecDepositPage(
+    final showExternalDepositPage = swapActivityShowsExternalDepositPage(
+      intent,
+    );
+    final showHardwareDepositPage = swapActivityShowsHardwareZecDepositPage(
       intent,
       intentIsHardware: intentIsHardware,
     );
@@ -686,10 +692,10 @@ class _SwapActivityFlowContent extends StatelessWidget {
       ),
       _ when showExternalDepositPage && depositInstruction != null =>
         SwapDepositTokensPageContent(
-          asset: _activitySellAsset(intent) ?? SwapAsset.zec,
+          asset: swapActivitySellAsset(intent) ?? SwapAsset.zec,
           amountText: intent.sellAmount,
           depositAddress: depositInstruction.address,
-          expiresInLabel: _depositDeadlineLabel(intent) ?? '2hrs',
+          expiresInLabel: swapDepositDeadlineLabel(intent) ?? '2hrs',
           expiresAt: intent.depositDeadline,
           memo: depositInstruction.memo,
           checking: depositChecking || state.statusRefreshing,
@@ -698,10 +704,10 @@ class _SwapActivityFlowContent extends StatelessWidget {
         ),
       _ when showHardwareDepositPage && depositInstruction != null =>
         SwapHardwareZecDepositPageContent(
-          asset: _activitySellAsset(intent) ?? SwapAsset.zec,
+          asset: swapActivitySellAsset(intent) ?? SwapAsset.zec,
           amountText: intent.sellAmount,
           depositAddress: depositInstruction.address,
-          expiresInLabel: _depositDeadlineLabel(intent) ?? '2hrs',
+          expiresInLabel: swapDepositDeadlineLabel(intent) ?? '2hrs',
           expiresAt: intent.depositDeadline,
           memo: depositInstruction.memo,
           onDepositZec: () => onSignZecDeposit(intent),
@@ -760,39 +766,35 @@ class _SwapStatusForIntentState extends ConsumerState<_SwapStatusForIntent> {
   Widget build(BuildContext context) {
     final intent = widget.intent;
     final state = ref.watch(swapStateProvider);
-    final sellAsset = _activitySellAsset(intent) ?? SwapAsset.zec;
-    final receiveAsset = _activityReceiveAsset(intent) ?? SwapAsset.usdc;
-    final payFiatText = _activityFiatTextForAsset(
-      state,
-      intent: intent,
-      asset: sellAsset,
-      amountText: intent.sellAmount,
-    );
-    final receiveFiatText = _activityFiatTextForAsset(
-      state,
-      intent: intent,
-      asset: receiveAsset,
-      amountText: intent.receiveEstimate,
-    );
     final accountInfo = _accountInfoForIntent(
       ref.watch(accountProvider).value,
       intent,
     );
+    final presentation = swapActivityStatusPresentationForIntent(
+      state,
+      intent,
+      accountDetail: accountInfo == null
+          ? null
+          : SwapActivityAccountDetail(
+              name: accountInfo.name,
+              profilePictureId: accountInfo.profilePictureId,
+            ),
+    );
     return SwapStatusPageContent(
-      title: _swapStatusTitle(intent),
-      payAsset: sellAsset,
-      receiveAsset: receiveAsset,
-      payFiatText: payFiatText,
-      receiveFiatText: receiveFiatText,
-      payAmountText: intent.sellAmount,
-      receiveAmountText: intent.receiveEstimate,
-      badgeKind: _swapStatusBadgeKind(intent.status),
-      progressIndex: _swapStatusProgressIndex(intent),
+      title: presentation.title,
+      payAsset: presentation.payAsset,
+      receiveAsset: presentation.receiveAsset,
+      payFiatText: presentation.payFiatText,
+      receiveFiatText: presentation.receiveFiatText,
+      payAmountText: presentation.payAmountText,
+      receiveAmountText: presentation.receiveAmountText,
+      badgeKind: presentation.badgeKind,
+      progressIndex: presentation.progressIndex,
       activeTab: _activeTab,
-      steps: _swapProgressSteps(intent),
-      details: _swapStatusDetails(intent, accountInfo: accountInfo),
+      steps: presentation.steps,
+      details: presentation.details,
       detailsExpanded: _detailsExpanded,
-      showTabs: !intent.status.isTerminal,
+      showTabs: presentation.showTabs,
       onTabChanged: (tab) {
         setState(() {
           _activeTab = tab;
@@ -808,216 +810,6 @@ class _SwapStatusForIntentState extends ConsumerState<_SwapStatusForIntent> {
   }
 }
 
-String _swapStatusTitle(SwapIntent intent) {
-  return switch (intent.status) {
-    SwapIntentStatus.complete => 'Swap completed',
-    SwapIntentStatus.failed ||
-    SwapIntentStatus.refunded ||
-    SwapIntentStatus.incompleteDeposit => 'Swap failed',
-    _ => 'Swapping ...',
-  };
-}
-
-SwapStatusBadgeKind _swapStatusBadgeKind(SwapIntentStatus status) {
-  return switch (status) {
-    SwapIntentStatus.complete => SwapStatusBadgeKind.completed,
-    SwapIntentStatus.failed ||
-    SwapIntentStatus.refunded ||
-    SwapIntentStatus.expired ||
-    SwapIntentStatus.incompleteDeposit => SwapStatusBadgeKind.failed,
-    _ => SwapStatusBadgeKind.liveQuote,
-  };
-}
-
-int _swapStatusProgressIndex(SwapIntent intent) {
-  final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
-  return switch (intent.status) {
-    SwapIntentStatus.awaitingDeposit ||
-    SwapIntentStatus.awaitingExternalDeposit => hasDepositTx ? 1 : 0,
-    SwapIntentStatus.depositObserved => 1,
-    SwapIntentStatus.processing ||
-    SwapIntentStatus.providerStatusUnknown ||
-    SwapIntentStatus.incompleteDeposit => 2,
-    SwapIntentStatus.complete ||
-    SwapIntentStatus.refunded ||
-    SwapIntentStatus.expired ||
-    SwapIntentStatus.failed => 3,
-  };
-}
-
-List<SwapStatusStepData> _swapProgressSteps(SwapIntent intent) {
-  final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
-  final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
-  final sourceVerb = intent.direction == SwapDirection.zecToExternal
-      ? 'Sending'
-      : 'Depositing';
-  final sourceDone = intent.direction == SwapDirection.zecToExternal
-      ? '$sourceSymbol sent'
-      : '$sourceSymbol Deposited';
-  final deliveryTitle = intent.direction == SwapDirection.zecToExternal
-      ? 'Deliver $receiveSymbol'
-      : 'Send $receiveSymbol';
-
-  final lastCheckedLabel =
-      _lastRelativeStatusCheckedLabel(intent.lastStatusCheckedAt) ??
-      'Last check: just now';
-
-  return [
-    SwapStatusStepData(
-      title: sourceSymbol,
-      state: SwapStatusStepState.pending,
-      completeTitle: sourceDone,
-      activeTitle: '$sourceVerb $sourceSymbol...',
-      pendingTitle: intent.direction == SwapDirection.zecToExternal
-          ? 'Send $sourceSymbol'
-          : 'Deposit $sourceSymbol',
-      lastCheckedLabel: lastCheckedLabel,
-      description:
-          'Confirm waiting for the source chain and provider to recognise the deposit',
-    ),
-    SwapStatusStepData(
-      title: 'Deposit confirmation',
-      state: SwapStatusStepState.pending,
-      activeTitle: 'Deposit confirmation...',
-      lastCheckedLabel: lastCheckedLabel,
-      description: 'Confirming the deposit before the swap route starts.',
-    ),
-    SwapStatusStepData(
-      title: 'Swap',
-      state: SwapStatusStepState.pending,
-      activeTitle: 'Swap...',
-      lastCheckedLabel: lastCheckedLabel,
-      description: 'The provider is executing the swap route.',
-    ),
-    SwapStatusStepData(
-      title: deliveryTitle,
-      state: SwapStatusStepState.pending,
-      activeTitle: '$deliveryTitle...',
-      lastCheckedLabel: lastCheckedLabel,
-      description: 'Delivering the output asset to the recipient address.',
-    ),
-  ];
-}
-
-List<SwapStatusDetailRowData> _swapStatusDetails(
-  SwapIntent intent, {
-  AccountInfo? accountInfo,
-}) {
-  final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
-  final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
-  final refundAddress = intent.oneClickRefundTo?.trim();
-  final recipientAddress = intent.oneClickRecipient?.trim();
-  final depositAddress = intent.depositAddress?.trim();
-  final localDepositTxHash = intent.depositTxHash?.trim();
-  final originChainTxHash = intent.originChainTxHash?.trim();
-  final destinationChainTxHash = intent.destinationChainTxHash?.trim();
-  final depositTxHash = _firstNonEmpty([localDepositTxHash, originChainTxHash]);
-  final timestamp = _swapTimestampLabel(
-    intent.completedAt ?? intent.updatedAt ?? intent.createdAt,
-  );
-  final terminal = intent.status.isTerminal;
-  final failed =
-      _swapStatusBadgeKind(intent.status) == SwapStatusBadgeKind.failed;
-  final sendsZec = intent.direction != SwapDirection.externalToZec;
-
-  if (terminal) {
-    return [
-      _accountDetailRow(accountInfo),
-      if (failed && refundAddress != null && refundAddress.isNotEmpty)
-        SwapStatusDetailRowData(
-          label: '$sourceSymbol refunded to',
-          value: _compactSwapAddress(refundAddress),
-        )
-      else if (!failed && depositAddress != null && depositAddress.isNotEmpty)
-        SwapStatusDetailRowData(
-          label: '$sourceSymbol deposit to',
-          value: _compactSwapAddress(depositAddress),
-          copyable: true,
-          copyText: depositAddress,
-        ),
-      SwapStatusDetailRowData(
-        label: 'Total fees',
-        value:
-            intent.totalFeesText ??
-            intent.swapFeeText ??
-            intent.providerRefundInfo?.refundFeeText ??
-            'Included',
-        help: true,
-      ),
-      if (!failed)
-        SwapStatusDetailRowData(
-          label: 'Realized slippage',
-          value: intent.realisedSlippageText ?? 'Not reported',
-        ),
-      if (timestamp != null)
-        SwapStatusDetailRowData(label: 'Timestamp', value: timestamp),
-    ];
-  }
-
-  return [
-    _accountDetailRow(accountInfo),
-    if (sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
-      SwapStatusDetailRowData(
-        label: '$receiveSymbol recipient',
-        value: _compactSwapAddress(recipientAddress),
-        copyable: true,
-        copyText: recipientAddress,
-      ),
-    if (!sendsZec && refundAddress != null && refundAddress.isNotEmpty)
-      SwapStatusDetailRowData(
-        label: '$sourceSymbol refund address',
-        value: _compactSwapAddress(refundAddress),
-      ),
-    if (depositAddress != null && depositAddress.isNotEmpty)
-      SwapStatusDetailRowData(
-        label: 'Deposit $sourceSymbol to',
-        value: _compactSwapAddress(depositAddress),
-        copyable: true,
-        copyText: depositAddress,
-      ),
-    SwapStatusDetailRowData(
-      label: 'Swap fee',
-      value: intent.swapFeeText ?? 'Included in shown rate',
-      help: true,
-    ),
-    SwapStatusDetailRowData(
-      label: 'Slippage tolerance',
-      value: intent.slippageToleranceText ?? 'Configured quote',
-    ),
-    SwapStatusDetailRowData(
-      label: 'Guaranteed minimum',
-      value: intent.minimumReceiveText ?? intent.receiveEstimate,
-      help: true,
-    ),
-    if (sendsZec && refundAddress != null && refundAddress.isNotEmpty)
-      SwapStatusDetailRowData(
-        label: '$sourceSymbol refund address',
-        value: _compactSwapAddress(refundAddress),
-      ),
-    if (!sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
-      SwapStatusDetailRowData(
-        label: '$receiveSymbol recipient',
-        value: _compactSwapAddress(recipientAddress),
-        copyable: true,
-        copyText: recipientAddress,
-      ),
-    if (depositTxHash != null && depositTxHash.isNotEmpty)
-      SwapStatusDetailRowData(
-        label: '$sourceSymbol deposit tx',
-        value: _compactSwapAddress(depositTxHash),
-        copyable: true,
-        copyText: depositTxHash,
-      ),
-    if (destinationChainTxHash != null && destinationChainTxHash.isNotEmpty)
-      SwapStatusDetailRowData(
-        label: '$receiveSymbol delivery tx',
-        value: _compactSwapAddress(destinationChainTxHash),
-        copyable: true,
-        copyText: destinationChainTxHash,
-      ),
-  ];
-}
-
 AccountInfo? _accountInfoForIntent(
   AccountState? accountState,
   SwapIntent intent,
@@ -1031,117 +823,6 @@ AccountInfo? _accountInfoForIntent(
   }
   return accountState.activeAccount;
 }
-
-SwapStatusDetailRowData _accountDetailRow(AccountInfo? accountInfo) {
-  return SwapStatusDetailRowData(
-    label: 'Account',
-    value: accountInfo?.name ?? 'Unknown account',
-    accountProfilePictureId:
-        accountInfo?.profilePictureId ?? kDefaultProfilePictureId,
-  );
-}
-
-String? _firstNonEmpty(Iterable<String?> values) {
-  for (final value in values) {
-    final trimmed = value?.trim();
-    if (trimmed != null && trimmed.isNotEmpty) return trimmed;
-  }
-  return null;
-}
-
-String _activityFiatTextForAsset(
-  SwapState state, {
-  required SwapIntent intent,
-  required SwapAsset asset,
-  required String amountText,
-}) {
-  final amount = _numericAmount(amountText);
-  if (amount == null || amount <= 0) return r'$--';
-  if (_isUsdLikeSwapAsset(asset)) return _formatActivityUsd(amount);
-  final externalAsset = intent.externalAsset ?? state.externalAsset;
-  if (asset.isNativeZec && _isUsdLikeSwapAsset(externalAsset)) {
-    final zecUsd =
-        state.indicativeExternalPerZec[externalAsset] ??
-        externalAsset.fallbackExternalPerZec;
-    if (zecUsd.isFinite && zecUsd > 0) {
-      return _formatActivityUsd(amount * zecUsd);
-    }
-  }
-  return r'$--';
-}
-
-bool _isUsdLikeSwapAsset(SwapAsset asset) {
-  final symbol = asset.symbol.toUpperCase();
-  return symbol == 'USDC' || symbol == 'USDT' || symbol == 'DAI';
-}
-
-double? _numericAmount(String amountText) {
-  final raw = amountText.split(RegExp(r'\s+')).first.replaceAll(',', '').trim();
-  final amount = double.tryParse(raw);
-  return amount == null || !amount.isFinite ? null : amount;
-}
-
-String _formatActivityUsd(double value) {
-  if (!value.isFinite || value <= 0) return r'$0.00';
-  if (value >= 1000000) return '\$${(value / 1000000).toStringAsFixed(2)}M';
-  if (value >= 1000) return '\$${(value / 1000).toStringAsFixed(2)}K';
-  return '\$${value.toStringAsFixed(2)}';
-}
-
-String? _depositDeadlineLabel(SwapIntent intent) {
-  final deadline = intent.depositDeadline;
-  if (deadline == null) return null;
-  final remaining = deadline.difference(DateTime.now());
-  if (remaining.isNegative) return '00:00';
-  if (remaining.inHours >= 1) {
-    final hours = (remaining.inSeconds / Duration.secondsPerHour).ceil();
-    return hours == 1 ? '1hr' : '${hours}hrs';
-  }
-  if (remaining.inMinutes >= 15) {
-    final minutes = remaining.inMinutes;
-    return minutes == 1 ? '1min' : '${minutes}mins';
-  }
-  final minutes = remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
-  final seconds = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
-  return '$minutes:$seconds';
-}
-
-String? _lastRelativeStatusCheckedLabel(DateTime? checkedAt) {
-  if (checkedAt == null) return null;
-  final elapsed = DateTime.now().difference(checkedAt.toLocal());
-  if (elapsed.inMinutes <= 0) return 'Last check: just now';
-  return 'Last check: ${elapsed.inMinutes}m ago';
-}
-
-String? _swapTimestampLabel(DateTime? timestamp) {
-  if (timestamp == null) return null;
-  final local = timestamp.toLocal();
-  final month = _monthNames[local.month - 1];
-  final hour = local.hour.toString().padLeft(2, '0');
-  final minute = local.minute.toString().padLeft(2, '0');
-  return '$month ${local.day}, ${local.year} $hour:$minute';
-}
-
-String _compactSwapAddress(String address) {
-  final trimmed = address.trim();
-  if (trimmed.length <= 18) return trimmed;
-  return '${trimmed.substring(0, 9)} ... ${trimmed.substring(trimmed.length - 7)}';
-}
-
-const _monthNames = <String>[
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
 
 class _SwapActivityMissingPanel extends StatelessWidget {
   const _SwapActivityMissingPanel();
@@ -1373,8 +1054,8 @@ class _ActivityAssetPair extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sellAsset = _activitySellAsset(intent);
-    final receiveAsset = _activityReceiveAsset(intent);
+    final sellAsset = swapActivitySellAsset(intent);
+    final receiveAsset = swapActivityReceiveAsset(intent);
     if (sellAsset == null || receiveAsset == null) {
       return const SizedBox.shrink();
     }
@@ -1450,107 +1131,6 @@ class _ActivityStatusErrorPanel extends StatelessWidget {
   }
 }
 
-class _ActivityStatusPlan {
-  const _ActivityStatusPlan({
-    required this.title,
-    required this.detail,
-    required this.iconName,
-    required this.tone,
-  });
-
-  static _ActivityStatusPlan fromIntent(SwapIntent intent) {
-    final sourceSymbol = _pairSymbol(intent.pair, 0);
-    final receiveSymbol = _pairSymbol(intent.pair, 1);
-    final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
-
-    return switch (intent.status) {
-      SwapIntentStatus.awaitingDeposit => _ActivityStatusPlan(
-        title: hasDepositTx ? '$sourceSymbol sent' : 'Send $sourceSymbol',
-        detail: hasDepositTx
-            ? 'Waiting for the deposit to confirm.'
-            : 'Send once to the deposit address below.',
-        iconName: hasDepositTx ? AppIcons.eye : AppIcons.link,
-        tone: _ActivityStatusPlanTone.action,
-      ),
-      SwapIntentStatus.awaitingExternalDeposit => _ActivityStatusPlan(
-        title: hasDepositTx ? '$sourceSymbol sent' : 'Send $sourceSymbol',
-        detail: hasDepositTx
-            ? 'Waiting for the source-chain deposit to confirm.'
-            : 'Send once to the source-chain deposit address below.',
-        iconName: hasDepositTx ? AppIcons.eye : AppIcons.link,
-        tone: _ActivityStatusPlanTone.action,
-      ),
-      SwapIntentStatus.depositObserved => _ActivityStatusPlan(
-        title: '$sourceSymbol deposit confirmed',
-        detail: 'Preparing the $receiveSymbol delivery.',
-        iconName: AppIcons.eye,
-        tone: _ActivityStatusPlanTone.action,
-      ),
-      SwapIntentStatus.processing => _ActivityStatusPlan(
-        title: '$receiveSymbol delivery in progress',
-        detail: 'No new approval is needed.',
-        iconName: AppIcons.renew,
-        tone: _ActivityStatusPlanTone.action,
-      ),
-      SwapIntentStatus.providerStatusUnknown => _ActivityStatusPlan(
-        title: 'Checking provider status',
-        detail: intent.providerStatusRaw == null
-            ? 'Refresh once. Keep the swap record open if it does not update.'
-            : 'Provider returned ${intent.providerStatusRaw}. Keep this record open.',
-        iconName: AppIcons.warning,
-        tone: _ActivityStatusPlanTone.warning,
-      ),
-      SwapIntentStatus.incompleteDeposit => const _ActivityStatusPlan(
-        title: 'Deposit needs attention',
-        detail: 'Top up the missing amount or wait for refund.',
-        iconName: AppIcons.warning,
-        tone: _ActivityStatusPlanTone.warning,
-      ),
-      SwapIntentStatus.complete => _ActivityStatusPlan(
-        title: receiveSymbol == 'ZEC'
-            ? 'ZEC ready'
-            : '$receiveSymbol delivered',
-        detail: 'The swap is complete.',
-        iconName: AppIcons.checkCircle,
-        tone: _ActivityStatusPlanTone.success,
-      ),
-      SwapIntentStatus.refunded => const _ActivityStatusPlan(
-        title: 'Funds refunded',
-        detail: 'Check the refund transaction before retrying.',
-        iconName: AppIcons.checkCircle,
-        tone: _ActivityStatusPlanTone.success,
-      ),
-      SwapIntentStatus.expired => const _ActivityStatusPlan(
-        title: 'Deposit window closed',
-        detail: 'No funds moved if no deposit was sent.',
-        iconName: AppIcons.block,
-        tone: _ActivityStatusPlanTone.destructive,
-      ),
-      SwapIntentStatus.failed => const _ActivityStatusPlan(
-        title: 'Swap failed',
-        detail: 'Start a fresh quote when ready.',
-        iconName: AppIcons.block,
-        tone: _ActivityStatusPlanTone.destructive,
-      ),
-    };
-  }
-
-  static String _pairSymbol(String pair, int index) {
-    final parts = pair.split(' -> ');
-    if (parts.length > index && parts[index].trim().isNotEmpty) {
-      return parts[index].trim();
-    }
-    return index == 0 ? 'deposit asset' : 'receive asset';
-  }
-
-  final String title;
-  final String detail;
-  final String iconName;
-  final _ActivityStatusPlanTone tone;
-}
-
-enum _ActivityStatusPlanTone { action, warning, success, destructive }
-
 class _ActivityStatusPlanPanel extends StatelessWidget {
   const _ActivityStatusPlanPanel({
     required this.intent,
@@ -1559,23 +1139,23 @@ class _ActivityStatusPlanPanel extends StatelessWidget {
   });
 
   final SwapIntent intent;
-  final _ActivityStatusPlan plan;
+  final SwapActivityStatusPlan plan;
   final bool statusRefreshing;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final color = switch (plan.tone) {
-      _ActivityStatusPlanTone.action => colors.text.accent,
-      _ActivityStatusPlanTone.warning => colors.text.warning,
-      _ActivityStatusPlanTone.success => colors.text.success,
-      _ActivityStatusPlanTone.destructive => colors.text.destructive,
+      SwapActivityStatusPlanTone.action => colors.text.accent,
+      SwapActivityStatusPlanTone.warning => colors.text.warning,
+      SwapActivityStatusPlanTone.success => colors.text.success,
+      SwapActivityStatusPlanTone.destructive => colors.text.destructive,
     };
     final iconColor = switch (plan.tone) {
-      _ActivityStatusPlanTone.action => colors.icon.accent,
-      _ActivityStatusPlanTone.warning => colors.icon.warning,
-      _ActivityStatusPlanTone.success => colors.icon.success,
-      _ActivityStatusPlanTone.destructive => colors.icon.destructive,
+      SwapActivityStatusPlanTone.action => colors.icon.accent,
+      SwapActivityStatusPlanTone.warning => colors.icon.warning,
+      SwapActivityStatusPlanTone.success => colors.icon.success,
+      SwapActivityStatusPlanTone.destructive => colors.icon.destructive,
     };
     final live = _shouldAutoRefreshActivityStatus(intent.status);
     return Column(
@@ -1659,7 +1239,7 @@ class _ActivityRouteTracker extends StatefulWidget {
   const _ActivityRouteTracker({required this.intent, required this.tone});
 
   final SwapIntent intent;
-  final _ActivityStatusPlanTone tone;
+  final SwapActivityStatusPlanTone tone;
 
   @override
   State<_ActivityRouteTracker> createState() => _ActivityRouteTrackerState();
@@ -1675,7 +1255,7 @@ class _ActivityRouteTrackerState extends State<_ActivityRouteTracker> {
   @override
   void initState() {
     super.initState();
-    final plan = _ActivityRoutePlan.fromIntent(widget.intent);
+    final plan = SwapActivityRoutePlan.fromIntent(widget.intent);
     _displayProgressIndex = plan.progressIndex;
     _displayIntentId = widget.intent.id;
   }
@@ -1692,7 +1272,7 @@ class _ActivityRouteTrackerState extends State<_ActivityRouteTracker> {
     super.didUpdateWidget(oldWidget);
     final changedIntent = _displayIntentId != widget.intent.id;
     if (changedIntent) {
-      final plan = _ActivityRoutePlan.fromIntent(widget.intent);
+      final plan = SwapActivityRoutePlan.fromIntent(widget.intent);
       _displayProgressIndex = plan.progressIndex;
       _displayIntentId = widget.intent.id;
     }
@@ -1712,7 +1292,7 @@ class _ActivityRouteTrackerState extends State<_ActivityRouteTracker> {
   void _syncPulseTimer() {
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final plan = _ActivityRoutePlan.fromIntent(widget.intent);
+    final plan = SwapActivityRoutePlan.fromIntent(widget.intent);
     final shouldPulse = !reduceMotion && plan.hasActiveStep;
     if (shouldPulse && _timer == null) {
       _timer = Timer.periodic(_activityStepBlinkTempo, (_) => _triggerPulse());
@@ -1732,7 +1312,7 @@ class _ActivityRouteTrackerState extends State<_ActivityRouteTracker> {
   void _syncDisplayProgress() {
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final targetPlan = _ActivityRoutePlan.fromIntent(widget.intent);
+    final targetPlan = SwapActivityRoutePlan.fromIntent(widget.intent);
     final targetIndex = targetPlan.progressIndex;
     if (reduceMotion ||
         !targetPlan.canAnimateProgress ||
@@ -1761,7 +1341,7 @@ class _ActivityRouteTrackerState extends State<_ActivityRouteTracker> {
 
   void _advanceDisplayProgress() {
     if (!mounted) return;
-    final targetPlan = _ActivityRoutePlan.fromIntent(widget.intent);
+    final targetPlan = SwapActivityRoutePlan.fromIntent(widget.intent);
     final targetIndex = targetPlan.progressIndex;
     if (!targetPlan.canAnimateProgress ||
         targetIndex <= _displayProgressIndex) {
@@ -1783,7 +1363,7 @@ class _ActivityRouteTrackerState extends State<_ActivityRouteTracker> {
 
   @override
   Widget build(BuildContext context) {
-    final plan = _ActivityRoutePlan.fromIntent(widget.intent);
+    final plan = SwapActivityRoutePlan.fromIntent(widget.intent);
     final displayPlan = plan.displayedAtProgress(_displayProgressIndex);
     return Semantics(
       label: 'Swap progress: ${displayPlan.semanticLabel}',
@@ -1829,8 +1409,8 @@ class _ActivityRouteSegmentStrip extends StatelessWidget {
     required this.pulse,
   });
 
-  final _ActivityRoutePlan plan;
-  final _ActivityStatusPlanTone tone;
+  final SwapActivityRoutePlan plan;
+  final SwapActivityStatusPlanTone tone;
   final int pulse;
 
   @override
@@ -1863,8 +1443,8 @@ class _ActivityRouteSegment extends StatelessWidget {
   });
 
   final int index;
-  final _ActivityRouteStepState state;
-  final _ActivityStatusPlanTone tone;
+  final SwapActivityRouteStepState state;
+  final SwapActivityStatusPlanTone tone;
   final int pulse;
 
   @override
@@ -1874,12 +1454,12 @@ class _ActivityRouteSegment extends StatelessWidget {
       key: ValueKey('swap_activity_route_segment_${index}_${state.name}'),
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
-      height: state == _ActivityRouteStepState.active ? 7 : 5,
+      height: state == SwapActivityRouteStepState.active ? 7 : 5,
       decoration: BoxDecoration(
         color: _activityRouteSegmentColor(context, state, tone),
         borderRadius: BorderRadius.circular(AppRadii.full),
         border: Border.all(
-          color: state == _ActivityRouteStepState.pending
+          color: state == SwapActivityRouteStepState.pending
               ? colors.border.subtle
               : _activityRouteColor(
                   context,
@@ -1889,7 +1469,7 @@ class _ActivityRouteSegment extends StatelessWidget {
         ),
       ),
     );
-    if (state != _ActivityRouteStepState.active) return segment;
+    if (state != SwapActivityRouteStepState.active) return segment;
     return _ActivityStepBlinkOpacity(
       key: ValueKey('swap_activity_route_segment_blink_$index'),
       pulse: pulse,
@@ -1942,20 +1522,20 @@ class _ActivityRouteStepView extends StatelessWidget {
     super.key,
   });
 
-  final _ActivityRouteStep step;
-  final _ActivityStatusPlanTone tone;
+  final SwapActivityRouteStep step;
+  final SwapActivityStatusPlanTone tone;
   final int pulse;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final color = _activityRouteColor(context, step.state, tone);
-    final pending = step.state == _ActivityRouteStepState.pending;
-    final active = step.state == _ActivityRouteStepState.active;
+    final pending = step.state == SwapActivityRouteStepState.pending;
+    final active = step.state == SwapActivityRouteStepState.active;
     final iconName = switch (step.state) {
-      _ActivityRouteStepState.done => AppIcons.check,
-      _ActivityRouteStepState.warning => AppIcons.warning,
-      _ActivityRouteStepState.failed => AppIcons.block,
+      SwapActivityRouteStepState.done => AppIcons.check,
+      SwapActivityRouteStepState.warning => AppIcons.warning,
+      SwapActivityRouteStepState.failed => AppIcons.block,
       _ => step.iconName,
     };
     return Column(
@@ -2151,343 +1731,41 @@ bool _shouldAutoRefreshActivityStatus(SwapIntentStatus status) {
 
 Color _activityRouteSegmentColor(
   BuildContext context,
-  _ActivityRouteStepState state,
-  _ActivityStatusPlanTone tone,
+  SwapActivityRouteStepState state,
+  SwapActivityStatusPlanTone tone,
 ) {
   final colors = context.colors;
   return switch (state) {
-    _ActivityRouteStepState.done => colors.text.success,
-    _ActivityRouteStepState.active ||
-    _ActivityRouteStepState.warning ||
-    _ActivityRouteStepState.failed => _activityRouteColor(
+    SwapActivityRouteStepState.done => colors.text.success,
+    SwapActivityRouteStepState.active ||
+    SwapActivityRouteStepState.warning ||
+    SwapActivityRouteStepState.failed => _activityRouteColor(
       context,
       state,
       tone,
     ).withValues(alpha: 0.72),
-    _ActivityRouteStepState.pending => colors.background.base,
-  };
-}
-
-class _ActivityRoutePlan {
-  const _ActivityRoutePlan({required this.steps});
-
-  factory _ActivityRoutePlan.fromIntent(SwapIntent intent) {
-    final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
-    final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
-    final receivesZec = receiveSymbol == 'ZEC';
-    final deliverLabel = receivesZec ? 'Receive ZEC' : 'Deliver';
-    final deliverDetail = receivesZec
-        ? 'Provider is sending ZEC directly to this wallet shielded address.'
-        : 'Provider is sending funds to your destination address.';
-    final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
-
-    final labels = ['Send $sourceSymbol', 'Confirm', 'Swap', deliverLabel];
-    final details = [
-      'Send the quoted amount to the one-time deposit address.',
-      'Waiting for the source chain and provider to recognize the deposit.',
-      'Provider is converting funds and preparing delivery.',
-      deliverDetail,
-    ];
-    final icons = [
-      AppIcons.link,
-      AppIcons.eye,
-      AppIcons.renew,
-      receivesZec ? AppIcons.shieldKeyhole : AppIcons.checkCircle,
-    ];
-    final states = switch (intent.status) {
-      SwapIntentStatus.awaitingDeposit ||
-      SwapIntentStatus.awaitingExternalDeposit =>
-        hasDepositTx
-            ? const [
-                _ActivityRouteStepState.done,
-                _ActivityRouteStepState.active,
-                _ActivityRouteStepState.pending,
-                _ActivityRouteStepState.pending,
-              ]
-            : const [
-                _ActivityRouteStepState.active,
-                _ActivityRouteStepState.pending,
-                _ActivityRouteStepState.pending,
-                _ActivityRouteStepState.pending,
-              ],
-      SwapIntentStatus.depositObserved || SwapIntentStatus.processing => const [
-        _ActivityRouteStepState.done,
-        _ActivityRouteStepState.done,
-        _ActivityRouteStepState.active,
-        _ActivityRouteStepState.pending,
-      ],
-      SwapIntentStatus.providerStatusUnknown => const [
-        _ActivityRouteStepState.done,
-        _ActivityRouteStepState.warning,
-        _ActivityRouteStepState.active,
-        _ActivityRouteStepState.pending,
-      ],
-      SwapIntentStatus.incompleteDeposit =>
-        hasDepositTx
-            ? const [
-                _ActivityRouteStepState.done,
-                _ActivityRouteStepState.warning,
-                _ActivityRouteStepState.pending,
-                _ActivityRouteStepState.pending,
-              ]
-            : const [
-                _ActivityRouteStepState.warning,
-                _ActivityRouteStepState.pending,
-                _ActivityRouteStepState.pending,
-                _ActivityRouteStepState.pending,
-              ],
-      SwapIntentStatus.complete => const [
-        _ActivityRouteStepState.done,
-        _ActivityRouteStepState.done,
-        _ActivityRouteStepState.done,
-        _ActivityRouteStepState.done,
-      ],
-      SwapIntentStatus.refunded => const [
-        _ActivityRouteStepState.done,
-        _ActivityRouteStepState.warning,
-        _ActivityRouteStepState.pending,
-        _ActivityRouteStepState.pending,
-      ],
-      SwapIntentStatus.expired => const [
-        _ActivityRouteStepState.failed,
-        _ActivityRouteStepState.pending,
-        _ActivityRouteStepState.pending,
-        _ActivityRouteStepState.pending,
-      ],
-      SwapIntentStatus.failed =>
-        hasDepositTx
-            ? const [
-                _ActivityRouteStepState.done,
-                _ActivityRouteStepState.done,
-                _ActivityRouteStepState.failed,
-                _ActivityRouteStepState.pending,
-              ]
-            : const [
-                _ActivityRouteStepState.failed,
-                _ActivityRouteStepState.pending,
-                _ActivityRouteStepState.pending,
-                _ActivityRouteStepState.pending,
-              ],
-    };
-    return _ActivityRoutePlan(
-      steps: [
-        for (var index = 0; index < labels.length; index++)
-          _ActivityRouteStep(
-            label: labels[index],
-            detail: details[index],
-            state: states[index],
-            iconName: icons[index],
-          ),
-      ],
-    );
-  }
-
-  int get activeStepIndex {
-    final failedOrWarningIndex = steps.indexWhere(
-      (step) =>
-          step.state == _ActivityRouteStepState.failed ||
-          step.state == _ActivityRouteStepState.warning,
-    );
-    if (failedOrWarningIndex != -1) return failedOrWarningIndex;
-    final activeIndex = steps.indexWhere(
-      (step) => step.state == _ActivityRouteStepState.active,
-    );
-    if (activeIndex != -1) return activeIndex;
-    final lastDoneIndex = steps.lastIndexWhere(
-      (step) => step.state == _ActivityRouteStepState.done,
-    );
-    return lastDoneIndex == -1 ? 0 : lastDoneIndex;
-  }
-
-  _ActivityRouteStep get activeStep => steps[activeStepIndex];
-
-  bool get hasActiveStep =>
-      steps.any((step) => step.state == _ActivityRouteStepState.active);
-
-  bool get hasAlertStep => steps.any(
-    (step) =>
-        step.state == _ActivityRouteStepState.failed ||
-        step.state == _ActivityRouteStepState.warning,
-  );
-
-  bool get canAnimateProgress => !hasAlertStep && (hasActiveStep || isComplete);
-
-  int get progressIndex {
-    if (isComplete) return steps.length;
-    final activeIndex = steps.indexWhere(
-      (step) => step.state == _ActivityRouteStepState.active,
-    );
-    if (activeIndex != -1) return activeIndex;
-    return activeStepIndex;
-  }
-
-  _ActivityRoutePlan displayedAtProgress(int progressIndex) {
-    if (!canAnimateProgress || progressIndex >= this.progressIndex) {
-      return this;
-    }
-    final clampedIndex = progressIndex.clamp(0, steps.length).toInt();
-    if (clampedIndex >= steps.length) return this;
-    return _ActivityRoutePlan(
-      steps: [
-        for (var index = 0; index < steps.length; index++)
-          steps[index].copyWith(
-            state: index < clampedIndex
-                ? _ActivityRouteStepState.done
-                : index == clampedIndex
-                ? _ActivityRouteStepState.active
-                : _ActivityRouteStepState.pending,
-          ),
-      ],
-    );
-  }
-
-  int get completedStepCount =>
-      steps.where((step) => step.state == _ActivityRouteStepState.done).length;
-
-  String get phaseLabel {
-    if (isComplete) return 'Funds delivered';
-    final step = activeStep;
-    return step.state == _ActivityRouteStepState.active
-        ? 'Now: ${step.label}'
-        : step.state.label;
-  }
-
-  String get semanticLabel =>
-      '$phaseLabel, ${activeStep.detail}, $completedStepCount of ${steps.length} steps done';
-
-  bool get isComplete =>
-      steps.every((step) => step.state == _ActivityRouteStepState.done);
-
-  final List<_ActivityRouteStep> steps;
-}
-
-class _ActivityRouteStep {
-  const _ActivityRouteStep({
-    required this.label,
-    required this.detail,
-    required this.state,
-    required this.iconName,
-  });
-
-  final String label;
-  final String detail;
-  final _ActivityRouteStepState state;
-  final String iconName;
-
-  _ActivityRouteStep copyWith({_ActivityRouteStepState? state}) {
-    return _ActivityRouteStep(
-      label: label,
-      detail: detail,
-      state: state ?? this.state,
-      iconName: iconName,
-    );
-  }
-}
-
-enum _ActivityRouteStepState { pending, active, done, warning, failed }
-
-extension _ActivityRouteStepStateLabel on _ActivityRouteStepState {
-  String get label => switch (this) {
-    _ActivityRouteStepState.pending => 'Waiting',
-    _ActivityRouteStepState.active => 'Now',
-    _ActivityRouteStepState.done => 'Done',
-    _ActivityRouteStepState.warning => 'Check',
-    _ActivityRouteStepState.failed => 'Stopped',
+    SwapActivityRouteStepState.pending => colors.background.base,
   };
 }
 
 Color _activityRouteColor(
   BuildContext context,
-  _ActivityRouteStepState state,
-  _ActivityStatusPlanTone tone,
+  SwapActivityRouteStepState state,
+  SwapActivityStatusPlanTone tone,
 ) {
   final colors = context.colors;
   return switch (state) {
-    _ActivityRouteStepState.done => colors.text.success,
-    _ActivityRouteStepState.warning => colors.text.warning,
-    _ActivityRouteStepState.failed => colors.text.destructive,
-    _ActivityRouteStepState.active => switch (tone) {
-      _ActivityStatusPlanTone.warning => colors.text.warning,
-      _ActivityStatusPlanTone.destructive => colors.text.destructive,
+    SwapActivityRouteStepState.done => colors.text.success,
+    SwapActivityRouteStepState.warning => colors.text.warning,
+    SwapActivityRouteStepState.failed => colors.text.destructive,
+    SwapActivityRouteStepState.active => switch (tone) {
+      SwapActivityStatusPlanTone.warning => colors.text.warning,
+      SwapActivityStatusPlanTone.destructive => colors.text.destructive,
       _ => colors.text.accent,
     },
-    _ActivityRouteStepState.pending => colors.text.secondary,
+    SwapActivityRouteStepState.pending => colors.text.secondary,
   };
 }
-
-class _ActivityResolution {
-  const _ActivityResolution({
-    required this.title,
-    required this.message,
-    required this.detail,
-    required this.iconName,
-    required this.tone,
-    this.primaryAction,
-  });
-
-  static _ActivityResolution? fromIntent(SwapIntent intent) {
-    return switch (intent.status) {
-      SwapIntentStatus.incompleteDeposit => _ActivityResolution(
-        title: 'Resolve incomplete deposit',
-        message: 'The deposit is below the quoted amount.',
-        detail:
-            'Send only the missing amount with the same one-time deposit details, or wait for the refund path.',
-        iconName: AppIcons.warning,
-        tone: _ActivityResolutionTone.warning,
-        primaryAction: _ActivityResolutionAction.copyTopUpDetails,
-      ),
-      SwapIntentStatus.providerStatusUnknown => _ActivityResolution(
-        title: 'Status needs your attention',
-        message: intent.providerStatusRaw == null
-            ? 'The provider status could not be interpreted.'
-            : 'The provider returned ${intent.providerStatusRaw}.',
-        detail:
-            'Do not resend funds. Refresh once and keep this activity item for support if the status does not move forward.',
-        iconName: AppIcons.warning,
-        tone: _ActivityResolutionTone.warning,
-      ),
-      SwapIntentStatus.refunded => _ActivityResolution(
-        title: 'Refund complete',
-        message: 'The swap is closed and the refund has been submitted.',
-        detail:
-            'Check the origin-chain refund transaction before starting a fresh quote.',
-        iconName: AppIcons.checkCircle,
-        tone: _ActivityResolutionTone.success,
-        primaryAction: _ActivityResolutionAction.reviewFreshQuote,
-      ),
-      SwapIntentStatus.failed => _ActivityResolution(
-        title: 'Route failed',
-        message: 'The swap could not complete this route.',
-        detail:
-            'No funds moved according to status. Review the receipt, then start a new quote.',
-        iconName: AppIcons.block,
-        tone: _ActivityResolutionTone.destructive,
-        primaryAction: _ActivityResolutionAction.reviewFreshQuote,
-      ),
-      SwapIntentStatus.expired => _ActivityResolution(
-        title: 'Deposit window closed',
-        message: 'The deposit window for this quote has closed.',
-        detail:
-            'If you did not send funds, no action is needed. If you sent funds near expiry, refresh once and keep this deposit address for support.',
-        iconName: AppIcons.block,
-        tone: _ActivityResolutionTone.destructive,
-        primaryAction: _ActivityResolutionAction.reviewFreshQuote,
-      ),
-      _ => null,
-    };
-  }
-
-  final String title;
-  final String message;
-  final String detail;
-  final String iconName;
-  final _ActivityResolutionTone tone;
-  final _ActivityResolutionAction? primaryAction;
-}
-
-enum _ActivityResolutionTone { warning, success, destructive }
-
-enum _ActivityResolutionAction { copyTopUpDetails, reviewFreshQuote }
 
 class _ActivityResolutionPanel extends StatelessWidget {
   const _ActivityResolutionPanel({
@@ -2496,7 +1774,7 @@ class _ActivityResolutionPanel extends StatelessWidget {
     required this.onReviewFreshQuote,
   });
 
-  final _ActivityResolution resolution;
+  final SwapActivityResolution resolution;
   final SwapIntent intent;
   final VoidCallback onReviewFreshQuote;
 
@@ -2504,39 +1782,39 @@ class _ActivityResolutionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final color = switch (resolution.tone) {
-      _ActivityResolutionTone.warning => colors.text.warning,
-      _ActivityResolutionTone.success => colors.text.success,
-      _ActivityResolutionTone.destructive => colors.text.destructive,
+      SwapActivityResolutionTone.warning => colors.text.warning,
+      SwapActivityResolutionTone.success => colors.text.success,
+      SwapActivityResolutionTone.destructive => colors.text.destructive,
     };
     final iconColor = switch (resolution.tone) {
-      _ActivityResolutionTone.warning => colors.icon.warning,
-      _ActivityResolutionTone.success => colors.icon.success,
-      _ActivityResolutionTone.destructive => colors.icon.destructive,
+      SwapActivityResolutionTone.warning => colors.icon.warning,
+      SwapActivityResolutionTone.success => colors.icon.success,
+      SwapActivityResolutionTone.destructive => colors.icon.destructive,
     };
     final action = resolution.primaryAction;
     final actionLabel = switch (action) {
-      _ActivityResolutionAction.copyTopUpDetails => 'Copy top-up details',
-      _ActivityResolutionAction.reviewFreshQuote => 'Review fresh quote',
+      SwapActivityResolutionAction.copyTopUpDetails => 'Copy top-up details',
+      SwapActivityResolutionAction.reviewFreshQuote => 'Review fresh quote',
       null => null,
     };
     final actionIcon = switch (action) {
-      _ActivityResolutionAction.copyTopUpDetails => AppIcons.copy,
-      _ActivityResolutionAction.reviewFreshQuote => AppIcons.renew,
+      SwapActivityResolutionAction.copyTopUpDetails => AppIcons.copy,
+      SwapActivityResolutionAction.reviewFreshQuote => AppIcons.renew,
       null => null,
     };
     final actionKey = switch (action) {
-      _ActivityResolutionAction.copyTopUpDetails => const ValueKey(
+      SwapActivityResolutionAction.copyTopUpDetails => const ValueKey(
         'swap_resolution_copy_deposit_button',
       ),
-      _ActivityResolutionAction.reviewFreshQuote => const ValueKey(
+      SwapActivityResolutionAction.reviewFreshQuote => const ValueKey(
         'swap_resolution_review_again_button',
       ),
       null => null,
     };
     final depositAddress = intent.depositAddress;
     final actionEnabled =
-        action == _ActivityResolutionAction.reviewFreshQuote ||
-        (action == _ActivityResolutionAction.copyTopUpDetails &&
+        action == SwapActivityResolutionAction.reviewFreshQuote ||
+        (action == SwapActivityResolutionAction.copyTopUpDetails &&
             depositAddress != null &&
             depositAddress.isNotEmpty);
     return Container(
@@ -2582,7 +1860,7 @@ class _ActivityResolutionPanel extends StatelessWidget {
                       onPressed: actionEnabled
                           ? () {
                               if (action ==
-                                      _ActivityResolutionAction
+                                      SwapActivityResolutionAction
                                           .copyTopUpDetails &&
                                   depositAddress != null) {
                                 copySwapText(
@@ -2593,7 +1871,8 @@ class _ActivityResolutionPanel extends StatelessWidget {
                                 return;
                               }
                               if (action ==
-                                  _ActivityResolutionAction.reviewFreshQuote) {
+                                  SwapActivityResolutionAction
+                                      .reviewFreshQuote) {
                                 onReviewFreshQuote();
                               }
                             }
@@ -2623,44 +1902,6 @@ class _ActivityResolutionPanel extends StatelessWidget {
   }
 }
 
-bool _showDepositControls(SwapIntentStatus status) {
-  return switch (status) {
-    SwapIntentStatus.complete ||
-    SwapIntentStatus.refunded ||
-    SwapIntentStatus.expired ||
-    SwapIntentStatus.providerStatusUnknown ||
-    SwapIntentStatus.failed => false,
-    _ => true,
-  };
-}
-
-bool canRefreshSwapIntentStatus(SwapIntentStatus status) {
-  return status != SwapIntentStatus.complete;
-}
-
-bool _showsExternalDepositPage(SwapIntent intent) {
-  return intent.direction == SwapDirection.externalToZec &&
-      intent.status == SwapIntentStatus.awaitingExternalDeposit &&
-      _ActivityDepositInstruction.fromIntent(intent) != null;
-}
-
-bool _showsHardwareZecDepositPage(
-  SwapIntent intent, {
-  required bool intentIsHardware,
-}) {
-  return intentIsHardware &&
-      intent.direction == SwapDirection.zecToExternal &&
-      intent.status == SwapIntentStatus.awaitingDeposit &&
-      !(intent.depositTxHash?.trim().isNotEmpty ?? false) &&
-      _ActivityDepositInstruction.fromIntent(intent) != null;
-}
-
-bool _showsDepositPage(SwapIntent intent, {required bool intentIsHardware}) {
-  if (intent.status == SwapIntentStatus.expired) return true;
-  return _showsExternalDepositPage(intent) ||
-      _showsHardwareZecDepositPage(intent, intentIsHardware: intentIsHardware);
-}
-
 const _depositConfirmationPendingMessage =
     'Deposit confirmation not found yet.\nCheck again in a few minutes.';
 
@@ -2672,7 +1913,7 @@ class _ActiveSwapSummaryPanel extends StatelessWidget {
   });
 
   final SwapIntent intent;
-  final _ActivityStatusPlan plan;
+  final SwapActivityStatusPlan plan;
   final bool statusRefreshing;
 
   @override
@@ -2702,33 +1943,6 @@ class _ActivityDetailDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(height: 1, color: context.colors.border.subtle);
   }
-}
-
-SwapAsset? _activitySellAsset(SwapIntent intent) {
-  final direction = intent.direction;
-  final externalAsset = intent.externalAsset;
-  if (direction == null || externalAsset == null) {
-    return _activityAssetFromPair(intent.pair, 0);
-  }
-  return direction.fromAsset(externalAsset);
-}
-
-SwapAsset? _activityReceiveAsset(SwapIntent intent) {
-  final direction = intent.direction;
-  final externalAsset = intent.externalAsset;
-  if (direction == null || externalAsset == null) {
-    return _activityAssetFromPair(intent.pair, 1);
-  }
-  return direction.toAsset(externalAsset);
-}
-
-SwapAsset? _activityAssetFromPair(String pair, int index) {
-  final parts = pair.split('->');
-  if (index < 0 || index >= parts.length) return null;
-  final tokens = parts[index].trim().split(RegExp(r'\s+'));
-  final symbol = tokens.isEmpty ? '' : tokens.first;
-  if (symbol.isEmpty) return null;
-  return SwapAsset.byName(symbol.toLowerCase());
 }
 
 class _ActiveSwapTradeLine extends StatelessWidget {
@@ -2792,8 +2006,7 @@ _ExternalRecipientSummary? _externalRecipientSummary(SwapIntent intent) {
   final recipient = intent.oneClickRecipient?.trim();
   if (recipient == null || recipient.isEmpty) return null;
   final symbol =
-      intent.externalAsset?.symbol ??
-      _ActivityStatusPlan._pairSymbol(intent.pair, 1);
+      intent.externalAsset?.symbol ?? swapActivityPairSymbol(intent.pair, 1);
   return _ExternalRecipientSummary(
     label: '$symbol recipient',
     value: recipient,
@@ -2873,64 +2086,6 @@ class _ActiveTradeAmount extends StatelessWidget {
       ],
     );
   }
-}
-
-class _ActivityDepositInstruction {
-  const _ActivityDepositInstruction({
-    required this.sendLabel,
-    required this.depositSymbol,
-    required this.depositAddressLabel,
-    required this.address,
-    required this.railLabel,
-    required this.reuseWarning,
-    required this.txHashLabel,
-    required this.txHashHint,
-    required this.submitLabel,
-    required this.showQr,
-    this.memo,
-  });
-
-  static _ActivityDepositInstruction? fromIntent(SwapIntent intent) {
-    final direction = intent.direction;
-    final externalAsset = intent.externalAsset;
-    final depositAddress = intent.depositAddress;
-    if (direction == null || externalAsset == null || depositAddress == null) {
-      return null;
-    }
-
-    final depositSymbol = direction.fromSymbol(externalAsset);
-    final depositAddressLabel = direction.sendsZec
-        ? '$depositSymbol deposit'
-        : '$depositSymbol source deposit';
-
-    return _ActivityDepositInstruction(
-      sendLabel: direction.sendsZec
-          ? 'Send $depositSymbol'
-          : 'Send $depositSymbol from source chain',
-      depositSymbol: depositSymbol,
-      depositAddressLabel: depositAddressLabel,
-      address: depositAddress,
-      railLabel: externalAsset.railLabel,
-      reuseWarning: 'Do not reuse this address',
-      memo: intent.depositMemo,
-      txHashLabel: '$depositSymbol deposit tx hash',
-      txHashHint: '$depositSymbol source-chain transaction hash',
-      submitLabel: 'Submit $depositSymbol deposit',
-      showQr: !direction.sendsZec,
-    );
-  }
-
-  final String sendLabel;
-  final String depositSymbol;
-  final String depositAddressLabel;
-  final String address;
-  final String railLabel;
-  final String reuseWarning;
-  final String? memo;
-  final String txHashLabel;
-  final String txHashHint;
-  final String submitLabel;
-  final bool showQr;
 }
 
 class _ActivityHardwareActionPanel extends StatelessWidget {
@@ -3018,24 +2173,25 @@ class _ActivityDepositActionPanel extends StatelessWidget {
   });
 
   final SwapState state;
-  final _ActivityDepositInstruction instruction;
+  final SwapActivityDepositInstruction instruction;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
 
   @override
   Widget build(BuildContext context) {
+    final qr = instruction.qr;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (instruction.showQr) ...[
+        if (qr != null) ...[
           SwapDepositQrPanel(
             key: const ValueKey('swap_activity_deposit_qr_panel'),
             title: 'Send ${instruction.depositSymbol} to this deposit address',
             qrData: instruction.address,
             addressLabel: instruction.depositAddressLabel,
             address: instruction.address,
-            railLabel: instruction.railLabel,
-            reuseWarning: instruction.reuseWarning,
+            railLabel: qr.railLabel,
+            reuseWarning: qr.reuseWarning,
             memo: instruction.memo,
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -3056,7 +2212,7 @@ class _ActivityDepositActionPanel extends StatelessWidget {
 class _ActivityDepositInstructionPanel extends StatelessWidget {
   const _ActivityDepositInstructionPanel({required this.instruction});
 
-  final _ActivityDepositInstruction instruction;
+  final SwapActivityDepositInstruction instruction;
 
   @override
   Widget build(BuildContext context) {
@@ -3132,7 +2288,7 @@ class _DepositTxHashDisclosure extends StatefulWidget {
   });
 
   final SwapState state;
-  final _ActivityDepositInstruction instruction;
+  final SwapActivityDepositInstruction instruction;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
 

@@ -9,6 +9,7 @@ import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_profile_picture.dart';
 import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_contract.dart';
+import '../models/swap_detail_tooltips.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 import 'swap_copy_feedback.dart';
@@ -24,9 +25,6 @@ const _swapStatusSummaryMaxAmountChars = 10;
 const _swapStatusProgressHeight = 580.0;
 const _swapStatusSummaryCardHeight = 120.0;
 const _swapStatusBadgeOverlap = 1.0;
-const _swapStatusSwapFeeTooltip = 'Swap fee details coming soon.';
-const _swapStatusMinimumReceiveTooltip = 'Minimum receive details coming soon.';
-const _swapStatusTotalFeesTooltip = 'Total fee details coming soon.';
 const _swapStatusDetailIconSize = 14.0;
 
 class SwapStatusStepData {
@@ -1302,10 +1300,10 @@ class _StatusDetailActionIcon extends StatelessWidget {
 
 String _swapStatusHelpTooltip(String label) {
   return switch (label) {
-    'Swap fee' => _swapStatusSwapFeeTooltip,
-    'Guaranteed minimum' => _swapStatusMinimumReceiveTooltip,
-    'Total fees' => _swapStatusTotalFeesTooltip,
-    _ => 'Swap detail explanation coming soon.',
+    'Swap fee' => swapFeeTooltip,
+    'Guaranteed minimum' => swapGenericMinimumReceiveTooltip,
+    'Total fees' => swapTotalFeesTooltip,
+    _ => swapStatusDetailTooltip,
   };
 }
 

@@ -8,15 +8,10 @@ import '../../../core/widgets/app_profile_picture.dart';
 import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_address_plan.dart';
 import '../domain/swap_contract.dart';
+import '../models/swap_detail_tooltips.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 
-String _swapReviewMinimumReceiveTooltip(String receiveSymbol) =>
-    "The lowest amount of $receiveSymbol you'll get after slippage. "
-    'You may get more, never less.';
-const _swapReviewSwapFeeTooltip =
-    'Fee for us and the route providers to process this swap. '
-    'Already included in the rate shown above.';
 const _swapReviewDetailIconSize = 14.0;
 
 class SwapReviewPageContent extends StatelessWidget {
@@ -451,9 +446,7 @@ class _ReviewDetailsList extends StatelessWidget {
     final accountRow = _ReviewDetailRow(
       label: sendsZec ? 'From' : 'To',
       value: accountLabel ?? 'Current account',
-      leadingValue: _AccountAvatar(
-        profilePictureId: accountProfilePictureId,
-      ),
+      leadingValue: _AccountAvatar(profilePictureId: accountProfilePictureId),
     );
     final addressRow = _ReviewDetailRow(
       label: sendsZec ? 'To' : 'From',
@@ -480,7 +473,7 @@ class _ReviewDetailsList extends StatelessWidget {
               label: 'Guaranteed minimum',
               value: compactSwapAmountText(quote.minimumReceiveText),
               trailingIcon: AppIcons.help,
-              tooltipMessage: _swapReviewMinimumReceiveTooltip(
+              tooltipMessage: swapMinimumReceiveTooltip(
                 quote.receiveAsset.symbol,
               ),
             ),
@@ -489,7 +482,7 @@ class _ReviewDetailsList extends StatelessWidget {
               label: 'Swap fee',
               value: quote.feeLabel,
               trailingIcon: AppIcons.help,
-              tooltipMessage: _swapReviewSwapFeeTooltip,
+              tooltipMessage: swapFeeTooltip,
             ),
           ],
         ),
