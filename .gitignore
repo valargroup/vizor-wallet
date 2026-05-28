@@ -29,6 +29,10 @@ migrate_working_dir/
 # Claude Code
 .claude/
 
+# UI copy QA review artifacts — local-only, never push to remote.
+qa-copy-review.csv
+copy-review-*.csv
+
 # Rust
 rust/target/
 rust/build/

@@ -196,7 +196,7 @@ void main() {
     expect(find.text('Deposit tokens'), findsNothing);
     expect(find.text('Time’s up'), findsOneWidget);
     expect(find.text('Swap failed'), findsOneWidget);
-    expect(find.text('Restart Swap'), findsOneWidget);
+    expect(find.text('Restart swap'), findsOneWidget);
     expect(
       tester
           .widget<AppButton>(
@@ -271,7 +271,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Time’s up'), findsOneWidget);
-      expect(find.text('Restart Swap'), findsOneWidget);
+      expect(find.text('Restart swap'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('swap_near_intents_attribution')),
         findsOneWidget,
@@ -521,7 +521,7 @@ void main() {
           details: const [
             SwapStatusDetailRowData(label: 'Account', value: 'John'),
             SwapStatusDetailRowData(
-              label: 'USDC Deposit to',
+              label: 'USDC deposit to',
               value: '0x123kjhc ... 4x98g20',
               copyable: true,
             ),
@@ -531,7 +531,7 @@ void main() {
               help: true,
             ),
             SwapStatusDetailRowData(
-              label: 'Realised slippage',
+              label: 'Realized slippage',
               value: '0.25 USDC (0.27%)',
             ),
             SwapStatusDetailRowData(
@@ -578,7 +578,7 @@ void main() {
           details: const [
             SwapStatusDetailRowData(label: 'Account', value: 'John'),
             SwapStatusDetailRowData(
-              label: 'USDC Refunded to',
+              label: 'USDC refunded to',
               value: '0x123kjhc ... 4x98g20',
             ),
             SwapStatusDetailRowData(
@@ -752,8 +752,8 @@ void main() {
       find.byKey(const ValueKey('swap_transaction_details_collapsed')),
       findsOneWidget,
     );
-    expect(find.text('Transaction Details'), findsOneWidget);
-    expect(find.text('More Details'), findsOneWidget);
+    expect(find.text('Transaction details'), findsOneWidget);
+    expect(find.text('More details'), findsOneWidget);
     expect(find.text('Slippage tolerance'), findsNothing);
     expect(
       find.ancestor(
@@ -768,7 +768,7 @@ void main() {
     );
     expect(
       find.ancestor(
-        of: find.text('Transaction Details'),
+        of: find.text('Transaction details'),
         matching: find.byWidgetPredicate(
           (widget) =>
               widget is MouseRegion &&
@@ -779,7 +779,7 @@ void main() {
     );
     expect(
       find.ancestor(
-        of: find.text('More Details'),
+        of: find.text('More details'),
         matching: find.byWidgetPredicate(
           (widget) =>
               widget is MouseRegion &&
@@ -791,7 +791,7 @@ void main() {
 
     final accountLabelRect = tester.getRect(find.text('Account'));
     final accountValueRect = tester.getRect(find.text('John'));
-    final refundLabelRect = tester.getRect(find.text('USDC Refund address'));
+    final refundLabelRect = tester.getRect(find.text('USDC refund address'));
     final depositLabelRect = tester.getRect(find.text('Deposit USDC to'));
     final refundValueRect = tester.getRect(
       find.text('0x123kjhc ... 4x98g20').first,
@@ -821,7 +821,7 @@ void main() {
     expect(feeValueRect.right, lessThan(feeHelpIconRect.left));
     expect((refundValueRect.right - feeHelpIconRect.right).abs(), lessThan(1));
 
-    await tester.tap(find.text('More Details'));
+    await tester.tap(find.text('More details'));
     await tester.pump();
     await tester.pump();
 
@@ -845,7 +845,7 @@ void main() {
       find.byKey(const ValueKey('swap_transaction_details_scroll_view')),
       findsOneWidget,
     );
-    expect(find.text('Less Details'), findsOneWidget);
+    expect(find.text('Less details'), findsOneWidget);
     expect(find.text('Slippage tolerance'), findsOneWidget);
     expect(find.text('Price protection'), findsNothing);
     expect(
@@ -858,7 +858,7 @@ void main() {
     );
     expect(
       find.ancestor(
-        of: find.text('Less Details'),
+        of: find.text('Less details'),
         matching: find.byWidgetPredicate(
           (widget) =>
               widget is MouseRegion &&
@@ -989,7 +989,7 @@ void main() {
     );
     expect(find.text('Settlement path'), findsNothing);
     expect(find.text('Enter a trade'), findsNothing);
-    expect(find.text('Add Recipient Address'), findsOneWidget);
+    expect(find.text('Add recipient address'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('swap_near_intents_attribution')),
       findsOneWidget,
@@ -1254,7 +1254,7 @@ void main() {
       ),
       const Size(272, 220),
     );
-    expect(find.text('Grant access to your Camera'), findsOneWidget);
+    expect(find.text('Grant access to your camera'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
       findsNothing,
@@ -1267,7 +1267,7 @@ void main() {
     await pumpStatus(SwapAddressQrCameraStatus.denied, onRetry: () {});
 
     expect(find.text("You've denied Camera access"), findsOneWidget);
-    expect(find.text('Request again'), findsOneWidget);
+    expect(find.text('Allow camera'), findsOneWidget);
     expect(
       tester
           .getSize(find.byKey(const ValueKey('swap_address_scan_retry_button')))
@@ -1930,7 +1930,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(swapProvider.requests, isEmpty);
-      expect(find.text('Review Swap'), findsNothing);
+      expect(find.text('Review swap'), findsNothing);
     },
   );
 
@@ -2600,7 +2600,7 @@ void main() {
     expect(find.byKey(const ValueKey('swap_status_title')), findsOneWidget);
     expect(find.text('Swapping ...'), findsOneWidget);
     expect(find.text('Swap Progress'), findsOneWidget);
-    expect(find.text('Transaction Details'), findsOneWidget);
+    expect(find.text('Transaction details'), findsOneWidget);
     expect(find.text('Activity detail'), findsNothing);
     expect(
       find.byKey(const ValueKey('swap_status_summary_card')),
@@ -3074,7 +3074,7 @@ void main() {
     expect(clipboardWrites.single, isNot(contains('Swap id:')));
     expect(clipboardWrites.single, isNot(contains('Shared fields:')));
     expect(clipboardWrites.single, contains('Pair:'));
-    expect(find.text('Receipt Copied'), findsOneWidget);
+    expect(find.text('Receipt copied'), findsOneWidget);
   });
 
   testWidgets('activity queue groups swaps and selection updates detail', (
@@ -3485,7 +3485,7 @@ void main() {
     expect(attributionRect.left, closeTo(paneRect.left + AppSpacing.md, 1));
     expect(paneRect.bottom - attributionRect.bottom, closeTo(AppSpacing.md, 1));
 
-    await tester.tap(find.text('Transaction Details'));
+    await tester.tap(find.text('Transaction details'));
     await tester.pumpAndSettle();
 
     expect(
@@ -3498,7 +3498,7 @@ void main() {
     expect(find.text('Current account'), findsNothing);
     expect(tester.getRect(explorerButton).top, closeTo(progressButtonTop, 1));
 
-    await tester.tap(find.text('More Details'));
+    await tester.tap(find.text('More details'));
     await tester.pumpAndSettle();
 
     expect(tester.getRect(explorerButton).top, closeTo(progressButtonTop, 1));
@@ -3802,18 +3802,18 @@ void main() {
 
     expect(find.text('Swap completed'), findsOneWidget);
     expect(find.byKey(const ValueKey('swap_final_details')), findsOneWidget);
-    expect(find.text('ZEC Deposit to'), findsOneWidget);
+    expect(find.text('ZEC deposit to'), findsOneWidget);
     expect(find.text('Total fees'), findsOneWidget);
     expect(find.text('0.0000134 ZEC'), findsOneWidget);
-    expect(find.text('Realised slippage'), findsOneWidget);
+    expect(find.text('Realized slippage'), findsOneWidget);
     expect(find.text('0.000758 USDC (0.07%)'), findsOneWidget);
     expect(find.text('Timestamp'), findsOneWidget);
-    expect(find.text('ZEC Deposit tx'), findsNothing);
+    expect(find.text('ZEC deposit tx'), findsNothing);
     expect(find.text('completed-deposit-txid'), findsNothing);
-    expect(find.text('USDC Delivery tx'), findsNothing);
+    expect(find.text('USDC delivery tx'), findsNothing);
     expect(find.text('usdc-delivery-txid'), findsNothing);
     expect(find.text('Slippage tolerance'), findsNothing);
-    expect(find.text('Minimum Receive'), findsNothing);
+    expect(find.text('Guaranteed minimum'), findsNothing);
   });
 
   testWidgets('failed swap detail keeps final status details compact', (
@@ -3853,18 +3853,18 @@ void main() {
 
     expect(find.text('Swap failed'), findsWidgets);
     expect(find.byKey(const ValueKey('swap_final_details')), findsOneWidget);
-    expect(find.text('USDC Refunded to'), findsOneWidget);
+    expect(find.text('USDC refunded to'), findsOneWidget);
     expect(find.text('Total fees'), findsOneWidget);
     expect(find.text('0.19 USDC'), findsOneWidget);
     expect(find.text('Timestamp'), findsOneWidget);
-    expect(find.text('USDC Deposit to'), findsNothing);
-    expect(find.text('USDC Deposit tx'), findsNothing);
+    expect(find.text('USDC deposit to'), findsNothing);
+    expect(find.text('USDC deposit tx'), findsNothing);
     expect(find.text('failed-deposit-txid'), findsNothing);
-    expect(find.text('ZEC Delivery tx'), findsNothing);
+    expect(find.text('ZEC delivery tx'), findsNothing);
     expect(find.text('failed-delivery-txid'), findsNothing);
-    expect(find.text('Realised slippage'), findsNothing);
+    expect(find.text('Realized slippage'), findsNothing);
     expect(find.text('Slippage tolerance'), findsNothing);
-    expect(find.text('Minimum Receive'), findsNothing);
+    expect(find.text('Guaranteed minimum'), findsNothing);
   });
 
   testWidgets('open swap sessions poll status after the configured interval', (
@@ -4270,11 +4270,17 @@ void main() {
     expect(find.text('0.00001 ZEC (0.5%)'), findsOneWidget);
     expect(find.text('Price protection'), findsNothing);
     expect(
-      _tooltipWithMessage('Swap fee details coming soon.'),
+      _tooltipWithMessage(
+        'Fee for us and the route providers to process this swap. '
+        'Already included in the rate shown above.',
+      ),
       findsOneWidget,
     );
     expect(
-      _tooltipWithMessage('Minimum receive details coming soon.'),
+      _tooltipWithMessage(
+        "The lowest amount of USDC you'll get after slippage. "
+        'You may get more, never less.',
+      ),
       findsOneWidget,
     );
     expect(swapProvider.requests.single.slippageBps, 50);
@@ -4392,7 +4398,7 @@ void main() {
       find.byKey(const ValueKey('swap_review_deposit_qr_panel')),
       findsNothing,
     );
-    expect(find.text('Review Swap'), findsOneWidget);
+    expect(find.text('Review swap'), findsOneWidget);
     final reviewSummary = find.byKey(
       const ValueKey('swap_review_trade_summary'),
     );
@@ -4420,9 +4426,9 @@ void main() {
     );
     expect(find.text('1.5000 ZEC'), findsWidgets);
     expect(find.text('Slippage tolerance'), findsOneWidget);
-    expect(find.text('Minimum Receive'), findsOneWidget);
+    expect(find.text('Guaranteed minimum'), findsOneWidget);
     expect(find.text('Swap fee'), findsOneWidget);
-    expect(find.text('Review & Swap'), findsOneWidget);
+    expect(find.text('Review & swap'), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(const ValueKey('swap_start_button')));
     await tester.pumpAndSettle();
@@ -4479,9 +4485,22 @@ void main() {
       expect(request.refundAddress, 'u1actualshieldedrecipient');
 
       expect(find.byKey(const ValueKey('swap_review_panel')), findsOneWidget);
-      expect(find.text('Review Swap'), findsOneWidget);
-      expect(find.text('USDC Recipient address'), findsOneWidget);
-      expect(find.text('Minimum Receive'), findsOneWidget);
+      expect(find.text('Review swap'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('swap_review_details')),
+          matching: find.text('To'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('swap_review_details')),
+          matching: find.text('From'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Guaranteed minimum'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('swap_review_details_toggle')),
         findsNothing,
@@ -4685,9 +4704,9 @@ void main() {
       expect(liveRequest.amountText, '105.27');
       expect(liveRequest.destination, '0xrecipient');
       expect(liveRequest.refundAddress, 'u1actualshieldedrecipient');
-      expect(find.text('Review Swap'), findsOneWidget);
+      expect(find.text('Review swap'), findsOneWidget);
       expect(find.text('Slippage tolerance'), findsOneWidget);
-      expect(find.text('Minimum Receive'), findsOneWidget);
+      expect(find.text('Guaranteed minimum'), findsOneWidget);
     },
   );
 
@@ -4815,7 +4834,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('swap_review_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review Swap'), findsOneWidget);
+    expect(find.text('Review swap'), findsOneWidget);
 
     await tester.ensureVisible(
       find.byKey(const ValueKey('swap_review_cancel_button')),
@@ -4824,7 +4843,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('swap_review_cancel_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review Swap'), findsNothing);
+    expect(find.text('Review swap'), findsNothing);
     expect(_fieldText(tester, 'swap_amount_field'), '1.5');
     expect(_destinationSummaryText(tester), '0xrecipient');
   });
@@ -4952,7 +4971,7 @@ void main() {
       find.text('Quote expired. Review again for a fresh route.'),
       findsNothing,
     );
-    expect(find.text('Review & Swap'), findsOneWidget);
+    expect(find.text('Review & swap'), findsOneWidget);
   });
 
   testWidgets('quote failure shows an inline error and preserves the draft', (
@@ -4981,7 +5000,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('swap_review_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review Swap'), findsNothing);
+    expect(find.text('Review swap'), findsNothing);
     expect(
       find.byKey(const ValueKey('swap_quote_error_banner')),
       findsOneWidget,
@@ -5088,7 +5107,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('swap_review_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review Swap'), findsOneWidget);
+    expect(find.text('Review swap'), findsOneWidget);
     expect(find.text('Slippage tolerance'), findsOneWidget);
     expect(find.text('Swap fee'), findsOneWidget);
     expect(
@@ -5116,7 +5135,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('swap_compact_ticket')), findsOneWidget);
-    expect(find.text('Review Swap'), findsNothing);
+    expect(find.text('Review swap'), findsNothing);
     expect(_fieldText(tester, 'swap_amount_field'), isEmpty);
     expect(_destinationSummaryText(tester), isEmpty);
   });
@@ -5152,7 +5171,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(swapProvider.requests, isEmpty);
-    expect(find.text('Review Swap'), findsNothing);
+    expect(find.text('Review swap'), findsNothing);
     expect(
       find.textContaining('Could not prepare a fresh wallet receive address.'),
       findsOneWidget,
@@ -5197,11 +5216,9 @@ void main() {
       'u1actualshieldedrecipient',
     );
     expect(swapProvider.requests.single.refundAddress, '0xexternal-refund');
-    expect(find.text('Review Swap'), findsOneWidget);
+    expect(find.text('Review swap'), findsOneWidget);
     expect(
-      find.textContaining(
-        'ZEC arrives directly at this wallet shielded address',
-      ),
+      find.textContaining('ZEC arrives at your shielded address'),
       findsNothing,
     );
   });
@@ -5491,9 +5508,9 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('swap_review_button')));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Review & Swap'));
+      await tester.ensureVisible(find.text('Review & swap'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Review & Swap'));
+      await tester.tap(find.text('Review & swap'));
       await tester.pumpAndSettle();
 
       expect(find.text('Deposit tokens'), findsOneWidget);
@@ -5560,7 +5577,7 @@ void main() {
       await tester.tap(copyDepositAddress);
       await tester.pumpAndSettle();
       expect(clipboardWrites.last, '0xlive-deposit');
-      expect(find.text('Address Copied'), findsOneWidget);
+      expect(find.text('Address copied'), findsOneWidget);
       expect(find.text('Receive address'), findsNothing);
       expect(
         find.byKey(const ValueKey('swap_copy_receive_address')),
@@ -5676,7 +5693,7 @@ void main() {
       'u1actualshieldedrecipient',
     );
     await _openSwapStatusDetails(tester, expand: true);
-    expect(find.text('USDC Recipient'), findsOneWidget);
+    expect(find.text('USDC recipient'), findsOneWidget);
     expect(find.text('0xrecipient'), findsOneWidget);
     expect(find.text('t1live-deposit'), findsWidgets);
     expect(find.text('ZEC deposit tx hash'), findsNothing);
@@ -6534,7 +6551,7 @@ Widget _statusTestPage({
         const [
           SwapStatusDetailRowData(label: 'Account', value: 'John'),
           SwapStatusDetailRowData(
-            label: 'USDC Refund address',
+            label: 'USDC refund address',
             value: '0x123kjhc ... 4x98g20',
           ),
           SwapStatusDetailRowData(
@@ -6551,7 +6568,7 @@ Widget _statusTestPage({
             value: '0.25 USDC (0.5%)',
           ),
           SwapStatusDetailRowData(
-            label: 'Minimum Receive',
+            label: 'Guaranteed minimum',
             value: '0.249 ZEC',
             help: true,
           ),
@@ -7693,7 +7710,7 @@ Future<void> _openSwapStatusDetails(
   await tester.pumpAndSettle();
   if (!expand) return;
 
-  final moreDetails = find.text('More Details');
+  final moreDetails = find.text('More details');
   if (moreDetails.evaluate().isEmpty) return;
   await tester.ensureVisible(moreDetails);
   await tester.pumpAndSettle();

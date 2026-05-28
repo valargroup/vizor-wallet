@@ -395,9 +395,9 @@ class _KeystoneQrScannerCardState extends State<KeystoneQrScannerCard>
                                           _CameraAccessStatus.requesting)
                                         const _CameraPermissionPrompt(
                                           icon: AppIcons.camera,
-                                          title: 'Enable the Camera access',
+                                          title: 'Enable camera access',
                                           description:
-                                              'A Camera is required to connect Keystone.\n'
+                                              'A camera is required to connect Keystone.\n'
                                               'You can revert this in settings anytime later.',
                                           iconStyle: _CameraPermissionIconStyle
                                               .inverse,
@@ -448,7 +448,7 @@ class _KeystoneQrScannerCardState extends State<KeystoneQrScannerCard>
                                             leading: const AppIcon(
                                               AppIcons.renew,
                                             ),
-                                            child: const Text('Request again'),
+                                            child: const Text('Allow camera'),
                                           ),
                                         ),
                                     ],

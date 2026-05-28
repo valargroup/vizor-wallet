@@ -16,7 +16,7 @@ void main() {
           children: [
             AppContextMenuItem(
               iconName: AppIcons.trash,
-              label: 'Remove Contact',
+              label: 'Remove contact',
               destructive: true,
               onTap: () {},
             ),
@@ -35,7 +35,7 @@ void main() {
       AppThemeData.light.colors.background.neutralScrim,
     ]);
 
-    final text = tester.widget<Text>(find.text('Remove Contact'));
+    final text = tester.widget<Text>(find.text('Remove contact'));
     expect(text.style?.color, AppThemeData.light.colors.text.destructive);
   });
 
@@ -49,7 +49,7 @@ void main() {
           children: [
             AppContextMenuItem(
               iconName: AppIcons.scroll,
-              label: 'Edit Contact',
+              label: 'Edit contact',
               onTap: () {},
             ),
           ],
@@ -59,7 +59,7 @@ void main() {
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
-    await gesture.moveTo(tester.getCenter(find.text('Edit Contact')));
+    await gesture.moveTo(tester.getCenter(find.text('Edit contact')));
     await tester.pumpAndSettle();
 
     final decoration = _itemDecoration(tester);
@@ -88,7 +88,7 @@ void main() {
                       children: [
                         AppContextMenuItem(
                           iconName: AppIcons.scroll,
-                          label: 'Edit Contact',
+                          label: 'Edit contact',
                           onTap: () {},
                         ),
                       ],
@@ -116,14 +116,14 @@ void main() {
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
-    await gesture.moveTo(tester.getCenter(find.text('Edit Contact')));
+    await gesture.moveTo(tester.getCenter(find.text('Edit contact')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Hide menu'));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Edit Contact'), findsNothing);
+    expect(find.text('Edit contact'), findsNothing);
 
     await gesture.removePointer();
   });

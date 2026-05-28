@@ -253,13 +253,13 @@ class _DepositValueBlock extends StatelessWidget {
 
 String _copyToastMessage(String label) {
   final normalized = label.trim();
-  if (normalized.isEmpty) return 'Copied to Clipboard';
+  if (normalized.isEmpty) return 'Copied to clipboard';
   final lower = normalized.toLowerCase();
-  if (lower == 'memo') return 'Memo Copied';
+  if (lower == 'memo') return 'Memo copied';
   if (lower.contains('address') || lower.contains('deposit')) {
-    return 'Address Copied';
+    return 'Address copied';
   }
-  return 'Copied to Clipboard';
+  return 'Copied to clipboard';
 }
 
 class _DepositInfoPill extends StatelessWidget {

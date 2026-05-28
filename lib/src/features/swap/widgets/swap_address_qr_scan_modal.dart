@@ -494,7 +494,7 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
             if (status == SwapAddressQrCameraStatus.requesting)
               const _SwapAddressQrCameraMessage(
                 iconName: AppIcons.camera,
-                title: 'Grant access to your Camera',
+                title: 'Grant access to your camera',
                 description:
                     'Request again, or enable manually\nin the System settings.',
               ),
@@ -510,7 +510,7 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
                   size: AppButtonSize.medium,
                   minWidth: 96,
                   leading: const AppIcon(AppIcons.renew),
-                  child: const Text('Request again'),
+                  child: const Text('Allow camera'),
                 ),
               ),
             if (status == SwapAddressQrCameraStatus.unavailable)

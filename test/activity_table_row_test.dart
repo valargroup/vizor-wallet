@@ -166,14 +166,14 @@ void main() {
       ),
     );
 
-    expect(rows[0].title, 'Sent failed');
+    expect(rows[0].title, 'Send failed');
     expect(rows[0].amountText, '1.11 $ticker');
     expect(rows[0].amountIconName, AppIcons.arrowBack);
     expect(rows[0].amountSubtitle, 'Refunded');
     expect(rows[0].statusText, 'Failed');
     expect(rows[0].statusIconName, AppIcons.skull);
     expect(rows[0].backgroundColor, isNotNull);
-    expect(find.text('Sent failed'), findsOneWidget);
+    expect(find.text('Send failed'), findsOneWidget);
     expect(find.text('Refunded'), findsOneWidget);
   });
 

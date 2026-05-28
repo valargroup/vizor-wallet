@@ -1595,7 +1595,7 @@ const _statusScenarios = [
     oneClickStatus: 'REFUNDED',
     direction: SwapDirection.zecToExternal,
     expectedStatus: SwapIntentStatus.refunded,
-    expectedNextAction: 'Refund sent to the refund address',
+    expectedNextAction: 'Refund sent to your refund address',
     expectedPairText: 'ZEC -> USDC',
   ),
   _StatusScenario(

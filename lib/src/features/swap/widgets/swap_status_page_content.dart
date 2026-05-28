@@ -740,7 +740,7 @@ class _StatusTabs extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
             _StatusTabLabel(
               minWidth: _detailsTabMinWidth,
-              label: 'Transaction Details',
+              label: 'Transaction details',
               active: activeTab == SwapStatusTab.details,
               onTap: () => onChanged?.call(SwapStatusTab.details),
             ),
@@ -771,7 +771,7 @@ class _StatusTabLabel extends StatelessWidget {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         key: ValueKey(
-          label == 'Transaction Details'
+          label == 'Transaction details'
               ? 'swap_status_tab_details'
               : 'swap_status_tab_progress',
         ),
@@ -1047,7 +1047,7 @@ class _SwapTransactionDetailsState extends State<_SwapTransactionDetails> {
               const SizedBox(height: AppSpacing.sm),
               _InsetDetailRow(
                 row: const SwapStatusDetailRowData(
-                  label: 'Less Details',
+                  label: 'Less details',
                   value: '',
                 ),
                 chevronUp: true,
@@ -1066,7 +1066,7 @@ class _SwapTransactionDetailsState extends State<_SwapTransactionDetails> {
                 const SizedBox(height: AppSpacing.sm),
                 _InsetDetailRow(
                   row: const SwapStatusDetailRowData(
-                    label: 'More Details',
+                    label: 'More details',
                     value: '',
                   ),
                   onTap: widget.onToggleExpanded,
@@ -1303,7 +1303,7 @@ class _StatusDetailActionIcon extends StatelessWidget {
 String _swapStatusHelpTooltip(String label) {
   return switch (label) {
     'Swap fee' => _swapStatusSwapFeeTooltip,
-    'Minimum Receive' => _swapStatusMinimumReceiveTooltip,
+    'Guaranteed minimum' => _swapStatusMinimumReceiveTooltip,
     'Total fees' => _swapStatusTotalFeesTooltip,
     _ => 'Swap detail explanation coming soon.',
   };

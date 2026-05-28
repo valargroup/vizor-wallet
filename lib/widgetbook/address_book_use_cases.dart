@@ -94,7 +94,7 @@ Widget buildAddressBookContactPickerModalUseCase(BuildContext context) {
     ],
     child: Center(
       child: AddressBookContactPickerModal(
-        title: 'USDC Recipients',
+        title: 'USDC recipients',
         networks: const [AddressBookNetwork.ethereum],
         emptyTitle: 'No saved USDC recipients',
         onSelected: (_) {},
@@ -736,7 +736,7 @@ class _ContactContextMenu extends StatelessWidget {
       children: [
         AppContextMenuItem(
           iconName: AppIcons.scroll,
-          label: 'Edit Contact',
+          label: 'Edit contact',
           onTap: onAction,
         ),
         if (_canSend) ...[
@@ -756,7 +756,7 @@ class _ContactContextMenu extends StatelessWidget {
         const AppContextMenuDivider(),
         AppContextMenuItem(
           iconName: AppIcons.trash,
-          label: 'Remove Contact',
+          label: 'Remove contact',
           destructive: true,
           onTap: onAction,
         ),
@@ -775,7 +775,7 @@ class _AddressBookAddButton extends StatelessWidget {
       variant: AppButtonVariant.secondary,
       minWidth: 256,
       leading: const AppIcon(AppIcons.users),
-      child: const Text('Add Contact'),
+      child: const Text('Add contact'),
     );
   }
 }
@@ -875,7 +875,7 @@ class _ContactFormModal extends StatelessWidget {
           SizedBox(
             height: _isEdit ? 66 : 86,
             child: AppTextField(
-              label: 'Address Label',
+              label: 'Address label',
               showLabel: !_isEdit,
               initialValue: _isEdit ? 'Mike' : null,
               hintText: 'Add label 1-20 characters',
@@ -904,7 +904,7 @@ class _ContactFormModal extends StatelessWidget {
             onPressed: _isEdit ? () {} : null,
             variant: AppButtonVariant.primary,
             minWidth: 280,
-            child: Text(_isEdit ? 'Save Edits' : 'Add Contact'),
+            child: Text(_isEdit ? 'Save changes' : 'Add contact'),
           ),
           const SizedBox(height: AppSpacing.s),
           AppButton(
@@ -1336,7 +1336,7 @@ class _RemoveContactModal extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Remove Contact',
+            'Remove contact',
             overflow: TextOverflow.ellipsis,
             style: AppTypography.bodyLarge.copyWith(
               color: context.colors.text.accent,
@@ -1349,7 +1349,7 @@ class _RemoveContactModal extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Mike will be removed from Address Book.',
+            'Mike will be removed from your address book.',
             textAlign: TextAlign.center,
             style: AppTypography.bodyMedium.copyWith(
               color: context.colors.text.secondary,
@@ -1360,7 +1360,7 @@ class _RemoveContactModal extends StatelessWidget {
             onPressed: () {},
             variant: AppButtonVariant.destructive,
             minWidth: 280,
-            child: const Text('Remove Contact'),
+            child: const Text('Remove contact'),
           ),
           const SizedBox(height: AppSpacing.s),
           AppButton(
@@ -1496,7 +1496,7 @@ class _AddressBookSidebar extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   const AppSidebarItem(
-                    label: 'Address Book',
+                    label: 'Address book',
                     iconName: AppIcons.users,
                     active: true,
                   ),

@@ -295,7 +295,7 @@ SwapIntentRecord _swapRecord({
 ActivityRowData _failedSentRow(BuildContext context) {
   final colors = context.colors;
   return ActivityRowData(
-    title: 'Sent failed',
+    title: 'Send failed',
     leadingIconName: AppIcons.plane,
     leadingBackgroundColor: colors.background.neutralSubtleOpacity,
     leadingIconColor: colors.icon.regular,
@@ -371,7 +371,7 @@ class _PreviewActivitySidebar extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
-                    label: 'Address Book',
+                    label: 'Address book',
                     iconName: AppIcons.users,
                     onTap: () {},
                   ),

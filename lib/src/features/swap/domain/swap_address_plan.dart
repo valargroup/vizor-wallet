@@ -62,7 +62,7 @@ class SwapAddressPlan {
 
   String get deliverySummary {
     if (zecDeliveryIsDirectShielded) {
-      return 'ZEC arrives directly at the shielded wallet address';
+      return 'ZEC arrives at your shielded address';
     }
     return '${externalAsset.symbol} is delivered to the external destination';
   }

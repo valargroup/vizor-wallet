@@ -238,7 +238,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     final address = _selectedAddress;
     if (address.isEmpty) return;
     Clipboard.setData(ClipboardData(text: address));
-    showAppToast(context, 'Address Copied');
+    showAppToast(context, 'Address copied');
   }
 
   void _selectAddressType(_ReceiveAddressType type) {

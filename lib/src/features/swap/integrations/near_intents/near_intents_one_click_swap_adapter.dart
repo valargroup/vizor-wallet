@@ -1403,7 +1403,7 @@ String _nextAction(SwapIntentStatus status, SwapQuote quote) {
       'Provider returned a status this wallet does not recognize',
     SwapIntentStatus.incompleteDeposit => 'Deposit is below the quoted amount',
     SwapIntentStatus.complete => 'Swap complete',
-    SwapIntentStatus.refunded => 'Refund sent to the refund address',
+    SwapIntentStatus.refunded => 'Refund sent to your refund address',
     SwapIntentStatus.expired => 'Start a fresh quote',
     SwapIntentStatus.failed => 'Swap failed',
   };

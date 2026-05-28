@@ -23,7 +23,7 @@ Widget buildSwapPageFigmaNode1UseCase(BuildContext context) {
   return _SwapPageFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode1State,
-      actionLabel: 'Add Refund Address',
+      actionLabel: 'Add refund address',
     ),
   );
 }
@@ -32,7 +32,7 @@ Widget buildSwapPageFigmaNode2UseCase(BuildContext context) {
   return _SwapPageFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode2State,
-      actionLabel: 'Add Refund Address',
+      actionLabel: 'Add refund address',
     ),
   );
 }
@@ -41,7 +41,7 @@ Widget buildSwapPageFigmaNode3UseCase(BuildContext context) {
   return _SwapPageFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode3State,
-      actionLabel: 'Add Refund Address',
+      actionLabel: 'Add refund address',
     ),
   );
 }
@@ -50,7 +50,7 @@ Widget buildSwapPageFigmaNode5UseCase(BuildContext context) {
   return _SwapPageFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode5State,
-      actionLabel: 'Add Recipient Address',
+      actionLabel: 'Add recipient address',
       zecAvailableText: '128 ZEC',
       zecAvailableZatoshi: BigInt.from(12800000000),
       maxAmountText: '128',
@@ -62,7 +62,7 @@ Widget buildSwapPageFigmaNode6UseCase(BuildContext context) {
   return _SwapPageFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode6State,
-      actionLabel: 'Add Refund Address',
+      actionLabel: 'Add refund address',
     ),
   );
 }
@@ -387,7 +387,7 @@ Widget buildSwapWidgetFigmaNode1UseCase(BuildContext context) {
   return _SwapWidgetFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode1State,
-      actionLabel: 'Add Refund Address',
+      actionLabel: 'Add refund address',
     ),
   );
 }
@@ -396,7 +396,7 @@ Widget buildSwapWidgetFigmaNode2UseCase(BuildContext context) {
   return _SwapWidgetFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode2State,
-      actionLabel: 'Add Refund Address',
+      actionLabel: 'Add refund address',
     ),
   );
 }
@@ -405,7 +405,7 @@ Widget buildSwapWidgetFigmaNode3UseCase(BuildContext context) {
   return _SwapWidgetFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode3State,
-      actionLabel: 'Add Refund Address',
+      actionLabel: 'Add refund address',
     ),
   );
 }
@@ -414,7 +414,7 @@ Widget buildSwapWidgetFigmaNode5UseCase(BuildContext context) {
   return _SwapWidgetFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode5State,
-      actionLabel: 'Add Recipient Address',
+      actionLabel: 'Add recipient address',
       zecAvailableText: '128 ZEC',
       zecAvailableZatoshi: BigInt.from(12800000000),
       maxAmountText: '128',
@@ -426,7 +426,7 @@ Widget buildSwapWidgetFigmaNode6UseCase(BuildContext context) {
   return _SwapWidgetFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode6State,
-      actionLabel: 'Add Refund Address',
+      actionLabel: 'Add refund address',
     ),
   );
 }
@@ -586,7 +586,7 @@ const _designTransactionDetails = <SwapStatusDetailRowData>[
     accountProfilePictureId: _designAccountProfilePictureId,
   ),
   SwapStatusDetailRowData(
-    label: 'USDC Refund address',
+    label: 'USDC refund address',
     value: '0x123kjhc ... 4x98g20',
   ),
   SwapStatusDetailRowData(
@@ -604,7 +604,7 @@ const _designTransactionDetails = <SwapStatusDetailRowData>[
     value: '0.25 USDC (0.5%)',
   ),
   SwapStatusDetailRowData(
-    label: 'Minimum Receive',
+    label: 'Guaranteed minimum',
     value: '0.249 ZEC',
     help: true,
   ),
@@ -617,13 +617,13 @@ const _designCompletedDetails = <SwapStatusDetailRowData>[
     accountProfilePictureId: _designAccountProfilePictureId,
   ),
   SwapStatusDetailRowData(
-    label: 'USDC Deposit to',
+    label: 'USDC deposit to',
     value: '0x123kjhc ... 4x98g20',
     copyable: true,
   ),
   SwapStatusDetailRowData(label: 'Total fees', value: '~0.25 USDC', help: true),
   SwapStatusDetailRowData(
-    label: 'Realised slippage',
+    label: 'Realized slippage',
     value: '0.25 USDC (0.27%)',
   ),
   SwapStatusDetailRowData(label: 'Timestamp', value: 'May 20, 2026 13:20'),
@@ -636,7 +636,7 @@ const _designFailedDetails = <SwapStatusDetailRowData>[
     accountProfilePictureId: _designAccountProfilePictureId,
   ),
   SwapStatusDetailRowData(
-    label: 'USDC Refunded to',
+    label: 'USDC refunded to',
     value: '0x123kjhc ... 4x98g20',
   ),
   SwapStatusDetailRowData(label: 'Total fees', value: '~0.25 USDC', help: true),
@@ -1153,7 +1153,7 @@ class _SwapPageModalFrame extends StatelessWidget {
                                   const SizedBox(height: AppSpacing.md),
                                   _SwapComposerPreview(
                                     initialState: _figmaNode3State,
-                                    actionLabel: 'Add Refund Address',
+                                    actionLabel: 'Add refund address',
                                     showActionButton: false,
                                   ),
                                 ],

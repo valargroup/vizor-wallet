@@ -52,7 +52,7 @@ void main() {
     expect(plan.zecDeliveryIsDirectShielded, isTrue);
     expect(
       plan.deliverySummary,
-      'ZEC arrives directly at the shielded wallet address',
+      'ZEC arrives at your shielded address',
     );
     expect(plan.reviewDeliveryValue, 'shielded wallet address');
     expect(

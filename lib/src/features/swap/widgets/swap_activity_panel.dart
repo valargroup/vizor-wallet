@@ -232,7 +232,7 @@ class _SwapActivityDetailSurfaceState
     );
     showAppToast(
       _toastContext(context),
-      result.isCertain ? 'ZEC Deposit Sent' : 'ZEC Deposit Checking',
+      result.isCertain ? 'ZEC deposit sent' : 'Checking ZEC deposit',
     );
   }
 
@@ -925,12 +925,12 @@ List<SwapStatusDetailRowData> _swapStatusDetails(
       _accountDetailRow(accountInfo),
       if (failed && refundAddress != null && refundAddress.isNotEmpty)
         SwapStatusDetailRowData(
-          label: '$sourceSymbol Refunded to',
+          label: '$sourceSymbol refunded to',
           value: _compactSwapAddress(refundAddress),
         )
       else if (!failed && depositAddress != null && depositAddress.isNotEmpty)
         SwapStatusDetailRowData(
-          label: '$sourceSymbol Deposit to',
+          label: '$sourceSymbol deposit to',
           value: _compactSwapAddress(depositAddress),
           copyable: true,
           copyText: depositAddress,
@@ -946,7 +946,7 @@ List<SwapStatusDetailRowData> _swapStatusDetails(
       ),
       if (!failed)
         SwapStatusDetailRowData(
-          label: 'Realised slippage',
+          label: 'Realized slippage',
           value: intent.realisedSlippageText ?? 'Not reported',
         ),
       if (timestamp != null)
@@ -958,14 +958,14 @@ List<SwapStatusDetailRowData> _swapStatusDetails(
     _accountDetailRow(accountInfo),
     if (sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
       SwapStatusDetailRowData(
-        label: '$receiveSymbol Recipient',
+        label: '$receiveSymbol recipient',
         value: _compactSwapAddress(recipientAddress),
         copyable: true,
         copyText: recipientAddress,
       ),
     if (!sendsZec && refundAddress != null && refundAddress.isNotEmpty)
       SwapStatusDetailRowData(
-        label: '$sourceSymbol Refund address',
+        label: '$sourceSymbol refund address',
         value: _compactSwapAddress(refundAddress),
       ),
     if (depositAddress != null && depositAddress.isNotEmpty)
@@ -985,32 +985,32 @@ List<SwapStatusDetailRowData> _swapStatusDetails(
       value: intent.slippageToleranceText ?? 'Configured quote',
     ),
     SwapStatusDetailRowData(
-      label: 'Minimum Receive',
+      label: 'Guaranteed minimum',
       value: intent.minimumReceiveText ?? intent.receiveEstimate,
       help: true,
     ),
     if (sendsZec && refundAddress != null && refundAddress.isNotEmpty)
       SwapStatusDetailRowData(
-        label: '$sourceSymbol Refund address',
+        label: '$sourceSymbol refund address',
         value: _compactSwapAddress(refundAddress),
       ),
     if (!sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
       SwapStatusDetailRowData(
-        label: '$receiveSymbol Recipient',
+        label: '$receiveSymbol recipient',
         value: _compactSwapAddress(recipientAddress),
         copyable: true,
         copyText: recipientAddress,
       ),
     if (depositTxHash != null && depositTxHash.isNotEmpty)
       SwapStatusDetailRowData(
-        label: '$sourceSymbol Deposit tx',
+        label: '$sourceSymbol deposit tx',
         value: _compactSwapAddress(depositTxHash),
         copyable: true,
         copyText: depositTxHash,
       ),
     if (destinationChainTxHash != null && destinationChainTxHash.isNotEmpty)
       SwapStatusDetailRowData(
-        label: '$receiveSymbol Delivery tx',
+        label: '$receiveSymbol delivery tx',
         value: _compactSwapAddress(destinationChainTxHash),
         copyable: true,
         copyText: destinationChainTxHash,
@@ -1156,7 +1156,7 @@ class _SwapActivityMissingPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Swap activity could not be loaded.',
+            "Couldn't load this swap. Try again or pull to refresh.",
             style: AppTypography.headlineSmall.copyWith(
               color: colors.text.accent,
             ),
@@ -2437,7 +2437,7 @@ class _ActivityResolution {
         primaryAction: _ActivityResolutionAction.copyTopUpDetails,
       ),
       SwapIntentStatus.providerStatusUnknown => _ActivityResolution(
-        title: 'Status needs review',
+        title: 'Status needs your attention',
         message: intent.providerStatusRaw == null
             ? 'The provider status could not be interpreted.'
             : 'The provider returned ${intent.providerStatusRaw}.',
@@ -3306,7 +3306,7 @@ String _copyValueToastMessage(String label) {
   if (lower.contains('address') ||
       lower.contains('recipient') ||
       lower.contains('deposit')) {
-    return 'Address Copied';
+    return 'Address copied';
   }
   return 'Copied to Clipboard';
 }

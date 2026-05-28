@@ -16,12 +16,12 @@ import 'package:zcash_wallet/src/providers/sync_provider.dart';
 
 void main() {
   const failureLabels = {
-    SyncFailureKind.endpoint: 'Syncing failed. Endpoint error...',
-    SyncFailureKind.databaseBusy: 'Syncing failed. Wallet data busy...',
-    SyncFailureKind.databaseFatal: 'Syncing failed. Wallet data error...',
-    SyncFailureKind.chainRecovery: 'Syncing failed. Chain recovery...',
-    SyncFailureKind.parseFatal: 'Syncing failed. Data error...',
-    SyncFailureKind.unknown: 'Syncing failed. Unknown error...',
+    SyncFailureKind.endpoint: 'Syncing failed: Endpoint error',
+    SyncFailureKind.databaseBusy: 'Syncing failed: Wallet data busy',
+    SyncFailureKind.databaseFatal: 'Syncing failed: Wallet data error',
+    SyncFailureKind.chainRecovery: 'Syncing failed: Chain recovery',
+    SyncFailureKind.parseFatal: 'Syncing failed: Data error',
+    SyncFailureKind.unknown: 'Syncing failed: Unknown error',
   };
 
   testWidgets('sidebar shows in-progress sync percentage', (tester) async {
@@ -67,7 +67,7 @@ void main() {
     await tester.pumpWidget(_sidebarHarness(SyncState()));
     await tester.pump();
 
-    await tester.tap(find.text('Address Book'));
+    await tester.tap(find.text('Address book'));
     await tester.pumpAndSettle();
 
     expect(find.text('address book'), findsOneWidget);
@@ -82,7 +82,7 @@ void main() {
     final positions = [
       tester.getTopLeft(find.text('Home')).dy,
       tester.getTopLeft(find.text('Swap')).dy,
-      tester.getTopLeft(find.text('Address Book')).dy,
+      tester.getTopLeft(find.text('Address book')).dy,
       tester.getTopLeft(find.text('Activity')).dy,
     ];
     final gaps = [
@@ -167,7 +167,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Syncing failed. Network error...'), findsOneWidget);
+    expect(find.text('Syncing failed: Network error'), findsOneWidget);
     expect(find.text('Vizor is synced'), findsNothing);
     final text = tester.widget<Text>(
       find.byKey(const ValueKey('sidebar_sync_text')),

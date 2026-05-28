@@ -106,7 +106,7 @@ class _ContactActionsMenu extends StatelessWidget {
       children: [
         AppContextMenuItem(
           iconName: AppIcons.scroll,
-          label: 'Edit Contact',
+          label: 'Edit contact',
           onTap: _noop,
         ),
         const SizedBox(height: AppSpacing.xxs),
@@ -124,7 +124,7 @@ class _ContactActionsMenu extends StatelessWidget {
         const AppContextMenuDivider(),
         AppContextMenuItem(
           iconName: AppIcons.trash,
-          label: 'Remove Contact',
+          label: 'Remove contact',
           destructive: true,
           onTap: _noop,
         ),
@@ -173,7 +173,7 @@ class _NarrowActionsMenu extends StatelessWidget {
       children: [
         AppContextMenuItem(
           iconName: AppIcons.scroll,
-          label: 'Edit Contact',
+          label: 'Edit contact',
           onTap: _noop,
         ),
         const SizedBox(height: AppSpacing.xxs),

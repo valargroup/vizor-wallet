@@ -59,7 +59,7 @@ List<AddressBookNetwork> _swapContactPickerNetworks(SwapState state) {
 }
 
 String _swapContactPickerTitle(SwapState state) {
-  final role = state.direction.sendsZec ? 'Recipients' : 'Refunds';
+  final role = state.direction.sendsZec ? 'recipients' : 'refunds';
   return '${state.externalAsset.symbol} $role';
 }
 
@@ -267,21 +267,21 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
     final commandItems = [
       _SwapCommandItem(
         id: 'open_swap',
-        title: 'Open Swap',
+        title: 'Open swap',
         detail: 'Composer and quote review',
         iconName: AppIcons.sync,
         onRun: () => runPaletteAction(() => context.go('/swap')),
       ),
       _SwapCommandItem(
         id: 'open_activity',
-        title: 'Open Activity',
+        title: 'Open activity',
         detail: 'Status, receipt, and recovery',
         iconName: AppIcons.history,
         onRun: () => runPaletteAction(() => context.go('/activity')),
       ),
       _SwapCommandItem(
         id: 'refresh_status',
-        title: 'Refresh Status',
+        title: 'Refresh status',
         detail: selectedIntent?.statusLabel ?? 'No active swap',
         iconName: AppIcons.renew,
         enabled:
@@ -295,7 +295,7 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
       ),
       _SwapCommandItem(
         id: 'copy_receipt',
-        title: 'Copy Receipt',
+        title: 'Copy receipt',
         detail: 'Redacted activity evidence',
         iconName: AppIcons.copy,
         enabled: activeReceiptText.isNotEmpty,
@@ -303,13 +303,13 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
           copySwapText(
             context,
             text: activeReceiptText,
-            toastMessage: 'Receipt Copied',
+            toastMessage: 'Receipt copied',
           );
         }),
       ),
       _SwapCommandItem(
         id: 'copy_deposit',
-        title: 'Copy Deposit Address',
+        title: 'Copy deposit address',
         detail: activeDepositAddress ?? 'No active deposit address',
         iconName: AppIcons.copy,
         enabled:
@@ -318,13 +318,13 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
           copySwapText(
             context,
             text: activeDepositAddress!,
-            toastMessage: 'Address Copied',
+            toastMessage: 'Address copied',
           );
         }),
       ),
       _SwapCommandItem(
         id: 'review_fresh_quote',
-        title: 'Review Fresh Quote',
+        title: 'Review fresh quote',
         detail: 'Reuse the selected swap route draft',
         iconName: AppIcons.renew,
         enabled: canReviewFreshQuote,
@@ -686,7 +686,7 @@ class _SwapCommandPaletteState extends State<_SwapCommandPalette> {
               key: const ValueKey('swap_command_palette_query'),
               label: 'Command',
               showLabel: false,
-              hintText: 'Search command',
+              hintText: 'Search commands',
               controller: _queryController,
               focusNode: _queryFocusNode,
               leading: const AppIcon(AppIcons.link),
@@ -1068,8 +1068,8 @@ class _SwapReviewButtonLabel extends StatelessWidget {
 
 String _destinationAddressActionLabel(SwapState state) {
   return state.direction.sendsZec
-      ? 'Add Recipient Address'
-      : 'Add Refund Address';
+      ? 'Add recipient address'
+      : 'Add refund address';
 }
 
 bool _reviewAmountExceedsAvailableZec(

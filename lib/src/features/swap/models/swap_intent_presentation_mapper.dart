@@ -171,7 +171,7 @@ List<SwapStep> swapStepsForRecord(SwapIntentRecord record) {
     SwapStep(
       label: sendsZec
           ? 'One-time transparent address prepared'
-          : 'One-time ${externalAsset.symbol} source address prepared',
+          : 'One-time ${externalAsset.chainLabel} address prepared for ${externalAsset.symbol}',
       state: SwapStepState.active,
       evidence: '0 previous uses',
     ),
@@ -353,7 +353,7 @@ String _deliverySummary(SwapIntentRecord record) {
   final externalAsset = record.externalAsset;
   if (direction == null || externalAsset == null) return 'prepared destination';
   if (!direction.sendsZec) {
-    return 'ZEC arrives directly at the shielded wallet address';
+    return 'ZEC arrives at your shielded address';
   }
   return '${externalAsset.symbol} is delivered to the external destination';
 }

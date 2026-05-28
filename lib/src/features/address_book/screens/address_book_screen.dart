@@ -206,7 +206,7 @@ class _AddressBookScreenState extends ConsumerState<AddressBookScreen> {
   Future<void> _copyAddress(AddressBookContact contact) async {
     await Clipboard.setData(ClipboardData(text: contact.address));
     if (!mounted) return;
-    showAppToast(context, 'Address Copied');
+    showAppToast(context, 'Address copied');
   }
 
   void _sendToContact(AddressBookContact contact) {
@@ -902,7 +902,7 @@ class _ContactContextMenu extends StatelessWidget {
       children: [
         AppContextMenuItem(
           iconName: AppIcons.scroll,
-          label: 'Edit Contact',
+          label: 'Edit contact',
           onTap: onEdit,
         ),
         if (canSend) ...[
@@ -922,7 +922,7 @@ class _ContactContextMenu extends StatelessWidget {
         const AppContextMenuDivider(),
         AppContextMenuItem(
           iconName: AppIcons.trash,
-          label: 'Remove Contact',
+          label: 'Remove contact',
           destructive: true,
           onTap: onRemove,
         ),
@@ -1063,7 +1063,7 @@ class _AddressBookAddButton extends StatelessWidget {
       variant: AppButtonVariant.secondary,
       minWidth: 256,
       leading: const AppIcon(AppIcons.users),
-      child: const Text('Add Contact'),
+      child: const Text('Add contact'),
     );
   }
 }
@@ -1156,7 +1156,7 @@ class _ContactFormModalState extends State<_ContactFormModal> {
             height: widget.editing ? 66 : 86,
             child: AppTextField(
               key: const ValueKey('address_book_contact_label_field'),
-              label: 'Address Label',
+              label: 'Address label',
               showLabel: !widget.editing,
               controller: _labelController,
               hintText: 'Add label 1-20 characters',
@@ -1209,7 +1209,7 @@ class _ContactFormModalState extends State<_ContactFormModal> {
                 : null,
             variant: AppButtonVariant.primary,
             minWidth: 280,
-            child: Text(widget.editing ? 'Save Edits' : 'Add Contact'),
+            child: Text(widget.editing ? 'Save changes' : 'Add contact'),
           ),
           const SizedBox(height: AppSpacing.s),
           AppButton(
@@ -1715,7 +1715,7 @@ class _RemoveContactModal extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Remove Contact',
+            'Remove contact',
             overflow: TextOverflow.ellipsis,
             style: AppTypography.bodyLarge.copyWith(
               color: context.colors.text.accent,
@@ -1730,7 +1730,7 @@ class _RemoveContactModal extends StatelessWidget {
           Text(
             contact == null
                 ? 'This contact will be removed.'
-                : '${contact.label} will be removed from Address Book.',
+                : '${contact.label} will be removed from your address book.',
             textAlign: TextAlign.center,
             style: AppTypography.bodyMedium.copyWith(
               color: context.colors.text.secondary,
@@ -1751,7 +1751,7 @@ class _RemoveContactModal extends StatelessWidget {
             onPressed: () => unawaited(onRemove()),
             variant: AppButtonVariant.destructive,
             minWidth: 280,
-            child: const Text('Remove Contact'),
+            child: const Text('Remove contact'),
           ),
           const SizedBox(height: AppSpacing.s),
           AppButton(
@@ -1853,7 +1853,9 @@ class _AddressBookError extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Text(
-        'Address Book could not be loaded.\n\nDetails: $error',
+        "Couldn't load your address book. "
+        'Try again, or contact support if this keeps happening.\n\n'
+        'Details: $error',
         textAlign: TextAlign.center,
         style: AppTypography.bodyMedium.copyWith(
           color: context.colors.text.destructive,

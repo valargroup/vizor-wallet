@@ -21,7 +21,7 @@ void main() {
     expect(find.text('3/4 In progress'), findsOneWidget);
     expect(find.text('Receiving ZEC ...'), findsOneWidget);
     expect(find.text('+4.12 ZEC'), findsOneWidget);
-    expect(find.text('Sent failed'), findsOneWidget);
+    expect(find.text('Send failed'), findsOneWidget);
     expect(find.text('Refunded'), findsOneWidget);
   });
 

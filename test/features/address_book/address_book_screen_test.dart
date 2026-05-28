@@ -235,7 +235,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Edit Contact'), findsOneWidget);
+    expect(find.text('Edit contact'), findsOneWidget);
     expect(find.text('Copy address'), findsOneWidget);
     expect(find.text('Send ZEC'), findsNothing);
   });
@@ -255,12 +255,12 @@ void main() {
       find.byKey(const ValueKey('address_book_contact_menu_mike')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Edit Contact'), findsOneWidget);
+    expect(find.text('Edit contact'), findsOneWidget);
 
     await tester.tapAt(const Offset(80, 120));
     await tester.pumpAndSettle();
 
-    expect(find.text('Edit Contact'), findsNothing);
+    expect(find.text('Edit contact'), findsNothing);
     expect(find.text('Copy address'), findsNothing);
   });
 }

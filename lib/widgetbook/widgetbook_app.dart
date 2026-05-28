@@ -263,7 +263,7 @@ class WidgetbookApp extends StatelessWidget {
               ],
             ),
             WidgetbookFolder(
-              name: 'Address Book',
+              name: 'Address book',
               children: [
                 WidgetbookComponent(
                   name: 'Page',

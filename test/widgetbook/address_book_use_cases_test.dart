@@ -25,7 +25,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Edit Contact'), findsOneWidget);
+    expect(find.text('Edit contact'), findsOneWidget);
   });
 
   testWidgets('remove contact modal use case renders in AppTheme', (
@@ -43,9 +43,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Remove Contact'), findsWidgets);
+    expect(find.text('Remove contact'), findsWidgets);
     expect(
-      find.text('Mike will be removed from Address Book.'),
+      find.text('Mike will be removed from your address book.'),
       findsOneWidget,
     );
   });

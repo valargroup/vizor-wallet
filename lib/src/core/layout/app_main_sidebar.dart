@@ -132,7 +132,7 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
                     key: const ValueKey('sidebar_address_book_button'),
-                    label: 'Address Book',
+                    label: 'Address book',
                     iconName: AppIcons.users,
                     active: _matches('/address-book'),
                     onTap: _matches('/address-book')
@@ -298,8 +298,8 @@ class _SidebarSyncStatusData {
       final reason = _syncFailureReason(failure.kind);
       return _SidebarSyncStatusData(
         kind: _SidebarSyncStatusKind.failed,
-        label: 'Syncing failed. $reason...',
-        semanticsLabel: 'Syncing failed. $reason',
+        label: 'Syncing failed: $reason',
+        semanticsLabel: 'Syncing failed: $reason',
       );
     }
 

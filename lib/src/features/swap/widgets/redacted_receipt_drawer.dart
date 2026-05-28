@@ -424,15 +424,15 @@ String _supportRowKey(String label) {
 
 String _copyDetailToastMessage(String label) {
   final lower = label.trim().toLowerCase();
-  if (lower.contains('explorer')) return 'Explorer Link Copied';
-  if (lower.contains('tx')) return 'Transaction Copied';
-  if (lower.contains('quote')) return 'Quote Copied';
-  if (lower.contains('memo')) return 'Memo Copied';
+  if (lower.contains('explorer')) return 'Explorer link copied';
+  if (lower.contains('tx')) return 'Tx hash copied';
+  if (lower.contains('quote')) return 'Quote copied';
+  if (lower.contains('memo')) return 'Memo copied';
   if (lower.contains('address') ||
       lower.contains('recipient') ||
       lower.contains('refund') ||
       lower.contains('deposit')) {
-    return 'Address Copied';
+    return 'Address copied';
   }
-  return 'Copied to Clipboard';
+  return 'Copied to clipboard';
 }

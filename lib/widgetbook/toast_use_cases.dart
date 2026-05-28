@@ -13,9 +13,9 @@ Widget buildToastUseCase(BuildContext context) {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: const [
-          AppToast(message: 'Address Copied'),
+          AppToast(message: 'Address copied'),
           SizedBox(height: AppSpacing.sm),
-          AppToast(message: 'Transaction Hash Copied'),
+          AppToast(message: 'Transaction hash copied'),
         ],
       ),
     ),

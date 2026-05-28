@@ -391,7 +391,7 @@ class _SendReviewScreenState extends ConsumerState<SendReviewScreen> {
   Future<void> _copyRecipientAddress() async {
     await Clipboard.setData(ClipboardData(text: widget.args.address.trim()));
     if (!mounted) return;
-    showAppToast(context, 'Address Copied');
+    showAppToast(context, 'Address copied');
   }
 
   @override

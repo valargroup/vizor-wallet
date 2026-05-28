@@ -50,7 +50,7 @@ ActivityRowData buildTransactionActivityRow({
       : null;
 
   return ActivityRowData(
-    title: isFailed && isSent ? 'Sent failed' : _txTitle(kind),
+    title: isFailed && isSent ? 'Send failed' : _txTitle(kind),
     leadingIconName: _txIcon(kind),
     leadingBackgroundColor: colors.background.neutralSubtleOpacity,
     leadingIconColor: colors.icon.regular,

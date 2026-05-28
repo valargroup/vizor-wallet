@@ -11,8 +11,12 @@ import '../domain/swap_contract.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 
-const _swapReviewMinimumReceiveTooltip = 'Minimum receive details coming soon.';
-const _swapReviewSwapFeeTooltip = 'Swap fee details coming soon.';
+String _swapReviewMinimumReceiveTooltip(String receiveSymbol) =>
+    "The lowest amount of $receiveSymbol you'll get after slippage. "
+    'You may get more, never less.';
+const _swapReviewSwapFeeTooltip =
+    'Fee for us and the route providers to process this swap. '
+    'Already included in the rate shown above.';
 const _swapReviewDetailIconSize = 14.0;
 
 class SwapReviewPageContent extends StatelessWidget {
@@ -53,7 +57,7 @@ class SwapReviewPageContent extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Review Swap',
+            'Review swap',
             key: const ValueKey('swap_review_title'),
             textAlign: TextAlign.center,
             style: AppTypography.displaySmall.copyWith(
@@ -176,14 +180,14 @@ class SwapReviewPageActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final startingLabel = sendsZec ? 'Sending' : 'Starting';
+    final startingLabel = sendsZec ? 'Sending' : 'Locking quote';
     final primaryLabel = expired
         ? 'Review again'
         : startBlockedReason != null
         ? 'Insufficient ZEC'
         : starting
         ? startingLabel
-        : 'Review & Swap';
+        : 'Review & swap';
     final showPrimaryArrow =
         !expired && !starting && startBlockedReason == null;
     return SizedBox(
@@ -443,6 +447,18 @@ class _ReviewDetailsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sendsZec = quote.direction.sendsZec;
+    final accountRow = _ReviewDetailRow(
+      label: sendsZec ? 'From' : 'To',
+      value: accountLabel ?? 'Current account',
+      leadingValue: _AccountAvatar(
+        profilePictureId: accountProfilePictureId,
+      ),
+    );
+    final addressRow = _ReviewDetailRow(
+      label: sendsZec ? 'To' : 'From',
+      value: _compactAddress(_refundOrRecipientValue(addressPlan)),
+    );
     return SizedBox(
       key: const ValueKey('swap_review_details'),
       width: 400,
@@ -451,17 +467,8 @@ class _ReviewDetailsList extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ReviewDetailRow(
-              label: 'Account',
-              value: accountLabel ?? 'Current account',
-              leadingValue: _AccountAvatar(
-                profilePictureId: accountProfilePictureId,
-              ),
-            ),
-            _ReviewDetailRow(
-              label: _refundOrRecipientLabel(quote),
-              value: _compactAddress(_refundOrRecipientValue(addressPlan)),
-            ),
+            if (sendsZec) accountRow else addressRow,
+            if (sendsZec) addressRow else accountRow,
             const SizedBox(height: AppSpacing.sm),
             _ReviewDetailRow(
               label: 'Slippage tolerance',
@@ -470,10 +477,12 @@ class _ReviewDetailsList extends StatelessWidget {
                   _slippageToleranceText(quote),
             ),
             _ReviewDetailRow(
-              label: 'Minimum Receive',
+              label: 'Guaranteed minimum',
               value: compactSwapAmountText(quote.minimumReceiveText),
               trailingIcon: AppIcons.help,
-              tooltipMessage: _swapReviewMinimumReceiveTooltip,
+              tooltipMessage: _swapReviewMinimumReceiveTooltip(
+                quote.receiveAsset.symbol,
+              ),
             ),
             const SizedBox(height: AppSpacing.sm),
             _ReviewDetailRow(
@@ -625,13 +634,6 @@ class _ReviewNotice extends StatelessWidget {
       ],
     );
   }
-}
-
-String _refundOrRecipientLabel(SwapQuote quote) {
-  final symbol = quote.externalAsset.symbol;
-  return quote.direction.sendsZec
-      ? '$symbol Recipient address'
-      : '$symbol Refund address';
 }
 
 String _refundOrRecipientValue(SwapAddressPlan addressPlan) {
