@@ -208,14 +208,9 @@ mod tests {
 
         assert_eq!(deleted, 1);
         assert_eq!(db.get_bundle_count(&params.vote_round_id).unwrap(), 1);
-        assert!(crate::wallet::voting::delegation::store_delegation_tx_hash(
-            db_path.to_str().unwrap(),
-            "wallet-1",
-            &params.vote_round_id,
-            1,
-            "skipped",
-        )
-        .is_err());
+        assert!(db
+            .store_delegation_tx_hash(&params.vote_round_id, 1, "skipped")
+            .is_err());
     }
 
     fn test_round_params() -> zcash_voting::VotingRoundParams {

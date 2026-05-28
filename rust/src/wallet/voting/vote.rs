@@ -102,11 +102,6 @@ pub struct VoteRecord {
     pub submitted: bool,
 }
 
-/// Initialize the local voting database for vote commitment operations.
-pub fn prepare_vote(db_path: &str, wallet_id: &str) -> Result<(), String> {
-    open_voting_db(db_path, wallet_id).map(|_| ())
-}
-
 #[allow(clippy::too_many_arguments)]
 /// Build signed vote commitments and public share payloads for one bundle.
 ///
@@ -469,18 +464,6 @@ fn hex_vecs(values: &[Vec<u8>]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn prepare_vote_initializes_voting_db_schema() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-
-        prepare_vote(db_path.to_str().unwrap(), "wallet-1").unwrap();
-
-        let db = zcash_voting::storage::VotingDb::open(db_path.to_str().unwrap()).unwrap();
-        db.set_wallet_id("wallet-1");
-        assert!(db.list_rounds().unwrap().is_empty());
-    }
 
     #[test]
     fn validate_draft_votes_rejects_invalid_inputs_before_db_work() {
