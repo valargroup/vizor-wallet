@@ -9,48 +9,84 @@ import 'models/activity_row_data.dart';
 
 const _swapActivityAmountPrivacyMaskLength = 3;
 
-List<ActivityRowData> buildSwapActivityRows({
-  required BuildContext context,
-  required Iterable<SwapIntentRecord> records,
-  bool privacyModeEnabled = false,
-  ValueChanged<SwapIntentRecord>? onSwapTap,
-}) {
-  return [
-    for (final record in records)
-      buildSwapActivityRow(
-        context: context,
-        record: record,
-        privacyModeEnabled: privacyModeEnabled,
-        onTap: onSwapTap == null ? null : () => onSwapTap(record),
-      ),
-  ];
+class SwapActivityRowItem {
+  const SwapActivityRowItem({
+    required this.intentId,
+    required this.providerLabel,
+    required this.sellAmountText,
+    required this.receiveEstimateText,
+    required this.status,
+    required this.activityTimestamp,
+    this.direction,
+    this.externalAsset,
+    this.depositTxHash,
+    this.completedAt,
+    this.lastStatusCheckedAt,
+    this.updatedAt,
+  });
+
+  factory SwapActivityRowItem.fromRecord(SwapIntentRecord record) {
+    return SwapActivityRowItem(
+      intentId: record.id,
+      providerLabel: record.providerLabel,
+      sellAmountText: record.sellAmountText,
+      receiveEstimateText: record.receiveEstimateText,
+      status: record.status,
+      direction: record.direction,
+      externalAsset: record.externalAsset,
+      depositTxHash: record.depositTxHash,
+      activityTimestamp: record.activityTimestamp,
+      completedAt: record.completedAt,
+      lastStatusCheckedAt: record.lastStatusCheckedAt,
+      updatedAt: record.updatedAt,
+    );
+  }
+
+  final String intentId;
+  final String providerLabel;
+  final String sellAmountText;
+  final String receiveEstimateText;
+  final SwapIntentStatus status;
+  final SwapDirection? direction;
+  final SwapAsset? externalAsset;
+  final String? depositTxHash;
+  final DateTime? activityTimestamp;
+  final DateTime? completedAt;
+  final DateTime? lastStatusCheckedAt;
+  final DateTime? updatedAt;
+}
+
+List<SwapActivityRowItem> swapActivityRowItemsFromRecords(
+  Iterable<SwapIntentRecord> records,
+) {
+  return [for (final record in records) SwapActivityRowItem.fromRecord(record)];
 }
 
 ActivityRowData buildSwapActivityRow({
   required BuildContext context,
-  required SwapIntentRecord record,
+  required SwapActivityRowItem item,
   bool privacyModeEnabled = false,
   VoidCallback? onTap,
 }) {
   final colors = context.colors;
-  final failed = _swapActivityFailed(record.status);
-  final timedOut = record.status == SwapIntentStatus.expired;
-  final returnsFunds = _swapActivityReturnsFunds(record);
-  final incompleteDeposit = record.status == SwapIntentStatus.incompleteDeposit;
-  final complete = record.status == SwapIntentStatus.complete;
-  final sellAsset = _swapActivitySellAsset(record);
-  final receiveAsset = _swapActivityReceiveAsset(record);
-  final progress = _swapActivityProgress(record);
+  final failed = _swapActivityFailed(item.status);
+  final timedOut = item.status == SwapIntentStatus.expired;
+  final returnsFunds = _swapActivityReturnsFunds(item);
+  final incompleteDeposit = item.status == SwapIntentStatus.incompleteDeposit;
+  final complete = item.status == SwapIntentStatus.complete;
+  final sellAsset = _swapActivitySellAsset(item);
+  final receiveAsset = _swapActivityReceiveAsset(item);
+  final progress = _swapActivityProgress(item);
 
   return ActivityRowData(
-    title: _swapActivityTitle(record.status),
+    title: _swapActivityTitle(item.status),
     leadingIconName: AppIcons.swapArrows,
     leadingBackgroundColor: colors.background.neutralSubtleOpacity,
     leadingIconColor: colors.icon.regular,
     leadingProgressValue: complete ? null : progress?.value,
-    subtitle: _swapActivityAssetSubtitle(sellAsset) ?? record.providerLabel,
+    subtitle: _swapActivityAssetSubtitle(sellAsset) ?? item.providerLabel,
     amountText: _swapActivityAmountText(
-      record,
+      item,
       includeSign: !(returnsFunds || timedOut),
       privacyModeEnabled: privacyModeEnabled,
     ),
@@ -64,10 +100,10 @@ ActivityRowData buildSwapActivityRow({
         : null,
     amountSubtitleIconName: timedOut ? AppIcons.time : null,
     amountSubtitleIconColor: timedOut ? colors.text.secondary : null,
-    statusText: _swapActivityStatusText(record.status, progress),
+    statusText: _swapActivityStatusText(item.status, progress),
     statusIconName: failed
         ? AppIcons.skull
-        : record.status == SwapIntentStatus.refunded
+        : item.status == SwapIntentStatus.refunded
         ? AppIcons.arrowBack
         : incompleteDeposit
         ? AppIcons.warning
@@ -79,12 +115,12 @@ ActivityRowData buildSwapActivityRow({
         : incompleteDeposit
         ? colors.text.brandCrimson
         : colors.text.secondary,
-    timestampText: formatActivityTimestamp(record.activityTimestamp),
-    childRows: failed || returnsFunds || !_swapActivityShowsReceiveLeg(record)
+    timestampText: formatActivityTimestamp(item.activityTimestamp),
+    childRows: failed || returnsFunds || !_swapActivityShowsReceiveLeg(item)
         ? const []
         : _swapActivityChildRows(
             context: context,
-            record: record,
+            item: item,
             receiveAsset: receiveAsset,
             complete: complete,
             privacyModeEnabled: privacyModeEnabled,
@@ -95,14 +131,14 @@ ActivityRowData buildSwapActivityRow({
 
 List<ActivityRowData> _swapActivityChildRows({
   required BuildContext context,
-  required SwapIntentRecord record,
+  required SwapActivityRowItem item,
   required SwapAsset? receiveAsset,
   required bool complete,
   required bool privacyModeEnabled,
 }) {
-  final direction = record.direction;
+  final direction = item.direction;
   if (direction == null || receiveAsset == null) return const [];
-  if (!complete && _swapActivityProgress(record) == null) {
+  if (!complete && _swapActivityProgress(item) == null) {
     return const [];
   }
 
@@ -119,20 +155,20 @@ List<ActivityRowData> _swapActivityChildRows({
       leadingBackgroundColor: colors.background.neutralSubtleOpacity,
       leadingIconColor: colors.icon.regular,
       amountText: _swapActivityReceiveAmountText(
-        record,
+        item,
         privacyModeEnabled: privacyModeEnabled,
       ),
       amountColor: colors.text.accent,
       statusText: active ? 'In progress' : 'Completed',
       statusIconName: active ? AppIcons.loader : null,
       statusColor: colors.text.secondary,
-      timestampText: _swapActivityChildTimestamp(record),
+      timestampText: _swapActivityChildTimestamp(item),
     ),
   ];
 }
 
 String _swapActivityAmountText(
-  SwapIntentRecord record, {
+  SwapActivityRowItem item, {
   required bool includeSign,
   required bool privacyModeEnabled,
 }) {
@@ -143,14 +179,14 @@ String _swapActivityAmountText(
       maskLength: _swapActivityAmountPrivacyMaskLength,
     );
   }
-  final amount = record.sellAmountText;
+  final amount = item.sellAmountText;
   if (amount.trim().isEmpty) return '--';
   if (!includeSign) return amount;
   return '-$amount';
 }
 
 String _swapActivityReceiveAmountText(
-  SwapIntentRecord record, {
+  SwapActivityRowItem item, {
   required bool privacyModeEnabled,
 }) {
   if (privacyModeEnabled) {
@@ -160,7 +196,7 @@ String _swapActivityReceiveAmountText(
       maskLength: _swapActivityAmountPrivacyMaskLength,
     );
   }
-  final amount = record.receiveEstimateText.trim();
+  final amount = item.receiveEstimateText.trim();
   if (amount.isEmpty) return '--';
   if (amount.startsWith('+')) return amount;
   return '+$amount';
@@ -204,8 +240,8 @@ bool _swapActivityFailed(SwapIntentStatus status) {
       status == SwapIntentStatus.expired;
 }
 
-bool _swapActivityReturnsFunds(SwapIntentRecord record) {
-  return record.status == SwapIntentStatus.refunded;
+bool _swapActivityReturnsFunds(SwapActivityRowItem item) {
+  return item.status == SwapIntentStatus.refunded;
 }
 
 String _swapActivityTitle(SwapIntentStatus status) {
@@ -217,16 +253,16 @@ String _swapActivityTitle(SwapIntentStatus status) {
   };
 }
 
-SwapAsset? _swapActivitySellAsset(SwapIntentRecord record) {
-  final direction = record.direction;
-  final externalAsset = record.externalAsset;
+SwapAsset? _swapActivitySellAsset(SwapActivityRowItem item) {
+  final direction = item.direction;
+  final externalAsset = item.externalAsset;
   if (direction == null || externalAsset == null) return null;
   return direction.fromAsset(externalAsset);
 }
 
-SwapAsset? _swapActivityReceiveAsset(SwapIntentRecord record) {
-  final direction = record.direction;
-  final externalAsset = record.externalAsset;
+SwapAsset? _swapActivityReceiveAsset(SwapActivityRowItem item) {
+  final direction = item.direction;
+  final externalAsset = item.externalAsset;
   if (direction == null || externalAsset == null) return null;
   return direction.toAsset(externalAsset);
 }
@@ -252,9 +288,9 @@ String _swapActivityChildTitle({
       : 'Depositing ${receiveAsset.symbol}...';
 }
 
-String _swapActivityChildTimestamp(SwapIntentRecord record) {
+String _swapActivityChildTimestamp(SwapActivityRowItem item) {
   final timestamp =
-      record.completedAt ?? record.lastStatusCheckedAt ?? record.updatedAt;
+      item.completedAt ?? item.lastStatusCheckedAt ?? item.updatedAt;
   if (timestamp == null) return '--';
   return _relativeActivityTimestamp(timestamp) ??
       formatActivityTimestamp(timestamp);
@@ -268,8 +304,8 @@ String? _relativeActivityTimestamp(DateTime timestamp) {
   return null;
 }
 
-bool _swapActivityShowsReceiveLeg(SwapIntentRecord record) {
-  return switch (record.status) {
+bool _swapActivityShowsReceiveLeg(SwapActivityRowItem item) {
+  return switch (item.status) {
     SwapIntentStatus.depositObserved ||
     SwapIntentStatus.processing ||
     SwapIntentStatus.providerStatusUnknown ||
@@ -283,10 +319,10 @@ bool _swapActivityShowsReceiveLeg(SwapIntentRecord record) {
   };
 }
 
-_SwapActivityProgress? _swapActivityProgress(SwapIntentRecord record) {
+_SwapActivityProgress? _swapActivityProgress(SwapActivityRowItem item) {
   const totalSteps = 4;
-  final hasDepositTx = record.depositTxHash?.trim().isNotEmpty ?? false;
-  return switch (record.status) {
+  final hasDepositTx = item.depositTxHash?.trim().isNotEmpty ?? false;
+  return switch (item.status) {
     SwapIntentStatus.awaitingDeposit ||
     SwapIntentStatus.awaitingExternalDeposit => _SwapActivityProgress(
       currentStep: hasDepositTx ? 2 : 1,

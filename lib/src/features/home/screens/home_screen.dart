@@ -30,11 +30,10 @@ import '../../../rust/api/sync.dart' as rust_sync;
 import '../../activity/activity_row_mapper.dart';
 import '../../activity/models/activity_row_data.dart';
 import '../../activity/screens/activity_transaction_status_screen.dart';
-import '../../activity/widgets/activity_table.dart';
+import '../../activity/swap_activity_row_items_provider.dart';
 import '../../activity/swap_activity_row_mapper.dart';
+import '../../activity/widgets/activity_table.dart';
 import '../../swap/models/swap_activity_navigation.dart';
-import '../../swap/models/swap_models.dart';
-import '../../swap/providers/swap_activity_store.dart';
 import '../../swap/providers/swap_activity_tracker.dart';
 import '../widgets/keystone_shield_signing_overlay.dart';
 
@@ -628,10 +627,10 @@ class _HomePaneState extends ConsumerState<_HomePane> {
   List<ActivityRowData> _activityRows(BuildContext context) {
     final accountUuid = ref.watch(accountProvider).value?.activeAccountUuid;
     final swapFeatureEnabled = ref.watch(swapFeatureEnabledProvider);
-    final swapRecords = accountUuid == null || !swapFeatureEnabled
-        ? const <SwapIntentRecord>[]
-        : ref.watch(swapActivityRecordsProvider(accountUuid)).value ??
-              const <SwapIntentRecord>[];
+    final swapItems = accountUuid == null || !swapFeatureEnabled
+        ? const <SwapActivityRowItem>[]
+        : ref.watch(swapActivityRowItemsProvider(accountUuid)).value ??
+              const <SwapActivityRowItem>[];
     final entries = <_HomeActivityEntry>[
       if (widget.hasActivitySyncData)
         for (final tx in widget.sync.recentTransactions)
@@ -644,14 +643,14 @@ class _HomePaneState extends ConsumerState<_HomePane> {
               onTap: () => _openTransactionStatus(tx),
             ),
           ),
-      for (final record in swapRecords)
+      for (final item in swapItems)
         _HomeActivityEntry(
-          timestamp: record.activityTimestamp,
+          timestamp: item.activityTimestamp,
           row: buildSwapActivityRow(
             context: context,
-            record: record,
+            item: item,
             privacyModeEnabled: widget.privacyModeEnabled,
-            onTap: () => _openSwapStatus(record),
+            onTap: () => _openSwapStatus(item.intentId),
           ),
         ),
     ]..sort(_compareHomeActivityEntries);
@@ -665,10 +664,10 @@ class _HomePaneState extends ConsumerState<_HomePane> {
     unawaited(_pushTransactionStatus(transaction));
   }
 
-  void _openSwapStatus(SwapIntentRecord record) {
+  void _openSwapStatus(String intentId) {
     context.push(
       swapActivityDetailUri(
-        intentId: record.id,
+        intentId: intentId,
         returnTarget: SwapActivityReturnTarget.home,
       ).toString(),
     );

@@ -21,18 +21,15 @@ void main() {
             builder: (context) {
               row = buildSwapActivityRow(
                 context: context,
-                record: SwapIntentRecord(
-                  id: 'swap-1',
+                item: SwapActivityRowItem(
+                  intentId: 'swap-1',
                   providerLabel: 'NEAR Intents',
-                  pairText: 'ZEC -> USDC',
                   sellAmountText: '0.0030 ZEC',
                   receiveEstimateText: '0.21 USDC',
                   status: SwapIntentStatus.processing,
-                  nextAction: 'Swap is processing',
                   direction: SwapDirection.zecToExternal,
                   externalAsset: SwapAsset.usdc,
-                  createdAt: null,
-                  updatedAt: DateTime.now().subtract(
+                  activityTimestamp: DateTime.now().subtract(
                     const Duration(minutes: 2),
                   ),
                   lastStatusCheckedAt: DateTime.now().subtract(
@@ -84,17 +81,15 @@ void main() {
             builder: (context) {
               row = buildSwapActivityRow(
                 context: context,
-                record: SwapIntentRecord(
-                  id: 'swap-2',
+                item: SwapActivityRowItem(
+                  intentId: 'swap-2',
                   providerLabel: 'NEAR Intents',
-                  pairText: 'USDC -> ZEC',
                   sellAmountText: '0.21 USDC',
                   receiveEstimateText: '0.0030 ZEC',
                   status: SwapIntentStatus.awaitingExternalDeposit,
-                  nextAction: 'Send USDC to the deposit address',
                   direction: SwapDirection.externalToZec,
                   externalAsset: SwapAsset.usdc,
-                  updatedAt: DateTime.utc(2026, 5, 7, 10, 30),
+                  activityTimestamp: DateTime.utc(2026, 5, 7, 10, 30),
                 ),
               );
               return const SizedBox.shrink();
@@ -127,17 +122,16 @@ void main() {
             builder: (context) {
               row = buildSwapActivityRow(
                 context: context,
-                record: const SwapIntentRecord(
-                  id: 'swap-confirming-deposit',
+                item: const SwapActivityRowItem(
+                  intentId: 'swap-confirming-deposit',
                   providerLabel: 'NEAR Intents',
-                  pairText: 'ZEC -> USDC',
                   sellAmountText: '0.0030 ZEC',
                   receiveEstimateText: '0.21 USDC',
                   status: SwapIntentStatus.awaitingDeposit,
-                  nextAction: 'Waiting for deposit confirmation',
                   direction: SwapDirection.zecToExternal,
                   externalAsset: SwapAsset.usdc,
                   depositTxHash: 'zec-deposit-txid',
+                  activityTimestamp: null,
                 ),
               );
               return const SizedBox.shrink();
@@ -165,16 +159,15 @@ void main() {
               row = buildSwapActivityRow(
                 context: context,
                 privacyModeEnabled: true,
-                record: const SwapIntentRecord(
-                  id: 'swap-private',
+                item: const SwapActivityRowItem(
+                  intentId: 'swap-private',
                   providerLabel: 'NEAR Intents',
-                  pairText: 'ZEC -> USDC',
                   sellAmountText: '0.0030 ZEC',
                   receiveEstimateText: '0.21 USDC',
                   status: SwapIntentStatus.complete,
-                  nextAction: 'Complete',
                   direction: SwapDirection.zecToExternal,
                   externalAsset: SwapAsset.usdc,
+                  activityTimestamp: null,
                 ),
               );
               return const SizedBox.shrink();
@@ -204,16 +197,15 @@ void main() {
             builder: (context) {
               row = buildSwapActivityRow(
                 context: context,
-                record: const SwapIntentRecord(
-                  id: 'swap-failed',
+                item: const SwapActivityRowItem(
+                  intentId: 'swap-failed',
                   providerLabel: 'NEAR Intents',
-                  pairText: 'USDC -> ZEC',
                   sellAmountText: '101.23 USDC',
                   receiveEstimateText: '4.12 ZEC',
                   status: SwapIntentStatus.failed,
-                  nextAction: 'Swap failed',
                   direction: SwapDirection.externalToZec,
                   externalAsset: SwapAsset.usdc,
+                  activityTimestamp: null,
                 ),
               );
               return const SizedBox.shrink();
@@ -246,16 +238,15 @@ void main() {
             builder: (context) {
               row = buildSwapActivityRow(
                 context: context,
-                record: const SwapIntentRecord(
-                  id: 'swap-timeout',
+                item: const SwapActivityRowItem(
+                  intentId: 'swap-timeout',
                   providerLabel: 'NEAR Intents',
-                  pairText: 'USDC -> ZEC',
                   sellAmountText: '101.23 USDC',
                   receiveEstimateText: '4.12 ZEC',
                   status: SwapIntentStatus.expired,
-                  nextAction: 'Start a fresh quote',
                   direction: SwapDirection.externalToZec,
                   externalAsset: SwapAsset.usdc,
+                  activityTimestamp: null,
                 ),
               );
               return const SizedBox.shrink();
@@ -274,5 +265,37 @@ void main() {
     expect(row!.statusIconName, AppIcons.skull);
     expect(row!.leadingProgressValue, isNull);
     expect(row!.childRows, isEmpty);
+  });
+
+  test('maps persisted swap records to activity row items', () {
+    final updatedAt = DateTime.utc(2026, 5, 7, 10, 30);
+    final checkedAt = DateTime.utc(2026, 5, 7, 10, 31);
+    final item = swapActivityRowItemsFromRecords([
+      SwapIntentRecord(
+        id: 'swap-record',
+        providerLabel: 'NEAR Intents',
+        pairText: 'ZEC -> USDC',
+        sellAmountText: '0.0030 ZEC',
+        receiveEstimateText: '0.21 USDC',
+        status: SwapIntentStatus.processing,
+        nextAction: 'Swap is processing',
+        direction: SwapDirection.zecToExternal,
+        externalAsset: SwapAsset.usdc,
+        depositTxHash: 'zec-deposit-txid',
+        updatedAt: updatedAt,
+        lastStatusCheckedAt: checkedAt,
+      ),
+    ]).single;
+
+    expect(item.intentId, 'swap-record');
+    expect(item.providerLabel, 'NEAR Intents');
+    expect(item.sellAmountText, '0.0030 ZEC');
+    expect(item.receiveEstimateText, '0.21 USDC');
+    expect(item.status, SwapIntentStatus.processing);
+    expect(item.direction, SwapDirection.zecToExternal);
+    expect(item.externalAsset, SwapAsset.usdc);
+    expect(item.depositTxHash, 'zec-deposit-txid');
+    expect(item.activityTimestamp, updatedAt);
+    expect(item.lastStatusCheckedAt, checkedAt);
   });
 }

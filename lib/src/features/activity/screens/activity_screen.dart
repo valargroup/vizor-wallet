@@ -20,12 +20,11 @@ import '../../../providers/privacy_mode_provider.dart';
 import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
-import '../../swap/models/swap_models.dart';
 import '../../swap/models/swap_activity_navigation.dart';
-import '../../swap/providers/swap_activity_store.dart';
 import '../../swap/providers/swap_activity_tracker.dart';
 import '../activity_row_mapper.dart';
 import '../models/activity_row_data.dart';
+import '../swap_activity_row_items_provider.dart';
 import '../swap_activity_row_mapper.dart';
 import '../widgets/activity_table.dart';
 import 'activity_transaction_status_screen.dart';
@@ -185,10 +184,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     unawaited(_pushTransactionStatus(transaction));
   }
 
-  void _openSwapStatus(SwapIntentRecord record) {
+  void _openSwapStatus(String intentId) {
     context.push(
       swapActivityDetailUri(
-        intentId: record.id,
+        intentId: intentId,
         returnTarget: SwapActivityReturnTarget.activity,
       ).toString(),
     );
@@ -315,10 +314,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         accountUuid != null &&
         (loadedTransactions != null || hasSyncForActiveAccount);
     final swapFeatureEnabled = ref.watch(swapFeatureEnabledProvider);
-    final swapRecords = accountUuid == null || !swapFeatureEnabled
-        ? const <SwapIntentRecord>[]
-        : ref.watch(swapActivityRecordsProvider(accountUuid)).value ??
-              const <SwapIntentRecord>[];
+    final swapItems = accountUuid == null || !swapFeatureEnabled
+        ? const <SwapActivityRowItem>[]
+        : ref.watch(swapActivityRowItemsProvider(accountUuid)).value ??
+              const <SwapActivityRowItem>[];
     final entries = <_ActivityEntry>[
       if (canRenderTransactions)
         for (final tx in transactions)
@@ -331,14 +330,14 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
               onTap: () => _openTransactionStatus(tx),
             ),
           ),
-      for (final record in swapRecords)
+      for (final item in swapItems)
         _ActivityEntry(
-          timestamp: record.activityTimestamp,
+          timestamp: item.activityTimestamp,
           row: buildSwapActivityRow(
             context: context,
-            record: record,
+            item: item,
             privacyModeEnabled: privacyModeEnabled,
-            onTap: () => _openSwapStatus(record),
+            onTap: () => _openSwapStatus(item.intentId),
           ),
         ),
     ]..sort(_compareActivityEntries);

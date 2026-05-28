@@ -243,7 +243,10 @@ List<ActivityRowData> _swapActivityRows(
   required SwapIntentRecord swapRecord,
 }) {
   return [
-    buildSwapActivityRow(context: context, record: swapRecord),
+    buildSwapActivityRow(
+      context: context,
+      item: SwapActivityRowItem.fromRecord(swapRecord),
+    ),
     _failedSentRow(context),
     _sentRow(context, selected: true),
     _sentRow(context),
