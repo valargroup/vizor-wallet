@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/voting/voting_flow_models.dart';
+import '../../features/voting/voting_resume_plan.dart';
 import '../../services/voting/voting_models.dart';
 import 'voting_config_provider.dart';
 import 'voting_service_providers.dart';
@@ -127,7 +128,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
       roundId: round.roundId,
     );
     final proposalIds = _proposalIdsFromRoundJson(round.rawJson);
-    var pendingRecovery = false;
+    var hasBlockingRecovery = false;
     if (proposalIds.isNotEmpty) {
       try {
         final roundPlan = await recovery.loadRoundPlan(
@@ -136,7 +137,10 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
           roundId: round.roundId,
           proposalIds: proposalIds,
         );
-        pendingRecovery = roundPlan.pendingRecovery;
+        hasBlockingRecovery = hasBlockingRoundRecoveryWork(
+          roundPlan: roundPlan,
+          resumePlan: resumePlan,
+        );
       } catch (error) {
         debugPrint(
           '[zcash] Voting: skipped in-progress lookup for round '
@@ -144,7 +148,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
         );
       }
     }
-    if (pendingRecovery) {
+    if (hasBlockingRecovery) {
       return const _RoundListRecoveryState(voted: false, inProgress: true);
     }
     if (resumePlan.hasCompletedVoteForDisplay) {
