@@ -307,9 +307,13 @@ pub fn mark_delegation_confirmed(
 
 /// Persists signed vote commitment recovery data after signing succeeds.
 ///
-/// Stores `commitment_bundle_json` for the vote key. The vote commitment tree
-/// position is not known until the cast-vote transaction is confirmed on-chain,
-/// so `vc_tree_position` is intentionally left unset here.
+/// Stores `commitment_bundle_json` for the vote key with a temporary vote tree
+/// position placeholder.
+///
+/// zodl-ios stores `0` before cast-vote submission so the bundle remains
+/// loadable if the app is killed between signing, broadcast, confirmation, and
+/// share delegation. The confirmed cast-vote event later replaces this with the
+/// real vote commitment tree position.
 ///
 /// # Errors
 ///
@@ -327,24 +331,26 @@ pub fn store_signed_vote_commitment(
     let tx = conn
         .transaction()
         .map_err(|e| format!("begin signed vote transaction failed: {e}"))?;
+    let stored_hash =
+        queries::get_vote_tx_hash(&tx, round_id, &wallet_id, bundle_index, proposal_id)
+            .map_err(|e| format!("get_vote_tx_hash failed: {e}"))?;
     let (stored_json, _) =
         load_vote_recovery_fields(&tx, round_id, &wallet_id, bundle_index, proposal_id)?;
-    check_text_conflict(
-        stored_json.as_deref(),
+    if stored_hash.is_some() {
+        check_text_conflict(
+            stored_json.as_deref(),
+            commitment_bundle_json,
+            "vote commitment_bundle_json",
+        )?;
+    }
+    queries::store_commitment_bundle(
+        &tx,
+        round_id,
+        &wallet_id,
+        bundle_index,
+        proposal_id,
         commitment_bundle_json,
-        "vote commitment_bundle_json",
-    )?;
-    tx.execute(
-        "UPDATE votes SET commitment_bundle_json = :json
-         WHERE round_id = :round_id AND wallet_id = :wallet_id
-         AND bundle_index = :bundle_index AND proposal_id = :proposal_id",
-        named_params! {
-            ":json": commitment_bundle_json,
-            ":round_id": round_id,
-            ":wallet_id": wallet_id,
-            ":bundle_index": bundle_index as i64,
-            ":proposal_id": proposal_id as i64,
-        },
+        0,
     )
     .map_err(|e| format!("store signed vote commitment failed: {e}"))?;
     tx.commit()

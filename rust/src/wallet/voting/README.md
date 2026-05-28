@@ -80,7 +80,7 @@ Key: `(round_id, bundle_index, proposal_id)`
 | Phase | Derived From | Resume Behavior |
 | --- | --- | --- |
 | `prepared` | `votes` row exists without `tx_hash` or commitment recovery data | Build and sign vote commitment. |
-| `signed` | `commitment_bundle_json` exists without submitted vote transaction state | Submit cast-vote transaction. |
+| `signed` | `commitment_bundle_json` exists without submitted vote transaction state. New writes also store `vc_tree_position = 0` as a zodl-ios-compatible placeholder. | Submit cast-vote transaction. Legacy rows with no tree position are rebuilt before submission. |
 | `submitted_vote` | `tx_hash` exists and `submitted = 1`, but confirmation data is incomplete | Poll transaction confirmation and store vote confirmation data. Do not resubmit. |
 | `confirmed` | `tx_hash`, `submitted = 1`, `vc_tree_position`, and `commitment_bundle_json` exist | No vote recovery work remains. |
 
@@ -145,9 +145,15 @@ confirmed --conflicting tx_hash or van_leaf_position--> error
 signature first. Only after `sign_cast_vote` succeeds does it call
 `workflow::store_signed_vote_commitment`.
 
-`workflow::store_signed_vote_commitment` opens a transaction, checks existing
-`commitment_bundle_json` and `vc_tree_position` for same-data idempotency, stores
-the commitment recovery fields through `zcash_voting` queries, and commits.
+`workflow::store_signed_vote_commitment` opens a transaction and stores the
+commitment recovery fields through `zcash_voting` queries with a temporary
+`vc_tree_position = 0`. This mirrors zodl-ios. It keeps the bundle loadable if
+the app exits before the cast-vote transaction is confirmed and later replaced
+with the real vote commitment tree position.
+
+Before a cast-vote transaction hash exists, retry may overwrite the signed
+commitment JSON because no network submission has happened yet. After a tx hash
+exists, retry must only accept the same commitment JSON.
 
 This ordering prevents recovery from seeing a commitment bundle that was built
 but never successfully signed.
@@ -156,8 +162,9 @@ Transition:
 
 ```text
 prepared --sign_cast_vote ok + store commitment recovery--> signed
-signed --same commitment_json and vc_tree_position--> signed
-signed --conflicting commitment_json or vc_tree_position--> error
+signed --retry before tx hash--> signed
+submitted_vote --same commitment_json--> submitted_vote
+submitted_vote --conflicting commitment_json--> error
 sign_cast_vote error --> prepared
 ```
 
@@ -323,4 +330,3 @@ constants.
 - `submitted_share` resumes helper confirmation/retry using stored
   `sent_to_urls`.
 - `confirmed` artifacts are omitted from pending work.
-

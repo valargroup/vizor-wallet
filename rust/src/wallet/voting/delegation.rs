@@ -439,9 +439,8 @@ async fn prepare_delegation_bundle_context(
     let note_infos = selected.voting_note_infos();
     let selected_weight_zatoshi = voting_power(&selected);
 
-    let bundle_setup = voting_db
-        .ensure_bundles(&round_id, &note_infos)
-        .map_err(|e| format!("ensure_bundles failed: {e}"))?;
+    let bundle_setup =
+        ensure_bundles_for_notes_allowing_skipped_suffix(&voting_db, &round_id, &note_infos)?;
     if bundle_setup.bundle_count == 0 {
         return Err("No eligible voting bundles were created for delegation".to_string());
     }
@@ -664,9 +663,11 @@ pub async fn setup_delegation_bundles(
     )
     .await?;
     let note_infos = selected.voting_note_infos();
-    voting_db
-        .ensure_bundles(round_params.vote_round_id.as_str(), &note_infos)
-        .map_err(|e| format!("ensure_bundles failed: {e}"))
+    ensure_bundles_for_notes_allowing_skipped_suffix(
+        &voting_db,
+        round_params.vote_round_id.as_str(),
+        &note_infos,
+    )
 }
 
 /// Warms PIR and governance-PCZT state for a single delegation bundle.
@@ -1169,6 +1170,65 @@ fn ensure_round_initialized(
     })
 }
 
+/// Creates bundle rows or validates the persisted bundle prefix.
+///
+/// `zcash_voting` requires the current note chunks to match the stored bundle
+/// count exactly. Vizor can intentionally delete later bundle rows when a
+/// Keystone user skips unsigned bundles, so we allow the stored prefix to
+/// remain valid while ignoring later current chunks.
+fn ensure_bundles_for_notes_allowing_skipped_suffix(
+    voting_db: &zcash_voting::storage::VotingDb,
+    round_id: &str,
+    notes: &[zcash_voting::NoteInfo],
+) -> Result<BundleSetupResult, String> {
+    let stored_count = voting_db
+        .get_bundle_count(round_id)
+        .map_err(|e| format!("get_bundle_count failed: {e}"))?;
+    if stored_count == 0 {
+        return voting_db
+            .ensure_bundles(round_id, notes)
+            .map_err(|e| format!("ensure_bundles failed: {e}"));
+    }
+
+    let bundles = zcash_voting::round::note_bundles(notes)
+        .map_err(|e| format!("note_bundles failed: {e}"))?;
+    if bundles.len() < stored_count as usize {
+        return Err(format!(
+            "current note selection produces {} delegation bundles, but {stored_count} \
+             bundle rows are already persisted for round {round_id}",
+            bundles.len()
+        ));
+    }
+
+    let stored_bundles = &bundles[..stored_count as usize];
+    validate_persisted_bundle_notes(voting_db, round_id, stored_bundles)?;
+    Ok(BundleSetupResult {
+        bundle_count: stored_count,
+        eligible_weight: bundle_set_weight_zatoshi(stored_bundles)?,
+        dropped_count: 0,
+    })
+}
+
+fn validate_persisted_bundle_notes(
+    voting_db: &zcash_voting::storage::VotingDb,
+    round_id: &str,
+    bundles: &[Vec<zcash_voting::NoteInfo>],
+) -> Result<(), String> {
+    let conn = voting_db.conn();
+    let wallet_id = voting_db.wallet_id();
+    for (bundle_index, bundle_notes) in bundles.iter().enumerate() {
+        zcash_voting::storage::queries::require_bundle_notes(
+            &conn,
+            round_id,
+            &wallet_id,
+            bundle_index as u32,
+            bundle_notes,
+        )
+        .map_err(|e| format!("persisted bundle notes do not match current selection: {e}"))?;
+    }
+    Ok(())
+}
+
 /// Returns the eligible notes for one chunked delegation bundle.
 fn bundle_notes(
     notes: &[zcash_voting::NoteInfo],
@@ -1188,6 +1248,14 @@ fn bundle_weight_zatoshi(notes: &[zcash_voting::NoteInfo]) -> Result<u64, String
     let total = raw_bundle_weight_zatoshi(notes)?;
     Ok((total / zcash_voting::governance::BALLOT_DIVISOR)
         * zcash_voting::governance::BALLOT_DIVISOR)
+}
+
+fn bundle_set_weight_zatoshi(bundles: &[Vec<zcash_voting::NoteInfo>]) -> Result<u64, String> {
+    bundles.iter().try_fold(0u64, |acc, bundle| {
+        let weight = bundle_weight_zatoshi(bundle)?;
+        acc.checked_add(weight)
+            .ok_or_else(|| "delegation bundle set weight overflows u64".to_string())
+    })
 }
 
 fn raw_bundle_weight_zatoshi(notes: &[zcash_voting::NoteInfo]) -> Result<u64, String> {
@@ -1536,8 +1604,10 @@ mod tests {
         ensure_voting_round(&voting_db, &params, None).unwrap();
         let notes = vec![test_note_info(42)];
 
-        let created = voting_db.ensure_bundles(ROUND_ID, &notes).unwrap();
-        let reused = voting_db.ensure_bundles(ROUND_ID, &notes).unwrap();
+        let created =
+            ensure_bundles_for_notes_allowing_skipped_suffix(&voting_db, ROUND_ID, &notes).unwrap();
+        let reused =
+            ensure_bundles_for_notes_allowing_skipped_suffix(&voting_db, ROUND_ID, &notes).unwrap();
 
         assert_eq!(created.bundle_count, 1);
         assert_eq!(
@@ -1568,7 +1638,9 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            shape_err.contains("no eligible notes") || shape_err.contains("planned bundle count")
+            shape_err.contains("notes must not be empty")
+                || shape_err.contains("no eligible notes")
+                || shape_err.contains("current note selection produces")
         );
 
         let mut substituted = test_note_info(42);
@@ -1589,7 +1661,8 @@ mod tests {
         ensure_voting_round(&voting_db, &params, None).unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
 
-        let setup = voting_db.ensure_bundles(ROUND_ID, &notes).unwrap();
+        let setup =
+            ensure_bundles_for_notes_allowing_skipped_suffix(&voting_db, ROUND_ID, &notes).unwrap();
 
         assert_eq!(setup.bundle_count, 2);
         assert_eq!(
@@ -1604,6 +1677,27 @@ mod tests {
         assert_eq!(
             bundle_weight_zatoshi(&bundle_notes(&notes, 1).unwrap()).unwrap(),
             zcash_voting::governance::BALLOT_DIVISOR
+        );
+    }
+
+    #[test]
+    fn ensure_bundles_accepts_truncated_prefix_after_skipping_bundles() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("zcash_wallet.db");
+        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
+        let params = test_round_params();
+        ensure_voting_round(&voting_db, &params, None).unwrap();
+        let notes: Vec<_> = (0..6).map(test_note_info).collect();
+        ensure_bundles_for_notes_allowing_skipped_suffix(&voting_db, ROUND_ID, &notes).unwrap();
+        voting_db.delete_skipped_bundles(ROUND_ID, 1).unwrap();
+
+        let reused =
+            ensure_bundles_for_notes_allowing_skipped_suffix(&voting_db, ROUND_ID, &notes).unwrap();
+
+        assert_eq!(reused.bundle_count, 1);
+        assert_eq!(
+            reused.eligible_weight,
+            5 * zcash_voting::governance::BALLOT_DIVISOR
         );
     }
 
