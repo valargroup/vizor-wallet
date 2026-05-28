@@ -12,11 +12,14 @@ import '../src/core/widgets/app_icon.dart';
 import '../src/core/widgets/app_pane_modal_overlay.dart';
 import '../src/features/swap/models/swap_fiat_amount.dart';
 import '../src/features/swap/models/swap_models.dart';
-import '../src/features/swap/widgets/swap_address_qr_scan_modal.dart';
+import '../src/features/address_scan/widgets/address_qr_scan_modal.dart';
+import '../src/features/swap/widgets/swap_address_edit_modal.dart';
+import '../src/features/swap/widgets/swap_asset_selector_modal.dart';
 import '../src/features/swap/widgets/swap_composer_panel.dart';
 import '../src/features/swap/widgets/swap_deposit_tokens_page_content.dart';
 import '../src/features/swap/widgets/swap_near_intents_attribution.dart';
 import '../src/features/swap/widgets/swap_review_page_content.dart';
+import '../src/features/swap/widgets/swap_slippage_modal.dart';
 import '../src/features/swap/widgets/swap_status_page_content.dart';
 
 Widget buildSwapPageFigmaNode1UseCase(BuildContext context) {
@@ -81,8 +84,8 @@ Widget buildSwapAddressModalFigmaNode7UseCase(BuildContext context) {
 
 Widget buildSwapAddressScanModalPermissionUseCase(BuildContext context) {
   return _SwapPageModalFrame(
-    child: SwapAddressQrScanModalContent(
-      status: SwapAddressQrCameraStatus.requesting,
+    child: AddressQrScanModalContent(
+      status: AddressQrCameraStatus.requesting,
       onCancel: () {},
     ),
   );
@@ -90,8 +93,8 @@ Widget buildSwapAddressScanModalPermissionUseCase(BuildContext context) {
 
 Widget buildSwapAddressScanModalDeniedUseCase(BuildContext context) {
   return _SwapPageModalFrame(
-    child: SwapAddressQrScanModalContent(
-      status: SwapAddressQrCameraStatus.denied,
+    child: AddressQrScanModalContent(
+      status: AddressQrCameraStatus.denied,
       onRetry: () {},
       onCancel: () {},
     ),
@@ -100,9 +103,9 @@ Widget buildSwapAddressScanModalDeniedUseCase(BuildContext context) {
 
 Widget buildSwapAddressScanModalActiveUseCase(BuildContext context) {
   return _SwapPageModalFrame(
-    child: SwapAddressQrScanModalContent(
-      status: SwapAddressQrCameraStatus.active,
-      cameraView: const _SwapAddressQrCameraPreview(),
+    child: AddressQrScanModalContent(
+      status: AddressQrCameraStatus.active,
+      cameraView: const _AddressQrCameraPreview(),
       onCancel: () {},
     ),
   );
@@ -110,9 +113,9 @@ Widget buildSwapAddressScanModalActiveUseCase(BuildContext context) {
 
 Widget buildSwapAddressScanModalLoadingUseCase(BuildContext context) {
   return _SwapPageModalFrame(
-    child: SwapAddressQrScanModalContent(
-      status: SwapAddressQrCameraStatus.loading,
-      cameraView: const _SwapAddressQrCameraPreview(),
+    child: AddressQrScanModalContent(
+      status: AddressQrCameraStatus.loading,
+      cameraView: const _AddressQrCameraPreview(),
       onCancel: () {},
     ),
   );
@@ -1535,8 +1538,8 @@ class _SwapComposerPreviewState extends State<_SwapComposerPreview> {
   }
 }
 
-class _SwapAddressQrCameraPreview extends StatelessWidget {
-  const _SwapAddressQrCameraPreview();
+class _AddressQrCameraPreview extends StatelessWidget {
+  const _AddressQrCameraPreview();
 
   @override
   Widget build(BuildContext context) {

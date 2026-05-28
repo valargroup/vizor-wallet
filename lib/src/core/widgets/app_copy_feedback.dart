@@ -3,17 +3,19 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../core/widgets/app_toast.dart';
+import 'app_toast.dart';
 
-void copySwapText(
+void copyTextWithToast(
   BuildContext context, {
   required String text,
   required String toastMessage,
 }) {
-  unawaited(_copySwapText(context, text: text, toastMessage: toastMessage));
+  unawaited(
+    _copyTextWithToast(context, text: text, toastMessage: toastMessage),
+  );
 }
 
-Future<void> _copySwapText(
+Future<void> _copyTextWithToast(
   BuildContext context, {
   required String text,
   required String toastMessage,

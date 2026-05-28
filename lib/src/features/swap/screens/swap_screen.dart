@@ -24,9 +24,12 @@ import '../../address_book/widgets/address_book_contact_picker_modal.dart';
 import '../models/swap_activity_status_mapper.dart';
 import '../models/swap_models.dart';
 import '../providers/swap_state_provider.dart';
-import '../widgets/swap_address_qr_scan_modal.dart';
+import '../../address_scan/widgets/address_qr_scan_modal.dart';
+import '../widgets/swap_address_edit_modal.dart';
+import '../widgets/swap_asset_selector_modal.dart';
 import '../widgets/swap_composer_panel.dart';
 import '../widgets/swap_near_intents_attribution.dart';
+import '../widgets/swap_slippage_modal.dart';
 
 class SwapScreen extends ConsumerStatefulWidget {
   const SwapScreen({super.key});
@@ -335,14 +338,13 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
                         onOpenContacts: _openAddressContactPicker,
                         onCancel: _closeSwapModal,
                       ),
-                      _SwapModalSurface.addressScanner =>
-                        SwapAddressQrScanModal(
-                          onAddressScanned: (value) {
-                            swapNotifier.updateDestination(value);
-                            _closeSwapModal();
-                          },
-                          onCancel: _closeSwapModal,
-                        ),
+                      _SwapModalSurface.addressScanner => AddressQrScanModal(
+                        onAddressScanned: (value) {
+                          swapNotifier.updateDestination(value);
+                          _closeSwapModal();
+                        },
+                        onCancel: _closeSwapModal,
+                      ),
                       _SwapModalSurface.contactPicker =>
                         AddressBookContactPickerModal(
                           title: _swapContactPickerTitle(swapState),

@@ -5,10 +5,10 @@ import 'package:pretty_qr_code/pretty_qr_code.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_copy_feedback.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_contract.dart';
-import 'swap_copy_feedback.dart';
 
 class SwapDepositTokensPageContent extends StatelessWidget {
   const SwapDepositTokensPageContent({
@@ -758,7 +758,7 @@ class _DepositDetailRow extends StatelessWidget {
                       key: copyKey,
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
-                        copySwapText(
+                        copyTextWithToast(
                           context,
                           text: copyText,
                           toastMessage: toastMessage,

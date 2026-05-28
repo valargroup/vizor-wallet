@@ -57,7 +57,6 @@ void main() {
     expect(request.body?['referral'], 'rowan');
 
     expect(quote.providerQuoteId, 'quote-1');
-    expect(quote.providerSignature, 'quote-signature');
     expect(quote.pairText, 'ZEC -> USDC');
     expect(quote.sellAmountText, '1.5 ZEC');
     expect(quote.sellAmountBaseUnits, BigInt.from(150000000));
@@ -995,7 +994,6 @@ void main() {
           status: 'PROCESSING',
           swapDetails: {
             'intentHashes': ['intent-hash-1'],
-            'nearTxHashes': ['near-tx-hash-1'],
           },
         ),
       ),
@@ -1008,7 +1006,6 @@ void main() {
     final status = await provider.getStatus('status-deposit');
 
     expect(status.nearIntentHash, 'intent-hash-1');
-    expect(status.nearTransactionHash, 'near-tx-hash-1');
   });
 
   test('captures provider refund amounts from status swap details', () async {
@@ -1165,7 +1162,47 @@ void main() {
   });
 
   test(
-    'captures snake-case NEAR Intents hashes from status swap details',
+    'uses base-unit precision for rounded ZEC realised slippage amounts',
+    () async {
+      final transport = _FakeOneClickTransport([
+        _FakeResponse.get('/v0/tokens', _tokens),
+        _FakeResponse.get(
+          '/v0/status',
+          _quoteResponse(
+            originAsset: 'nep141:zec.omft.near',
+            destinationAsset: 'nep141:usdc.example',
+            swapType: 'EXACT_OUTPUT',
+            amountIn: '189900',
+            amountInFormatted: '0.0019',
+            amountOut: '1200000',
+            amountOutFormatted: '1.2',
+            minAmountIn: '189000',
+            minAmountOut: '1200000',
+            depositAddress: 'status-deposit',
+            status: 'SUCCESS',
+            swapDetails: {
+              'amountIn': '190185',
+              'amountInFormatted': '0.0019',
+              'amountOut': '1200000',
+              'amountOutFormatted': '1.2',
+              'slippage': '15',
+            },
+          ),
+        ),
+      ]);
+      final provider = NearIntentsOneClickSwapAdapter(
+        transport: transport,
+        now: () => DateTime.utc(2026, 5, 27, 7, 25),
+      );
+
+      final status = await provider.getStatus('status-deposit');
+
+      expect(status.realisedSlippageText, '0.00000285 ZEC (0.15%)');
+    },
+  );
+
+  test(
+    'captures snake-case NEAR Intents intent hashes from status swap details',
     () async {
       final transport = _FakeOneClickTransport([
         _FakeResponse.get('/v0/tokens', _tokens),
@@ -1181,7 +1218,6 @@ void main() {
             status: 'PROCESSING',
             swapDetails: {
               'intent_hashes': ['intent-hash-snake'],
-              'near_tx_hashes': ['near-tx-hash-snake'],
             },
           ),
         ),
@@ -1194,12 +1230,11 @@ void main() {
       final status = await provider.getStatus('status-deposit');
 
       expect(status.nearIntentHash, 'intent-hash-snake');
-      expect(status.nearTransactionHash, 'near-tx-hash-snake');
     },
   );
 
   test(
-    'captures nested NEAR swap transaction hashes from status details',
+    'captures origin and destination transaction hashes from status details',
     () async {
       final transport = _FakeOneClickTransport([
         _FakeResponse.get('/v0/tokens', _tokens),
@@ -1221,12 +1256,6 @@ void main() {
               'destinationChainTxHashes': [
                 {'hash': 'destination-chain-tx-hash'},
               ],
-              'nearDepositTransactions': [
-                {'txHash': 'near-deposit-tx-hash'},
-              ],
-              'nearSwapTransactions': [
-                {'txHash': 'near-swap-tx-hash'},
-              ],
             },
           ),
         ),
@@ -1239,7 +1268,6 @@ void main() {
       final status = await provider.getStatus('status-deposit');
 
       expect(status.nearIntentHash, 'intent-hash-1');
-      expect(status.nearTransactionHash, 'near-swap-tx-hash');
       expect(status.originChainTxHash, 'origin-chain-tx-hash');
       expect(status.destinationChainTxHash, 'destination-chain-tx-hash');
     },

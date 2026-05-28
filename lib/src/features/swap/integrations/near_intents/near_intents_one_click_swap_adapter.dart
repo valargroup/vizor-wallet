@@ -388,7 +388,6 @@ class NearIntentsOneClickSwapAdapter
       minimumReceiveText: quote.minimumReceiveText,
       providerStatusRaw: response.status,
       nearIntentHash: response.swapDetails?.intentHash,
-      nearTransactionHash: response.swapDetails?.nearTransactionHash,
       originChainTxHash: response.swapDetails?.originChainTxHash,
       destinationChainTxHash: response.swapDetails?.destinationChainTxHash,
       providerRefundInfo: providerRefundInfo,
@@ -452,7 +451,6 @@ class NearIntentsOneClickSwapAdapter
         deadline: depositDeadline,
       ),
       providerQuoteId: response.correlationId,
-      providerSignature: response.signature,
       sellAmountBaseUnits: _parseBaseUnits(quote.amountIn, 'amountIn'),
       sellAmountTextOverride:
           '${_trimDecimal(quote.amountInFormatted)} ${sellAsset.symbol}',
@@ -551,12 +549,24 @@ class NearIntentsOneClickSwapAdapter
     required String? formatted,
     required String? baseUnits,
     required _OneClickToken token,
+    bool preferBaseUnits = false,
   }) {
+    if (preferBaseUnits) {
+      final baseUnitAmount = _baseUnitDecimalAmount(baseUnits, token: token);
+      if (baseUnitAmount != null) return baseUnitAmount;
+    }
     final formattedValue = _cleanOptionalText(formatted);
     if (formattedValue != null) {
       final parsed = double.tryParse(formattedValue);
       if (parsed != null) return parsed;
     }
+    return _baseUnitDecimalAmount(baseUnits, token: token);
+  }
+
+  double? _baseUnitDecimalAmount(
+    String? baseUnits, {
+    required _OneClickToken token,
+  }) {
     final raw = _cleanOptionalText(baseUnits);
     if (raw == null || !_isIntegerAmount(raw)) return null;
     return double.tryParse(_baseUnitsToDecimal(raw, token.decimals));
@@ -656,11 +666,13 @@ class NearIntentsOneClickSwapAdapter
         formatted: quote.amountInFormatted,
         baseUnits: quote.amountIn,
         token: sellToken,
+        preferBaseUnits: true,
       );
       final actual = _statusDecimalAmount(
         formatted: details.amountInFormatted,
         baseUnits: details.amountIn,
         token: sellToken,
+        preferBaseUnits: true,
       );
       if (expected == null || actual == null) return null;
       return (actual - expected).clamp(0, double.infinity).toDouble();
@@ -670,11 +682,13 @@ class NearIntentsOneClickSwapAdapter
       formatted: quote.amountOutFormatted,
       baseUnits: quote.amountOut,
       token: receiveToken,
+      preferBaseUnits: true,
     );
     final actual = _statusDecimalAmount(
       formatted: details.amountOutFormatted,
       baseUnits: details.amountOut,
       token: receiveToken,
+      preferBaseUnits: true,
     );
     if (expected == null || actual == null) return null;
     return (expected - actual).clamp(0, double.infinity).toDouble();
@@ -929,7 +943,6 @@ class _OneClickQuote {
 class _OneClickQuoteResponse {
   const _OneClickQuoteResponse({
     required this.correlationId,
-    required this.signature,
     required this.quoteRequest,
     required this.quote,
   });
@@ -950,14 +963,12 @@ class _OneClickQuoteResponse {
           (throw const OneClickApiException(
             'Missing string field: correlationId',
           )),
-      signature: _string(json, 'signature'),
       quoteRequest: _OneClickQuoteRequest.fromJson(request),
       quote: _OneClickQuote.fromJson(quote),
     );
   }
 
   final String correlationId;
-  final String signature;
   final _OneClickQuoteRequest quoteRequest;
   final _OneClickQuote quote;
 }
@@ -995,7 +1006,6 @@ class _OneClickStatusResponse {
 class _OneClickSwapDetails {
   const _OneClickSwapDetails({
     this.intentHash,
-    this.nearTransactionHash,
     this.amountIn,
     this.amountInFormatted,
     this.amountOut,
@@ -1014,12 +1024,6 @@ class _OneClickSwapDetails {
   factory _OneClickSwapDetails.fromJson(Map<String, dynamic> json) {
     return _OneClickSwapDetails(
       intentHash: _firstOptionalString(json, 'intentHashes', 'intent_hashes'),
-      nearTransactionHash:
-          _firstOptionalString(json, 'nearTxHashes', 'near_tx_hashes') ??
-          _firstTransactionHash(json, 'nearSwapTransactions') ??
-          _firstTransactionHash(json, 'near_swap_transactions') ??
-          _firstTransactionHash(json, 'nearDepositTransactions') ??
-          _firstTransactionHash(json, 'near_deposit_transactions'),
       amountIn: _optionalString(json, 'amountIn'),
       amountInFormatted: _optionalString(json, 'amountInFormatted'),
       amountOut: _optionalString(json, 'amountOut'),
@@ -1044,7 +1048,6 @@ class _OneClickSwapDetails {
   }
 
   final String? intentHash;
-  final String? nearTransactionHash;
   final String? amountIn;
   final String? amountInFormatted;
   final String? amountOut;
@@ -1138,19 +1141,6 @@ String? _firstOptionalString(
       if (trimmed.isNotEmpty) return trimmed;
     }
     return null;
-  }
-  return null;
-}
-
-String? _firstTransactionHash(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is! List) return null;
-  for (final item in value) {
-    if (item is! Map) continue;
-    final txHash = item['txHash'] ?? item['tx_hash'];
-    if (txHash is! String) continue;
-    final trimmed = txHash.trim();
-    if (trimmed.isNotEmpty) return trimmed;
   }
   return null;
 }

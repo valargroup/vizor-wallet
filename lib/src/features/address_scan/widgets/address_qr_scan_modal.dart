@@ -11,18 +11,12 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../services/camera_permission_settings.dart';
 import '../../../services/qr_scanner.dart';
-import '../domain/swap_address_scan_payload.dart';
+import '../domain/address_scan_payload.dart';
 
-enum SwapAddressQrCameraStatus {
-  requesting,
-  denied,
-  active,
-  loading,
-  unavailable,
-}
+enum AddressQrCameraStatus { requesting, denied, active, loading, unavailable }
 
-class SwapAddressQrScanModal extends StatefulWidget {
-  const SwapAddressQrScanModal({
+class AddressQrScanModal extends StatefulWidget {
+  const AddressQrScanModal({
     required this.onAddressScanned,
     required this.onCancel,
     super.key,
@@ -32,10 +26,10 @@ class SwapAddressQrScanModal extends StatefulWidget {
   final VoidCallback onCancel;
 
   @override
-  State<SwapAddressQrScanModal> createState() => _SwapAddressQrScanModalState();
+  State<AddressQrScanModal> createState() => _AddressQrScanModalState();
 }
 
-class _SwapAddressQrScanModalState extends State<SwapAddressQrScanModal>
+class _AddressQrScanModalState extends State<AddressQrScanModal>
     with WidgetsBindingObserver {
   late final MobileScannerController _controller;
   StreamSubscription<List<MobileScannerCameraInfo>>? _camerasSubscription;
@@ -83,7 +77,7 @@ class _SwapAddressQrScanModalState extends State<SwapAddressQrScanModal>
       if (!mounted) return;
       _applyCameras(cameras);
     } catch (e, st) {
-      log('SwapAddressQrScanModal: camera list error: $e\n$st');
+      log('AddressQrScanModal: camera list error: $e\n$st');
       if (!mounted) return;
       setState(() => _loadingCameras = false);
     }
@@ -131,21 +125,21 @@ class _SwapAddressQrScanModalState extends State<SwapAddressQrScanModal>
     return name;
   }
 
-  SwapAddressQrCameraStatus _cameraAccessStatus(MobileScannerState state) {
-    if (!QrScanner.isAvailable) return SwapAddressQrCameraStatus.unavailable;
+  AddressQrCameraStatus _cameraAccessStatus(MobileScannerState state) {
+    if (!QrScanner.isAvailable) return AddressQrCameraStatus.unavailable;
     if (state.error?.errorCode == MobileScannerErrorCode.permissionDenied) {
-      return SwapAddressQrCameraStatus.denied;
+      return AddressQrCameraStatus.denied;
     }
     if (state.error != null && !state.isRunning) {
-      return SwapAddressQrCameraStatus.unavailable;
+      return AddressQrCameraStatus.unavailable;
     }
     if (state.hasCameraPermission && state.isRunning) {
-      return SwapAddressQrCameraStatus.active;
+      return AddressQrCameraStatus.active;
     }
     if (state.hasCameraPermission || state.isStarting || state.isInitialized) {
-      return SwapAddressQrCameraStatus.loading;
+      return AddressQrCameraStatus.loading;
     }
-    return SwapAddressQrCameraStatus.requesting;
+    return AddressQrCameraStatus.requesting;
   }
 
   String _cameraUnavailableDescription(MobileScannerState state) {
@@ -160,18 +154,18 @@ class _SwapAddressQrScanModalState extends State<SwapAddressQrScanModal>
     try {
       await _controller.start();
     } catch (e, st) {
-      log('SwapAddressQrScanModal: camera start retry error: $e\n$st');
+      log('AddressQrScanModal: camera start retry error: $e\n$st');
     }
 
     if (!mounted || !openSettingsOnDenied) return;
     if (_cameraAccessStatus(_controller.value) !=
-        SwapAddressQrCameraStatus.denied) {
+        AddressQrCameraStatus.denied) {
       return;
     }
 
     final opened = await CameraPermissionSettings.open();
     if (!opened) {
-      log('SwapAddressQrScanModal: failed to open camera permission settings');
+      log('AddressQrScanModal: failed to open camera permission settings');
     }
   }
 
@@ -201,7 +195,7 @@ class _SwapAddressQrScanModalState extends State<SwapAddressQrScanModal>
     try {
       await _controller.switchCamera(SelectCamera(cameraId: nextCamera.id));
     } catch (e, st) {
-      log('SwapAddressQrScanModal: camera switch error: $e\n$st');
+      log('AddressQrScanModal: camera switch error: $e\n$st');
       if (!mounted) return;
       setState(() {
         _selectedCameraId = _controller.value.camera?.id;
@@ -215,7 +209,7 @@ class _SwapAddressQrScanModalState extends State<SwapAddressQrScanModal>
 
   void _handleScanComplete(String value) {
     if (_completed) return;
-    final normalized = normalizeSwapAddressScanPayload(value);
+    final normalized = normalizeAddressScanPayload(value);
     if (normalized == null || normalized.isEmpty) {
       setState(() {
         _error = 'QR code did not include an address.';
@@ -234,10 +228,10 @@ class _SwapAddressQrScanModalState extends State<SwapAddressQrScanModal>
       builder: (context, scannerState, _) {
         final status = _cameraAccessStatus(scannerState);
         final unavailableDescription =
-            status == SwapAddressQrCameraStatus.unavailable
+            status == AddressQrCameraStatus.unavailable
             ? _cameraUnavailableDescription(scannerState)
             : null;
-        return SwapAddressQrScanModalContent(
+        return AddressQrScanModalContent(
           status: status,
           cameraView: QrScanner.isAvailable
               ? PlainQrScannerView(
@@ -266,8 +260,8 @@ class _SwapAddressQrScanModalState extends State<SwapAddressQrScanModal>
   }
 }
 
-class SwapAddressQrScanModalContent extends StatelessWidget {
-  const SwapAddressQrScanModalContent({
+class AddressQrScanModalContent extends StatelessWidget {
+  const AddressQrScanModalContent({
     required this.status,
     required this.onCancel,
     this.cameraView,
@@ -287,7 +281,7 @@ class SwapAddressQrScanModalContent extends StatelessWidget {
   static const cameraModalHeight = 276.0;
   static const cameraFooterHeight = 40.0;
 
-  final SwapAddressQrCameraStatus status;
+  final AddressQrCameraStatus status;
   final Widget? cameraView;
   final String cameraLabel;
   final bool canChooseCamera;
@@ -301,7 +295,7 @@ class SwapAddressQrScanModalContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Container(
-      key: const ValueKey('swap_address_scan_modal'),
+      key: const ValueKey('address_scan_modal'),
       width: width,
       height: height,
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
@@ -312,7 +306,7 @@ class SwapAddressQrScanModalContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SwapAddressQrScanTitle(),
+          const _AddressQrScanTitle(),
           const SizedBox(height: 16),
           Expanded(
             child: Padding(
@@ -321,7 +315,7 @@ class SwapAddressQrScanModalContent extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Center(
-                      child: _SwapAddressQrCameraModal(
+                      child: _AddressQrCameraModal(
                         status: status,
                         cameraView: cameraView,
                         cameraLabel: cameraLabel,
@@ -336,7 +330,7 @@ class SwapAddressQrScanModalContent extends StatelessWidget {
                     const SizedBox(height: AppSpacing.xxs),
                     Text(
                       error!,
-                      key: const ValueKey('swap_address_scan_error'),
+                      key: const ValueKey('address_scan_error'),
                       textAlign: TextAlign.center,
                       style: AppTypography.bodySmall.copyWith(
                         color: colors.text.destructive,
@@ -349,7 +343,7 @@ class SwapAddressQrScanModalContent extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           AppButton(
-            key: const ValueKey('swap_address_scan_cancel_button'),
+            key: const ValueKey('address_scan_cancel_button'),
             onPressed: onCancel,
             variant: AppButtonVariant.ghost,
             size: AppButtonSize.large,
@@ -362,8 +356,8 @@ class SwapAddressQrScanModalContent extends StatelessWidget {
   }
 }
 
-class _SwapAddressQrScanTitle extends StatelessWidget {
-  const _SwapAddressQrScanTitle();
+class _AddressQrScanTitle extends StatelessWidget {
+  const _AddressQrScanTitle();
 
   @override
   Widget build(BuildContext context) {
@@ -398,8 +392,8 @@ class _SwapAddressQrScanTitle extends StatelessWidget {
   }
 }
 
-class _SwapAddressQrCameraModal extends StatelessWidget {
-  const _SwapAddressQrCameraModal({
+class _AddressQrCameraModal extends StatelessWidget {
+  const _AddressQrCameraModal({
     required this.status,
     required this.cameraLabel,
     required this.canChooseCamera,
@@ -409,7 +403,7 @@ class _SwapAddressQrCameraModal extends StatelessWidget {
     this.cameraView,
   });
 
-  final SwapAddressQrCameraStatus status;
+  final AddressQrCameraStatus status;
   final Widget? cameraView;
   final String cameraLabel;
   final bool canChooseCamera;
@@ -418,19 +412,19 @@ class _SwapAddressQrCameraModal extends StatelessWidget {
   final String? unavailableDescription;
 
   bool get _showsCameraFooter =>
-      status == SwapAddressQrCameraStatus.active ||
-      status == SwapAddressQrCameraStatus.loading;
+      status == AddressQrCameraStatus.active ||
+      status == AddressQrCameraStatus.loading;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      key: const ValueKey('swap_address_scan_camera_modal'),
-      width: SwapAddressQrScanModalContent.cameraWidth,
-      height: SwapAddressQrScanModalContent.cameraModalHeight,
+      key: const ValueKey('address_scan_camera_modal'),
+      width: AddressQrScanModalContent.cameraWidth,
+      height: AddressQrScanModalContent.cameraModalHeight,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _SwapAddressQrCameraViewport(
+          _AddressQrCameraViewport(
             status: status,
             cameraView: cameraView,
             onRetry: onRetry,
@@ -439,9 +433,9 @@ class _SwapAddressQrCameraModal extends StatelessWidget {
           if (_showsCameraFooter) ...[
             const SizedBox(height: 16),
             SizedBox(
-              key: const ValueKey('swap_address_scan_camera_footer_slot'),
-              height: SwapAddressQrScanModalContent.cameraFooterHeight,
-              child: _SwapAddressQrCameraFooter(
+              key: const ValueKey('address_scan_camera_footer_slot'),
+              height: AddressQrScanModalContent.cameraFooterHeight,
+              child: _AddressQrCameraFooter(
                 label: cameraLabel,
                 enabled: canChooseCamera,
                 onTap: onCameraTap,
@@ -454,15 +448,15 @@ class _SwapAddressQrCameraModal extends StatelessWidget {
   }
 }
 
-class _SwapAddressQrCameraViewport extends StatelessWidget {
-  const _SwapAddressQrCameraViewport({
+class _AddressQrCameraViewport extends StatelessWidget {
+  const _AddressQrCameraViewport({
     required this.status,
     required this.onRetry,
     required this.unavailableDescription,
     this.cameraView,
   });
 
-  final SwapAddressQrCameraStatus status;
+  final AddressQrCameraStatus status;
   final Widget? cameraView;
   final VoidCallback? onRetry;
   final String? unavailableDescription;
@@ -471,15 +465,15 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final showsCameraSurface =
-        status == SwapAddressQrCameraStatus.active ||
-        status == SwapAddressQrCameraStatus.loading;
+        status == AddressQrCameraStatus.active ||
+        status == AddressQrCameraStatus.loading;
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadii.large),
       clipBehavior: Clip.antiAliasWithSaveLayer,
       child: SizedBox(
-        key: const ValueKey('swap_address_scan_camera_viewport'),
-        width: SwapAddressQrScanModalContent.cameraWidth,
-        height: SwapAddressQrScanModalContent.cameraHeight,
+        key: const ValueKey('address_scan_camera_viewport'),
+        width: AddressQrScanModalContent.cameraWidth,
+        height: AddressQrScanModalContent.cameraHeight,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -491,20 +485,20 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
               ),
             ),
             ?cameraView,
-            if (status == SwapAddressQrCameraStatus.requesting)
-              const _SwapAddressQrCameraMessage(
+            if (status == AddressQrCameraStatus.requesting)
+              const _AddressQrCameraMessage(
                 iconName: AppIcons.camera,
                 title: 'Grant access to your camera',
                 description:
                     'Request again, or enable manually\nin the System settings.',
               ),
-            if (status == SwapAddressQrCameraStatus.denied)
-              _SwapAddressQrCameraMessage(
+            if (status == AddressQrCameraStatus.denied)
+              _AddressQrCameraMessage(
                 iconName: AppIcons.camera,
                 title: _cameraDeniedTitle,
                 description: _cameraDeniedDescription,
                 action: AppButton(
-                  key: const ValueKey('swap_address_scan_retry_button'),
+                  key: const ValueKey('address_scan_retry_button'),
                   onPressed: onRetry,
                   variant: AppButtonVariant.secondary,
                   size: AppButtonSize.medium,
@@ -513,8 +507,8 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
                   child: const Text('Allow camera'),
                 ),
               ),
-            if (status == SwapAddressQrCameraStatus.unavailable)
-              _SwapAddressQrCameraMessage(
+            if (status == AddressQrCameraStatus.unavailable)
+              _AddressQrCameraMessage(
                 iconName: AppIcons.cameraDenied,
                 title: 'Camera unavailable',
                 description:
@@ -523,7 +517,7 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
                 action: onRetry == null
                     ? null
                     : AppButton(
-                        key: const ValueKey('swap_address_scan_retry_button'),
+                        key: const ValueKey('address_scan_retry_button'),
                         onPressed: onRetry,
                         variant: AppButtonVariant.secondary,
                         size: AppButtonSize.medium,
@@ -532,13 +526,13 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
                         child: const Text('Try again'),
                       ),
               ),
-            if (status == SwapAddressQrCameraStatus.loading)
-              const _SwapAddressQrLoadingOverlay(),
+            if (status == AddressQrCameraStatus.loading)
+              const _AddressQrLoadingOverlay(),
             if (showsCameraSurface)
               Positioned.fill(
                 child: IgnorePointer(
                   child: DecoratedBox(
-                    key: const ValueKey('swap_address_scan_camera_border'),
+                    key: const ValueKey('address_scan_camera_border'),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(AppRadii.large),
                       border: Border.all(
@@ -564,8 +558,8 @@ class _SwapAddressQrCameraViewport extends StatelessWidget {
       : 'Request again, or enable manually\nin the System settings.';
 }
 
-class _SwapAddressQrCameraMessage extends StatelessWidget {
-  const _SwapAddressQrCameraMessage({
+class _AddressQrCameraMessage extends StatelessWidget {
+  const _AddressQrCameraMessage({
     required this.iconName,
     required this.title,
     required this.description,
@@ -581,7 +575,7 @@ class _SwapAddressQrCameraMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return ColoredBox(
-      key: const ValueKey('swap_address_scan_camera_message'),
+      key: const ValueKey('address_scan_camera_message'),
       color: colors.background.ground,
       child: Center(
         child: Padding(
@@ -615,7 +609,7 @@ class _SwapAddressQrCameraMessage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              _SwapAddressQrCameraDescription(
+              _AddressQrCameraDescription(
                 description: description,
                 color: colors.text.secondary,
               ),
@@ -628,8 +622,8 @@ class _SwapAddressQrCameraMessage extends StatelessWidget {
   }
 }
 
-class _SwapAddressQrCameraDescription extends StatelessWidget {
-  const _SwapAddressQrCameraDescription({
+class _AddressQrCameraDescription extends StatelessWidget {
+  const _AddressQrCameraDescription({
     required this.description,
     required this.color,
   });
@@ -669,14 +663,14 @@ class _SwapAddressQrCameraDescription extends StatelessWidget {
   }
 }
 
-class _SwapAddressQrLoadingOverlay extends StatelessWidget {
-  const _SwapAddressQrLoadingOverlay();
+class _AddressQrLoadingOverlay extends StatelessWidget {
+  const _AddressQrLoadingOverlay();
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     return ClipRect(
-      key: const ValueKey('swap_address_scan_loading_overlay'),
+      key: const ValueKey('address_scan_loading_overlay'),
       child: BackdropFilter(
         filter: ui.ImageFilter.blur(sigmaX: 37, sigmaY: 37),
         child: DecoratedBox(
@@ -704,8 +698,8 @@ class _SwapAddressQrLoadingOverlay extends StatelessWidget {
   }
 }
 
-class _SwapAddressQrCameraFooter extends StatelessWidget {
-  const _SwapAddressQrCameraFooter({
+class _AddressQrCameraFooter extends StatelessWidget {
+  const _AddressQrCameraFooter({
     required this.label,
     required this.enabled,
     required this.onTap,
@@ -728,7 +722,7 @@ class _SwapAddressQrCameraFooter extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? onTap : null,
           child: Container(
-            key: const ValueKey('swap_address_scan_camera_footer'),
+            key: const ValueKey('address_scan_camera_footer'),
             height: 32,
             constraints: const BoxConstraints(minWidth: 96, maxWidth: 248),
             padding: const EdgeInsets.symmetric(horizontal: 8),

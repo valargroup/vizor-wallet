@@ -60,7 +60,6 @@ void main() {
       depositMemo: 'memo-7',
       depositTxHash: 'zec-txid',
       providerQuoteId: 'quote-1',
-      providerSignature: 'quote-signature',
       swapFeeText: 'Included in shown rate',
       totalFeesText: '0.01005 ZEC',
       realisedSlippageText: '0.0525 USDC (0.05%)',
@@ -69,7 +68,6 @@ void main() {
       minimumReceiveText: '104.1975 USDC',
       providerStatusRaw: 'PROCESSING',
       nearIntentHash: 'intent-hash-1',
-      nearTransactionHash: 'near-tx-hash-1',
       originChainTxHash: 'origin-chain-tx-1',
       destinationChainTxHash: 'destination-chain-tx-1',
       providerRefundInfo: const SwapProviderRefundInfo(
@@ -107,7 +105,6 @@ void main() {
     expect(restored.single.depositMemo, 'memo-7');
     expect(restored.single.depositTxHash, 'zec-txid');
     expect(restored.single.providerQuoteId, 'quote-1');
-    expect(restored.single.providerSignature, 'quote-signature');
     expect(restored.single.swapFeeText, 'Included in shown rate');
     expect(restored.single.totalFeesText, '0.01005 ZEC');
     expect(restored.single.realisedSlippageText, '0.0525 USDC (0.05%)');
@@ -116,7 +113,6 @@ void main() {
     expect(restored.single.minimumReceiveText, '104.1975 USDC');
     expect(restored.single.providerStatusRaw, 'PROCESSING');
     expect(restored.single.nearIntentHash, 'intent-hash-1');
-    expect(restored.single.nearTransactionHash, 'near-tx-hash-1');
     expect(restored.single.originChainTxHash, 'origin-chain-tx-1');
     expect(restored.single.destinationChainTxHash, 'destination-chain-tx-1');
     expect(restored.single.providerRefundInfo?.minimumDepositText, '1.485 ZEC');

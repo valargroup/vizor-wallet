@@ -84,7 +84,7 @@ void main() {
       find.byKey(const ValueKey('address_book_contact_menu_mike')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit Contact'));
+    await tester.tap(find.text('Edit contact'));
     await tester.pumpAndSettle();
 
     final labelFieldFinder = find.descendant(
@@ -101,7 +101,7 @@ void main() {
     expect(labelField().controller?.text, isEmpty);
     expect(
       tester
-          .widget<AppButton>(find.widgetWithText(AppButton, 'Save Edits'))
+          .widget<AppButton>(find.widgetWithText(AppButton, 'Save changes'))
           .onPressed,
       isNull,
     );
@@ -201,22 +201,17 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Scan address QR'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('swap_address_scan_modal')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('address_scan_modal')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('address_book_contact_label_field')),
       findsNothing,
     );
     expect(find.text('scan route'), findsNothing);
 
-    await tester.tap(
-      find.byKey(const ValueKey('swap_address_scan_cancel_button')),
-    );
+    await tester.tap(find.byKey(const ValueKey('address_scan_cancel_button')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('swap_address_scan_modal')), findsNothing);
+    expect(find.byKey(const ValueKey('address_scan_modal')), findsNothing);
     expect(
       find.byKey(const ValueKey('address_book_contact_label_field')),
       findsOneWidget,

@@ -17,7 +17,6 @@ class SwapIntentRecord {
     this.depositMemo,
     this.depositTxHash,
     this.providerQuoteId,
-    this.providerSignature,
     this.swapFeeText,
     this.totalFeesText,
     this.realisedSlippageText,
@@ -26,7 +25,6 @@ class SwapIntentRecord {
     this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
-    this.nearTransactionHash,
     this.originChainTxHash,
     this.destinationChainTxHash,
     this.providerRefundInfo,
@@ -58,7 +56,6 @@ class SwapIntentRecord {
       depositMemo: intent.depositMemo,
       depositTxHash: intent.depositTxHash,
       providerQuoteId: intent.providerQuoteId,
-      providerSignature: intent.providerSignature,
       swapFeeText: intent.swapFeeText,
       totalFeesText: intent.totalFeesText,
       realisedSlippageText: intent.realisedSlippageText,
@@ -67,7 +64,6 @@ class SwapIntentRecord {
       minimumReceiveText: intent.minimumReceiveText,
       providerStatusRaw: intent.providerStatusRaw,
       nearIntentHash: intent.nearIntentHash,
-      nearTransactionHash: intent.nearTransactionHash,
       originChainTxHash: intent.originChainTxHash,
       destinationChainTxHash: intent.destinationChainTxHash,
       providerRefundInfo: intent.providerRefundInfo,
@@ -98,7 +94,6 @@ class SwapIntentRecord {
   final String? depositMemo;
   final String? depositTxHash;
   final String? providerQuoteId;
-  final String? providerSignature;
   final String? swapFeeText;
   final String? totalFeesText;
   final String? realisedSlippageText;
@@ -107,7 +102,6 @@ class SwapIntentRecord {
   final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
-  final String? nearTransactionHash;
   final String? originChainTxHash;
   final String? destinationChainTxHash;
   final SwapProviderRefundInfo? providerRefundInfo;
@@ -140,7 +134,6 @@ class SwapIntentRecord {
     String? depositMemo,
     String? depositTxHash,
     String? providerQuoteId,
-    String? providerSignature,
     String? swapFeeText,
     String? totalFeesText,
     String? realisedSlippageText,
@@ -149,7 +142,6 @@ class SwapIntentRecord {
     String? minimumReceiveText,
     String? providerStatusRaw,
     String? nearIntentHash,
-    String? nearTransactionHash,
     String? originChainTxHash,
     String? destinationChainTxHash,
     SwapProviderRefundInfo? providerRefundInfo,
@@ -181,7 +173,6 @@ class SwapIntentRecord {
       depositMemo: depositMemo ?? this.depositMemo,
       depositTxHash: depositTxHash ?? this.depositTxHash,
       providerQuoteId: providerQuoteId ?? this.providerQuoteId,
-      providerSignature: providerSignature ?? this.providerSignature,
       swapFeeText: swapFeeText ?? this.swapFeeText,
       totalFeesText: totalFeesText ?? this.totalFeesText,
       realisedSlippageText: realisedSlippageText ?? this.realisedSlippageText,
@@ -191,7 +182,6 @@ class SwapIntentRecord {
       minimumReceiveText: minimumReceiveText ?? this.minimumReceiveText,
       providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
       nearIntentHash: nearIntentHash ?? this.nearIntentHash,
-      nearTransactionHash: nearTransactionHash ?? this.nearTransactionHash,
       originChainTxHash: originChainTxHash ?? this.originChainTxHash,
       destinationChainTxHash:
           destinationChainTxHash ?? this.destinationChainTxHash,
@@ -232,7 +222,6 @@ class SwapIntent {
     this.depositMemo,
     this.depositTxHash,
     this.providerQuoteId,
-    this.providerSignature,
     this.swapFeeText,
     this.totalFeesText,
     this.realisedSlippageText,
@@ -241,7 +230,6 @@ class SwapIntent {
     this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
-    this.nearTransactionHash,
     this.originChainTxHash,
     this.destinationChainTxHash,
     this.providerRefundInfo,
@@ -275,7 +263,6 @@ class SwapIntent {
   final String? depositMemo;
   final String? depositTxHash;
   final String? providerQuoteId;
-  final String? providerSignature;
   final String? swapFeeText;
   final String? totalFeesText;
   final String? realisedSlippageText;
@@ -284,7 +271,6 @@ class SwapIntent {
   final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
-  final String? nearTransactionHash;
   final String? originChainTxHash;
   final String? destinationChainTxHash;
   final SwapProviderRefundInfo? providerRefundInfo;
@@ -320,7 +306,6 @@ class SwapIntent {
     String? depositMemo,
     String? depositTxHash,
     String? providerQuoteId,
-    String? providerSignature,
     String? swapFeeText,
     String? totalFeesText,
     String? realisedSlippageText,
@@ -329,7 +314,6 @@ class SwapIntent {
     String? minimumReceiveText,
     String? providerStatusRaw,
     String? nearIntentHash,
-    String? nearTransactionHash,
     String? originChainTxHash,
     String? destinationChainTxHash,
     SwapProviderRefundInfo? providerRefundInfo,
@@ -365,7 +349,6 @@ class SwapIntent {
       depositMemo: depositMemo ?? this.depositMemo,
       depositTxHash: depositTxHash ?? this.depositTxHash,
       providerQuoteId: providerQuoteId ?? this.providerQuoteId,
-      providerSignature: providerSignature ?? this.providerSignature,
       swapFeeText: swapFeeText ?? this.swapFeeText,
       totalFeesText: totalFeesText ?? this.totalFeesText,
       realisedSlippageText: realisedSlippageText ?? this.realisedSlippageText,
@@ -375,7 +358,6 @@ class SwapIntent {
       minimumReceiveText: minimumReceiveText ?? this.minimumReceiveText,
       providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
       nearIntentHash: nearIntentHash ?? this.nearIntentHash,
-      nearTransactionHash: nearTransactionHash ?? this.nearTransactionHash,
       originChainTxHash: originChainTxHash ?? this.originChainTxHash,
       destinationChainTxHash:
           destinationChainTxHash ?? this.destinationChainTxHash,

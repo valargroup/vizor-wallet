@@ -118,7 +118,6 @@ class SwapQuote {
     required this.depositInstruction,
     this.quoteExpiresAt,
     this.providerQuoteId,
-    this.providerSignature,
     this.sellAmountBaseUnits,
     this.sellAmountTextOverride,
     this.receiveEstimateTextOverride,
@@ -200,7 +199,6 @@ class SwapQuote {
   final DateTime? quoteExpiresAt;
   final SwapDepositInstruction depositInstruction;
   final String? providerQuoteId;
-  final String? providerSignature;
   final BigInt? sellAmountBaseUnits;
   final String? sellAmountTextOverride;
   final String? receiveEstimateTextOverride;

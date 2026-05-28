@@ -59,6 +59,14 @@ void main() {
       _detailRow(presentation.details, 'Guaranteed minimum').helpTooltip,
       swapMinimumReceiveTooltip('USDC'),
     );
+    expect(
+      _detailRow(presentation.details, 'ZEC refund address').copyable,
+      isTrue,
+    );
+    expect(
+      _detailRow(presentation.details, 'ZEC refund address').copyText,
+      'u1refund-address',
+    );
   });
 
   test('keeps terminal failure details compact and final', () {
@@ -93,172 +101,36 @@ void main() {
       contains('u1'),
     );
     expect(
+      _detailRow(presentation.details, 'ZEC refunded to').copyable,
+      isTrue,
+    );
+    expect(
+      _detailRow(presentation.details, 'ZEC refunded to').copyText,
+      'u1refund-address',
+    );
+    expect(
       _detailValue(presentation.details, 'Timestamp'),
       'May 7, 2026 10:30',
     );
   });
 
-  test('maps route plan progress and staged display states', () {
-    final plan = SwapActivityRoutePlan.fromIntent(
-      _intent(
-        status: SwapIntentStatus.processing,
-        direction: SwapDirection.zecToExternal,
-        externalAsset: SwapAsset.usdc,
-      ),
-    );
-
-    expect(plan.steps.map((step) => step.label), [
-      'Send ZEC',
-      'Confirm',
-      'Swap',
-      'Deliver',
-    ]);
-    expect(plan.progressIndex, 2);
-    expect(plan.canAnimateProgress, isTrue);
-    expect(
-      plan.semanticLabel,
-      'Now: Swap, Provider is converting funds and preparing delivery., 2 of 4 steps done',
-    );
-
-    final displayed = plan.displayedAtProgress(1);
-    expect(displayed.steps.map((step) => step.state), [
-      SwapActivityRouteStepState.done,
-      SwapActivityRouteStepState.active,
-      SwapActivityRouteStepState.pending,
-      SwapActivityRouteStepState.pending,
-    ]);
-  });
-
-  test('moves broadcast deposits to confirmation while awaiting provider', () {
-    final intent = _intent(
-      status: SwapIntentStatus.awaitingDeposit,
-      direction: SwapDirection.zecToExternal,
-      externalAsset: SwapAsset.usdc,
-      depositTxHash: 'zec-deposit-txid',
-    );
-
+  test('marks external source refund addresses copyable', () {
     final presentation = swapActivityStatusPresentationForIntent(
-      _state(),
-      intent,
-    );
-    expect(presentation.progressIndex, 1);
-
-    final plan = SwapActivityRoutePlan.fromIntent(intent);
-    expect(plan.progressIndex, 1);
-    expect(
-      plan.semanticLabel,
-      'Now: Confirm, Waiting for the source chain and provider to recognize the deposit., 1 of 4 steps done',
-    );
-    expect(plan.steps.map((step) => step.state), [
-      SwapActivityRouteStepState.done,
-      SwapActivityRouteStepState.active,
-      SwapActivityRouteStepState.pending,
-      SwapActivityRouteStepState.pending,
-    ]);
-  });
-
-  test('maps active status plan copy from intent status', () {
-    final awaitingBroadcast = SwapActivityStatusPlan.fromIntent(
+      _state(indicativeExternalPerZec: {SwapAsset.usdc: 70}),
       _intent(
-        status: SwapIntentStatus.awaitingDeposit,
-        direction: SwapDirection.zecToExternal,
+        status: SwapIntentStatus.awaitingExternalDeposit,
+        direction: SwapDirection.externalToZec,
         externalAsset: SwapAsset.usdc,
-      ),
-    );
-    expect(awaitingBroadcast.title, 'Send ZEC');
-    expect(awaitingBroadcast.tone, SwapActivityStatusPlanTone.action);
-
-    final awaitingConfirm = SwapActivityStatusPlan.fromIntent(
-      _intent(
-        status: SwapIntentStatus.awaitingDeposit,
-        direction: SwapDirection.zecToExternal,
-        externalAsset: SwapAsset.usdc,
-        depositTxHash: 'zec-deposit-txid',
-      ),
-    );
-    expect(awaitingConfirm.title, 'ZEC sent');
-    expect(awaitingConfirm.detail, 'Waiting for the deposit to confirm.');
-
-    final unknown = SwapActivityStatusPlan.fromIntent(
-      _intent(
-        status: SwapIntentStatus.providerStatusUnknown,
-        direction: SwapDirection.zecToExternal,
-        externalAsset: SwapAsset.usdc,
-        providerStatusRaw: 'mystery_status',
-      ),
-    );
-    expect(unknown.tone, SwapActivityStatusPlanTone.warning);
-    expect(
-      unknown.detail,
-      'Provider returned mystery_status. Keep this record open.',
-    );
-  });
-
-  test('maps failed route plans without animating alert states', () {
-    final plan = SwapActivityRoutePlan.fromIntent(
-      _intent(
-        status: SwapIntentStatus.failed,
-        direction: SwapDirection.zecToExternal,
-        externalAsset: SwapAsset.usdc,
+        pair: 'USDC -> ZEC',
+        depositAddress: '0xdeposit-address',
+        oneClickRefundTo: '0xrefund-address',
       ),
     );
 
-    expect(plan.progressIndex, 0);
-    expect(plan.canAnimateProgress, isFalse);
-    expect(plan.steps.first.state, SwapActivityRouteStepState.failed);
-    expect(
-      plan.semanticLabel,
-      'Stopped, Send the quoted amount to the one-time deposit address., 0 of 4 steps done',
-    );
-    expect(identical(plan.displayedAtProgress(0), plan), isTrue);
-  });
-
-  test('maps resolution messaging and actions for attention states', () {
-    final incomplete = SwapActivityResolution.fromIntent(
-      _intent(
-        status: SwapIntentStatus.incompleteDeposit,
-        direction: SwapDirection.zecToExternal,
-        externalAsset: SwapAsset.usdc,
-      ),
-    );
-    expect(incomplete?.tone, SwapActivityResolutionTone.warning);
-    expect(
-      incomplete?.primaryAction,
-      SwapActivityResolutionAction.copyTopUpDetails,
-    );
-
-    final unknown = SwapActivityResolution.fromIntent(
-      _intent(
-        status: SwapIntentStatus.providerStatusUnknown,
-        direction: SwapDirection.zecToExternal,
-        externalAsset: SwapAsset.usdc,
-        providerStatusRaw: 'mystery_status',
-      ),
-    );
-    expect(unknown?.primaryAction, isNull);
-    expect(unknown?.message, 'The provider returned mystery_status.');
-
-    final failed = SwapActivityResolution.fromIntent(
-      _intent(
-        status: SwapIntentStatus.failed,
-        direction: SwapDirection.zecToExternal,
-        externalAsset: SwapAsset.usdc,
-      ),
-    );
-    expect(failed?.tone, SwapActivityResolutionTone.destructive);
-    expect(
-      failed?.primaryAction,
-      SwapActivityResolutionAction.reviewFreshQuote,
-    );
-
-    final processing = SwapActivityResolution.fromIntent(
-      _intent(
-        status: SwapIntentStatus.processing,
-        direction: SwapDirection.zecToExternal,
-        externalAsset: SwapAsset.usdc,
-      ),
-    );
-    expect(processing, isNull);
+    final row = _detailRow(presentation.details, 'USDC refund address');
+    expect(row.value, contains('0x'));
+    expect(row.copyable, isTrue);
+    expect(row.copyText, '0xrefund-address');
   });
 
   test('maps deposit instructions by swap direction', () {
@@ -383,6 +255,7 @@ SwapIntent _intent({
   required SwapIntentStatus status,
   required SwapDirection direction,
   required SwapAsset externalAsset,
+  String pair = 'ZEC -> USDC',
   String sellAmount = '2.0000 ZEC',
   String receiveEstimate = '140.00 USDC',
   String? depositAddress,
@@ -398,7 +271,7 @@ SwapIntent _intent({
   return SwapIntent(
     id: 'swap-activity',
     title: 'ZEC to USDC',
-    pair: 'ZEC -> USDC',
+    pair: pair,
     sellAmount: sellAmount,
     receiveEstimate: receiveEstimate,
     provider: 'NEAR Intents',

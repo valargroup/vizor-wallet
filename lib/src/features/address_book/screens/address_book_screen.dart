@@ -20,7 +20,7 @@ import '../../../core/widgets/app_profile_picture.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../send/models/send_prefill_args.dart';
-import '../../swap/widgets/swap_address_qr_scan_modal.dart';
+import '../../address_scan/widgets/address_qr_scan_modal.dart';
 import '../models/address_book_contact.dart';
 import '../providers/address_book_provider.dart';
 import '../widgets/address_book_network_icon.dart';
@@ -292,7 +292,7 @@ class _AddressBookScreenState extends ConsumerState<AddressBookScreen> {
           onCancel: _returnToDraftForm,
         );
       case _AddressBookModalKind.addressScanner:
-        return SwapAddressQrScanModal(
+        return AddressQrScanModal(
           onAddressScanned: _selectScannedAddress,
           onCancel: _returnToDraftForm,
         );

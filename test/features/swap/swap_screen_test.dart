@@ -33,10 +33,9 @@ import 'package:zcash_wallet/src/features/activity/widgets/activity_table.dart';
 import 'package:zcash_wallet/src/features/swap/screens/swap_review_screen.dart';
 import 'package:zcash_wallet/src/features/swap/screens/swap_screen.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_amount_text.dart';
-import 'package:zcash_wallet/src/features/swap/widgets/swap_address_qr_scan_modal.dart';
+import 'package:zcash_wallet/src/features/address_scan/widgets/address_qr_scan_modal.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_asset_icon.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_deposit_tokens_page_content.dart';
-import 'package:zcash_wallet/src/features/swap/widgets/swap_queue_panel.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_status_page_content.dart';
 import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/receive_address_provider.dart';
@@ -978,7 +977,11 @@ void main() {
     final addressFieldHeight = tester
         .getSize(find.byKey(const ValueKey('swap_address_summary')))
         .height;
+    final addressFieldWidth = tester
+        .getSize(find.byKey(const ValueKey('swap_address_summary')))
+        .width;
     expect(addressFieldHeight, 32);
+    expect(addressFieldWidth, closeTo(196, 1));
     expect(find.text('Ethereum recipient'), findsNothing);
     expect(find.text('Add Recipient address...'), findsOneWidget);
     expect(
@@ -1189,10 +1192,10 @@ void main() {
 
     final paneRect = tester.getRect(find.byType(AppDesktopPane));
     final modalRect = tester.getRect(
-      find.byKey(const ValueKey('swap_address_scan_modal')),
+      find.byKey(const ValueKey('address_scan_modal')),
     );
     final cameraRect = tester.getRect(
-      find.byKey(const ValueKey('swap_address_scan_camera_viewport')),
+      find.byKey(const ValueKey('address_scan_camera_viewport')),
     );
     final sidebarSwapRect = tester.getRect(
       find.byKey(const ValueKey('sidebar_swap_button')),
@@ -1211,7 +1214,7 @@ void main() {
     tester,
   ) async {
     Future<void> pumpStatus(
-      SwapAddressQrCameraStatus status, {
+      AddressQrCameraStatus status, {
       Widget? cameraView,
       bool canChooseCamera = false,
       VoidCallback? onCameraTap,
@@ -1220,7 +1223,7 @@ void main() {
       await tester.pumpWidget(
         _themeHarness(
           Center(
-            child: SwapAddressQrScanModalContent(
+            child: AddressQrScanModalContent(
               status: status,
               cameraView: cameraView,
               canChooseCamera: canChooseCamera,
@@ -1234,51 +1237,49 @@ void main() {
       await tester.pump();
     }
 
-    await pumpStatus(SwapAddressQrCameraStatus.requesting);
+    await pumpStatus(AddressQrCameraStatus.requesting);
 
     expect(
-      tester.getSize(find.byKey(const ValueKey('swap_address_scan_modal'))),
+      tester.getSize(find.byKey(const ValueKey('address_scan_modal'))),
       const Size(312, 440),
     );
     expect(
-      tester.getSize(
-        find.byKey(const ValueKey('swap_address_scan_camera_modal')),
-      ),
+      tester.getSize(find.byKey(const ValueKey('address_scan_camera_modal'))),
       const Size(272, 276),
     );
     expect(
       tester.getSize(
-        find.byKey(const ValueKey('swap_address_scan_camera_viewport')),
+        find.byKey(const ValueKey('address_scan_camera_viewport')),
       ),
       const Size(272, 220),
     );
     expect(find.text('Grant access to your camera'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
+      find.byKey(const ValueKey('address_scan_camera_footer_slot')),
       findsNothing,
     );
     expect(
-      find.byKey(const ValueKey('swap_address_scan_camera_border')),
+      find.byKey(const ValueKey('address_scan_camera_border')),
       findsNothing,
     );
 
-    await pumpStatus(SwapAddressQrCameraStatus.denied, onRetry: () {});
+    await pumpStatus(AddressQrCameraStatus.denied, onRetry: () {});
 
     expect(find.text("You've denied Camera access"), findsOneWidget);
     expect(find.text('Allow camera'), findsOneWidget);
     expect(
       tester
-          .getSize(find.byKey(const ValueKey('swap_address_scan_retry_button')))
+          .getSize(find.byKey(const ValueKey('address_scan_retry_button')))
           .height,
       32,
     );
     expect(
-      find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
+      find.byKey(const ValueKey('address_scan_camera_footer_slot')),
       findsNothing,
     );
 
     await pumpStatus(
-      SwapAddressQrCameraStatus.active,
+      AddressQrCameraStatus.active,
       cameraView: const ColoredBox(color: Color(0xFF2E3232)),
       canChooseCamera: true,
       onCameraTap: () {},
@@ -1287,43 +1288,41 @@ void main() {
     expect(
       tester
           .getSize(
-            find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
+            find.byKey(const ValueKey('address_scan_camera_footer_slot')),
           )
           .height,
       40,
     );
     expect(
       tester
-          .getSize(
-            find.byKey(const ValueKey('swap_address_scan_camera_footer')),
-          )
+          .getSize(find.byKey(const ValueKey('address_scan_camera_footer')))
           .height,
       32,
     );
     expect(
-      find.byKey(const ValueKey('swap_address_scan_camera_border')),
+      find.byKey(const ValueKey('address_scan_camera_border')),
       findsOneWidget,
     );
 
     await pumpStatus(
-      SwapAddressQrCameraStatus.loading,
+      AddressQrCameraStatus.loading,
       cameraView: const ColoredBox(color: Color(0xFF2E3232)),
     );
 
     expect(find.byType(BackdropFilter), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('swap_address_scan_loading_overlay')),
+      find.byKey(const ValueKey('address_scan_loading_overlay')),
       findsOneWidget,
     );
     expect(find.text('Loading...'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('swap_address_scan_camera_border')),
+      find.byKey(const ValueKey('address_scan_camera_border')),
       findsOneWidget,
     );
     expect(
       tester
           .getSize(
-            find.byKey(const ValueKey('swap_address_scan_camera_footer_slot')),
+            find.byKey(const ValueKey('address_scan_camera_footer_slot')),
           )
           .height,
       40,
@@ -3136,203 +3135,6 @@ void main() {
     expect(find.byKey(const ValueKey('activity_screen_row_6')), findsNothing);
     expect(find.byType(ActivityTablePagination), findsOneWidget);
   });
-
-  testWidgets('swap queue groups attention terminal swaps', (tester) async {
-    await _setDesktopViewport(tester);
-
-    await tester.pumpWidget(
-      _themeHarness(
-        SwapQueuePanel(
-          intents: [
-            _persistedIntent(
-              id: 'failed-swap',
-              txHash: 'failed-tx',
-              status: SwapIntentStatus.failed,
-              nextAction: 'Provider could not complete the swap',
-            ),
-            _persistedIntent(
-              id: 'complete-swap',
-              txHash: 'complete-tx',
-              status: SwapIntentStatus.complete,
-              nextAction: 'Receipt ready',
-            ),
-            _persistedIntent(
-              id: 'expired-swap',
-              txHash: 'expired-tx',
-              status: SwapIntentStatus.expired,
-              nextAction: 'Start a fresh quote',
-            ),
-            _persistedIntent(
-              id: 'unknown-status-swap',
-              txHash: 'unknown-status-tx',
-              status: SwapIntentStatus.providerStatusUnknown,
-              nextAction: 'Check provider status',
-            ),
-            _persistedIntent(
-              id: 'incomplete-swap',
-              txHash: 'incomplete-tx',
-              status: SwapIntentStatus.incompleteDeposit,
-              nextAction: 'Check deposit amount',
-            ),
-            _persistedIntent(
-              id: 'open-swap',
-              txHash: 'open-tx',
-              status: SwapIntentStatus.processing,
-              nextAction: 'Processing',
-            ),
-          ],
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('swap_queue_group_open')), findsOneWidget);
-    expect(find.text('Open 1'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('swap_queue_group_completed')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('swap_queue_group_failed')),
-      findsOneWidget,
-    );
-    expect(find.text('Attention'), findsOneWidget);
-    expect(find.text('Attention 4'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('swap_queue_row_failed-swap')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('swap_queue_row_expired-swap')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('swap_queue_row_unknown-status-swap')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('swap_queue_row_incomplete-swap')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(
-        const ValueKey('swap_queue_progress_segment_blink_processing_2'),
-      ),
-      findsOneWidget,
-    );
-    final colors = tester
-        .element(
-          find.byKey(const ValueKey('swap_queue_progress_segment_complete_0')),
-        )
-        .colors;
-    for (var index = 0; index < 4; index++) {
-      final segment = tester.widget<Container>(
-        find.byKey(ValueKey('swap_queue_progress_segment_complete_$index')),
-      );
-      final decoration = segment.decoration! as BoxDecoration;
-      expect(decoration.color, colors.text.success);
-    }
-
-    final processingStatusText = tester.widget<Text>(
-      find.descendant(
-        of: find.byKey(const ValueKey('swap_queue_row_open-swap')),
-        matching: find.text('Swapping through provider'),
-      ),
-    );
-    expect(processingStatusText.style?.color, colors.text.accent);
-    expect(processingStatusText.style?.color, isNot(colors.text.warning));
-  });
-
-  testWidgets('swap queue progress stages skipped status transitions', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _themeHarness(
-        SwapQueuePanel(
-          intents: [
-            _persistedIntent(
-              id: 'jump-swap',
-              txHash: '',
-              status: SwapIntentStatus.awaitingDeposit,
-              nextAction: 'Waiting for deposit',
-            ),
-          ],
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(
-      find.byKey(const ValueKey('swap_queue_live_pulse_jump-swap')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(
-        const ValueKey('swap_queue_progress_segment_blink_awaitingDeposit_0'),
-      ),
-      findsOneWidget,
-    );
-
-    await tester.pumpWidget(
-      _themeHarness(
-        SwapQueuePanel(
-          intents: [
-            _persistedIntent(
-              id: 'jump-swap',
-              txHash: 'jump-tx',
-              status: SwapIntentStatus.processing,
-              nextAction: 'Processing',
-            ),
-          ],
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(
-      find.byKey(
-        const ValueKey('swap_queue_progress_segment_blink_processing_1'),
-      ),
-      findsOneWidget,
-    );
-
-    await tester.pump(const Duration(milliseconds: 430));
-    expect(
-      find.byKey(
-        const ValueKey('swap_queue_progress_segment_blink_processing_2'),
-      ),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets(
-    'swap queue shows deposit confirmation after wallet tx broadcast',
-    (tester) async {
-      await tester.pumpWidget(
-        _themeHarness(
-          SwapQueuePanel(
-            intents: [
-              _persistedIntent(
-                id: 'confirming-deposit',
-                txHash: 'zec-auto-txid',
-                status: SwapIntentStatus.awaitingDeposit,
-                nextAction: 'Waiting for deposit',
-              ),
-            ],
-          ),
-        ),
-      );
-      await tester.pump();
-
-      expect(find.text('Confirming deposit'), findsOneWidget);
-      expect(
-        find.byKey(
-          const ValueKey('swap_queue_progress_segment_blink_awaitingDeposit_1'),
-        ),
-        findsOneWidget,
-      );
-    },
-  );
 
   testWidgets('activity progress detail fits without scrollbar chrome', (
     tester,
@@ -5519,7 +5321,6 @@ void main() {
       expect(sessionStore.savedIntents.single.depositAddress, '0xlive-deposit');
       expect(sessionStore.savedIntents.single.depositMemo, 'memo-live');
       expect(sessionStore.savedIntents.single.providerQuoteId, 'quote-live');
-      expect(sessionStore.savedIntents.single.providerSignature, 'sig-live');
       expect(
         sessionStore.savedIntents.single.oneClickRecipient,
         'u1actualshieldedrecipient',
@@ -5588,7 +5389,6 @@ void main() {
     expect(sessionStore.savedIntents.single.depositMemo, 'memo-live');
     expect(sessionStore.savedIntents.single.depositTxHash, 'zec-auto-txid');
     expect(sessionStore.savedIntents.single.providerQuoteId, 'quote-live');
-    expect(sessionStore.savedIntents.single.providerSignature, 'sig-live');
     expect(
       sessionStore.savedIntents.single.direction,
       SwapDirection.zecToExternal,
@@ -6602,7 +6402,6 @@ class _FakeSwapProvider implements SwapProvider {
         estimate.sellAmount,
       ),
       providerQuoteId: 'quote-live',
-      providerSignature: 'sig-live',
       providerRefundInfo: request.mode == SwapQuoteMode.exactOutput
           ? const SwapProviderRefundInfo(
               minimumDepositText: '1.485 ZEC',
@@ -6787,7 +6586,6 @@ class _DriftingExactOutputSwapProvider extends _FakeSwapProvider {
       quoteExpiresAt: quote.quoteExpiresAt,
       depositInstruction: quote.depositInstruction,
       providerQuoteId: quote.providerQuoteId,
-      providerSignature: quote.providerSignature,
       sellAmountBaseUnits: _fakeBaseUnits(quote.sellAsset, sellAmount),
       sellAmountTextOverride: '${sellAmount.toStringAsFixed(4)} ZEC',
       receiveEstimateTextOverride: quote.receiveEstimateText,
@@ -6822,7 +6620,6 @@ class _DriftingExactInputSwapProvider extends _FakeSwapProvider {
       quoteExpiresAt: quote.quoteExpiresAt,
       depositInstruction: quote.depositInstruction,
       providerQuoteId: quote.providerQuoteId,
-      providerSignature: quote.providerSignature,
       sellAmountBaseUnits: quote.sellAmountBaseUnits,
       sellAmountTextOverride: quote.sellAmountText,
       receiveEstimateTextOverride: '123.45 USDC',
@@ -7003,7 +6800,6 @@ class _LongQuoteSwapProvider extends _FakeSwapProvider {
       feeLabel: 'Included in shown rate',
       expiryLabel: estimate.expiryLabel,
       providerQuoteId: 'quote-long-provider-reference',
-      providerSignature: 'signature-long-provider-reference',
       sellAmountBaseUnits: estimate.sellAmountBaseUnits,
       sellAmountTextOverride: '12345.678901 ${estimate.sellAsset.symbol}',
       receiveEstimateTextOverride: '175.942100 ${estimate.receiveAsset.symbol}',
@@ -7460,7 +7256,6 @@ SwapIntent _persistedIntent({
     depositMemo: 'memo-7',
     depositTxHash: txHash,
     providerQuoteId: 'quote-1',
-    providerSignature: 'quote-signature',
     oneClickRecipient: '0xrecipient',
     oneClickRefundTo: 'u1refund',
     accountUuid: accountUuid,
@@ -7518,7 +7313,6 @@ SwapIntent _persistedExternalToZecIntent({
     depositAddress: id,
     depositMemo: 'memo-7',
     providerQuoteId: 'quote-1',
-    providerSignature: 'quote-signature',
     oneClickRecipient: stagingAddress,
     oneClickRefundTo: '0xpersisted-refund',
   );

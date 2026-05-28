@@ -10,22 +10,9 @@ import '../../../rust/api/sync.dart' as rust_sync;
 import '../../keystone/widgets/keystone_signing_modal.dart';
 import '../../send/services/sapling_params.dart';
 import '../../send/widgets/sapling_params_prompt.dart';
+import '../models/swap_keystone_broadcast_result.dart';
 import '../models/swap_models.dart';
 import '../providers/swap_hardware_signing_service.dart';
-
-class SwapKeystoneBroadcastResult {
-  const SwapKeystoneBroadcastResult({
-    required this.txHash,
-    required this.status,
-    this.message,
-  });
-
-  final String txHash;
-  final String status;
-  final String? message;
-
-  bool get isCertain => status == 'broadcasted';
-}
 
 class SwapKeystoneSigningOverlay extends ConsumerStatefulWidget {
   const SwapKeystoneSigningOverlay({

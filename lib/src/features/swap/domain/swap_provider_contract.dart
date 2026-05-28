@@ -21,7 +21,6 @@ class SwapIntentSnapshot {
     this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
-    this.nearTransactionHash,
     this.originChainTxHash,
     this.destinationChainTxHash,
     this.providerRefundInfo,
@@ -71,7 +70,6 @@ class SwapIntentSnapshot {
   final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
-  final String? nearTransactionHash;
   final String? originChainTxHash;
   final String? destinationChainTxHash;
   final SwapProviderRefundInfo? providerRefundInfo;

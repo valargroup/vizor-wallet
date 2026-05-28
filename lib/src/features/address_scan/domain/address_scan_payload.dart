@@ -1,6 +1,6 @@
 import '../../../core/zcash/zip321_payment_request.dart';
 
-String? normalizeSwapAddressScanPayload(String? input) {
+String? normalizeAddressScanPayload(String? input) {
   final trimmed = input?.trim();
   if (trimmed == null || trimmed.isEmpty) return null;
 

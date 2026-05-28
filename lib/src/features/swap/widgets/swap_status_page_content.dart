@@ -5,20 +5,17 @@ import 'package:flutter/widgets.dart';
 import '../../../core/profile_pictures.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_copy_feedback.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_profile_picture.dart';
 import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_contract.dart';
 import '../models/swap_detail_tooltips.dart';
+import '../models/swap_status_presentation.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
-import 'swap_copy_feedback.dart';
 
-enum SwapStatusBadgeKind { liveQuote, completed, failed }
-
-enum SwapStatusTab { progress, details }
-
-enum SwapStatusStepState { complete, active, pending }
+export '../models/swap_status_presentation.dart';
 
 const swapStatusDefaultProgressAdvanceInterval = Duration(milliseconds: 520);
 const _swapStatusSummaryMaxAmountChars = 10;
@@ -26,66 +23,6 @@ const _swapStatusProgressHeight = 580.0;
 const _swapStatusSummaryCardHeight = 120.0;
 const _swapStatusBadgeOverlap = 1.0;
 const _swapStatusDetailIconSize = 14.0;
-
-class SwapStatusStepData {
-  const SwapStatusStepData({
-    required this.title,
-    required this.state,
-    this.completeTitle,
-    this.activeTitle,
-    this.pendingTitle,
-    this.lastCheckedLabel,
-    this.description,
-  });
-
-  final String title;
-  final SwapStatusStepState state;
-  final String? completeTitle;
-  final String? activeTitle;
-  final String? pendingTitle;
-  final String? lastCheckedLabel;
-  final String? description;
-
-  String titleForState(SwapStatusStepState state) {
-    return switch (state) {
-      SwapStatusStepState.complete => completeTitle ?? title,
-      SwapStatusStepState.active => activeTitle ?? title,
-      SwapStatusStepState.pending => pendingTitle ?? title,
-    };
-  }
-
-  SwapStatusStepData copyWithState(SwapStatusStepState state) {
-    return SwapStatusStepData(
-      title: title,
-      state: state,
-      completeTitle: completeTitle,
-      activeTitle: activeTitle,
-      pendingTitle: pendingTitle,
-      lastCheckedLabel: lastCheckedLabel,
-      description: description,
-    );
-  }
-}
-
-class SwapStatusDetailRowData {
-  const SwapStatusDetailRowData({
-    required this.label,
-    required this.value,
-    this.copyable = false,
-    this.copyText,
-    this.help = false,
-    this.helpTooltip,
-    this.accountProfilePictureId,
-  });
-
-  final String label;
-  final String value;
-  final bool copyable;
-  final String? copyText;
-  final bool help;
-  final String? helpTooltip;
-  final String? accountProfilePictureId;
-}
 
 class SwapStatusPageContent extends StatefulWidget {
   const SwapStatusPageContent({
@@ -1174,7 +1111,7 @@ class _DetailRow extends StatelessWidget {
             onTap ??
             (row.copyable
                 ? () {
-                    copySwapText(
+                    copyTextWithToast(
                       context,
                       text: row.copyText ?? row.value,
                       toastMessage: 'Copied',
