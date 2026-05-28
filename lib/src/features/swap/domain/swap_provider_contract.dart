@@ -1,5 +1,6 @@
 import 'swap_asset.dart';
 import 'swap_direction.dart';
+import 'swap_fiat_value_basis.dart';
 import 'swap_intent_status.dart';
 import 'swap_quote.dart';
 
@@ -25,6 +26,7 @@ class SwapIntentSnapshot {
     this.destinationChainTxHash,
     this.providerRefundInfo,
     this.sellAmountBaseUnits,
+    this.fiatValueBasis,
   });
 
   factory SwapIntentSnapshot.fromQuote(
@@ -51,6 +53,7 @@ class SwapIntentSnapshot {
       priceProtectionText: quote.priceProtectionText,
       minimumReceiveText: quote.minimumReceiveText,
       providerRefundInfo: quote.providerRefundInfo,
+      fiatValueBasis: quote.fiatValueBasis,
     );
   }
 
@@ -74,6 +77,7 @@ class SwapIntentSnapshot {
   final String? destinationChainTxHash;
   final SwapProviderRefundInfo? providerRefundInfo;
   final BigInt? sellAmountBaseUnits;
+  final SwapFiatValueBasis? fiatValueBasis;
 }
 
 class SwapPricingSnapshot {

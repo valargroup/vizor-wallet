@@ -303,7 +303,14 @@ void main() {
           txHash: '',
           status: SwapIntentStatus.complete,
           nextAction: 'Swap complete',
-        ).copyWith(receiveEstimate: '123.45 USDC'),
+        ).copyWith(
+          receiveEstimate: '123.45 USDC',
+          fiatValueBasis: SwapFiatValueBasis(
+            capturedAt: DateTime.utc(2026, 5, 7, 10),
+            sellUsdUnitPrice: 70.1733333333,
+            receiveUsdUnitPrice: 1,
+          ),
+        ),
       ],
     );
 

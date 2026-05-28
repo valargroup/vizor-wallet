@@ -70,6 +70,15 @@ Widget buildSwapPageFigmaNode6UseCase(BuildContext context) {
   );
 }
 
+Widget buildSwapPageUnsupportedFiatUseCase(BuildContext context) {
+  return _SwapPageFrame(
+    child: _SwapComposerPreview(
+      initialState: _unsupportedFiatState,
+      actionLabel: 'Add refund address',
+    ),
+  );
+}
+
 Widget buildSwapAddressModalFigmaNode7UseCase(BuildContext context) {
   return _SwapPageModalFrame(
     child: SwapAddressEditModal(
@@ -238,6 +247,20 @@ Widget buildSwapDepositCountdownUseCase(BuildContext context) {
   );
 }
 
+Widget buildSwapDepositMemoQrUseCase(BuildContext context) {
+  return _SwapFlowPageFrame(
+    backLabel: 'Review',
+    child: SwapDepositTokensPageContent(
+      asset: SwapAsset.usdc,
+      amountText: '999.99 USDC',
+      depositAddress: '0x123kjhc4e984ac1832f10aa4x98g20',
+      memo: 'memo with & routing=value?',
+      expiresInLabel: '14:59',
+      onDeposited: () {},
+    ),
+  );
+}
+
 Widget buildSwapDepositHardwareZecUseCase(BuildContext context) {
   return _SwapFlowPageFrame(
     backLabel: 'Review',
@@ -346,6 +369,25 @@ Widget buildSwapStatusLargeAmountsUseCase(BuildContext context) {
   );
 }
 
+Widget buildSwapStatusCapturedFiatUseCase(BuildContext context) {
+  return _SwapStatusPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Swap completed',
+      badgeKind: SwapStatusBadgeKind.completed,
+      showTabs: false,
+      steps: const [],
+      details: _designCompletedDetails,
+      payAsset: SwapAsset.zec,
+      receiveAsset: SwapAsset.usdc,
+      payFiatText: r'$140.00',
+      receiveFiatText: r'$123.45',
+      payAmountText: '2.0000 ZEC',
+      receiveAmountText: '123.45 USDC',
+    ),
+  );
+}
+
 Widget buildSwapStatusDetailsCollapsedUseCase(BuildContext context) {
   return _SwapStatusPageFrame(
     backLabel: 'Activity',
@@ -429,6 +471,15 @@ Widget buildSwapWidgetFigmaNode6UseCase(BuildContext context) {
   return _SwapWidgetFrame(
     child: _SwapComposerPreview(
       initialState: _figmaNode6State,
+      actionLabel: 'Add refund address',
+    ),
+  );
+}
+
+Widget buildSwapWidgetUnsupportedFiatUseCase(BuildContext context) {
+  return _SwapWidgetFrame(
+    child: _SwapComposerPreview(
+      initialState: _unsupportedFiatState,
       actionLabel: 'Add refund address',
     ),
   );
@@ -544,6 +595,17 @@ final _figmaReviewLargeQuote = SwapQuote(
 
 final _figmaUsdcPerZec = <SwapAsset, double>{_figmaUsdc: 6.57894737};
 final _figmaZecPerUsdc = <SwapAsset, double>{_figmaUsdc: 512};
+
+final _unsupportedFiatState = SwapState(
+  direction: SwapDirection.externalToZec,
+  amountText: '1.2345',
+  receiveAmountText: '0.0521',
+  destinationText: '',
+  externalAsset: SwapAsset.eth,
+  reviewVisible: false,
+  intents: [],
+  slippageBps: 50,
+);
 
 const _designProgressSteps = <SwapStatusStepData>[
   SwapStatusStepData(

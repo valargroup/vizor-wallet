@@ -74,6 +74,10 @@ void main() {
     final state = _stateWithUsdRate(70);
 
     expect(
+      swapFiatDisplayText(state, asset: SwapAsset.eth, tokenAmountText: '1'),
+      r'$--',
+    );
+    expect(
       swapTokenAmountTextFromFiatText(
         state,
         asset: SwapAsset.eth,

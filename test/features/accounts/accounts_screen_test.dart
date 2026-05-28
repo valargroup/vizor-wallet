@@ -179,10 +179,10 @@ void main() {
     final accountsButton = find.byKey(
       const ValueKey('sidebar_accounts_button'),
     );
-    final walletButton = find.byKey(const ValueKey('sidebar_wallet_button'));
+    final homeButton = find.byKey(const ValueKey('sidebar_home_button'));
     expect(
       tester.getTopLeft(accountsButton).dy,
-      lessThan(tester.getTopLeft(walletButton).dy),
+      lessThan(tester.getTopLeft(homeButton).dy),
     );
 
     await tester.tap(accountsButton);

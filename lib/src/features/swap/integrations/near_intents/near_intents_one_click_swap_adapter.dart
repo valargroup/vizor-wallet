@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../domain/swap_contract.dart';
+import 'near_intents_amount_formatting.dart';
 
 class OneClickApiException implements Exception {
   const OneClickApiException(this.message, {this.operation, this.statusCode});
@@ -391,6 +392,7 @@ class NearIntentsOneClickSwapAdapter
       originChainTxHash: response.swapDetails?.originChainTxHash,
       destinationChainTxHash: response.swapDetails?.destinationChainTxHash,
       providerRefundInfo: providerRefundInfo,
+      fiatValueBasis: quote.fiatValueBasis,
     );
   }
 
@@ -469,6 +471,13 @@ class NearIntentsOneClickSwapAdapter
         sellAsset: sellAsset,
         sellToken: sellToken,
       ),
+      fiatValueBasis: _quoteFiatValueBasis(
+        response,
+        sellAsset: sellAsset,
+        sellToken: sellToken,
+        receiveAsset: receiveAsset,
+        receiveToken: receiveToken,
+      ),
     );
   }
 
@@ -526,10 +535,35 @@ class NearIntentsOneClickSwapAdapter
     required SwapAsset asset,
     required _OneClickToken token,
   }) {
-    final raw = _cleanOptionalText(value);
-    if (raw == null || !_isIntegerAmount(raw)) return null;
-    final amount = _trimDecimal(_baseUnitsToDecimal(raw, token.decimals));
-    return '$amount ${asset.symbol}';
+    return nearIntentsBaseUnitAmountText(
+      value: value,
+      asset: asset,
+      decimals: token.decimals,
+    );
+  }
+
+  SwapFiatValueBasis? _quoteFiatValueBasis(
+    _OneClickQuoteResponse response, {
+    required SwapAsset sellAsset,
+    required _OneClickToken sellToken,
+    required SwapAsset receiveAsset,
+    required _OneClickToken receiveToken,
+  }) {
+    final capturedAt = _parseIsoDateTime(response.timestamp) ?? _now().toUtc();
+    final basis = SwapFiatValueBasis(
+      capturedAt: capturedAt,
+      sellUsdUnitPrice: _capturedUsdUnitPrice(sellAsset, sellToken),
+      receiveUsdUnitPrice: _capturedUsdUnitPrice(receiveAsset, receiveToken),
+    );
+    return basis.isUsable ? basis : null;
+  }
+
+  double? _capturedUsdUnitPrice(SwapAsset asset, _OneClickToken token) =>
+      _isUsdLikeAsset(asset) ? 1 : _usableTokenPrice(token);
+
+  double? _usableTokenPrice(_OneClickToken token) {
+    final price = token.price;
+    return price != null && price.isFinite && price > 0 ? price : null;
   }
 
   String? _statusAmountText({
@@ -538,11 +572,12 @@ class NearIntentsOneClickSwapAdapter
     required SwapAsset asset,
     required _OneClickToken token,
   }) {
-    final formattedValue = _cleanOptionalText(formatted);
-    if (formattedValue != null && double.tryParse(formattedValue) != null) {
-      return '${_trimDecimal(formattedValue)} ${asset.symbol}';
-    }
-    return _baseUnitAmountText(baseUnits, asset: asset, token: token);
+    return nearIntentsStatusAmountText(
+      formatted: formatted,
+      baseUnits: baseUnits,
+      asset: asset,
+      decimals: token.decimals,
+    );
   }
 
   double? _statusDecimalAmount({
@@ -551,25 +586,12 @@ class NearIntentsOneClickSwapAdapter
     required _OneClickToken token,
     bool preferBaseUnits = false,
   }) {
-    if (preferBaseUnits) {
-      final baseUnitAmount = _baseUnitDecimalAmount(baseUnits, token: token);
-      if (baseUnitAmount != null) return baseUnitAmount;
-    }
-    final formattedValue = _cleanOptionalText(formatted);
-    if (formattedValue != null) {
-      final parsed = double.tryParse(formattedValue);
-      if (parsed != null) return parsed;
-    }
-    return _baseUnitDecimalAmount(baseUnits, token: token);
-  }
-
-  double? _baseUnitDecimalAmount(
-    String? baseUnits, {
-    required _OneClickToken token,
-  }) {
-    final raw = _cleanOptionalText(baseUnits);
-    if (raw == null || !_isIntegerAmount(raw)) return null;
-    return double.tryParse(_baseUnitsToDecimal(raw, token.decimals));
+    return nearIntentsStatusDecimalAmount(
+      formatted: formatted,
+      baseUnits: baseUnits,
+      decimals: token.decimals,
+      preferBaseUnits: preferBaseUnits,
+    );
   }
 
   String? _appFeesText({
@@ -585,6 +607,7 @@ class NearIntentsOneClickSwapAdapter
           formatted: amountInFormatted,
           baseUnits: amountInBaseUnits,
           token: sellToken,
+          preferBaseUnits: true,
         ) ??
         0;
     final fee = amountIn * appFeeBps / 10000;
@@ -605,11 +628,13 @@ class NearIntentsOneClickSwapAdapter
         formatted: details?.depositedAmountFormatted,
         baseUnits: details?.depositedAmount,
         token: sellToken,
+        preferBaseUnits: true,
       );
       final refunded = _statusDecimalAmount(
         formatted: details?.refundedAmountFormatted,
         baseUnits: details?.refundedAmount,
         token: sellToken,
+        preferBaseUnits: true,
       );
       if (deposited != null && refunded != null && deposited >= refunded) {
         return _feeAmountText(sellAsset, deposited - refunded);
@@ -695,26 +720,7 @@ class NearIntentsOneClickSwapAdapter
   }
 
   String _feeAmountText(SwapAsset asset, double amount) {
-    if (!amount.isFinite || amount <= 0) return '0 ${asset.symbol}';
-    return '${_preciseAmountText(asset, amount)} ${asset.symbol}';
-  }
-
-  String _preciseAmountText(SwapAsset asset, double amount) {
-    final fractionDigits = asset.decimals.clamp(0, 8).toInt();
-    if (fractionDigits == 0) return amount.toStringAsFixed(0);
-    final visibleMinimum = _minimumDecimalAmount(fractionDigits);
-    if (amount < visibleMinimum) {
-      return '<${visibleMinimum.toStringAsFixed(fractionDigits)}';
-    }
-    return _trimDecimal(amount.toStringAsFixed(fractionDigits));
-  }
-
-  double _minimumDecimalAmount(int fractionDigits) {
-    var value = 1.0;
-    for (var i = 0; i < fractionDigits; i++) {
-      value /= 10;
-    }
-    return value;
+    return nearIntentsFeeAmountText(asset, amount);
   }
 
   void _validateQuoteRequest(SwapQuoteRequest request) {
@@ -945,6 +951,7 @@ class _OneClickQuoteResponse {
     required this.correlationId,
     required this.quoteRequest,
     required this.quote,
+    this.timestamp,
   });
 
   factory _OneClickQuoteResponse.fromJson(
@@ -965,12 +972,14 @@ class _OneClickQuoteResponse {
           )),
       quoteRequest: _OneClickQuoteRequest.fromJson(request),
       quote: _OneClickQuote.fromJson(quote),
+      timestamp: _optionalString(json, 'timestamp'),
     );
   }
 
   final String correlationId;
   final _OneClickQuoteRequest quoteRequest;
   final _OneClickQuote quote;
+  final String? timestamp;
 }
 
 class _OneClickStatusResponse {
@@ -1115,11 +1124,6 @@ String? _cleanOptionalText(String? value) {
     return null;
   }
   return trimmed;
-}
-
-bool _isIntegerAmount(String value) {
-  final normalized = value.startsWith('-') ? value.substring(1) : value;
-  return normalized.isNotEmpty && RegExp(r'^\d+$').hasMatch(normalized);
 }
 
 String? _firstOptionalString(
@@ -1347,6 +1351,11 @@ String _rateText({
   final rate = receiveAmount / sellAmount;
   return '1 ${sellAsset.symbol} = '
       '${rate.toStringAsFixed(precision)} ${receiveAsset.symbol}';
+}
+
+bool _isUsdLikeAsset(SwapAsset asset) {
+  final symbol = asset.symbol.toUpperCase();
+  return symbol == 'USDC' || symbol == 'USDT' || symbol == 'DAI';
 }
 
 SwapIntentStatus _statusFromOneClick(

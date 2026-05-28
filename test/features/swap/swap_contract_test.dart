@@ -60,6 +60,7 @@ void main() {
         belowReadableEthQuote.priceProtectionText,
         '<0.00000001 ETH (0.5%)',
       );
+      expect(belowReadableEthQuote.fiatValueBasis, isNull);
     },
   );
 }

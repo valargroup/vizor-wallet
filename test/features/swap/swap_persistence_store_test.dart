@@ -77,6 +77,11 @@ void main() {
         refundedAmountText: '0.01 ZEC',
         refundReason: 'UNUSED_INPUT',
       ),
+      fiatValueBasis: SwapFiatValueBasis(
+        sellUsdUnitPrice: 70.1666666667,
+        receiveUsdUnitPrice: 1,
+        capturedAt: DateTime.utc(2026, 5, 7, 10),
+      ),
       lastStatusCheckedAt: DateTime.utc(2026, 5, 7, 10, 30),
       statusError: 'temporary status refresh failure',
       oneClickRecipient: '0xrecipient',
@@ -120,6 +125,12 @@ void main() {
     expect(restored.single.providerRefundInfo?.depositedAmountText, '1.5 ZEC');
     expect(restored.single.providerRefundInfo?.refundedAmountText, '0.01 ZEC');
     expect(restored.single.providerRefundInfo?.refundReason, 'UNUSED_INPUT');
+    expect(restored.single.fiatValueBasis?.sellUsdUnitPrice, 70.1666666667);
+    expect(restored.single.fiatValueBasis?.receiveUsdUnitPrice, 1);
+    expect(
+      restored.single.fiatValueBasis?.capturedAt,
+      DateTime.utc(2026, 5, 7, 10),
+    );
     expect(
       restored.single.lastStatusCheckedAt,
       DateTime.utc(2026, 5, 7, 10, 30),

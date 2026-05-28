@@ -17,7 +17,7 @@ String swapFiatDisplayText(
   final amount = double.tryParse(tokenAmountText.trim());
   if (amount == null || amount <= 0) return r'$0';
   final usdUnitPrice = swapUsdUnitPriceForAsset(state, asset: asset);
-  if (usdUnitPrice == null) return r'$0';
+  if (usdUnitPrice == null) return r'$--';
   return '\$${swapFormatFiatValue(amount * usdUnitPrice)}';
 }
 

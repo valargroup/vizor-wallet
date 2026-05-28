@@ -134,6 +134,10 @@ class WidgetbookApp extends StatelessWidget {
                       name: 'Fiat value input',
                       builder: buildSwapPageFigmaNode6UseCase,
                     ),
+                    WidgetbookUseCase(
+                      name: 'Unsupported fiat price',
+                      builder: buildSwapPageUnsupportedFiatUseCase,
+                    ),
                   ],
                 ),
                 WidgetbookComponent(
@@ -210,6 +214,10 @@ class WidgetbookApp extends StatelessWidget {
                       builder: buildSwapDepositCountdownUseCase,
                     ),
                     WidgetbookUseCase(
+                      name: 'Memo QR',
+                      builder: buildSwapDepositMemoQrUseCase,
+                    ),
+                    WidgetbookUseCase(
                       name: 'Hardware ZEC',
                       builder: buildSwapDepositHardwareZecUseCase,
                     ),
@@ -241,6 +249,10 @@ class WidgetbookApp extends StatelessWidget {
                     WidgetbookUseCase(
                       name: 'Large amounts - Both',
                       builder: buildSwapStatusLargeAmountsUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Captured fiat basis',
+                      builder: buildSwapStatusCapturedFiatUseCase,
                     ),
                     WidgetbookUseCase(
                       name: 'Details collapsed',
@@ -548,6 +560,10 @@ class WidgetbookApp extends StatelessWidget {
                 WidgetbookUseCase(
                   name: 'Fiat value input',
                   builder: buildSwapWidgetFigmaNode6UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Unsupported fiat price',
+                  builder: buildSwapWidgetUnsupportedFiatUseCase,
                 ),
               ],
             ),

@@ -31,6 +31,7 @@ SwapIntent _swapIntentFromRecord(SwapIntentRecord record) {
     originChainTxHash: record.originChainTxHash,
     destinationChainTxHash: record.destinationChainTxHash,
     providerRefundInfo: record.providerRefundInfo,
+    fiatValueBasis: record.fiatValueBasis,
     lastStatusCheckedAt: record.lastStatusCheckedAt,
     statusError: record.statusError,
     broadcastNotice: record.broadcastNotice,
@@ -90,6 +91,7 @@ SwapIntent swapIntentFromSnapshot({
     originChainTxHash: snapshot.originChainTxHash,
     destinationChainTxHash: snapshot.destinationChainTxHash,
     providerRefundInfo: snapshot.providerRefundInfo ?? quote.providerRefundInfo,
+    fiatValueBasis: snapshot.fiatValueBasis ?? quote.fiatValueBasis,
     oneClickRecipient: addressPlan.oneClickRecipient,
     oneClickRefundTo: addressPlan.oneClickRefundTo,
     depositDeadline: quote.depositInstruction.deadline,
@@ -192,6 +194,7 @@ SwapIntent updateSwapIntentFromSnapshot(
     originChainTxHash: snapshot.originChainTxHash,
     destinationChainTxHash: snapshot.destinationChainTxHash,
     providerRefundInfo: providerRefundInfo,
+    fiatValueBasis: intent.fiatValueBasis ?? snapshot.fiatValueBasis,
     lastStatusCheckedAt: lastStatusCheckedAt,
     depositAddress:
         intent.depositAddress ?? snapshot.depositInstruction.address,

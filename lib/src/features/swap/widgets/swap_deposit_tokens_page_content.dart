@@ -9,6 +9,8 @@ import '../../../core/widgets/app_copy_feedback.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_contract.dart';
+import '../models/swap_address_formatting.dart';
+import '../models/swap_deposit_qr_payload.dart';
 
 class SwapDepositTokensPageContent extends StatelessWidget {
   const SwapDepositTokensPageContent({
@@ -141,7 +143,7 @@ class _SwapDepositPageShell extends StatelessWidget {
             key: const ValueKey('swap_activity_deposit_qr_panel'),
             child: _DepositQrCard(
               asset: asset,
-              qrData: _qrPayload(depositAddress, memo),
+              qrData: swapDepositQrPayload(depositAddress, memo),
               amountText: amountText,
               expiresInLabel: expiresInLabel,
               expiresAt: expiresAt,
@@ -690,7 +692,7 @@ class _DepositDetailsList extends StatelessWidget {
           ),
           _DepositDetailRow(
             label: 'One-time address',
-            value: _compactAddress(depositAddress),
+            value: compactSwapAddress(depositAddress),
             copyText: depositAddress,
             toastMessage: 'Address copied',
             copyKey: const ValueKey('swap_copy_deposit_address'),
@@ -781,12 +783,6 @@ class _DepositDetailRow extends StatelessWidget {
   }
 }
 
-String _qrPayload(String address, String? memo) {
-  final normalizedMemo = memo?.trim();
-  if (normalizedMemo == null || normalizedMemo.isEmpty) return address;
-  return '$address?memo=$normalizedMemo';
-}
-
 String _formatCountdown(Duration remaining) {
   final totalSeconds = remaining.inSeconds <= 0 ? 0 : remaining.inSeconds;
   final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
@@ -809,10 +805,4 @@ String _formatHourLabel(int hours) {
 
 String _formatMinuteLabel(int minutes) {
   return minutes == 1 ? '1min' : '${minutes}mins';
-}
-
-String _compactAddress(String address) {
-  final trimmed = address.trim();
-  if (trimmed.length <= 18) return trimmed;
-  return '${trimmed.substring(0, 9)} ... ${trimmed.substring(trimmed.length - 7)}';
 }

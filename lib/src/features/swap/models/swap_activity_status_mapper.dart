@@ -1,4 +1,5 @@
 import '../../../core/profile_pictures.dart';
+import 'swap_address_formatting.dart';
 import 'swap_detail_tooltips.dart';
 import 'swap_models.dart';
 import 'swap_status_presentation.dart';
@@ -52,15 +53,13 @@ SwapActivityStatusPresentation swapActivityStatusPresentationForIntent(
     payAsset: sellAsset,
     receiveAsset: receiveAsset,
     payFiatText: _swapActivityFiatTextForAsset(
-      state,
       intent: intent,
-      asset: sellAsset,
+      side: _SwapActivityAmountSide.sell,
       amountText: intent.sellAmount,
     ),
     receiveFiatText: _swapActivityFiatTextForAsset(
-      state,
       intent: intent,
-      asset: receiveAsset,
+      side: _SwapActivityAmountSide.receive,
       amountText: intent.receiveEstimate,
     ),
     payAmountText: intent.sellAmount,
@@ -191,14 +190,14 @@ List<SwapStatusDetailRowData> _swapActivityStatusDetails(
       if (failed && refundAddress != null && refundAddress.isNotEmpty)
         SwapStatusDetailRowData(
           label: '$sourceSymbol refunded to',
-          value: _compactSwapActivityAddress(refundAddress),
+          value: compactSwapAddress(refundAddress),
           copyable: true,
           copyText: refundAddress,
         )
       else if (!failed && depositAddress != null && depositAddress.isNotEmpty)
         SwapStatusDetailRowData(
           label: '$sourceSymbol deposit to',
-          value: _compactSwapActivityAddress(depositAddress),
+          value: compactSwapAddress(depositAddress),
           copyable: true,
           copyText: depositAddress,
         ),
@@ -227,21 +226,21 @@ List<SwapStatusDetailRowData> _swapActivityStatusDetails(
     if (sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
       SwapStatusDetailRowData(
         label: '$receiveSymbol recipient',
-        value: _compactSwapActivityAddress(recipientAddress),
+        value: compactSwapAddress(recipientAddress),
         copyable: true,
         copyText: recipientAddress,
       ),
     if (!sendsZec && refundAddress != null && refundAddress.isNotEmpty)
       SwapStatusDetailRowData(
         label: '$sourceSymbol refund address',
-        value: _compactSwapActivityAddress(refundAddress),
+        value: compactSwapAddress(refundAddress),
         copyable: true,
         copyText: refundAddress,
       ),
     if (depositAddress != null && depositAddress.isNotEmpty)
       SwapStatusDetailRowData(
         label: 'Deposit $sourceSymbol to',
-        value: _compactSwapActivityAddress(depositAddress),
+        value: compactSwapAddress(depositAddress),
         copyable: true,
         copyText: depositAddress,
       ),
@@ -264,28 +263,28 @@ List<SwapStatusDetailRowData> _swapActivityStatusDetails(
     if (sendsZec && refundAddress != null && refundAddress.isNotEmpty)
       SwapStatusDetailRowData(
         label: '$sourceSymbol refund address',
-        value: _compactSwapActivityAddress(refundAddress),
+        value: compactSwapAddress(refundAddress),
         copyable: true,
         copyText: refundAddress,
       ),
     if (!sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
       SwapStatusDetailRowData(
         label: '$receiveSymbol recipient',
-        value: _compactSwapActivityAddress(recipientAddress),
+        value: compactSwapAddress(recipientAddress),
         copyable: true,
         copyText: recipientAddress,
       ),
     if (depositTxHash != null && depositTxHash.isNotEmpty)
       SwapStatusDetailRowData(
         label: '$sourceSymbol deposit tx',
-        value: _compactSwapActivityAddress(depositTxHash),
+        value: compactSwapAddress(depositTxHash),
         copyable: true,
         copyText: depositTxHash,
       ),
     if (destinationChainTxHash != null && destinationChainTxHash.isNotEmpty)
       SwapStatusDetailRowData(
         label: '$receiveSymbol delivery tx',
-        value: _compactSwapActivityAddress(destinationChainTxHash),
+        value: compactSwapAddress(destinationChainTxHash),
         copyable: true,
         copyText: destinationChainTxHash,
       ),
@@ -327,26 +326,23 @@ String swapActivityPairSymbol(String pair, int index) {
   return index == 0 ? 'deposit asset' : 'receive asset';
 }
 
-String _swapActivityFiatTextForAsset(
-  SwapState state, {
+String _swapActivityFiatTextForAsset({
   required SwapIntent intent,
-  required SwapAsset asset,
+  required _SwapActivityAmountSide side,
   required String amountText,
 }) {
   final amount = _numericAmount(amountText);
   if (amount == null || amount <= 0) return r'$--';
-  if (_isUsdLikeSwapAsset(asset)) return _formatActivityUsd(amount);
-  final externalAsset = intent.externalAsset ?? state.externalAsset;
-  if (asset.isNativeZec && _isUsdLikeSwapAsset(externalAsset)) {
-    final zecUsd =
-        state.indicativeExternalPerZec[externalAsset] ??
-        externalAsset.fallbackExternalPerZec;
-    if (zecUsd.isFinite && zecUsd > 0) {
-      return _formatActivityUsd(amount * zecUsd);
-    }
-  }
-  return r'$--';
+  final fiatValueBasis = intent.fiatValueBasis;
+  if (fiatValueBasis == null) return r'$--';
+  final capturedValue = switch (side) {
+    _SwapActivityAmountSide.sell => fiatValueBasis.sellUsdValue(amount),
+    _SwapActivityAmountSide.receive => fiatValueBasis.receiveUsdValue(amount),
+  };
+  return capturedValue == null ? r'$--' : _formatActivityUsd(capturedValue);
 }
+
+enum _SwapActivityAmountSide { sell, receive }
 
 String? swapDepositDeadlineLabel(SwapIntent intent) {
   final deadline = intent.depositDeadline;
@@ -380,12 +376,6 @@ String? _swapActivityTimestampLabel(DateTime? timestamp) {
   final hour = local.hour.toString().padLeft(2, '0');
   final minute = local.minute.toString().padLeft(2, '0');
   return '$month ${local.day}, ${local.year} $hour:$minute';
-}
-
-String _compactSwapActivityAddress(String address) {
-  final trimmed = address.trim();
-  if (trimmed.length <= 18) return trimmed;
-  return '${trimmed.substring(0, 9)} ... ${trimmed.substring(trimmed.length - 7)}';
 }
 
 class SwapActivityDepositInstruction {
@@ -516,11 +506,6 @@ String? _firstNonEmpty(Iterable<String?> values) {
     if (trimmed != null && trimmed.isNotEmpty) return trimmed;
   }
   return null;
-}
-
-bool _isUsdLikeSwapAsset(SwapAsset asset) {
-  final symbol = asset.symbol.toUpperCase();
-  return symbol == 'USDC' || symbol == 'USDT' || symbol == 'DAI';
 }
 
 double? _numericAmount(String amountText) {

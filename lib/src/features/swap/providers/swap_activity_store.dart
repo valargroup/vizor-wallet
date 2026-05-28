@@ -163,6 +163,7 @@ Map<String, Object?> _recordToJson(SwapIntentRecord record) {
     'originChainTxHash': record.originChainTxHash,
     'destinationChainTxHash': record.destinationChainTxHash,
     'providerRefundInfo': _providerRefundInfoToJson(record.providerRefundInfo),
+    'fiatValueBasis': _fiatValueBasisToJson(record.fiatValueBasis),
     'lastStatusCheckedAt': record.lastStatusCheckedAt
         ?.toUtc()
         .toIso8601String(),
@@ -209,6 +210,7 @@ SwapIntentRecord _recordFromJson(Map<String, dynamic> json) {
     originChainTxHash: _optionalString(json['originChainTxHash']),
     destinationChainTxHash: _optionalString(json['destinationChainTxHash']),
     providerRefundInfo: _providerRefundInfoFromJson(json['providerRefundInfo']),
+    fiatValueBasis: _fiatValueBasisFromJson(json['fiatValueBasis']),
     lastStatusCheckedAt: _optionalDateTime(json['lastStatusCheckedAt']),
     statusError: _optionalString(json['statusError']),
     broadcastNotice: _optionalString(json['broadcastNotice']),
@@ -231,6 +233,27 @@ SwapIntentRecord? _recordFromJsonOrNull(Map<String, dynamic> json) {
     return null;
   }
   return _recordFromJson(json);
+}
+
+Map<String, Object?>? _fiatValueBasisToJson(SwapFiatValueBasis? basis) {
+  if (basis == null || !basis.isUsable) return null;
+  return {
+    'sellUsdUnitPrice': basis.sellUsdUnitPrice,
+    'receiveUsdUnitPrice': basis.receiveUsdUnitPrice,
+    'capturedAt': basis.capturedAt.toUtc().toIso8601String(),
+  };
+}
+
+SwapFiatValueBasis? _fiatValueBasisFromJson(Object? value) {
+  if (value is! Map) return null;
+  final capturedAt = _optionalDateTime(value['capturedAt']);
+  if (capturedAt == null) return null;
+  final basis = SwapFiatValueBasis(
+    capturedAt: capturedAt,
+    sellUsdUnitPrice: _optionalDouble(value['sellUsdUnitPrice']),
+    receiveUsdUnitPrice: _optionalDouble(value['receiveUsdUnitPrice']),
+  );
+  return basis.isUsable ? basis : null;
 }
 
 Map<String, Object?>? _providerRefundInfoToJson(SwapProviderRefundInfo? info) {
@@ -269,6 +292,12 @@ BigInt? _optionalBigInt(Object? value) {
   if (value is int) return BigInt.from(value);
   if (value is! String) return null;
   return BigInt.tryParse(value);
+}
+
+double? _optionalDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  if (value is! String || value.isEmpty) return null;
+  return double.tryParse(value);
 }
 
 DateTime? _optionalDateTime(Object? value) {

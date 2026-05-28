@@ -27,8 +27,8 @@ void main() {
     expect(presentation.title, 'Swapping ...');
     expect(presentation.payAsset, SwapAsset.zec);
     expect(presentation.receiveAsset, SwapAsset.usdc);
-    expect(presentation.payFiatText, r'$140.00');
-    expect(presentation.receiveFiatText, r'$140.00');
+    expect(presentation.payFiatText, r'$--');
+    expect(presentation.receiveFiatText, r'$--');
     expect(presentation.badgeKind, SwapStatusBadgeKind.liveQuote);
     expect(presentation.progressIndex, 2);
     expect(presentation.showTabs, isTrue);
@@ -67,6 +67,50 @@ void main() {
       _detailRow(presentation.details, 'ZEC refund address').copyText,
       'u1refund-address',
     );
+  });
+
+  test(
+    'uses captured fiat basis instead of current pricing for status summary',
+    () {
+      final presentation = swapActivityStatusPresentationForIntent(
+        _state(indicativeExternalPerZec: {SwapAsset.usdc: 200}),
+        _intent(
+          status: SwapIntentStatus.complete,
+          direction: SwapDirection.zecToExternal,
+          externalAsset: SwapAsset.usdc,
+          sellAmount: '2.0000 ZEC',
+          receiveEstimate: '123.45 USDC',
+          fiatValueBasis: SwapFiatValueBasis(
+            sellUsdUnitPrice: 70,
+            receiveUsdUnitPrice: 1,
+            capturedAt: DateTime.utc(2026, 5, 7, 10),
+          ),
+        ),
+      );
+
+      expect(presentation.payFiatText, r'$140.00');
+      expect(presentation.receiveFiatText, r'$123.45');
+    },
+  );
+
+  test('does not recalculate missing captured fiat sides with live prices', () {
+    final presentation = swapActivityStatusPresentationForIntent(
+      _state(indicativeExternalPerZec: {SwapAsset.usdc: 200}),
+      _intent(
+        status: SwapIntentStatus.complete,
+        direction: SwapDirection.zecToExternal,
+        externalAsset: SwapAsset.usdc,
+        sellAmount: '2.0000 ZEC',
+        receiveEstimate: '123.45 USDC',
+        fiatValueBasis: SwapFiatValueBasis(
+          sellUsdUnitPrice: 70,
+          capturedAt: DateTime.utc(2026, 5, 7, 10),
+        ),
+      ),
+    );
+
+    expect(presentation.payFiatText, r'$140.00');
+    expect(presentation.receiveFiatText, r'$--');
   });
 
   test('keeps terminal failure details compact and final', () {
@@ -266,6 +310,7 @@ SwapIntent _intent({
   String? oneClickRecipient,
   String? oneClickRefundTo,
   String? providerStatusRaw,
+  SwapFiatValueBasis? fiatValueBasis,
   DateTime? completedAt,
 }) {
   return SwapIntent(
@@ -291,6 +336,7 @@ SwapIntent _intent({
     oneClickRecipient: oneClickRecipient,
     oneClickRefundTo: oneClickRefundTo,
     providerStatusRaw: providerStatusRaw,
+    fiatValueBasis: fiatValueBasis,
     completedAt: completedAt,
   );
 }

@@ -8,7 +8,7 @@ import 'package:zcash_wallet/src/features/swap/domain/swap_contract.dart';
 void main() {
   test('quote posts exact-input payload and parses 1Click quote', () async {
     final transport = _FakeOneClickTransport([
-      _FakeResponse.get('/v0/tokens', _tokensWithNearUsdcFirst),
+      _FakeResponse.get('/v0/tokens', _tokensWithPrices('72.5')),
       _FakeResponse.post(
         '/v0/quote',
         _quoteResponse(
@@ -63,6 +63,9 @@ void main() {
     expect(quote.receiveEstimateText, '105.25 USDC');
     expect(quote.minimumReceiveText, '104.75 USDC');
     expect(quote.rateText, '1 ZEC = 70.17 USDC');
+    expect(quote.fiatValueBasis?.sellUsdUnitPrice, 72.5);
+    expect(quote.fiatValueBasis?.receiveUsdUnitPrice, 1);
+    expect(quote.fiatValueBasis?.capturedAt, DateTime.utc(2026, 5, 7, 10));
     expect(quote.depositInstruction.address, 't1deposit');
     expect(quote.depositInstruction.memo, 'memo-7');
     expect(quote.quoteExpiresAt, DateTime.utc(2026, 5, 7, 12));
@@ -1200,6 +1203,75 @@ void main() {
       expect(status.realisedSlippageText, '0.00000285 ZEC (0.15%)');
     },
   );
+
+  test('uses base-unit precision for rounded ZEC app fees', () async {
+    final transport = _FakeOneClickTransport([
+      _FakeResponse.get('/v0/tokens', _tokens),
+      _FakeResponse.get(
+        '/v0/status',
+        _quoteResponse(
+          originAsset: 'nep141:zec.omft.near',
+          destinationAsset: 'nep141:usdc.example',
+          amountIn: '200000',
+          amountInFormatted: '0.0019',
+          amountOut: '1200000',
+          amountOutFormatted: '1.2',
+          minAmountOut: '1194000',
+          depositAddress: 'status-deposit',
+          status: 'SUCCESS',
+          appFees: const [
+            {'recipient': 'vizor.near', 'fee': 67},
+          ],
+          swapDetails: {
+            'amountIn': '200000',
+            'amountInFormatted': '0.0019',
+            'amountOut': '1200000',
+            'amountOutFormatted': '1.2',
+          },
+        ),
+      ),
+    ]);
+    final provider = NearIntentsOneClickSwapAdapter(
+      transport: transport,
+      now: () => DateTime.utc(2026, 5, 27, 7, 25),
+    );
+
+    final status = await provider.getStatus('status-deposit');
+
+    expect(status.totalFeesText, '0.0000134 ZEC');
+  });
+
+  test('uses base-unit precision for refunded total fees', () async {
+    final transport = _FakeOneClickTransport([
+      _FakeResponse.get('/v0/tokens', _tokens),
+      _FakeResponse.get(
+        '/v0/status',
+        _quoteResponse(
+          originAsset: 'nep141:zec.omft.near',
+          destinationAsset: 'nep141:usdc.example',
+          amountInFormatted: '0.0015',
+          amountOutFormatted: '1.2',
+          minAmountOut: '1194000',
+          depositAddress: 'status-deposit',
+          status: 'REFUNDED',
+          swapDetails: {
+            'depositedAmount': '150000',
+            'depositedAmountFormatted': '0.0015',
+            'refundedAmount': '149953',
+            'refundedAmountFormatted': '0.0015',
+          },
+        ),
+      ),
+    ]);
+    final provider = NearIntentsOneClickSwapAdapter(
+      transport: transport,
+      now: () => DateTime.utc(2026, 5, 27, 7, 25),
+    );
+
+    final status = await provider.getStatus('status-deposit');
+
+    expect(status.totalFeesText, '0.00000047 ZEC');
+  });
 
   test(
     'captures snake-case NEAR Intents intent hashes from status swap details',

@@ -28,6 +28,7 @@ class SwapIntentRecord {
     this.originChainTxHash,
     this.destinationChainTxHash,
     this.providerRefundInfo,
+    this.fiatValueBasis,
     this.lastStatusCheckedAt,
     this.statusError,
     this.broadcastNotice,
@@ -67,6 +68,7 @@ class SwapIntentRecord {
       originChainTxHash: intent.originChainTxHash,
       destinationChainTxHash: intent.destinationChainTxHash,
       providerRefundInfo: intent.providerRefundInfo,
+      fiatValueBasis: intent.fiatValueBasis,
       lastStatusCheckedAt: intent.lastStatusCheckedAt,
       statusError: intent.statusError,
       broadcastNotice: intent.broadcastNotice,
@@ -105,6 +107,7 @@ class SwapIntentRecord {
   final String? originChainTxHash;
   final String? destinationChainTxHash;
   final SwapProviderRefundInfo? providerRefundInfo;
+  final SwapFiatValueBasis? fiatValueBasis;
   final DateTime? lastStatusCheckedAt;
   final String? statusError;
   final String? broadcastNotice;
@@ -145,6 +148,7 @@ class SwapIntentRecord {
     String? originChainTxHash,
     String? destinationChainTxHash,
     SwapProviderRefundInfo? providerRefundInfo,
+    SwapFiatValueBasis? fiatValueBasis,
     DateTime? lastStatusCheckedAt,
     String? statusError,
     String? broadcastNotice,
@@ -186,6 +190,7 @@ class SwapIntentRecord {
       destinationChainTxHash:
           destinationChainTxHash ?? this.destinationChainTxHash,
       providerRefundInfo: providerRefundInfo ?? this.providerRefundInfo,
+      fiatValueBasis: fiatValueBasis ?? this.fiatValueBasis,
       lastStatusCheckedAt: lastStatusCheckedAt ?? this.lastStatusCheckedAt,
       statusError: clearStatusError ? null : statusError ?? this.statusError,
       broadcastNotice: clearBroadcastNotice
@@ -233,6 +238,7 @@ class SwapIntent {
     this.originChainTxHash,
     this.destinationChainTxHash,
     this.providerRefundInfo,
+    this.fiatValueBasis,
     this.lastStatusCheckedAt,
     this.statusError,
     this.oneClickRecipient,
@@ -274,6 +280,7 @@ class SwapIntent {
   final String? originChainTxHash;
   final String? destinationChainTxHash;
   final SwapProviderRefundInfo? providerRefundInfo;
+  final SwapFiatValueBasis? fiatValueBasis;
   final DateTime? lastStatusCheckedAt;
   final String? statusError;
   final String? oneClickRecipient;
@@ -317,6 +324,7 @@ class SwapIntent {
     String? originChainTxHash,
     String? destinationChainTxHash,
     SwapProviderRefundInfo? providerRefundInfo,
+    SwapFiatValueBasis? fiatValueBasis,
     DateTime? lastStatusCheckedAt,
     String? statusError,
     String? oneClickRecipient,
@@ -362,6 +370,7 @@ class SwapIntent {
       destinationChainTxHash:
           destinationChainTxHash ?? this.destinationChainTxHash,
       providerRefundInfo: providerRefundInfo ?? this.providerRefundInfo,
+      fiatValueBasis: fiatValueBasis ?? this.fiatValueBasis,
       lastStatusCheckedAt: lastStatusCheckedAt ?? this.lastStatusCheckedAt,
       statusError: clearStatusError ? null : statusError ?? this.statusError,
       oneClickRecipient: oneClickRecipient ?? this.oneClickRecipient,

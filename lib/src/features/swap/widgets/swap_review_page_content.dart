@@ -8,6 +8,7 @@ import '../../../core/widgets/app_profile_picture.dart';
 import '../../../core/widgets/app_tooltip.dart';
 import '../domain/swap_address_plan.dart';
 import '../domain/swap_contract.dart';
+import '../models/swap_address_formatting.dart';
 import '../models/swap_detail_tooltips.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
@@ -450,7 +451,7 @@ class _ReviewDetailsList extends StatelessWidget {
     );
     final addressRow = _ReviewDetailRow(
       label: sendsZec ? 'To' : 'From',
-      value: _compactAddress(_refundOrRecipientValue(addressPlan)),
+      value: compactSwapAddress(_refundOrRecipientValue(addressPlan)),
     );
     return SizedBox(
       key: const ValueKey('swap_review_details'),
@@ -633,12 +634,6 @@ String _refundOrRecipientValue(SwapAddressPlan addressPlan) {
   return addressPlan.direction.sendsZec
       ? addressPlan.userExternalAddress
       : addressPlan.oneClickRefundTo;
-}
-
-String _compactAddress(String address) {
-  final trimmed = address.trim();
-  if (trimmed.length <= 18) return trimmed;
-  return '${trimmed.substring(0, 9)} ... ${trimmed.substring(trimmed.length - 7)}';
 }
 
 String _payFiatText(SwapQuote quote) {

@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../../core/formatting/zec_amount.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_icon.dart';
+import '../models/swap_address_formatting.dart';
 import '../models/swap_fiat_amount.dart';
 import '../models/swap_models.dart';
 import 'swap_asset_icon.dart';
@@ -638,7 +639,14 @@ class _AddressTrigger extends StatelessWidget {
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
-                  hasValue ? _compactAddress(trimmed) : emptyText,
+                  hasValue
+                      ? compactSwapAddress(
+                          trimmed,
+                          prefixLength: 8,
+                          suffixLength: 6,
+                          separator: '...',
+                        )
+                      : emptyText,
                   key: const ValueKey('swap_destination_value'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1010,11 +1018,6 @@ class _SlippageControl extends StatelessWidget {
       ),
     );
   }
-}
-
-String _compactAddress(String value) {
-  if (value.length <= 18) return value;
-  return '${value.substring(0, 8)}...${value.substring(value.length - 6)}';
 }
 
 String _formatSlippage(int bps) {

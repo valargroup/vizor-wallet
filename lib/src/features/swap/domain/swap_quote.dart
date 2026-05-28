@@ -1,5 +1,6 @@
 import 'swap_asset.dart';
 import 'swap_direction.dart';
+import 'swap_fiat_value_basis.dart';
 
 class SwapQuoteRequest {
   const SwapQuoteRequest({
@@ -124,6 +125,7 @@ class SwapQuote {
     this.minimumReceiveTextOverride,
     this.rateTextOverride,
     this.providerRefundInfo,
+    this.fiatValueBasis,
   });
 
   factory SwapQuote.estimate({
@@ -205,6 +207,7 @@ class SwapQuote {
   final String? minimumReceiveTextOverride;
   final String? rateTextOverride;
   final SwapProviderRefundInfo? providerRefundInfo;
+  final SwapFiatValueBasis? fiatValueBasis;
 
   String get pairText => '${sellAsset.symbol} -> ${receiveAsset.symbol}';
   String get sellAmountText =>
