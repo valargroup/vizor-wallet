@@ -1,5 +1,5 @@
 // ignore_for_file: depend_on_referenced_packages
-// Dev-only entry point for inspecting the swap prototype without touching
+// Dev-only entry point for inspecting the swap UI without touching
 // wallet bootstrap, secure storage, Rust sync, or a real 1Click provider.
 
 import 'package:flutter/material.dart';
@@ -13,15 +13,14 @@ import 'src/features/activity/screens/activity_screen.dart';
 import 'src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'src/features/receive/models/receive_prefill_args.dart';
 import 'src/features/send/models/send_prefill_args.dart';
-import 'src/features/swap/models/swap_prototype_models.dart';
+import 'src/features/swap/models/swap_models.dart';
 import 'src/features/swap/models/swap_activity_navigation.dart';
-import 'src/features/swap/providers/swap_prototype_provider.dart';
+import 'src/features/swap/providers/swap_state_provider.dart';
 import 'src/features/swap/providers/swap_deposit_sender.dart';
 import 'src/features/swap/providers/swap_max_amount_estimator.dart';
 import 'src/features/swap/providers/swap_activity_store.dart';
 import 'src/features/swap/providers/swap_composer_preferences_store.dart';
 import 'src/features/swap/providers/swap_zec_staging_address_service.dart';
-import 'src/features/swap/screens/swap_address_scan_screen.dart';
 import 'src/features/swap/screens/swap_review_screen.dart';
 import 'src/features/swap/screens/swap_screen.dart';
 import 'src/providers/account_models.dart';
@@ -42,10 +41,6 @@ Future<void> main() async {
         builder: (_, _) => const SwapScreen(),
         routes: [
           GoRoute(path: 'review', builder: (_, _) => const SwapReviewScreen()),
-          GoRoute(
-            path: 'address-scan',
-            builder: (_, _) => const SwapAddressScanScreen(),
-          ),
         ],
       ),
       GoRoute(path: '/activity', builder: (_, _) => const ActivityScreen()),
@@ -138,10 +133,10 @@ String _previewScenario(Map<String, String> params) {
       : params['scenario'] ?? 'default';
 }
 
-List<SwapPrototypeIntent> _previewIntents(String scenario) {
+List<SwapIntent> _previewIntents(String scenario) {
   if (scenario != 'long') return const [];
   return [
-    SwapPrototypeIntent(
+    SwapIntent(
       id: 'swap-long-provider-data',
       title: 'USDC to ZEC',
       pair: 'USDC -> ZEC',
@@ -152,37 +147,37 @@ List<SwapPrototypeIntent> _previewIntents(String scenario) {
       nextAction:
           'Send the external deposit, then submit the source-chain transaction hash after confirmation.',
       steps: const [
-        SwapPrototypeStep(
+        SwapStep(
           label: 'Quote locked',
-          state: SwapPrototypeStepState.done,
+          state: SwapStepState.done,
           evidence: 'Stored locally',
         ),
-        SwapPrototypeStep(
+        SwapStep(
           label: 'Awaiting external deposit',
-          state: SwapPrototypeStepState.active,
+          state: SwapStepState.active,
           evidence: 'Waiting for source-chain confirmation',
         ),
       ],
       exposure: const [
-        SwapPrototypeField(
+        SwapDetailField(
           label: 'Deposit address',
           value:
               'one-time USDC address with source-chain routing metadata visible',
         ),
-        SwapPrototypeField(
+        SwapDetailField(
           label: 'Refund path',
           value:
               'USDC refunds return to the long source-chain address entered during review',
         ),
       ],
       receipt: const [
-        SwapPrototypeField(label: 'Swap id', value: 'swap-long-provider-data'),
-        SwapPrototypeField(
+        SwapDetailField(label: 'Swap id', value: 'swap-long-provider-data'),
+        SwapDetailField(
           label: 'Deposit',
           value:
               '0xone-time-usdc-deposit-address-with-a-long-provider-suffix-abcdef1234567890',
         ),
-        SwapPrototypeField(
+        SwapDetailField(
           label: 'Memo',
           value:
               'memo-with-a-long-routing-tag-and-provider-reference-9876543210',
@@ -205,7 +200,7 @@ final _previewBootstrap = AppBootstrapState(
   initialAccountState: const AccountState(
     accounts: [AccountInfo(uuid: 'account-1', name: 'Account 1', order: 0)],
     activeAccountUuid: 'account-1',
-    activeAddress: 'u1swapprototypeaddress',
+    activeAddress: 'u1swapaddress',
   ),
   initialSyncSnapshot: AppSyncSnapshot.empty,
   network: 'main',
@@ -355,7 +350,7 @@ class _PreviewMaxAmountEstimator implements SwapMaxAmountEstimator {
 
 class _PreviewSwapStore
     implements SwapActivityStore, SwapComposerPreferencesStore {
-  _PreviewSwapStore({List<SwapPrototypeIntent> initialIntents = const []})
+  _PreviewSwapStore({List<SwapIntent> initialIntents = const []})
     : _records = [
         for (final intent in initialIntents)
           SwapIntentRecord.fromIntent(intent),

@@ -11,7 +11,7 @@ import '../src/core/widgets/app_button.dart';
 import '../src/core/widgets/app_icon.dart';
 import '../src/core/widgets/app_pane_modal_overlay.dart';
 import '../src/features/swap/models/swap_fiat_amount.dart';
-import '../src/features/swap/models/swap_prototype_models.dart';
+import '../src/features/swap/models/swap_models.dart';
 import '../src/features/swap/widgets/swap_address_qr_scan_modal.dart';
 import '../src/features/swap/widgets/swap_composer_panel.dart';
 import '../src/features/swap/widgets/swap_deposit_tokens_page_content.dart';
@@ -643,7 +643,7 @@ const _designFailedDetails = <SwapStatusDetailRowData>[
   SwapStatusDetailRowData(label: 'Timestamp', value: 'May 20, 2026 13:20'),
 ];
 
-final _figmaNode1State = SwapPrototypeState(
+final _figmaNode1State = SwapState(
   direction: SwapDirection.externalToZec,
   amountText: '0',
   receiveAmountText: '0',
@@ -651,13 +651,11 @@ final _figmaNode1State = SwapPrototypeState(
   externalAsset: _figmaUsdc,
   reviewVisible: false,
   intents: [],
-  externalRequests: [],
-  requestImportText: '',
   slippageBps: 50,
   indicativeExternalPerZec: _figmaUsdcPerZec,
 );
 
-final _figmaNode2State = SwapPrototypeState(
+final _figmaNode2State = SwapState(
   direction: SwapDirection.externalToZec,
   amountText: '0',
   receiveAmountText: '0',
@@ -665,14 +663,12 @@ final _figmaNode2State = SwapPrototypeState(
   externalAsset: _figmaUsdc,
   reviewVisible: false,
   intents: [],
-  externalRequests: [],
-  requestImportText: '',
   slippageBps: 50,
   quoteMode: SwapQuoteMode.exactOutput,
   indicativeExternalPerZec: _figmaUsdcPerZec,
 );
 
-final _figmaNode3State = SwapPrototypeState(
+final _figmaNode3State = SwapState(
   direction: SwapDirection.externalToZec,
   amountText: '100',
   receiveAmountText: '0.25',
@@ -680,13 +676,11 @@ final _figmaNode3State = SwapPrototypeState(
   externalAsset: _figmaUsdc,
   reviewVisible: false,
   intents: [],
-  externalRequests: [],
-  requestImportText: '',
   slippageBps: 50,
   indicativeExternalPerZec: _figmaUsdcPerZec,
 );
 
-final _figmaNode5State = SwapPrototypeState(
+final _figmaNode5State = SwapState(
   direction: SwapDirection.zecToExternal,
   amountText: '0.25',
   receiveAmountText: '100',
@@ -694,13 +688,11 @@ final _figmaNode5State = SwapPrototypeState(
   externalAsset: _figmaUsdc,
   reviewVisible: false,
   intents: [],
-  externalRequests: [],
-  requestImportText: '',
   slippageBps: 50,
   indicativeExternalPerZec: _figmaZecPerUsdc,
 );
 
-final _figmaNode6State = SwapPrototypeState(
+final _figmaNode6State = SwapState(
   direction: SwapDirection.externalToZec,
   amountText: '100',
   amountFiatText: '100',
@@ -712,8 +704,6 @@ final _figmaNode6State = SwapPrototypeState(
   externalAsset: _figmaUsdc,
   reviewVisible: false,
   intents: [],
-  externalRequests: [],
-  requestImportText: '',
   slippageBps: 50,
   indicativeExternalPerZec: _figmaUsdcPerZec,
 );
@@ -1309,7 +1299,7 @@ class _SwapComposerPreview extends StatefulWidget {
     this.showActionButton = true,
   });
 
-  final SwapPrototypeState initialState;
+  final SwapState initialState;
   final String actionLabel;
   final String zecAvailableText;
   final BigInt? zecAvailableZatoshi;
@@ -1321,7 +1311,7 @@ class _SwapComposerPreview extends StatefulWidget {
 }
 
 class _SwapComposerPreviewState extends State<_SwapComposerPreview> {
-  late SwapPrototypeState _state;
+  late SwapState _state;
   var _assetSelectorOpen = false;
   var _slippageModalOpen = false;
 
@@ -1614,7 +1604,7 @@ class _SwapAddressQrCameraPreview extends StatelessWidget {
   }
 }
 
-String _estimateCounterpart(SwapPrototypeState state) {
+String _estimateCounterpart(SwapState state) {
   final quote = state.draftQuote;
   if (quote == null) return '';
   return state.quoteMode == SwapQuoteMode.exactInput
@@ -1622,8 +1612,8 @@ String _estimateCounterpart(SwapPrototypeState state) {
       : quote.sellAsset.formatAmountUp(quote.sellAmount);
 }
 
-SwapPrototypeState _withDerivedFiatTexts(
-  SwapPrototypeState state, {
+SwapState _withDerivedFiatTexts(
+  SwapState state, {
   bool preserveAmountFiatInput = false,
   bool preserveReceiveFiatInput = false,
 }) {

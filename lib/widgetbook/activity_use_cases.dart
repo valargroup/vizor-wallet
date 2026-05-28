@@ -11,7 +11,7 @@ import '../src/core/widgets/app_icon.dart';
 import '../src/features/activity/models/activity_row_data.dart';
 import '../src/features/activity/swap_activity_row_mapper.dart';
 import '../src/features/activity/widgets/activity_table.dart';
-import '../src/features/swap/models/swap_prototype_models.dart';
+import '../src/features/swap/models/swap_models.dart';
 
 Widget buildActivitySwapProgressExternalToZecUseCase(BuildContext context) {
   return _ActivityScreenFrame(

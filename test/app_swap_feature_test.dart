@@ -8,7 +8,7 @@ import 'package:zcash_wallet/src/core/config/swap_feature_config.dart';
 import 'package:zcash_wallet/src/features/activity/screens/activity_screen.dart';
 import 'package:zcash_wallet/src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'package:zcash_wallet/src/features/home/screens/home_screen.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_activity_store.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_provider_config.dart';
 import 'package:zcash_wallet/src/features/swap/screens/swap_screen.dart';

@@ -10,7 +10,7 @@ import '../../../rust/api/sync.dart' as rust_sync;
 import '../../keystone/widgets/keystone_signing_modal.dart';
 import '../../send/services/sapling_params.dart';
 import '../../send/widgets/sapling_params_prompt.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 import '../providers/swap_hardware_signing_service.dart';
 
 class SwapKeystoneBroadcastResult {
@@ -35,7 +35,7 @@ class SwapKeystoneSigningOverlay extends ConsumerStatefulWidget {
     super.key,
   });
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
   final VoidCallback onCancel;
   final ValueChanged<SwapKeystoneBroadcastResult> onDepositBroadcast;
 

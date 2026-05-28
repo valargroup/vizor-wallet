@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_fiat_amount.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 
 void main() {
   test('converts ZEC token amount to fiat display text', () {
@@ -84,8 +84,8 @@ void main() {
   });
 }
 
-SwapPrototypeState _stateWithUsdRate(double usdcPerZec) {
-  return SwapPrototypeState(
+SwapState _stateWithUsdRate(double usdcPerZec) {
+  return SwapState(
     direction: SwapDirection.zecToExternal,
     amountText: '',
     receiveAmountText: '',
@@ -93,8 +93,6 @@ SwapPrototypeState _stateWithUsdRate(double usdcPerZec) {
     externalAsset: SwapAsset.usdc,
     reviewVisible: false,
     intents: const [],
-    externalRequests: const [],
-    requestImportText: '',
     indicativeExternalPerZec: {SwapAsset.usdc: usdcPerZec},
   );
 }

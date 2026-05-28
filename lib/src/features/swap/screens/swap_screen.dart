@@ -22,8 +22,8 @@ import '../../../providers/sync_provider.dart';
 import '../../address_book/models/address_book_contact.dart';
 import '../../address_book/providers/address_book_provider.dart';
 import '../../address_book/widgets/address_book_contact_picker_modal.dart';
-import '../models/swap_prototype_models.dart';
-import '../providers/swap_prototype_provider.dart';
+import '../models/swap_models.dart';
+import '../providers/swap_state_provider.dart';
 import '../widgets/redacted_receipt_drawer.dart';
 import '../widgets/swap_activity_panel.dart';
 import '../widgets/swap_address_qr_scan_modal.dart';
@@ -48,29 +48,27 @@ enum _SwapModalSurface {
 
 const double _swapBodyDesignHeight = 580;
 
-AddressBookNetwork? _addressBookNetworkForSwapDestination(
-  SwapPrototypeState state,
-) {
+AddressBookNetwork? _addressBookNetworkForSwapDestination(SwapState state) {
   final asset = state.externalAsset;
   return AddressBookNetwork.tryFromChainTicker(asset.chainTicker);
 }
 
-List<AddressBookNetwork> _swapContactPickerNetworks(SwapPrototypeState state) {
+List<AddressBookNetwork> _swapContactPickerNetworks(SwapState state) {
   final network = _addressBookNetworkForSwapDestination(state);
   return network == null ? const [] : [network];
 }
 
-String _swapContactPickerTitle(SwapPrototypeState state) {
+String _swapContactPickerTitle(SwapState state) {
   final role = state.direction.sendsZec ? 'Recipients' : 'Refunds';
   return '${state.externalAsset.symbol} $role';
 }
 
-String _swapContactPickerEmptyTitle(SwapPrototypeState state) {
+String _swapContactPickerEmptyTitle(SwapState state) {
   final role = state.direction.sendsZec ? 'recipients' : 'refunds';
   return 'No saved ${state.externalAsset.symbol} $role';
 }
 
-String _swapAddressBookLabel(SwapPrototypeState state) {
+String _swapAddressBookLabel(SwapState state) {
   final role = state.direction.sendsZec ? 'recipient' : 'refund';
   return '${state.externalAsset.symbol} $role';
 }
@@ -162,14 +160,11 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
   }
 
   void _selectAddressBookContact(AddressBookContact contact) {
-    ref.read(swapPrototypeProvider.notifier).updateDestination(contact.address);
+    ref.read(swapStateProvider.notifier).updateDestination(contact.address);
     _closeSwapModal();
   }
 
-  Future<void> _rememberSwapAddress(
-    String value,
-    SwapPrototypeState swapState,
-  ) async {
+  Future<void> _rememberSwapAddress(String value, SwapState swapState) async {
     final address = value.trim();
     if (address.isEmpty) return;
     final network = _addressBookNetworkForSwapDestination(swapState);
@@ -213,8 +208,8 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
         });
       },
     );
-    final swapState = ref.watch(swapPrototypeProvider);
-    final swapNotifier = ref.read(swapPrototypeProvider.notifier);
+    final swapState = ref.watch(swapStateProvider);
+    final swapNotifier = ref.read(swapStateProvider.notifier);
     final accountState = ref.watch(accountProvider).value;
     final activeAccountUuid = accountState?.activeAccountUuid;
     final sync = ref.watch(
@@ -232,7 +227,7 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
       unawaited(() async {
         await swapNotifier.showReview();
         if (!context.mounted) return;
-        final next = ref.read(swapPrototypeProvider);
+        final next = ref.read(swapStateProvider);
         if (next.reviewVisible &&
             next.reviewQuote != null &&
             next.reviewAddressPlan != null) {
@@ -242,7 +237,7 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
     }
 
     void refreshStatus() {
-      final selected = ref.read(swapPrototypeProvider).selectedIntentOrNull;
+      final selected = ref.read(swapStateProvider).selectedIntentOrNull;
       if (selected == null || !canRefreshSwapIntentStatus(selected.status)) {
         return;
       }
@@ -844,7 +839,7 @@ class _SwapComposerStack extends StatelessWidget {
   });
 
   final double? viewportHeight;
-  final SwapPrototypeState state;
+  final SwapState state;
   final ValueChanged<String> onAmountChanged;
   final ValueChanged<String> onAmountFiatChanged;
   final ValueChanged<String> onReceiveAmountChanged;
@@ -928,7 +923,7 @@ class _SwapComposerBody extends StatelessWidget {
   });
 
   final double? bodyHeight;
-  final SwapPrototypeState state;
+  final SwapState state;
   final BigInt zecAvailableZatoshi;
   final VoidCallback onOpenDestinationAddress;
   final VoidCallback onReviewQuote;
@@ -980,7 +975,7 @@ class _SwapComposerBody extends StatelessWidget {
   }
 }
 
-double _effectiveSwapBodyHeight(double height, SwapPrototypeState state) {
+double _effectiveSwapBodyHeight(double height, SwapState state) {
   final hasQuoteError =
       state.quoteError != null || state.previewQuoteError != null;
   final clampedHeight = height < _swapBodyDesignHeight
@@ -997,7 +992,7 @@ class _SwapReviewFooter extends StatelessWidget {
     required this.onReviewQuote,
   });
 
-  final SwapPrototypeState state;
+  final SwapState state;
   final BigInt zecAvailableZatoshi;
   final VoidCallback onOpenDestinationAddress;
   final VoidCallback onReviewQuote;
@@ -1071,14 +1066,14 @@ class _SwapReviewButtonLabel extends StatelessWidget {
   }
 }
 
-String _destinationAddressActionLabel(SwapPrototypeState state) {
+String _destinationAddressActionLabel(SwapState state) {
   return state.direction.sendsZec
       ? 'Add Recipient Address'
       : 'Add Refund Address';
 }
 
 bool _reviewAmountExceedsAvailableZec(
-  SwapPrototypeState state,
+  SwapState state,
   BigInt availableZatoshi,
 ) {
   if (!state.direction.sendsZec) return false;

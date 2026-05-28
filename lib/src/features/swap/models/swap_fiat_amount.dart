@@ -1,9 +1,6 @@
-import 'swap_prototype_models.dart';
+import 'swap_models.dart';
 
-double? swapUsdUnitPriceForAsset(
-  SwapPrototypeState state, {
-  required SwapAsset asset,
-}) {
+double? swapUsdUnitPriceForAsset(SwapState state, {required SwapAsset asset}) {
   if (_isUsdStable(asset)) return 1;
   if (asset != SwapAsset.zec || !_isUsdStable(state.externalAsset)) {
     return null;
@@ -13,7 +10,7 @@ double? swapUsdUnitPriceForAsset(
 }
 
 String swapFiatDisplayText(
-  SwapPrototypeState state, {
+  SwapState state, {
   required SwapAsset asset,
   required String tokenAmountText,
 }) {
@@ -25,7 +22,7 @@ String swapFiatDisplayText(
 }
 
 String swapFiatInputTextFromTokenText(
-  SwapPrototypeState state, {
+  SwapState state, {
   required SwapAsset asset,
   required String tokenAmountText,
 }) {
@@ -37,7 +34,7 @@ String swapFiatInputTextFromTokenText(
 }
 
 String? swapTokenAmountTextFromFiatText(
-  SwapPrototypeState state, {
+  SwapState state, {
   required SwapAsset asset,
   required String fiatAmountText,
 }) {

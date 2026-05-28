@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/swap/domain/near_intents_one_click_swap_provider.dart';
+import 'package:zcash_wallet/src/features/swap/integrations/near_intents/near_intents_one_click_swap_adapter.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_failure_policy.dart';
 
 void main() {

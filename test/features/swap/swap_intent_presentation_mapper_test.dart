@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_intent_presentation_mapper.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 
 void main() {
   test('builds presentation rows from raw swap intent records', () {
-    final intent = swapPrototypeIntentFromRecord(
+    final intent = swapIntentFromRecord(
       SwapIntentRecord(
         id: 'swap-record',
         providerLabel: 'NEAR Intents',
@@ -56,7 +56,7 @@ void main() {
   test('updates raw lifecycle facts from provider status snapshots', () {
     final createdAt = DateTime.utc(2026, 5, 7, 10);
     final checkedAt = DateTime.utc(2026, 5, 7, 10, 30);
-    final intent = swapPrototypeIntentFromRecord(
+    final intent = swapIntentFromRecord(
       SwapIntentRecord(
         id: 'swap-record',
         providerLabel: 'NEAR Intents',
@@ -121,6 +121,6 @@ void main() {
   });
 }
 
-String _receiptValue(SwapPrototypeIntent intent, String label) {
+String _receiptValue(SwapIntent intent, String label) {
   return intent.receipt.where((field) => field.label == label).single.value;
 }

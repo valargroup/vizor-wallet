@@ -4,10 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../main.dart' show log;
 import '../../../core/formatting/zec_amount.dart';
-import '../domain/zip321_payment_request.dart';
 import '../models/swap_fiat_amount.dart';
 import '../models/swap_intent_presentation_mapper.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 import '../../../providers/account_provider.dart';
 import 'swap_activity_tracker.dart';
 import 'swap_deposit_sender.dart';
@@ -19,17 +18,11 @@ import 'swap_zec_staging_address_service.dart';
 
 export 'swap_provider_config.dart';
 
-final swapInitialIntentsProvider = Provider<List<SwapPrototypeIntent>>((ref) {
+final swapInitialIntentsProvider = Provider<List<SwapIntent>>((ref) {
   return const [];
 });
 
-final swapInitialExternalRequestsProvider = Provider<List<SwapExternalRequest>>(
-  (ref) {
-    return const [];
-  },
-);
-
-class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
+class SwapNotifier extends Notifier<SwapState> {
   var _quoteGeneration = 0;
   var _accountScopeGeneration = 0;
   var _statusRefreshInFlight = false;
@@ -37,7 +30,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   String? get _activeAccountUuidOrNull =>
       ref.read(accountProvider).value?.activeAccountUuid;
 
-  String? _accountUuidForIntent(SwapPrototypeIntent intent) {
+  String? _accountUuidForIntent(SwapIntent intent) {
     final activeAccountUuid = _activeAccountUuidOrNull;
     if (activeAccountUuid == null || intent.accountUuid != activeAccountUuid) {
       return null;
@@ -46,7 +39,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   }
 
   @override
-  SwapPrototypeState build() {
+  SwapState build() {
     ref.listen<String?>(
       accountProvider.select((value) => value.value?.activeAccountUuid),
       (previous, next) {
@@ -82,8 +75,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     unawaited(_loadSupportedExternalAssets());
     unawaited(_restorePersistedIntents(accountUuid: activeAccountUuid));
     final initialIntents = ref.watch(swapInitialIntentsProvider);
-    final initialRequests = ref.watch(swapInitialExternalRequestsProvider);
-    return const SwapPrototypeState(
+    return const SwapState(
       direction: SwapDirection.zecToExternal,
       amountText: '',
       receiveAmountText: '',
@@ -91,15 +83,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       externalAsset: SwapAsset.usdc,
       reviewVisible: false,
       intents: [],
-      externalRequests: [],
-      requestImportText: '',
     ).copyWith(
       intents: initialIntents,
-      externalRequests: initialRequests,
       selectedIntentId: initialIntents.isEmpty ? null : initialIntents.first.id,
-      selectedRequestId: initialRequests.isEmpty
-          ? null
-          : initialRequests.first.id,
     );
   }
 
@@ -443,7 +429,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
             nextState.receiveAmountInputMode == SwapAmountInputMode.fiat,
       );
     } catch (_) {
-      // Keep the static fallback so the prototype remains usable offline.
+      // Keep the static fallback so the swap flow remains usable offline.
     }
   }
 
@@ -555,8 +541,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       'Swap: start begin pair=${quote.pairText} '
       'direction=${quote.direction.name} '
       'quote=${_shortSwapValue(quote.providerQuoteId)} '
-      'deposit=${_shortSwapValue(quote.depositInstruction.address)} '
-      'liveFunds=${ref.read(swapLiveFundsEnabledProvider)}',
+      'deposit=${_shortSwapValue(quote.depositInstruction.address)}',
     );
     state = state.copyWith(startSubmitting: true, clearStatusError: true);
     if (accountUuid == null) {
@@ -570,8 +555,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     final activeAccountIsHardware = ref
         .read(accountProvider.notifier)
         .isActiveAccountHardware;
-    final liveFundsEnabled = ref.read(swapLiveFundsEnabledProvider);
-    if (quote.direction.sendsZec && liveFundsEnabled) {
+    if (quote.direction.sendsZec) {
       try {
         await ref
             .read(swapDepositSenderProvider)
@@ -650,17 +634,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     await _persistCurrentIntents();
 
     if (quote.direction.sendsZec) {
-      if (!ref.read(swapLiveFundsEnabledProvider)) {
-        log(
-          'Swap: live ZEC deposit skipped; live funds disabled '
-          'intent=${_shortSwapValue(intent.id)}',
-        );
-        state = state.copyWith(
-          statusError:
-              'Live ZEC deposit is disabled in this build. The quote is saved, but no wallet transaction was signed or broadcast.',
-        );
-        return true;
-      }
       if (activeAccountIsHardware) {
         log(
           'Swap: hardware ZEC deposit waiting for Keystone signing '
@@ -745,98 +718,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     if (intent.depositTxHash?.trim().isNotEmpty ?? false) return;
 
     await removeIntent(intentId);
-  }
-
-  void selectExternalRequest(String requestId) {
-    final request = _externalRequestById(requestId);
-    if (request == null) return;
-    state = state.copyWith(
-      selectedRequestId: request.id,
-      clearStatusError: true,
-    );
-  }
-
-  void updateRequestImportText(String value) {
-    state = state.copyWith(
-      requestImportText: value,
-      clearRequestImportError: true,
-    );
-  }
-
-  void importExternalRequest() {
-    try {
-      final parsed = Zip321PaymentRequest.parse(state.requestImportText);
-      final request = _externalRequestFromZip321(parsed);
-      state = state.copyWith(
-        externalRequests: [request, ...state.externalRequests],
-        selectedRequestId: request.id,
-        requestImportText: '',
-        clearRequestImportError: true,
-      );
-    } on Zip321ParseException catch (e) {
-      state = state.copyWith(requestImportError: e.message);
-    }
-  }
-
-  bool stageSelectedExternalRequest() {
-    if (state.externalRequests.isEmpty) return false;
-    final request = state.selectedRequest;
-    if (!request.canStageSwap) return false;
-    final direction = request.direction;
-    final externalAsset = request.externalAsset;
-    final amountText = request.amountText;
-    final destinationText = request.destinationText;
-    if (direction == null ||
-        externalAsset == null ||
-        amountText == null ||
-        destinationText == null) {
-      return false;
-    }
-
-    _quoteGeneration++;
-    state = state.copyWith(
-      direction: direction,
-      externalAsset: externalAsset,
-      quoteMode: SwapQuoteMode.exactInput,
-      amountText: amountText,
-      receiveAmountText: '',
-      amountInputMode: SwapAmountInputMode.token,
-      receiveAmountInputMode: SwapAmountInputMode.token,
-      amountFiatText: '',
-      receiveFiatText: '',
-      destinationText: destinationText,
-      reviewVisible: false,
-      quoteLoading: false,
-      externalRequests: _replaceExternalRequest(
-        state.externalRequests,
-        request.id,
-        request.copyWith(status: SwapExternalRequestStatus.accepted),
-      ),
-      selectedRequestId: request.id,
-      clearReview: true,
-      clearPreviewQuote: true,
-      clearPreviewQuoteError: true,
-      clearQuoteError: true,
-      clearStatusError: true,
-    );
-    state = _withDerivedFiatTexts(_withIndicativeCounterpart(state));
-    _clearPreviewQuoteState();
-    return true;
-  }
-
-  void rejectSelectedExternalRequest() {
-    if (state.externalRequests.isEmpty) return;
-    final request = state.selectedRequest;
-    if (!request.isOpen) return;
-    state = state.copyWith(
-      externalRequests: _replaceExternalRequest(
-        state.externalRequests,
-        request.id,
-        request.copyWith(status: SwapExternalRequestStatus.rejected),
-      ),
-      selectedRequestId: request.id,
-      clearStatusError: true,
-    );
   }
 
   void cancelReviewQuote() {
@@ -936,7 +817,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
         current.depositTxHash != normalizedTxHash) {
       return;
     }
-    final patched = swapPrototypeIntentFromRecord(
+    final patched = swapIntentFromRecord(
       SwapIntentRecord.fromIntent(current).copyWith(
         statusError: broadcastNotice,
         broadcastNotice: broadcastNotice,
@@ -950,7 +831,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
   }
 
   Future<void> _submitDepositTransaction(
-    SwapPrototypeIntent selected,
+    SwapIntent selected,
     String txHash, {
     String? broadcastStatus,
     String? broadcastMessage,
@@ -965,13 +846,6 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       );
       return;
     }
-    if (!ref.read(swapLiveFundsEnabledProvider)) {
-      state = state.copyWith(
-        statusError:
-            'Live deposit submission is disabled in this build. No swap status update was sent.',
-      );
-      return;
-    }
 
     log(
       'Swap: submit deposit begin intent=${_shortSwapValue(selected.id)} '
@@ -983,7 +857,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       status: broadcastStatus,
       message: broadcastMessage,
     );
-    final checkpointed = swapPrototypeIntentFromRecord(
+    final checkpointed = swapIntentFromRecord(
       SwapIntentRecord.fromIntent(selected).copyWith(
         depositTxHash: txHash,
         statusError: broadcastNotice,
@@ -1083,7 +957,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       status: broadcastStatus,
       message: broadcastMessage,
     );
-    final checkpointed = swapPrototypeIntentFromRecord(
+    final checkpointed = swapIntentFromRecord(
       SwapIntentRecord.fromIntent(intent).copyWith(
         depositTxHash: txHash,
         statusError: statusError ?? broadcastNotice,
@@ -1209,7 +1083,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
       );
       return;
     }
-    final checkpointed = swapPrototypeIntentFromRecord(
+    final checkpointed = swapIntentFromRecord(
       SwapIntentRecord.fromIntent(
         intent,
       ).copyWith(depositTxHash: txHash, updatedAt: DateTime.now().toUtc()),
@@ -1228,7 +1102,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
             txHash: txHash,
             depositMemo: intent.depositMemo,
           );
-      final updated = swapPrototypeIntentFromRecord(
+      final updated = swapIntentFromRecord(
         SwapIntentRecord.fromIntent(
           updateSwapIntentFromSnapshot(checkpointed, snapshot),
         ).copyWith(
@@ -1290,7 +1164,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  SwapPrototypeState _withIndicativeCounterpart(SwapPrototypeState next) {
+  SwapState _withIndicativeCounterpart(SwapState next) {
     final estimate = next.draftQuote;
     if (estimate == null) {
       return next.quoteMode == SwapQuoteMode.exactInput
@@ -1309,8 +1183,8 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  SwapPrototypeState _withDerivedFiatTexts(
-    SwapPrototypeState next, {
+  SwapState _withDerivedFiatTexts(
+    SwapState next, {
     bool preserveAmountFiatInput = false,
     bool preserveReceiveFiatInput = false,
   }) {
@@ -1332,7 +1206,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  SwapPrototypeState _withTokenAmountsForFiatModes(SwapPrototypeState current) {
+  SwapState _withTokenAmountsForFiatModes(SwapState current) {
     var next = current;
     if (next.amountInputMode == SwapAmountInputMode.fiat) {
       final tokenText = swapTokenAmountTextFromFiatText(
@@ -1353,7 +1227,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     return next;
   }
 
-  SwapPrototypeState _togglePayInputMode(SwapPrototypeState current) {
+  SwapState _togglePayInputMode(SwapState current) {
     final nextMode = current.amountInputMode == SwapAmountInputMode.token
         ? SwapAmountInputMode.fiat
         : SwapAmountInputMode.token;
@@ -1377,7 +1251,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  SwapPrototypeState _toggleReceiveInputMode(SwapPrototypeState current) {
+  SwapState _toggleReceiveInputMode(SwapState current) {
     final nextMode = current.receiveAmountInputMode == SwapAmountInputMode.token
         ? SwapAmountInputMode.fiat
         : SwapAmountInputMode.token;
@@ -1601,9 +1475,9 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     }
   }
 
-  List<SwapPrototypeIntent> _reconcileRefreshedIntents({
-    required List<SwapPrototypeIntent> currentIntents,
-    required List<SwapPrototypeIntent> refreshedIntents,
+  List<SwapIntent> _reconcileRefreshedIntents({
+    required List<SwapIntent> currentIntents,
+    required List<SwapIntent> refreshedIntents,
     required Set<String> refreshedIds,
   }) {
     final refreshedById = {
@@ -1619,10 +1493,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     ];
   }
 
-  void _logStatusTransitions(
-    List<SwapPrototypeIntent> before,
-    List<SwapPrototypeIntent> after,
-  ) {
+  void _logStatusTransitions(List<SwapIntent> before, List<SwapIntent> after) {
     for (final updated in after) {
       final previous = _intentByIdFrom(before, updated.id);
       if (previous == null || previous.status == updated.status) continue;
@@ -1641,7 +1512,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
 
   Future<void> _persistIntentsForAccount(
     String? accountUuid,
-    List<SwapPrototypeIntent> intentsToPersist,
+    List<SwapIntent> intentsToPersist,
   ) async {
     final scopedAccountUuid = accountUuid?.trim();
     if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return;
@@ -1683,7 +1554,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  String _providerDepositAddress(SwapPrototypeIntent intent) {
+  String _providerDepositAddress(SwapIntent intent) {
     return intent.depositAddress ?? intent.id;
   }
 
@@ -1694,15 +1565,15 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     return swapFailureMessage(SwapFailureOperation.quote, error);
   }
 
-  SwapPrototypeIntent _depositSnapshotIntent(
-    SwapPrototypeIntent intent,
+  SwapIntent _depositSnapshotIntent(
+    SwapIntent intent,
     SwapIntentSnapshot snapshot, {
     required String txHash,
     String? broadcastNotice,
   }) {
     final effectiveBroadcastNotice = broadcastNotice ?? intent.broadcastNotice;
     final updated = updateSwapIntentFromSnapshot(intent, snapshot);
-    return swapPrototypeIntentFromRecord(
+    return swapIntentFromRecord(
       SwapIntentRecord.fromIntent(updated).copyWith(
         depositTxHash: txHash,
         statusError: effectiveBroadcastNotice,
@@ -1714,7 +1585,7 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     );
   }
 
-  bool _isHardwareIntent(SwapPrototypeIntent intent) {
+  bool _isHardwareIntent(SwapIntent intent) {
     final accountUuid = _accountUuidForIntent(intent);
     if (accountUuid == null || accountUuid.trim().isEmpty) return false;
     return ref.read(accountProvider.notifier).isHardwareAccount(accountUuid);
@@ -1740,98 +1611,25 @@ class SwapPrototypeNotifier extends Notifier<SwapPrototypeState> {
     return null;
   }
 
-  SwapPrototypeIntent? _intentById(String intentId) {
+  SwapIntent? _intentById(String intentId) {
     return _intentByIdFrom(state.intents, intentId);
   }
 
-  SwapExternalRequest? _externalRequestById(String requestId) {
-    for (final request in state.externalRequests) {
-      if (request.id == requestId) return request;
-    }
-    return null;
-  }
-
-  SwapExternalRequest _externalRequestFromZip321(Zip321PaymentRequest parsed) {
-    final payment = parsed.primaryPayment;
-    final amount = payment.amount;
-    final unsupportedReason = parsed.unsupportedReason;
-    final id = 'zip321-${DateTime.now().microsecondsSinceEpoch}';
-    final requestedAction =
-        unsupportedReason ??
-        (amount == null
-            ? 'Review ZEC payment request'
-            : 'Review payment of $amount ZEC');
-    return SwapExternalRequest(
-      id: id,
-      source: 'ZIP-321 URI',
-      title: 'Zcash payment request',
-      requestedAction: requestedAction,
-      route: parsed.payments.length == 1
-          ? 'ZEC payment'
-          : '${parsed.payments.length} ZEC payments',
-      receivedAt: 'just now',
-      status: unsupportedReason == null
-          ? SwapExternalRequestStatus.needsReview
-          : SwapExternalRequestStatus.unsupported,
-      riskLabel: unsupportedReason ?? 'Approval required',
-      riskDetail:
-          unsupportedReason ??
-          'This request creates no transaction until you review it in the wallet.',
-      disclosures: [
-        SwapPrototypeField(label: 'Address', value: payment.address),
-        if (amount != null)
-          SwapPrototypeField(label: 'Amount', value: '$amount ZEC'),
-        if (payment.label != null)
-          SwapPrototypeField(label: 'Label', value: payment.label!),
-        if (payment.message != null)
-          SwapPrototypeField(label: 'Message', value: payment.message!),
-        if (payment.memoBase64Url != null)
-          const SwapPrototypeField(
-            label: 'Memo',
-            value: 'base64url memo present',
-          ),
-        SwapPrototypeField(
-          label: 'Payments',
-          value: parsed.payments.length.toString(),
-        ),
-      ],
-      paymentAddress: unsupportedReason == null ? payment.address : null,
-      paymentAmountText: unsupportedReason == null ? amount : null,
-      paymentMemoText: unsupportedReason == null ? payment.memoText : null,
-      paymentLabel: unsupportedReason == null ? payment.label : null,
-      paymentMessage: unsupportedReason == null ? payment.message : null,
-    );
-  }
-
-  SwapPrototypeIntent? _intentByIdFrom(
-    List<SwapPrototypeIntent> intents,
-    String intentId,
-  ) {
+  SwapIntent? _intentByIdFrom(List<SwapIntent> intents, String intentId) {
     for (final intent in intents) {
       if (intent.id == intentId) return intent;
     }
     return null;
   }
 
-  List<SwapPrototypeIntent> _replaceIntent(
-    List<SwapPrototypeIntent> intents,
+  List<SwapIntent> _replaceIntent(
+    List<SwapIntent> intents,
     String intentId,
-    SwapPrototypeIntent updated,
+    SwapIntent updated,
   ) {
     return [
       for (final intent in intents)
         if (intent.id == intentId) updated else intent,
-    ];
-  }
-
-  List<SwapExternalRequest> _replaceExternalRequest(
-    List<SwapExternalRequest> requests,
-    String requestId,
-    SwapExternalRequest updated,
-  ) {
-    return [
-      for (final request in requests)
-        if (request.id == requestId) updated else request,
     ];
   }
 }
@@ -1853,17 +1651,14 @@ String _shortSwapValue(String? value) {
   return '${trimmed.substring(0, 7)}...${trimmed.substring(trimmed.length - 6)}';
 }
 
-final swapPrototypeProvider =
-    NotifierProvider<SwapPrototypeNotifier, SwapPrototypeState>(
-      SwapPrototypeNotifier.new,
-    );
+final swapStateProvider = NotifierProvider<SwapNotifier, SwapState>(
+  SwapNotifier.new,
+);
 
-final swapPrototypeIntentsProvider = Provider<List<SwapPrototypeIntent>>((ref) {
-  return ref.watch(swapPrototypeProvider).intents;
+final swapIntentsProvider = Provider<List<SwapIntent>>((ref) {
+  return ref.watch(swapStateProvider).intents;
 });
 
-final selectedSwapPrototypeIntentProvider = Provider<SwapPrototypeIntent?>((
-  ref,
-) {
-  return ref.watch(swapPrototypeProvider).selectedIntentOrNull;
+final selectedSwapIntentProvider = Provider<SwapIntent?>((ref) {
+  return ref.watch(swapStateProvider).selectedIntentOrNull;
 });

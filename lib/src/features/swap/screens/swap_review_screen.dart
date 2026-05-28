@@ -13,9 +13,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 import '../models/swap_activity_navigation.dart';
-import '../providers/swap_prototype_provider.dart';
+import '../providers/swap_state_provider.dart';
 import '../widgets/swap_near_intents_attribution.dart';
 import '../widgets/swap_review_page_content.dart';
 
@@ -61,15 +61,15 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
   }
 
   void _returnToSwap() {
-    ref.read(swapPrototypeProvider.notifier).cancelReviewQuote();
+    ref.read(swapStateProvider.notifier).cancelReviewQuote();
     context.go('/swap');
   }
 
   void _reviewAgain() {
     unawaited(() async {
-      await ref.read(swapPrototypeProvider.notifier).showReview();
+      await ref.read(swapStateProvider.notifier).showReview();
       if (!mounted) return;
-      final next = ref.read(swapPrototypeProvider);
+      final next = ref.read(swapStateProvider);
       if (!next.reviewVisible ||
           next.reviewQuote == null ||
           next.reviewAddressPlan == null) {
@@ -83,17 +83,13 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
       if (!_startingIntent) {
         setState(() => _startingIntent = true);
       }
-      final started = await ref
-          .read(swapPrototypeProvider.notifier)
-          .startIntent();
+      final started = await ref.read(swapStateProvider.notifier).startIntent();
       if (!mounted) return;
       if (!started) {
         setState(() => _startingIntent = false);
         return;
       }
-      final startedIntent = ref
-          .read(swapPrototypeProvider)
-          .selectedIntentOrNull;
+      final startedIntent = ref.read(swapStateProvider).selectedIntentOrNull;
       if (startedIntent != null) {
         context.go(
           swapActivityDetailUri(
@@ -109,7 +105,7 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final swapState = ref.watch(swapPrototypeProvider);
+    final swapState = ref.watch(swapStateProvider);
     final quote = swapState.reviewQuote;
     final addressPlan = swapState.reviewAddressPlan;
     if (!swapState.reviewVisible || quote == null || addressPlan == null) {
@@ -238,7 +234,7 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
 }
 
 String? _reviewFiatTextForAsset(
-  SwapPrototypeState state, {
+  SwapState state, {
   required SwapAsset asset,
   required double amount,
 }) {
@@ -247,7 +243,7 @@ String? _reviewFiatTextForAsset(
 }
 
 double? _reviewUsdValueForAsset(
-  SwapPrototypeState state, {
+  SwapState state, {
   required SwapAsset asset,
   required double amount,
 }) {

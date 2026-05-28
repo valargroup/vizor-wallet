@@ -100,7 +100,7 @@ class RustSwapDepositSender implements SwapDepositSender {
 
       if (proposal.needsSaplingParams) {
         throw StateError(
-          'Sapling parameter download is not supported in the swap prototype yet',
+          'Sapling parameter download is not supported in the swap UI yet',
         );
       }
 

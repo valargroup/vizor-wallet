@@ -1,16 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../domain/near_intents_one_click_swap_provider.dart';
-import '../models/swap_prototype_models.dart';
+import '../integrations/near_intents/near_intents_one_click_swap_adapter.dart';
+import '../models/swap_models.dart';
 
-const _oneClickBaseUrl = String.fromEnvironment(
-  'ZCASH_SWAP_1CLICK_BASE_URL',
-  defaultValue: 'https://functions.vizor.cash/api/near-intents/1click',
+final _oneClickBaseUri = Uri.parse(
+  'https://functions.vizor.cash/api/near-intents/1click',
 );
 
 final swapIntentProvider = Provider<SwapProvider>((ref) {
-  return NearIntentsOneClickSwapProvider(
-    baseUri: Uri.parse(_oneClickBaseUrl),
+  return NearIntentsOneClickSwapAdapter(
+    baseUri: _oneClickBaseUri,
     referral: 'vizor',
   );
 });
@@ -21,13 +20,4 @@ final swapStatusPollIntervalProvider = Provider<Duration>((ref) {
 
 final swapPriceRefreshIntervalProvider = Provider<Duration>((ref) {
   return const Duration(seconds: 30);
-});
-
-const _liveFundsEnabled = bool.fromEnvironment(
-  'ZCASH_SWAP_ENABLE_LIVE_FUNDS',
-  defaultValue: true,
-);
-
-final swapLiveFundsEnabledProvider = Provider<bool>((ref) {
-  return _liveFundsEnabled;
 });

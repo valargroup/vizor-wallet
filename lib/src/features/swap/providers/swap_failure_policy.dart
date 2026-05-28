@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../domain/near_intents_one_click_swap_provider.dart';
+import '../integrations/near_intents/near_intents_one_click_swap_adapter.dart';
 
 enum SwapFailureOperation {
   tokenList,

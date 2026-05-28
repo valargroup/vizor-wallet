@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/swap/domain/static_near_intents_swap_provider.dart';
 import 'package:zcash_wallet/src/features/swap/domain/swap_contract.dart';
+
+import 'support/static_near_intents_swap_provider.dart';
 
 void main() {
   test('provider contract quotes ZEC into an external asset', () async {

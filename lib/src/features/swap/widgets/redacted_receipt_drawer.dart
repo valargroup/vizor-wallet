@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 
 typedef SwapSupportCopyText =
     void Function({required String text, required String toastMessage});
@@ -16,8 +16,8 @@ class RedactedReceiptDrawer extends StatelessWidget {
     super.key,
   });
 
-  final List<SwapPrototypeField> rows;
-  final SwapPrototypeIntent intent;
+  final List<SwapDetailField> rows;
+  final SwapIntent intent;
   final SwapSupportCopyText onCopyText;
 
   @override
@@ -101,7 +101,7 @@ class RedactedReceiptDrawer extends StatelessWidget {
   }
 }
 
-String supportDetailsText(List<SwapPrototypeField> rows) {
+String supportDetailsText(List<SwapDetailField> rows) {
   final fields = rows
       .where((row) => row.value.trim().isNotEmpty)
       .map((row) => '${row.label}: ${row.value}');
@@ -109,7 +109,7 @@ String supportDetailsText(List<SwapPrototypeField> rows) {
   return ['Support details', ...fields].join('\n');
 }
 
-String redactedReceiptText(List<SwapPrototypeField> rows) {
+String redactedReceiptText(List<SwapDetailField> rows) {
   final fields = _supportRows(rows)
       .where((row) => row.value.trim().isNotEmpty)
       .map((row) => '${row.label}: ${row.value}');
@@ -117,24 +117,24 @@ String redactedReceiptText(List<SwapPrototypeField> rows) {
   return ['Receipt scope: redacted status evidence', ...fields].join('\n');
 }
 
-List<SwapPrototypeField> _supportRows(List<SwapPrototypeField> rows) {
+List<SwapDetailField> _supportRows(List<SwapDetailField> rows) {
   return [
     for (final row in rows)
       if (!_isNoisySupportRow(row)) row,
   ];
 }
 
-List<SwapPrototypeField> _supportDetailRows(
-  List<SwapPrototypeField> rows,
-  SwapPrototypeIntent intent,
+List<SwapDetailField> _supportDetailRows(
+  List<SwapDetailField> rows,
+  SwapIntent intent,
 ) {
-  final fields = <SwapPrototypeField>[];
+  final fields = <SwapDetailField>[];
   final receiptRows = _supportRows(rows);
 
   void add(String label, String? rawValue) {
     final value = rawValue?.trim();
     if (value == null || value.isEmpty) return;
-    final candidate = SwapPrototypeField(label: label, value: value);
+    final candidate = SwapDetailField(label: label, value: value);
     if (_isNoisySupportRow(candidate)) return;
     if (_hasSupportField(fields, candidate)) return;
     fields.add(candidate);
@@ -199,10 +199,7 @@ List<SwapPrototypeField> _supportDetailRows(
   return fields;
 }
 
-bool _hasSupportField(
-  List<SwapPrototypeField> rows,
-  SwapPrototypeField candidate,
-) {
+bool _hasSupportField(List<SwapDetailField> rows, SwapDetailField candidate) {
   final label = candidate.label.trim().toLowerCase();
   final value = candidate.value.trim();
   return rows.any((row) {
@@ -212,15 +209,13 @@ bool _hasSupportField(
   });
 }
 
-bool _isNoisySupportRow(SwapPrototypeField row) {
+bool _isNoisySupportRow(SwapDetailField row) {
   final label = row.label.trim().toLowerCase();
   return label == 'swap id' || label == 'shared fields';
 }
 
-List<SwapPrototypeField> _safeSupportSummaryRows(
-  List<SwapPrototypeField> rows,
-) {
-  final fields = <SwapPrototypeField>[];
+List<SwapDetailField> _safeSupportSummaryRows(List<SwapDetailField> rows) {
+  final fields = <SwapDetailField>[];
 
   bool hasLabel(String needle) {
     final lowerNeedle = needle.toLowerCase();
@@ -228,7 +223,7 @@ List<SwapPrototypeField> _safeSupportSummaryRows(
   }
 
   void add(String label, String value) {
-    fields.add(SwapPrototypeField(label: label, value: value));
+    fields.add(SwapDetailField(label: label, value: value));
   }
 
   if (hasLabel('provider') || hasLabel('intent')) {
@@ -256,7 +251,7 @@ List<SwapPrototypeField> _safeSupportSummaryRows(
 class _SafeSummaryRow extends StatelessWidget {
   const _SafeSummaryRow({required this.row});
 
-  final SwapPrototypeField row;
+  final SwapDetailField row;
 
   @override
   Widget build(BuildContext context) {
@@ -301,7 +296,7 @@ class _SafeSummaryRow extends StatelessWidget {
 class _ReceiptRow extends StatelessWidget {
   const _ReceiptRow({required this.row, required this.onCopyText});
 
-  final SwapPrototypeField row;
+  final SwapDetailField row;
   final SwapSupportCopyText onCopyText;
 
   @override
@@ -351,7 +346,7 @@ class _ReceiptRow extends StatelessWidget {
 class _ReceiptCopyButton extends StatelessWidget {
   const _ReceiptCopyButton({required this.row, required this.onCopyText});
 
-  final SwapPrototypeField row;
+  final SwapDetailField row;
   final SwapSupportCopyText onCopyText;
 
   @override
@@ -386,7 +381,7 @@ class _ReceiptCopyButton extends StatelessWidget {
   }
 }
 
-bool _isCopyableSupportRow(SwapPrototypeField row) {
+bool _isCopyableSupportRow(SwapDetailField row) {
   final label = row.label.trim().toLowerCase();
   final value = row.value.trim();
   if (value.isEmpty) return false;
@@ -402,7 +397,7 @@ bool _isCopyableSupportRow(SwapPrototypeField row) {
       value.startsWith('https://');
 }
 
-bool _isHighSignalSupportRow(SwapPrototypeField row) {
+bool _isHighSignalSupportRow(SwapDetailField row) {
   final label = row.label.trim().toLowerCase();
   return label.contains('address') ||
       label.contains('recipient') ||
@@ -411,7 +406,7 @@ bool _isHighSignalSupportRow(SwapPrototypeField row) {
       label.contains('explorer');
 }
 
-bool _isTechnicalSupportRow(SwapPrototypeField row) {
+bool _isTechnicalSupportRow(SwapDetailField row) {
   final label = row.label.trim().toLowerCase();
   final value = row.value.trim();
   return label.contains('address') ||

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_activity_store.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_activity_tracker.dart';
 
@@ -148,12 +148,12 @@ void main() {
   });
 }
 
-SwapPrototypeIntent _intent({
+SwapIntent _intent({
   required String id,
   required String depositAddress,
   SwapIntentStatus status = SwapIntentStatus.awaitingDeposit,
 }) {
-  return SwapPrototypeIntent(
+  return SwapIntent(
     id: id,
     title: 'ZEC to USDC',
     pair: 'ZEC -> USDC',

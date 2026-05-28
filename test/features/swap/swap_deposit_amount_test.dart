@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_deposit_sender.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_hardware_signing_service.dart';
 
@@ -67,11 +67,8 @@ SwapQuote _quote({
   );
 }
 
-SwapPrototypeIntent _intent({
-  required String sellAmount,
-  BigInt? sellAmountBaseUnits,
-}) {
-  return SwapPrototypeIntent(
+SwapIntent _intent({required String sellAmount, BigInt? sellAmountBaseUnits}) {
+  return SwapIntent(
     id: 't1deposit',
     title: 'ZEC to USDC',
     pair: 'ZEC -> USDC',

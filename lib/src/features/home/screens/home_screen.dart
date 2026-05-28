@@ -33,7 +33,7 @@ import '../../activity/screens/activity_transaction_status_screen.dart';
 import '../../activity/widgets/activity_table.dart';
 import '../../activity/swap_activity_row_mapper.dart';
 import '../../swap/models/swap_activity_navigation.dart';
-import '../../swap/models/swap_prototype_models.dart';
+import '../../swap/models/swap_models.dart';
 import '../../swap/providers/swap_activity_store.dart';
 import '../../swap/providers/swap_activity_tracker.dart';
 import '../widgets/keystone_shield_signing_overlay.dart';

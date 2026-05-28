@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'swap_contract.dart';
+import '../../domain/swap_contract.dart';
 
 class OneClickApiException implements Exception {
   const OneClickApiException(this.message, {this.operation, this.statusCode});
@@ -104,9 +104,9 @@ class HttpClientOneClickApiTransport implements OneClickApiTransport {
   }
 }
 
-class NearIntentsOneClickSwapProvider
+class NearIntentsOneClickSwapAdapter
     implements SwapProvider, SwapPricingProvider {
-  NearIntentsOneClickSwapProvider({
+  NearIntentsOneClickSwapAdapter({
     Uri? baseUri,
     OneClickApiTransport? transport,
     this.bearerToken,
@@ -1296,9 +1296,7 @@ String _decimalStringToBaseUnits(String value, int decimals) {
   if (shift >= 0) {
     digits = digits.padRight(digits.length + shift, '0');
   } else {
-    final keepLength = digits.length + shift;
-    if (keepLength <= 0) return '0';
-    digits = digits.substring(0, keepLength);
+    throw const OneClickApiException('Amount exceeds token precision');
   }
 
   final raw = digits.replaceFirst(RegExp(r'^0+(?=\d)'), '');

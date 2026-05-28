@@ -58,7 +58,6 @@ import 'src/features/settings/screens/settings_screen.dart';
 import 'src/features/settings/screens/settings_change_password_screen.dart';
 import 'src/features/settings/screens/settings_endpoint_screen.dart';
 import 'src/features/settings/screens/settings_seed_phrase_screen.dart';
-import 'src/features/swap/screens/swap_address_scan_screen.dart';
 import 'src/features/swap/models/swap_activity_navigation.dart';
 import 'src/features/swap/screens/swap_review_screen.dart';
 import 'src/features/swap/screens/swap_screen.dart';
@@ -613,11 +612,6 @@ final _routerProvider = Provider<GoRouter>((ref) {
         path: '/swap/review',
         redirect: (_, _) => swapFeatureEnabled ? null : '/home',
         builder: (_, _) => const SwapReviewScreen(),
-      ),
-      GoRoute(
-        path: '/swap/address-scan',
-        redirect: (_, _) => swapFeatureEnabled ? null : '/home',
-        builder: (_, _) => const SwapAddressScanScreen(),
       ),
       GoRoute(
         path: '/send/review',

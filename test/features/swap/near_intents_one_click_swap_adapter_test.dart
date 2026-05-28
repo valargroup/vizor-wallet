@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/swap/domain/near_intents_one_click_swap_provider.dart';
+import 'package:zcash_wallet/src/features/swap/integrations/near_intents/near_intents_one_click_swap_adapter.dart';
 import 'package:zcash_wallet/src/features/swap/domain/swap_contract.dart';
 
 void main() {
@@ -24,7 +24,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       bearerToken: 'jwt-token',
       referral: 'rowan',
@@ -91,7 +91,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(
+      final provider = NearIntentsOneClickSwapAdapter(
         transport: transport,
         now: () => DateTime.utc(2026, 5, 7, 10),
       );
@@ -124,6 +124,39 @@ void main() {
     },
   );
 
+  test('quote rejects amount text that exceeds token decimals', () async {
+    final transport = _FakeOneClickTransport([
+      _FakeResponse.get('/v0/tokens', _tokensWithNearUsdcFirst),
+    ]);
+    final provider = NearIntentsOneClickSwapAdapter(
+      transport: transport,
+      now: () => DateTime.utc(2026, 5, 7, 10),
+    );
+
+    await expectLater(
+      provider.quote(
+        const SwapQuoteRequest(
+          direction: SwapDirection.zecToExternal,
+          externalAsset: SwapAsset.usdc,
+          mode: SwapQuoteMode.exactOutput,
+          amount: 105.1234567,
+          amountText: '105.1234567',
+          destination: '0xrecipient',
+          refundAddress: 'u1refund',
+        ),
+      ),
+      throwsA(
+        isA<OneClickApiException>().having(
+          (error) => error.message,
+          'message',
+          'Amount exceeds token precision',
+        ),
+      ),
+    );
+    expect(transport.requests, hasLength(1));
+    expect(transport.requests.single.method, 'GET');
+  });
+
   test(
     'quote posts external-asset exact-output payload using ZEC receive decimals',
     () async {
@@ -144,7 +177,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(
+      final provider = NearIntentsOneClickSwapAdapter(
         transport: transport,
         now: () => DateTime.utc(2026, 5, 7, 10),
       );
@@ -193,7 +226,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       now: () => DateTime.utc(2026, 5, 7, 10),
     );
@@ -238,7 +271,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       bearerToken: 'jwt-token',
       assetIdOverrides: {SwapAsset.usdc: 'nep141:base-usdc.example'},
@@ -277,7 +310,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       now: () => DateTime.utc(2026, 5, 7, 10),
     );
@@ -331,7 +364,7 @@ void main() {
       _FakeResponse.get('/v0/tokens', _tokensWithPrices('540.62')),
       _FakeResponse.get('/v0/tokens', _tokensWithPrices('541.10')),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(transport: transport);
+    final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
     final initial = await provider.loadPricingSnapshot();
     final refreshed = await provider.loadPricingSnapshot(forceRefresh: true);
@@ -365,7 +398,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(
+      final provider = NearIntentsOneClickSwapAdapter(
         transport: transport,
         now: () => DateTime.utc(2026, 5, 7, 10),
       );
@@ -409,7 +442,7 @@ void main() {
     final transport = _FakeOneClickTransport([
       _FakeResponse.get('/v0/tokens', _tokensWithAdditionalAssets),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(transport: transport);
+    final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
     final supported = await provider.listSupportedExternalAssets();
 
@@ -569,7 +602,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(transport: transport);
+      final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
       final quote = await provider.quote(
         const SwapQuoteRequest(
@@ -607,7 +640,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(transport: transport);
+      final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
       await provider.quote(
         const SwapQuoteRequest(
@@ -645,7 +678,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(transport: transport);
+      final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
       final supported = await provider.listSupportedExternalAssets();
       final ethUsdcVariants = [
@@ -699,7 +732,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(transport: transport);
+      final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
       final status = await provider.getStatus(
         '0xexternal-deposit',
@@ -738,7 +771,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(
+      final provider = NearIntentsOneClickSwapAdapter(
         transport: transport,
         now: () => DateTime.utc(2026, 5, 7, 10, 2),
       );
@@ -770,7 +803,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(transport: transport);
+      final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
       final status = await provider.getStatus('t1deposit');
 
@@ -801,7 +834,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(transport: transport);
+      final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
       final status = await provider.submitDepositTransaction(
         depositAddress: 't1deposit',
@@ -826,7 +859,7 @@ void main() {
         'message': 'jwt missing',
       }, statusCode: 401),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(transport: transport);
+    final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
     await expectLater(
       provider.quote(
@@ -850,7 +883,7 @@ void main() {
     final transport = _FakeOneClickTransport([
       _FakeResponse.get('/v0/tokens', [_tokens.first]),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(transport: transport);
+    final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
     expect(
       provider.quote(
@@ -890,7 +923,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(transport: transport);
+    final provider = NearIntentsOneClickSwapAdapter(transport: transport);
 
     expect(
       provider.getStatus('unsupported-deposit'),
@@ -933,7 +966,7 @@ void main() {
             ),
           ),
         ]);
-        final provider = NearIntentsOneClickSwapProvider(
+        final provider = NearIntentsOneClickSwapAdapter(
           transport: transport,
           now: () => DateTime.utc(2026, 5, 7, 10, 2),
         );
@@ -967,7 +1000,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       now: () => DateTime.utc(2026, 5, 7, 10, 2),
     );
@@ -1002,7 +1035,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       now: () => DateTime.utc(2026, 5, 7, 10, 2),
     );
@@ -1037,7 +1070,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       now: () => DateTime.utc(2026, 5, 7, 10, 2),
     );
@@ -1077,7 +1110,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(
+      final provider = NearIntentsOneClickSwapAdapter(
         transport: transport,
         now: () => DateTime.utc(2026, 5, 27, 7, 25),
       );
@@ -1119,7 +1152,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       now: () => DateTime.utc(2026, 5, 27, 7, 25),
     );
@@ -1153,7 +1186,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(
+      final provider = NearIntentsOneClickSwapAdapter(
         transport: transport,
         now: () => DateTime.utc(2026, 5, 7, 10, 2),
       );
@@ -1198,7 +1231,7 @@ void main() {
           ),
         ),
       ]);
-      final provider = NearIntentsOneClickSwapProvider(
+      final provider = NearIntentsOneClickSwapAdapter(
         transport: transport,
         now: () => DateTime.utc(2026, 5, 7, 10, 2),
       );
@@ -1229,7 +1262,7 @@ void main() {
         ),
       ),
     ]);
-    final provider = NearIntentsOneClickSwapProvider(
+    final provider = NearIntentsOneClickSwapAdapter(
       transport: transport,
       now: () => DateTime.utc(2026, 5, 7, 12, 1),
     );

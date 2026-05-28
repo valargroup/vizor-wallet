@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../core/privacy/privacy_mask.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_icon.dart';
-import '../swap/models/swap_prototype_models.dart';
+import '../swap/models/swap_models.dart';
 import 'activity_row_mapper.dart';
 import 'models/activity_row_data.dart';
 
@@ -35,7 +35,7 @@ ActivityRowData buildSwapActivityRow({
   final colors = context.colors;
   final failed = _swapActivityFailed(record.status);
   final timedOut = record.status == SwapIntentStatus.expired;
-  final returnsFunds = _swapActivityReturnsFunds(record.status);
+  final returnsFunds = _swapActivityReturnsFunds(record);
   final incompleteDeposit = record.status == SwapIntentStatus.incompleteDeposit;
   final complete = record.status == SwapIntentStatus.complete;
   final sellAsset = _swapActivitySellAsset(record);
@@ -204,9 +204,8 @@ bool _swapActivityFailed(SwapIntentStatus status) {
       status == SwapIntentStatus.expired;
 }
 
-bool _swapActivityReturnsFunds(SwapIntentStatus status) {
-  return status == SwapIntentStatus.failed ||
-      status == SwapIntentStatus.refunded;
+bool _swapActivityReturnsFunds(SwapIntentRecord record) {
+  return record.status == SwapIntentStatus.refunded;
 }
 
 String _swapActivityTitle(SwapIntentStatus status) {

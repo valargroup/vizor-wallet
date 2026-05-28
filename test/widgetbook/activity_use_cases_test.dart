@@ -83,7 +83,7 @@ void main() {
     },
   );
 
-  testWidgets('swap activity failed use case renders refunded single row', (
+  testWidgets('swap activity failed use case renders failed single row', (
     tester,
   ) async {
     await _pumpActivityUseCase(
@@ -93,7 +93,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Swap failed'), findsOneWidget);
-    expect(find.text('101.23 USDC'), findsOneWidget);
+    expect(find.text('-101.23 USDC'), findsOneWidget);
     expect(find.text('Failed'), findsWidgets);
     expect(find.text('Receiving ZEC ...'), findsNothing);
   });

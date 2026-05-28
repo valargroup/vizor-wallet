@@ -15,12 +15,12 @@ import 'package:zcash_wallet/src/core/widgets/app_button.dart';
 import 'package:zcash_wallet/src/core/widgets/app_icon.dart';
 import 'package:zcash_wallet/src/features/address_book/models/address_book_contact.dart';
 import 'package:zcash_wallet/src/features/address_book/providers/address_book_provider.dart';
-import 'package:zcash_wallet/src/features/swap/domain/near_intents_one_click_swap_provider.dart';
+import 'package:zcash_wallet/src/features/swap/integrations/near_intents/near_intents_one_click_swap_adapter.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_activity_navigation.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_intent_presentation_mapper.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_hardware_signing_service.dart';
-import 'package:zcash_wallet/src/features/swap/providers/swap_prototype_provider.dart';
+import 'package:zcash_wallet/src/features/swap/providers/swap_state_provider.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_deposit_sender.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_max_amount_estimator.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_activity_store.dart';
@@ -29,7 +29,6 @@ import 'package:zcash_wallet/src/features/swap/providers/swap_zec_staging_addres
 import 'package:zcash_wallet/src/features/activity/screens/activity_screen.dart';
 import 'package:zcash_wallet/src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'package:zcash_wallet/src/features/activity/widgets/activity_table.dart';
-import 'package:zcash_wallet/src/features/swap/screens/swap_address_scan_screen.dart';
 import 'package:zcash_wallet/src/features/swap/screens/swap_review_screen.dart';
 import 'package:zcash_wallet/src/features/swap/screens/swap_screen.dart';
 import 'package:zcash_wallet/src/features/swap/widgets/swap_amount_text.dart';
@@ -43,15 +42,17 @@ import 'package:zcash_wallet/src/providers/receive_address_provider.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
+import 'support/swap_preview_intents.dart';
+
 void main() {
-  test('swapIntentProvider tags 1Click quotes with the Vizor referral', () {
+  test('swapIntentProvider uses the Vizor proxy and referral', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 
     final provider = container.read(swapIntentProvider);
 
-    expect(provider, isA<NearIntentsOneClickSwapProvider>());
-    final oneClickProvider = provider as NearIntentsOneClickSwapProvider;
+    expect(provider, isA<NearIntentsOneClickSwapAdapter>());
+    final oneClickProvider = provider as NearIntentsOneClickSwapAdapter;
     expect(
       oneClickProvider.baseUri.toString(),
       'https://functions.vizor.cash/api/near-intents/1click',
@@ -259,7 +260,7 @@ void main() {
             initialLocation: '/activity/swap/expired-deposit?from=swap',
             routes: [_swapRoute(), _swapActivityRoute()],
           ),
-          seedPrototypeFixtures: false,
+          seedSwapFixtures: false,
           sessionStore: sessionStore,
         ),
       );
@@ -313,7 +314,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: _PricingSwapProvider([70.1733333333]),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
       ),
     );
@@ -899,9 +900,7 @@ void main() {
     },
   );
 
-  testWidgets('sidebar Swap item opens the swap prototype route', (
-    tester,
-  ) async {
+  testWidgets('sidebar Swap item opens the swap route', (tester) async {
     await _setDesktopViewport(tester);
 
     final router = GoRouter(
@@ -1145,7 +1144,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -1180,7 +1179,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -1344,7 +1343,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         addressBookRepository: _FakeAddressBookRepository([
           _addressBookContact(
             id: 'usdc',
@@ -1401,7 +1400,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         addressBookRepository: addressBookRepository,
       ),
     );
@@ -1450,7 +1449,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: _FakeSwapProvider(supportedAssets: [baseUsdc]),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         addressBookRepository: _FakeAddressBookRepository([
           _addressBookContact(
             id: 'base',
@@ -1491,7 +1490,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: _FakeSwapPersistenceStore(),
       ),
     );
@@ -1534,7 +1533,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
       ),
     );
@@ -1580,7 +1579,7 @@ void main() {
         bootstrap: _twoAccountBootstrap,
         accountNotifier: () => accountNotifier,
         sessionStore: sessionStore,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pump();
@@ -1594,7 +1593,7 @@ void main() {
     await tester.pump();
 
     expect(
-      container.read(swapPrototypeProvider).intents.map((intent) => intent.id),
+      container.read(swapStateProvider).intents.map((intent) => intent.id),
       ['account-two-current-swap'],
     );
 
@@ -1603,7 +1602,7 @@ void main() {
     await tester.pump();
 
     expect(
-      container.read(swapPrototypeProvider).intents.map((intent) => intent.id),
+      container.read(swapStateProvider).intents.map((intent) => intent.id),
       ['account-two-current-swap'],
     );
   });
@@ -1624,7 +1623,7 @@ void main() {
         bootstrap: _twoAccountBootstrap,
         accountNotifier: () => accountNotifier,
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -1684,7 +1683,7 @@ void main() {
         bootstrap: _twoAccountBootstrap,
         accountNotifier: () => accountNotifier,
         sessionStore: sessionStore,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -1693,7 +1692,7 @@ void main() {
       tester.element(find.byType(SwapScreen)),
       listen: false,
     );
-    expect(container.read(swapPrototypeProvider).slippageBps, 50);
+    expect(container.read(swapStateProvider).slippageBps, 50);
 
     await tester.enterText(
       find.byKey(const ValueKey('swap_amount_field')),
@@ -1706,7 +1705,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
-    final accountTwoState = container.read(swapPrototypeProvider);
+    final accountTwoState = container.read(swapStateProvider);
     expect(accountTwoState.direction, SwapDirection.externalToZec);
     expect(accountTwoState.externalAsset, SwapAsset.near);
     expect(accountTwoState.slippageBps, 200);
@@ -1746,7 +1745,7 @@ void main() {
         bootstrap: _twoAccountBootstrap,
         accountNotifier: () => accountNotifier,
         sessionStore: sessionStore,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -1795,7 +1794,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: _FakeSwapPersistenceStore(),
         spendableBalance: BigInt.from(123450000),
         maxAmountEstimator: maxEstimator,
@@ -1825,7 +1824,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: _FakeSwapPersistenceStore(),
         spendableBalance: BigInt.from(123450000),
         maxAmountEstimator: maxEstimator,
@@ -1870,7 +1869,7 @@ void main() {
         ),
         bootstrap: _twoAccountBootstrap,
         accountNotifier: () => accountNotifier,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: _FakeSwapPersistenceStore(),
         spendableBalance: BigInt.from(123450000),
         maxAmountEstimator: maxEstimator,
@@ -1882,7 +1881,7 @@ void main() {
       tester.element(find.byType(SwapScreen)),
       listen: false,
     );
-    unawaited(container.read(swapPrototypeProvider.notifier).useMaxZecAmount());
+    unawaited(container.read(swapStateProvider.notifier).useMaxZecAmount());
     await tester.pump();
 
     expect(maxEstimator.requests, ['account-1']);
@@ -1893,7 +1892,7 @@ void main() {
     maxEstimator.complete(BigInt.from(123390000));
     await tester.pumpAndSettle();
 
-    final swapState = container.read(swapPrototypeProvider);
+    final swapState = container.read(swapStateProvider);
     expect(swapState.amountText, isEmpty);
     expect(swapState.maxAmountLoading, isFalse);
   });
@@ -1910,7 +1909,7 @@ void main() {
             initialLocation: '/swap',
             routes: [_swapRoute(), _swapActivityRoute()],
           ),
-          seedPrototypeFixtures: false,
+          seedSwapFixtures: false,
           spendableBalance: BigInt.from(100000000),
           swapProvider: swapProvider,
         ),
@@ -1954,7 +1953,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
       ),
     );
@@ -1997,7 +1996,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
         swapProvider: swapProvider,
       ),
@@ -2220,7 +2219,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
       ),
     );
@@ -2270,7 +2269,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
       ),
     );
@@ -2351,7 +2350,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
       ),
     );
@@ -2387,7 +2386,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
       ),
     );
@@ -2420,7 +2419,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -2455,7 +2454,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -2492,7 +2491,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         priceRefreshInterval: const Duration(seconds: 1),
       ),
     );
@@ -2530,7 +2529,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         priceRefreshInterval: const Duration(seconds: 1),
       ),
     );
@@ -2725,7 +2724,7 @@ void main() {
             initialLocation: '/swap',
             routes: [_swapRoute(), _swapActivityRoute()],
           ),
-          seedPrototypeFixtures: false,
+          seedSwapFixtures: false,
           swapProvider: swapProvider,
           sessionStore: sessionStore,
         ),
@@ -2789,7 +2788,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         swapProvider: swapProvider,
         sessionStore: sessionStore,
       ),
@@ -2844,7 +2843,7 @@ void main() {
           initialLocation: '/swap',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: sessionStore,
       ),
     );
@@ -3163,7 +3162,7 @@ void main() {
           initialLocation: '/activity',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: _FakeSwapPersistenceStore(
           initialIntents: overflowIntents,
         ),
@@ -3213,7 +3212,7 @@ void main() {
           initialLocation: '/activity',
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
         sessionStore: _FakeSwapPersistenceStore(initialIntents: intents),
       ),
     );
@@ -3626,7 +3625,6 @@ void main() {
         ),
         swapProvider: swapProvider,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -3938,7 +3936,6 @@ void main() {
         ),
         swapProvider: swapProvider,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -3981,7 +3978,7 @@ void main() {
         ),
         swapProvider: swapProvider,
         sessionStore: sessionStore,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pump();
@@ -3992,24 +3989,24 @@ void main() {
       listen: false,
     );
     expect(
-      container.read(swapPrototypeProvider).intents.map((intent) => intent.id),
+      container.read(swapStateProvider).intents.map((intent) => intent.id),
       ['hardware-cancelled-swap'],
     );
     expect(swapProvider.statusRequests, hasLength(1));
 
     await container
-        .read(swapPrototypeProvider.notifier)
+        .read(swapStateProvider.notifier)
         .removeIntent('hardware-cancelled-swap');
     await tester.pump();
 
-    expect(container.read(swapPrototypeProvider).intents, isEmpty);
+    expect(container.read(swapStateProvider).intents, isEmpty);
     expect(sessionStore.savedIntents, isEmpty);
 
     swapProvider.completeStatus();
     await tester.pump();
     await tester.pump();
 
-    expect(container.read(swapPrototypeProvider).intents, isEmpty);
+    expect(container.read(swapStateProvider).intents, isEmpty);
     expect(sessionStore.savedIntents, isEmpty);
   });
 
@@ -4038,7 +4035,6 @@ void main() {
         ),
         swapProvider: swapProvider,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -4137,28 +4133,25 @@ void main() {
           oneClickRefundTo:
               '0xrefund-address-with-a-very-long-source-chain-suffix-abcdef1234567890',
           exposure: const [
-            SwapPrototypeField(
+            SwapDetailField(
               label: 'USDC source deposit',
               value:
                   'one-time USDC address with source-chain routing metadata visible',
             ),
-            SwapPrototypeField(
+            SwapDetailField(
               label: 'Refund path',
               value:
                   'USDC refunds return to the long source-chain address entered during review',
             ),
           ],
           receipt: const [
-            SwapPrototypeField(
-              label: 'Swap id',
-              value: 'swap-long-provider-data',
-            ),
-            SwapPrototypeField(
+            SwapDetailField(label: 'Swap id', value: 'swap-long-provider-data'),
+            SwapDetailField(
               label: 'Deposit',
               value:
                   '0xone-time-usdc-deposit-address-with-a-long-provider-suffix-abcdef1234567890',
             ),
-            SwapPrototypeField(
+            SwapDetailField(
               label: 'Memo',
               value:
                   'memo-with-a-long-routing-tag-and-provider-reference-9876543210',
@@ -4460,7 +4453,7 @@ void main() {
             routes: [_swapRoute(), _swapActivityRoute()],
           ),
           swapProvider: swapProvider,
-          seedPrototypeFixtures: false,
+          seedSwapFixtures: false,
         ),
       );
       await tester.pumpAndSettle();
@@ -4541,7 +4534,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -4572,6 +4565,51 @@ void main() {
     expect(liveRequest.destination, '0xrecipient');
   });
 
+  testWidgets('token amount fields cap fractional digits by asset decimals', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+
+    await tester.pumpWidget(
+      _routerHarness(
+        GoRouter(
+          initialLocation: '/swap',
+          routes: [_swapRoute(), _swapActivityRoute()],
+        ),
+        seedSwapFixtures: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_amount_field')),
+      '1.12345678',
+    );
+    await tester.pump();
+    expect(_fieldText(tester, 'swap_amount_field'), '1.12345678');
+
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_amount_field')),
+      '1.123456789',
+    );
+    await tester.pump();
+    expect(_fieldText(tester, 'swap_amount_field'), '1.12345678');
+
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_receive_amount_field')),
+      '105.123456',
+    );
+    await tester.pump();
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '105.123456');
+
+    await tester.enterText(
+      find.byKey(const ValueKey('swap_receive_amount_field')),
+      '105.1234567',
+    );
+    await tester.pump();
+    expect(_fieldText(tester, 'swap_receive_amount_field'), '105.123456');
+  });
+
   testWidgets('fiat receive input estimates exact-output locally', (
     tester,
   ) async {
@@ -4585,7 +4623,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -4620,7 +4658,7 @@ void main() {
             routes: [_swapRoute(), _swapActivityRoute()],
           ),
           swapProvider: swapProvider,
-          seedPrototypeFixtures: false,
+          seedSwapFixtures: false,
         ),
       );
       await tester.pumpAndSettle();
@@ -4720,7 +4758,7 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        seedPrototypeFixtures: false,
+        seedSwapFixtures: false,
       ),
     );
     await tester.pumpAndSettle();
@@ -4804,7 +4842,6 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -4877,7 +4914,6 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -4896,7 +4932,7 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(SwapReviewScreen)),
     );
-    container.read(swapPrototypeProvider.notifier).expireReviewQuote();
+    container.read(swapStateProvider.notifier).expireReviewQuote();
     await tester.pumpAndSettle();
 
     expect(
@@ -4972,7 +5008,6 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -5271,7 +5306,6 @@ void main() {
           routes: [_swapRoute(), _swapActivityRoute()],
         ),
         swapProvider: swapProvider,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -5325,7 +5359,6 @@ void main() {
             routes: [_swapRoute(), _swapActivityRoute()],
           ),
           swapProvider: swapProvider,
-          liveFundsEnabled: true,
         ),
       );
       await tester.pumpAndSettle();
@@ -5567,52 +5600,6 @@ void main() {
     },
   );
 
-  testWidgets('live-funds gate can disable ZEC auto deposit broadcast', (
-    tester,
-  ) async {
-    await _setDesktopViewport(tester);
-    final swapProvider = _FakeSwapProvider();
-    final depositSender = _FakeSwapDepositSender();
-    final sessionStore = _FakeSwapPersistenceStore();
-
-    await tester.pumpWidget(
-      _routerHarness(
-        GoRouter(
-          initialLocation: '/swap',
-          routes: [_swapRoute(), _swapActivityRoute()],
-        ),
-        swapProvider: swapProvider,
-        depositSender: depositSender,
-        sessionStore: sessionStore,
-        liveFundsEnabled: false,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.enterText(
-      find.byKey(const ValueKey('swap_amount_field')),
-      '1.5',
-    );
-    await _enterDestinationText(tester, '0xrecipient');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('swap_review_button')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('swap_start_button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('swap_start_button')));
-    await tester.pumpAndSettle();
-
-    expect(depositSender.requests, isEmpty);
-    expect(swapProvider.submittedDeposits, isEmpty);
-    expect(sessionStore.savedIntents, hasLength(1));
-    expect(sessionStore.savedIntents.single.depositTxHash, isNull);
-    expect(
-      find.byKey(const ValueKey('swap_status_page_content')),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('starting a ZEC swap sends and submits the deposit tx', (
     tester,
   ) async {
@@ -5630,7 +5617,6 @@ void main() {
         swapProvider: swapProvider,
         depositSender: depositSender,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -5680,7 +5666,7 @@ void main() {
     expect(
       sessionStore.savedIntents.single.receipt,
       contains(
-        isA<SwapPrototypeField>()
+        isA<SwapDetailField>()
             .having((field) => field.label, 'label', 'USDC recipient')
             .having((field) => field.value, 'value', '0xrecipient'),
       ),
@@ -5715,7 +5701,6 @@ void main() {
         swapProvider: swapProvider,
         depositSender: depositSender,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -5773,7 +5758,6 @@ void main() {
         swapProvider: swapProvider,
         depositSender: depositSender,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -5830,7 +5814,6 @@ void main() {
         swapProvider: swapProvider,
         depositSender: depositSender,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -5882,7 +5865,6 @@ void main() {
         depositSender: depositSender,
         hardwareSigningService: hardwareSigningService,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -5978,7 +5960,6 @@ void main() {
           depositSender: depositSender,
           hardwareSigningService: hardwareSigningService,
           sessionStore: sessionStore,
-          liveFundsEnabled: true,
         ),
       );
       await tester.pumpAndSettle();
@@ -6047,7 +6028,6 @@ void main() {
         depositSender: depositSender,
         hardwareSigningService: hardwareSigningService,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -6116,7 +6096,6 @@ void main() {
           depositSender: depositSender,
           hardwareSigningService: hardwareSigningService,
           sessionStore: sessionStore,
-          liveFundsEnabled: true,
         ),
       );
       await tester.pumpAndSettle();
@@ -6217,7 +6196,6 @@ void main() {
         depositSender: depositSender,
         hardwareSigningService: hardwareSigningService,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -6285,7 +6263,6 @@ void main() {
         swapProvider: swapProvider,
         depositSender: depositSender,
         sessionStore: sessionStore,
-        liveFundsEnabled: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -6332,15 +6309,14 @@ Widget _routerHarness(
   Duration? statusPollInterval,
   Duration? priceRefreshInterval,
   LoadShieldedAddress? loadShieldedAddress,
-  bool seedPrototypeFixtures = true,
-  bool liveFundsEnabled = true,
+  bool seedSwapFixtures = true,
   AppBootstrapState? bootstrap,
   AccountNotifier Function()? accountNotifier,
   AddressBookRepository? addressBookRepository,
 }) {
-  final previewIntents = seedPrototypeFixtures
+  final previewIntents = seedSwapFixtures
       ? _accountScopedPreviewSwapIntents()
-      : const <SwapPrototypeIntent>[];
+      : const <SwapIntent>[];
   final effectiveSessionStore =
       sessionStore ?? _FakeSwapPersistenceStore(initialIntents: previewIntents);
   return ProviderScope(
@@ -6392,13 +6368,9 @@ Widget _routerHarness(
       swapComposerPreferencesStoreProvider.overrideWithValue(
         effectiveSessionStore,
       ),
-      if (seedPrototypeFixtures) ...[
+      if (seedSwapFixtures) ...[
         swapInitialIntentsProvider.overrideWithValue(previewIntents),
-        swapInitialExternalRequestsProvider.overrideWithValue(
-          previewExternalRequests,
-        ),
       ],
-      swapLiveFundsEnabledProvider.overrideWithValue(liveFundsEnabled),
       if (priceRefreshInterval != null)
         swapPriceRefreshIntervalProvider.overrideWithValue(
           priceRefreshInterval,
@@ -6427,10 +6399,6 @@ GoRoute _swapRoute() {
     builder: (_, _) => const SwapScreen(),
     routes: [
       GoRoute(path: 'review', builder: (_, _) => const SwapReviewScreen()),
-      GoRoute(
-        path: 'address-scan',
-        builder: (_, _) => const SwapAddressScanScreen(),
-      ),
     ],
   );
 }
@@ -6456,7 +6424,7 @@ GoRoute _swapActivityRoute() {
   );
 }
 
-List<SwapPrototypeIntent> _accountScopedPreviewSwapIntents() {
+List<SwapIntent> _accountScopedPreviewSwapIntents() {
   return [
     for (final intent in previewSwapIntents)
       intent.copyWith(accountUuid: 'account-1'),
@@ -7287,7 +7255,7 @@ class _FakeSwapHardwareSigningService implements SwapHardwareSigningService {
   @override
   Future<SwapHardwarePcztDraft> createZecDepositPczt({
     required String accountUuid,
-    required SwapPrototypeIntent intent,
+    required SwapIntent intent,
   }) async {
     depositDrafts.add(intent.id);
     return SwapHardwarePcztDraft(
@@ -7382,7 +7350,7 @@ class _FakeSwapAccountNotifier extends AccountNotifier {
 class _FakeSwapPersistenceStore
     implements SwapActivityStore, SwapComposerPreferencesStore {
   _FakeSwapPersistenceStore({
-    List<SwapPrototypeIntent> initialIntents = const [],
+    List<SwapIntent> initialIntents = const [],
     SwapComposerPreferences? initialPreferences,
     Map<String, SwapComposerPreferences> initialPreferencesByAccount = const {},
   }) : savedIntents = [...initialIntents],
@@ -7397,7 +7365,7 @@ class _FakeSwapPersistenceStore
         _legacyIntents.add(intent);
       } else {
         _intentsByAccount
-            .putIfAbsent(accountUuid, () => <SwapPrototypeIntent>[])
+            .putIfAbsent(accountUuid, () => <SwapIntent>[])
             .add(intent);
       }
     }
@@ -7405,13 +7373,13 @@ class _FakeSwapPersistenceStore
 
   var loadCount = 0;
   var loadPreferencesCount = 0;
-  final saveSnapshots = <List<SwapPrototypeIntent>>[];
+  final saveSnapshots = <List<SwapIntent>>[];
   final loadedAccounts = <String>[];
   final savedAccounts = <String>[];
-  List<SwapPrototypeIntent> savedIntents;
+  List<SwapIntent> savedIntents;
   SwapComposerPreferences? savedPreferences;
-  final _legacyIntents = <SwapPrototypeIntent>[];
-  final _intentsByAccount = <String, List<SwapPrototypeIntent>>{};
+  final _legacyIntents = <SwapIntent>[];
+  final _intentsByAccount = <String, List<SwapIntent>>{};
   final _preferencesByAccount = <String, SwapComposerPreferences>{};
 
   @override
@@ -7437,9 +7405,7 @@ class _FakeSwapPersistenceStore
     _legacyIntents.removeWhere((intent) => recordIds.contains(intent.id));
     savedIntents = [
       for (final record in records)
-        swapPrototypeIntentFromRecord(
-          record.copyWith(accountUuid: accountUuid),
-        ),
+        swapIntentFromRecord(record.copyWith(accountUuid: accountUuid)),
     ];
     _intentsByAccount[accountUuid] = [...savedIntents];
     saveSnapshots.add(savedIntents);
@@ -7526,7 +7492,7 @@ class _FakeAddressBookRepository implements AddressBookRepository {
   }
 }
 
-SwapPrototypeIntent _persistedIntent({
+SwapIntent _persistedIntent({
   required String id,
   required String txHash,
   String? depositAddress,
@@ -7535,7 +7501,7 @@ SwapPrototypeIntent _persistedIntent({
   String accountUuid = 'account-1',
 }) {
   final effectiveNextAction = nextAction ?? status.label;
-  return SwapPrototypeIntent(
+  return SwapIntent(
     id: id,
     title: 'ZEC to USDC',
     pair: 'ZEC -> USDC',
@@ -7545,18 +7511,18 @@ SwapPrototypeIntent _persistedIntent({
     status: status,
     nextAction: effectiveNextAction,
     steps: [
-      SwapPrototypeStep(
+      SwapStep(
         label: status.label,
-        state: SwapPrototypeStepState.active,
+        state: SwapStepState.active,
         evidence: effectiveNextAction,
       ),
     ],
     exposure: const [
-      SwapPrototypeField(label: 'Deposit address', value: 'persisted-deposit'),
+      SwapDetailField(label: 'Deposit address', value: 'persisted-deposit'),
     ],
     receipt: [
-      SwapPrototypeField(label: 'Swap id', value: id),
-      SwapPrototypeField(label: 'Deposit tx', value: txHash),
+      SwapDetailField(label: 'Swap id', value: id),
+      SwapDetailField(label: 'Deposit tx', value: txHash),
     ],
     direction: SwapDirection.zecToExternal,
     externalAsset: SwapAsset.usdc,
@@ -7590,11 +7556,11 @@ SwapIntentSnapshot _statusSnapshot({required String id}) {
   );
 }
 
-SwapPrototypeIntent _persistedExternalToZecIntent({
+SwapIntent _persistedExternalToZecIntent({
   required String id,
   required String stagingAddress,
 }) {
-  return SwapPrototypeIntent(
+  return SwapIntent(
     id: id,
     title: 'USDC to ZEC',
     pair: 'USDC -> ZEC',
@@ -7604,18 +7570,18 @@ SwapPrototypeIntent _persistedExternalToZecIntent({
     status: SwapIntentStatus.awaitingExternalDeposit,
     nextAction: 'Waiting for the stored source-chain deposit',
     steps: const [
-      SwapPrototypeStep(
+      SwapStep(
         label: 'Awaiting external deposit',
-        state: SwapPrototypeStepState.active,
+        state: SwapStepState.active,
         evidence: 'Waiting for the stored source-chain deposit',
       ),
     ],
     exposure: [
-      SwapPrototypeField(label: 'ZEC destination', value: stagingAddress),
+      SwapDetailField(label: 'ZEC destination', value: stagingAddress),
     ],
     receipt: [
-      SwapPrototypeField(label: 'Swap id', value: id),
-      SwapPrototypeField(label: 'Receive address', value: stagingAddress),
+      SwapDetailField(label: 'Swap id', value: id),
+      SwapDetailField(label: 'Receive address', value: stagingAddress),
     ],
     direction: SwapDirection.externalToZec,
     externalAsset: SwapAsset.usdc,
@@ -7747,7 +7713,7 @@ final _bootstrap = AppBootstrapState(
   initialAccountState: const AccountState(
     accounts: [AccountInfo(uuid: 'account-1', name: 'Account 1', order: 0)],
     activeAccountUuid: 'account-1',
-    activeAddress: 'u1swapprototypeaddress',
+    activeAddress: 'u1swapaddress',
   ),
   initialSyncSnapshot: AppSyncSnapshot.empty,
   network: 'main',
@@ -7791,7 +7757,7 @@ final _hardwareBootstrap = AppBootstrapState(
       ),
     ],
     activeAccountUuid: 'account-1',
-    activeAddress: 'u1swapprototypeaddress',
+    activeAddress: 'u1swapaddress',
   ),
   initialSyncSnapshot: AppSyncSnapshot.empty,
   network: 'main',

@@ -168,9 +168,10 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
         modalAccount != null &&
         accounts.length == 1 &&
         accounts.first.uuid == modalAccount.uuid;
-    final modalPendingSwapCount = modalAccount == null
-        ? const AsyncValue<int>.data(0)
-        : ref.watch(swapPendingIntentCountProvider(modalAccount.uuid));
+    final modalPendingSwapCount =
+        modalAccount != null && _activeModal == _AccountModalType.removeAccount
+        ? ref.watch(swapPendingIntentCountProvider(modalAccount.uuid))
+        : const AsyncValue<int>.data(0);
 
     return AppDesktopShell(
       sidebar: const AppMainSidebar(),

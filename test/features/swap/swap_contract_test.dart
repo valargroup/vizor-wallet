@@ -1,7 +1,31 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 
 void main() {
+  test('blocks review when token amount exceeds asset decimals', () {
+    const state = SwapState(
+      direction: SwapDirection.zecToExternal,
+      amountText: '',
+      receiveAmountText: '105.1234567',
+      destinationText: '0xrecipient',
+      externalAsset: SwapAsset.usdc,
+      reviewVisible: false,
+      intents: [],
+      quoteMode: SwapQuoteMode.exactOutput,
+    );
+
+    expect(
+      state.quoteAmountPrecisionError,
+      'USDC supports up to 6 decimal places.',
+    );
+    expect(state.canReviewQuote, isFalse);
+
+    final valid = state.copyWith(receiveAmountText: '105.123456');
+
+    expect(valid.quoteAmountPrecisionError, isNull);
+    expect(valid.canReviewQuote, isTrue);
+  });
+
   test(
     'formats protection amounts using token decimals before display floors',
     () {

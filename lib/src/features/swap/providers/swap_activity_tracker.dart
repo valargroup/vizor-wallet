@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/swap_intent_presentation_mapper.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 import 'swap_activity_store.dart';
 import 'swap_failure_policy.dart';
 import 'swap_provider_config.dart';
@@ -32,7 +32,7 @@ class SwapActivityRefreshResult {
     this.didRefresh = false,
   });
 
-  final List<SwapPrototypeIntent> intents;
+  final List<SwapIntent> intents;
   final String? refreshError;
   final bool didRefresh;
 }
@@ -102,7 +102,7 @@ class SwapActivityStatusRefresher {
   }
 
   bool _isRefreshDue(
-    SwapPrototypeIntent intent,
+    SwapIntent intent,
     String accountUuid,
     DateTime now, {
     required bool force,
@@ -133,16 +133,14 @@ class SwapActivityTracker {
   final SwapProvider _swapProvider;
   final void Function()? _onRecordsChanged;
 
-  Future<List<SwapPrototypeIntent>> loadIntents({
-    required String accountUuid,
-  }) async {
+  Future<List<SwapIntent>> loadIntents({required String accountUuid}) async {
     final records = await _activityStore.loadRecords(accountUuid: accountUuid);
     return _intentsFromRecords(records);
   }
 
   Future<void> saveIntents({
     required String accountUuid,
-    required List<SwapPrototypeIntent> intents,
+    required List<SwapIntent> intents,
   }) async {
     await _activityStore.saveRecords(
       accountUuid: accountUuid,
@@ -159,7 +157,7 @@ class SwapActivityTracker {
 
   Future<SwapActivityRefreshResult> refreshOpenIntents({
     required String accountUuid,
-    required List<SwapPrototypeIntent> currentIntents,
+    required List<SwapIntent> currentIntents,
   }) async {
     final persistedIntents = await loadIntents(accountUuid: accountUuid);
     final sourceIntents = persistedIntents.isEmpty
@@ -180,7 +178,7 @@ class SwapActivityTracker {
 
   Future<SwapActivityRefreshResult> refreshIntent({
     required String accountUuid,
-    required List<SwapPrototypeIntent> currentIntents,
+    required List<SwapIntent> currentIntents,
     required String intentId,
     bool includeTerminal = true,
   }) {
@@ -194,7 +192,7 @@ class SwapActivityTracker {
 
   Future<SwapActivityRefreshResult> refreshIntents({
     required String accountUuid,
-    required List<SwapPrototypeIntent> currentIntents,
+    required List<SwapIntent> currentIntents,
     required Iterable<String> intentIds,
     required bool includeTerminal,
   }) async {
@@ -251,8 +249,8 @@ class SwapActivityTracker {
     );
   }
 
-  Future<SwapPrototypeIntent> _refreshProviderBackedIntent(
-    SwapPrototypeIntent intent, {
+  Future<SwapIntent> _refreshProviderBackedIntent(
+    SwapIntent intent, {
     DateTime? checkedAt,
   }) async {
     final snapshot = await _swapProvider.getStatus(
@@ -267,12 +265,12 @@ class SwapActivityTracker {
     ).copyWith(clearStatusError: true);
   }
 
-  static String _providerDepositAddress(SwapPrototypeIntent intent) {
+  static String _providerDepositAddress(SwapIntent intent) {
     return intent.depositAddress ?? intent.id;
   }
 
   static bool _shouldAutoRefreshIntent(
-    SwapPrototypeIntent intent, {
+    SwapIntent intent, {
     required String accountUuid,
   }) {
     return _isPersistableIntent(intent, accountUuid: accountUuid) &&
@@ -280,7 +278,7 @@ class SwapActivityTracker {
   }
 
   static bool _canRefreshIntent(
-    SwapPrototypeIntent intent, {
+    SwapIntent intent, {
     required String accountUuid,
     required bool includeTerminal,
   }) {
@@ -290,7 +288,7 @@ class SwapActivityTracker {
   }
 
   static bool _isPersistableIntent(
-    SwapPrototypeIntent intent, {
+    SwapIntent intent, {
     required String accountUuid,
   }) {
     return intent.accountUuid == accountUuid &&
@@ -300,14 +298,14 @@ class SwapActivityTracker {
   }
 }
 
-List<SwapPrototypeIntent> _intentsFromRecords(List<SwapIntentRecord> records) {
-  return [for (final record in records) swapPrototypeIntentFromRecord(record)];
+List<SwapIntent> _intentsFromRecords(List<SwapIntentRecord> records) {
+  return [for (final record in records) swapIntentFromRecord(record)];
 }
 
-List<SwapPrototypeIntent> _replaceIntent(
-  List<SwapPrototypeIntent> intents,
+List<SwapIntent> _replaceIntent(
+  List<SwapIntent> intents,
   String intentId,
-  SwapPrototypeIntent updated,
+  SwapIntent updated,
 ) {
   return [
     for (final intent in intents) intent.id == intentId ? updated : intent,

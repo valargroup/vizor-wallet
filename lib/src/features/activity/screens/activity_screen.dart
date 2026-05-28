@@ -20,7 +20,7 @@ import '../../../providers/privacy_mode_provider.dart';
 import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
-import '../../swap/models/swap_prototype_models.dart';
+import '../../swap/models/swap_models.dart';
 import '../../swap/models/swap_activity_navigation.dart';
 import '../../swap/providers/swap_activity_store.dart';
 import '../../swap/providers/swap_activity_tracker.dart';

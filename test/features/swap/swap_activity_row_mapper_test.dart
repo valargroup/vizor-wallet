@@ -5,7 +5,7 @@ import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/core/widgets/app_icon.dart';
 import 'package:zcash_wallet/src/features/activity/models/activity_row_data.dart';
 import 'package:zcash_wallet/src/features/activity/swap_activity_row_mapper.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 
 void main() {
   testWidgets('maps swap records to shared activity table rows', (
@@ -193,9 +193,7 @@ void main() {
     expect(row!.childRows.single.amountText, contains('***'));
   });
 
-  testWidgets('maps failed swaps without child rows and with refunded amount', (
-    tester,
-  ) async {
+  testWidgets('maps failed swaps without refund semantics', (tester) async {
     ActivityRowData? row;
 
     await tester.pumpWidget(
@@ -226,9 +224,9 @@ void main() {
     );
 
     expect(row!.title, 'Swap failed');
-    expect(row!.amountText, '101.23 USDC');
-    expect(row!.amountIconName, AppIcons.arrowBack);
-    expect(row!.amountSubtitle, 'Refunded');
+    expect(row!.amountText, '-101.23 USDC');
+    expect(row!.amountIconName, isNull);
+    expect(row!.amountSubtitle, isNull);
     expect(row!.statusText, 'Failed');
     expect(row!.statusIconName, AppIcons.skull);
     expect(row!.leadingProgressValue, isNull);

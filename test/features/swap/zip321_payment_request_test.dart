@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/swap/domain/zip321_payment_request.dart';
+import 'package:zcash_wallet/src/core/zcash/zip321_payment_request.dart';
 
 void main() {
   group('Zip321PaymentRequest', () {
@@ -45,7 +45,7 @@ void main() {
       expect(request.primaryPayment.memoIsBinary, isFalse);
     });
 
-    test('parses binary memos as unsupported by the prototype', () {
+    test('parses binary memos as unsupported by the swap flow', () {
       final request = Zip321PaymentRequest.parse(
         'zcash:u1zip321destination?amount=1&memo=_w',
       );
@@ -58,7 +58,7 @@ void main() {
     });
 
     test(
-      'parses valid multi-payment requests as unsupported by the prototype',
+      'parses valid multi-payment requests as unsupported by the swap flow',
       () {
         final request = Zip321PaymentRequest.parse(
           'zcash:?address=u1first&amount=1&address.1=u1second&amount.1=2',
@@ -73,7 +73,7 @@ void main() {
       },
     );
 
-    test('parses custom asset requests as unsupported by the prototype', () {
+    test('parses custom asset requests as unsupported by the swap flow', () {
       final request = Zip321PaymentRequest.parse(
         'zcash:?address=u1assetrequest&req-asset=AEcnAAAAAAAAAA',
       );

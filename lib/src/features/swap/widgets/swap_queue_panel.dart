@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_icon.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 
@@ -19,7 +19,7 @@ class SwapQueuePanel extends StatelessWidget {
     super.key,
   });
 
-  final List<SwapPrototypeIntent> intents;
+  final List<SwapIntent> intents;
   final String? selectedIntentId;
   final ValueChanged<String>? onIntentSelected;
   final bool statusRefreshing;
@@ -128,7 +128,7 @@ class _QueueGroup {
 
   final String id;
   final String label;
-  final List<SwapPrototypeIntent> intents;
+  final List<SwapIntent> intents;
 }
 
 class _QueueRefreshButton extends StatelessWidget {
@@ -186,7 +186,7 @@ class _QueueRefreshButton extends StatelessWidget {
 class _QueueRow extends StatelessWidget {
   const _QueueRow({required this.intent, required this.selected, this.onTap});
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
   final bool selected;
   final VoidCallback? onTap;
 
@@ -287,7 +287,7 @@ class _QueueRow extends StatelessWidget {
 class _QueueAssetPair extends StatelessWidget {
   const _QueueAssetPair({required this.intent, required this.selected});
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
   final bool selected;
 
   @override
@@ -408,7 +408,7 @@ class _QueueStatusGlyph extends StatelessWidget {
 class _QueueAmountFlow extends StatelessWidget {
   const _QueueAmountFlow({required this.intent});
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
 
   @override
   Widget build(BuildContext context) {
@@ -457,7 +457,7 @@ class _QueueCountChip extends StatelessWidget {
 class _QueueProgressSegments extends StatefulWidget {
   const _QueueProgressSegments({required this.intent});
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
 
   @override
   State<_QueueProgressSegments> createState() => _QueueProgressSegmentsState();
@@ -692,7 +692,7 @@ bool _isLiveStatus(SwapIntentStatus status) {
   };
 }
 
-SwapAsset? _intentSellAsset(SwapPrototypeIntent intent) {
+SwapAsset? _intentSellAsset(SwapIntent intent) {
   final direction = intent.direction;
   final externalAsset = intent.externalAsset;
   if (direction == null || externalAsset == null) {
@@ -701,7 +701,7 @@ SwapAsset? _intentSellAsset(SwapPrototypeIntent intent) {
   return direction.fromAsset(externalAsset);
 }
 
-SwapAsset? _intentReceiveAsset(SwapPrototypeIntent intent) {
+SwapAsset? _intentReceiveAsset(SwapIntent intent) {
   final direction = intent.direction;
   final externalAsset = intent.externalAsset;
   if (direction == null || externalAsset == null) {
@@ -735,7 +735,7 @@ String _queueStatusIcon(SwapIntentStatus status) {
 
 enum _QueueSegmentState { pending, active, success, warning, destructive }
 
-List<_QueueSegmentState> _queueSegmentStates(SwapPrototypeIntent intent) {
+List<_QueueSegmentState> _queueSegmentStates(SwapIntent intent) {
   final status = intent.status;
   return switch (status) {
     SwapIntentStatus.awaitingDeposit ||
@@ -793,7 +793,7 @@ List<_QueueSegmentState> _queueSegmentStates(SwapPrototypeIntent intent) {
 }
 
 List<_QueueSegmentState> _queueSegmentStatesForDisplay(
-  SwapPrototypeIntent intent,
+  SwapIntent intent,
   int progressIndex,
 ) {
   if (!_queueCanAnimateProgress(intent.status) ||
@@ -823,7 +823,7 @@ bool _queueCanAnimateProgress(SwapIntentStatus status) {
   };
 }
 
-int _queueProgressIndex(SwapPrototypeIntent intent) {
+int _queueProgressIndex(SwapIntent intent) {
   final status = intent.status;
   return switch (status) {
     SwapIntentStatus.awaitingDeposit ||
@@ -842,7 +842,7 @@ bool _isAwaitingDepositStatus(SwapIntentStatus status) {
       status == SwapIntentStatus.awaitingExternalDeposit;
 }
 
-bool _hasDepositTx(SwapPrototypeIntent intent) {
+bool _hasDepositTx(SwapIntent intent) {
   return intent.depositTxHash?.trim().isNotEmpty ?? false;
 }
 
@@ -857,7 +857,7 @@ Color _queueSegmentColor(BuildContext context, _QueueSegmentState state) {
   };
 }
 
-String _queueActionLabel(SwapPrototypeIntent intent) {
+String _queueActionLabel(SwapIntent intent) {
   if (_isAwaitingDepositStatus(intent.status) && _hasDepositTx(intent)) {
     return 'Confirming deposit';
   }

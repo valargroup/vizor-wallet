@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/storage/app_secure_store.dart';
-import 'package:zcash_wallet/src/features/swap/models/swap_prototype_models.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_activity_store.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_composer_preferences_store.dart';
 
@@ -27,7 +27,7 @@ void main() {
   });
 
   test('round-trips the swap activity fields needed for recovery', () async {
-    final intent = SwapPrototypeIntent(
+    final intent = SwapIntent(
       id: 't1deposit',
       title: 'ZEC to USDC',
       pair: 'ZEC -> USDC',
@@ -38,21 +38,21 @@ void main() {
       status: SwapIntentStatus.processing,
       nextAction: 'Swap is processing',
       steps: const [
-        SwapPrototypeStep(
+        SwapStep(
           label: 'Deposit observed',
-          state: SwapPrototypeStepState.done,
+          state: SwapStepState.done,
           evidence: 'tx submitted',
         ),
       ],
       exposure: const [
-        SwapPrototypeField(
+        SwapDetailField(
           label: 'Third-party data',
           value: 'solver sees deposit tx and route',
         ),
       ],
       receipt: const [
-        SwapPrototypeField(label: 'Swap id', value: 't1deposit'),
-        SwapPrototypeField(label: 'Refund to', value: 'u1refund'),
+        SwapDetailField(label: 'Swap id', value: 't1deposit'),
+        SwapDetailField(label: 'Refund to', value: 'u1refund'),
       ],
       direction: SwapDirection.zecToExternal,
       externalAsset: SwapAsset.usdc,
@@ -230,6 +230,36 @@ void main() {
     );
   });
 
+  test('skips malformed swap activity records during restore', () async {
+    await secureStore.writeString(
+      swapActivityStorageKeyForTest('account-1'),
+      jsonEncode({
+        'version': 1,
+        'records': [
+          {},
+          {
+            'id': 'valid-swap',
+            'provider': 'NEAR Intents',
+            'pair': 'ZEC -> USDC',
+            'sellAmount': '1.0000 ZEC',
+            'receiveEstimate': '100.00 USDC',
+            'status': 'processing',
+            'nextAction': 'Processing',
+            'direction': 'zecToExternal',
+            'depositAddress': 'valid-swap',
+          },
+        ],
+      }),
+    );
+
+    final restored = await activityStore.loadRecords(accountUuid: 'account-1');
+
+    expect(restored, hasLength(1));
+    expect(restored.single.id, 'valid-swap');
+    expect(restored.single.sellAmountText, '1.0000 ZEC');
+    expect(restored.single.accountUuid, 'account-1');
+  });
+
   test('round-trips only the last attempted swap pair', () async {
     const preferences = SwapComposerPreferences(
       direction: SwapDirection.externalToZec,
@@ -325,11 +355,8 @@ void main() {
   );
 }
 
-SwapPrototypeIntent _minimalIntent({
-  required String id,
-  required String accountUuid,
-}) {
-  return SwapPrototypeIntent(
+SwapIntent _minimalIntent({required String id, required String accountUuid}) {
+  return SwapIntent(
     id: id,
     title: 'ZEC to USDC',
     pair: 'ZEC -> USDC',

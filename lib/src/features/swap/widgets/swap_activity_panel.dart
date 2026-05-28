@@ -16,8 +16,8 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
 import '../domain/near_intents_explorer.dart';
 import '../models/swap_activity_navigation.dart';
-import '../models/swap_prototype_models.dart';
-import '../providers/swap_prototype_provider.dart';
+import '../models/swap_models.dart';
+import '../providers/swap_state_provider.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 import 'swap_copy_feedback.dart';
@@ -96,12 +96,9 @@ class _SwapActivityDetailSurfaceState
       _initialIntentApplied = true;
       return;
     }
-    final intent = _intentById(
-      ref.read(swapPrototypeProvider).intents,
-      intentId,
-    );
+    final intent = _intentById(ref.read(swapStateProvider).intents, intentId);
     if (intent == null) return;
-    ref.read(swapPrototypeProvider.notifier).selectIntent(intentId);
+    ref.read(swapStateProvider.notifier).selectIntent(intentId);
     final needsAutoSign =
         widget.autoSignZecDeposit &&
         _isHardwareIntent(intent) &&
@@ -125,7 +122,7 @@ class _SwapActivityDetailSurfaceState
   BuildContext _toastContext(BuildContext fallback) =>
       _toastOverlayContextKey.currentContext ?? fallback;
 
-  bool _isHardwareIntent(SwapPrototypeIntent intent) {
+  bool _isHardwareIntent(SwapIntent intent) {
     final accountUuid = intent.accountUuid;
     if (accountUuid == null || accountUuid.trim().isEmpty) return false;
     final accountState = ref.read(accountProvider).value;
@@ -141,7 +138,7 @@ class _SwapActivityDetailSurfaceState
   }
 
   Future<void> _refreshStatusForSelectedIntent() async {
-    final selected = ref.read(swapPrototypeProvider).selectedIntentOrNull;
+    final selected = ref.read(swapStateProvider).selectedIntentOrNull;
     if (selected == null || !canRefreshSwapIntentStatus(selected.status)) {
       return;
     }
@@ -153,12 +150,10 @@ class _SwapActivityDetailSurfaceState
         }
       });
     }
-    await ref
-        .read(swapPrototypeProvider.notifier)
-        .refreshSelectedIntentStatus();
+    await ref.read(swapStateProvider.notifier).refreshSelectedIntentStatus();
     if (!mounted) return;
 
-    final state = ref.read(swapPrototypeProvider);
+    final state = ref.read(swapStateProvider);
     final refreshed = state.selectedIntentOrNull;
     final shouldWarn =
         _showsExternalDepositPage(selected) &&
@@ -175,18 +170,16 @@ class _SwapActivityDetailSurfaceState
 
   void _submitDepositTransaction() {
     unawaited(
-      ref
-          .read(swapPrototypeProvider.notifier)
-          .submitSelectedDepositTransaction(),
+      ref.read(swapStateProvider.notifier).submitSelectedDepositTransaction(),
     );
   }
 
   void _reviewFreshQuote() {
-    ref.read(swapPrototypeProvider.notifier).prepareRetryFromSelectedIntent();
+    ref.read(swapStateProvider.notifier).prepareRetryFromSelectedIntent();
     context.go('/swap');
   }
 
-  void _openNearIntentsExplorerLink(SwapPrototypeIntent intent) {
+  void _openNearIntentsExplorerLink(SwapIntent intent) {
     unawaited(
       launchNearIntentsExplorer(
         nearIntentHash: intent.nearIntentHash,
@@ -196,7 +189,7 @@ class _SwapActivityDetailSurfaceState
     );
   }
 
-  void _signZecDeposit(SwapPrototypeIntent intent) {
+  void _signZecDeposit(SwapIntent intent) {
     setState(() {
       _keystoneSigningRequest = _SwapKeystoneSigningRequest(
         intentId: intent.id,
@@ -213,7 +206,7 @@ class _SwapActivityDetailSurfaceState
         request.removeUnsentIntentOnCancel) {
       unawaited(
         ref
-            .read(swapPrototypeProvider.notifier)
+            .read(swapStateProvider.notifier)
             .removeUnsentHardwareDepositIntent(request.intentId),
       );
     }
@@ -228,7 +221,7 @@ class _SwapActivityDetailSurfaceState
     _closeKeystoneSigning();
     unawaited(
       ref
-          .read(swapPrototypeProvider.notifier)
+          .read(swapStateProvider.notifier)
           .submitDepositTransactionForIntent(
             intentId: request.intentId,
             accountUuid: request.accountUuid,
@@ -256,8 +249,7 @@ class _SwapActivityDetailSurfaceState
       },
     );
 
-    final state = ref.watch(swapPrototypeProvider);
-    final liveFundsEnabled = ref.watch(swapLiveFundsEnabledProvider);
+    final state = ref.watch(swapStateProvider);
     final initialIntentId = widget.intentId.trim();
     if (!_initialIntentApplied && initialIntentId.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -277,7 +269,6 @@ class _SwapActivityDetailSurfaceState
         : SwapActivityDetailPagePanel(
             state: state,
             intent: activityDetailIntent,
-            liveFundsEnabled: liveFundsEnabled,
             depositChecking:
                 _depositCheckingIntentId == activityDetailIntent.id,
             depositCheckWarning:
@@ -286,7 +277,7 @@ class _SwapActivityDetailSurfaceState
                 : null,
             onRefreshStatus: _refreshStatus,
             onDepositTxHashChanged: ref
-                .read(swapPrototypeProvider.notifier)
+                .read(swapStateProvider.notifier)
                 .updateDepositTxHash,
             onSubmitDepositTransaction: _submitDepositTransaction,
             onReviewFreshQuote: _reviewFreshQuote,
@@ -384,10 +375,7 @@ class _SwapActivityDetailPaneContent extends StatelessWidget {
   }
 }
 
-SwapPrototypeIntent? _intentById(
-  List<SwapPrototypeIntent> intents,
-  String? intentId,
-) {
+SwapIntent? _intentById(List<SwapIntent> intents, String? intentId) {
   if (intentId == null) return null;
   for (final intent in intents) {
     if (intent.id == intentId) return intent;
@@ -403,7 +391,7 @@ class SwapActivityPanel extends StatelessWidget {
     super.key,
   });
 
-  final SwapPrototypeState state;
+  final SwapState state;
   final VoidCallback onRefreshStatus;
   final ValueChanged<String> onIntentSelected;
 
@@ -510,17 +498,15 @@ class _SwapActivityStack extends StatelessWidget {
     required this.onSubmitDepositTransaction,
     required this.onReviewFreshQuote,
     required this.onSignZecDeposit,
-    required this.liveFundsEnabled,
     required this.intentIsHardware,
   });
 
-  final SwapPrototypeState state;
-  final SwapPrototypeIntent selectedIntent;
+  final SwapState state;
+  final SwapIntent selectedIntent;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
   final VoidCallback onReviewFreshQuote;
-  final ValueChanged<SwapPrototypeIntent> onSignZecDeposit;
-  final bool liveFundsEnabled;
+  final ValueChanged<SwapIntent> onSignZecDeposit;
   final bool intentIsHardware;
 
   @override
@@ -581,7 +567,6 @@ class _SwapActivityStack extends StatelessWidget {
             instruction: depositInstruction,
             onDepositTxHashChanged: onDepositTxHashChanged,
             onSubmitDepositTransaction: onSubmitDepositTransaction,
-            liveFundsEnabled: liveFundsEnabled,
           ),
         ],
       ],
@@ -593,7 +578,6 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
   const SwapActivityDetailPagePanel({
     required this.state,
     required this.intent,
-    required this.liveFundsEnabled,
     required this.depositChecking,
     required this.depositCheckWarning,
     required this.onRefreshStatus,
@@ -606,17 +590,16 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
     super.key,
   });
 
-  final SwapPrototypeState state;
-  final SwapPrototypeIntent intent;
-  final bool liveFundsEnabled;
+  final SwapState state;
+  final SwapIntent intent;
   final bool depositChecking;
   final String? depositCheckWarning;
   final VoidCallback onRefreshStatus;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
   final VoidCallback onReviewFreshQuote;
-  final ValueChanged<SwapPrototypeIntent> onSignZecDeposit;
-  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
+  final ValueChanged<SwapIntent> onSignZecDeposit;
+  final ValueChanged<SwapIntent> onCopyExplorerLink;
   final bool intentIsHardware;
 
   @override
@@ -624,7 +607,6 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
     final flowContent = _SwapActivityFlowContent(
       state: state,
       intent: intent,
-      liveFundsEnabled: liveFundsEnabled,
       depositChecking: depositChecking,
       depositCheckWarning: depositCheckWarning,
       onRefreshStatus: onRefreshStatus,
@@ -666,7 +648,6 @@ class _SwapActivityFlowContent extends StatelessWidget {
   const _SwapActivityFlowContent({
     required this.state,
     required this.intent,
-    required this.liveFundsEnabled,
     required this.depositChecking,
     required this.depositCheckWarning,
     required this.onRefreshStatus,
@@ -678,17 +659,16 @@ class _SwapActivityFlowContent extends StatelessWidget {
     required this.intentIsHardware,
   });
 
-  final SwapPrototypeState state;
-  final SwapPrototypeIntent intent;
-  final bool liveFundsEnabled;
+  final SwapState state;
+  final SwapIntent intent;
   final bool depositChecking;
   final String? depositCheckWarning;
   final VoidCallback onRefreshStatus;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
   final VoidCallback onReviewFreshQuote;
-  final ValueChanged<SwapPrototypeIntent> onSignZecDeposit;
-  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
+  final ValueChanged<SwapIntent> onSignZecDeposit;
+  final ValueChanged<SwapIntent> onCopyExplorerLink;
   final bool intentIsHardware;
 
   @override
@@ -755,7 +735,7 @@ class _SwapStatusForIntent extends ConsumerStatefulWidget {
     required this.onOpenExplorer,
   });
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
   final VoidCallback onOpenExplorer;
 
   @override
@@ -779,7 +759,7 @@ class _SwapStatusForIntentState extends ConsumerState<_SwapStatusForIntent> {
   @override
   Widget build(BuildContext context) {
     final intent = widget.intent;
-    final state = ref.watch(swapPrototypeProvider);
+    final state = ref.watch(swapStateProvider);
     final sellAsset = _activitySellAsset(intent) ?? SwapAsset.zec;
     final receiveAsset = _activityReceiveAsset(intent) ?? SwapAsset.usdc;
     final payFiatText = _activityFiatTextForAsset(
@@ -828,7 +808,7 @@ class _SwapStatusForIntentState extends ConsumerState<_SwapStatusForIntent> {
   }
 }
 
-String _swapStatusTitle(SwapPrototypeIntent intent) {
+String _swapStatusTitle(SwapIntent intent) {
   return switch (intent.status) {
     SwapIntentStatus.complete => 'Swap completed',
     SwapIntentStatus.failed ||
@@ -849,7 +829,7 @@ SwapStatusBadgeKind _swapStatusBadgeKind(SwapIntentStatus status) {
   };
 }
 
-int _swapStatusProgressIndex(SwapPrototypeIntent intent) {
+int _swapStatusProgressIndex(SwapIntent intent) {
   final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
   return switch (intent.status) {
     SwapIntentStatus.awaitingDeposit ||
@@ -865,7 +845,7 @@ int _swapStatusProgressIndex(SwapPrototypeIntent intent) {
   };
 }
 
-List<SwapStatusStepData> _swapProgressSteps(SwapPrototypeIntent intent) {
+List<SwapStatusStepData> _swapProgressSteps(SwapIntent intent) {
   final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
   final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
   final sourceVerb = intent.direction == SwapDirection.zecToExternal
@@ -920,7 +900,7 @@ List<SwapStatusStepData> _swapProgressSteps(SwapPrototypeIntent intent) {
 }
 
 List<SwapStatusDetailRowData> _swapStatusDetails(
-  SwapPrototypeIntent intent, {
+  SwapIntent intent, {
   AccountInfo? accountInfo,
 }) {
   final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
@@ -1040,7 +1020,7 @@ List<SwapStatusDetailRowData> _swapStatusDetails(
 
 AccountInfo? _accountInfoForIntent(
   AccountState? accountState,
-  SwapPrototypeIntent intent,
+  SwapIntent intent,
 ) {
   if (accountState == null) return null;
   final accountUuid = intent.accountUuid?.trim();
@@ -1070,8 +1050,8 @@ String? _firstNonEmpty(Iterable<String?> values) {
 }
 
 String _activityFiatTextForAsset(
-  SwapPrototypeState state, {
-  required SwapPrototypeIntent intent,
+  SwapState state, {
+  required SwapIntent intent,
   required SwapAsset asset,
   required String amountText,
 }) {
@@ -1108,7 +1088,7 @@ String _formatActivityUsd(double value) {
   return '\$${value.toStringAsFixed(2)}';
 }
 
-String? _depositDeadlineLabel(SwapPrototypeIntent intent) {
+String? _depositDeadlineLabel(SwapIntent intent) {
   final deadline = intent.depositDeadline;
   if (deadline == null) return null;
   final remaining = deadline.difference(DateTime.now());
@@ -1198,7 +1178,6 @@ class SwapActivityDetailModal extends StatelessWidget {
   const SwapActivityDetailModal({
     required this.state,
     required this.intent,
-    required this.liveFundsEnabled,
     required this.onClose,
     required this.onRefreshStatus,
     required this.onDepositTxHashChanged,
@@ -1210,16 +1189,15 @@ class SwapActivityDetailModal extends StatelessWidget {
     super.key,
   });
 
-  final SwapPrototypeState state;
-  final SwapPrototypeIntent intent;
-  final bool liveFundsEnabled;
+  final SwapState state;
+  final SwapIntent intent;
   final VoidCallback onClose;
   final VoidCallback onRefreshStatus;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
   final VoidCallback onReviewFreshQuote;
-  final ValueChanged<SwapPrototypeIntent> onSignZecDeposit;
-  final ValueChanged<SwapPrototypeIntent> onCopyExplorerLink;
+  final ValueChanged<SwapIntent> onSignZecDeposit;
+  final ValueChanged<SwapIntent> onCopyExplorerLink;
   final bool intentIsHardware;
 
   @override
@@ -1301,7 +1279,6 @@ class SwapActivityDetailModal extends StatelessWidget {
                         onSubmitDepositTransaction: onSubmitDepositTransaction,
                         onReviewFreshQuote: onReviewFreshQuote,
                         onSignZecDeposit: onSignZecDeposit,
-                        liveFundsEnabled: liveFundsEnabled,
                         intentIsHardware: intentIsHardware,
                       ),
                     ),
@@ -1392,7 +1369,7 @@ class _ActivityDetailScrollAreaState extends State<_ActivityDetailScrollArea> {
 class _ActivityAssetPair extends StatelessWidget {
   const _ActivityAssetPair({required this.intent});
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
 
   @override
   Widget build(BuildContext context) {
@@ -1481,7 +1458,7 @@ class _ActivityStatusPlan {
     required this.tone,
   });
 
-  static _ActivityStatusPlan fromIntent(SwapPrototypeIntent intent) {
+  static _ActivityStatusPlan fromIntent(SwapIntent intent) {
     final sourceSymbol = _pairSymbol(intent.pair, 0);
     final receiveSymbol = _pairSymbol(intent.pair, 1);
     final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
@@ -1581,7 +1558,7 @@ class _ActivityStatusPlanPanel extends StatelessWidget {
     required this.statusRefreshing,
   });
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
   final _ActivityStatusPlan plan;
   final bool statusRefreshing;
 
@@ -1681,7 +1658,7 @@ class _ActivityStatusPlanPanel extends StatelessWidget {
 class _ActivityRouteTracker extends StatefulWidget {
   const _ActivityRouteTracker({required this.intent, required this.tone});
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
   final _ActivityStatusPlanTone tone;
 
   @override
@@ -2194,7 +2171,7 @@ Color _activityRouteSegmentColor(
 class _ActivityRoutePlan {
   const _ActivityRoutePlan({required this.steps});
 
-  factory _ActivityRoutePlan.fromIntent(SwapPrototypeIntent intent) {
+  factory _ActivityRoutePlan.fromIntent(SwapIntent intent) {
     final sourceSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 0);
     final receiveSymbol = _ActivityStatusPlan._pairSymbol(intent.pair, 1);
     final receivesZec = receiveSymbol == 'ZEC';
@@ -2448,7 +2425,7 @@ class _ActivityResolution {
     this.primaryAction,
   });
 
-  static _ActivityResolution? fromIntent(SwapPrototypeIntent intent) {
+  static _ActivityResolution? fromIntent(SwapIntent intent) {
     return switch (intent.status) {
       SwapIntentStatus.incompleteDeposit => _ActivityResolution(
         title: 'Resolve incomplete deposit',
@@ -2520,7 +2497,7 @@ class _ActivityResolutionPanel extends StatelessWidget {
   });
 
   final _ActivityResolution resolution;
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
   final VoidCallback onReviewFreshQuote;
 
   @override
@@ -2636,7 +2613,7 @@ class _ActivityResolutionPanel extends StatelessWidget {
     );
   }
 
-  String _topUpDetailsText(SwapPrototypeIntent intent) {
+  String _topUpDetailsText(SwapIntent intent) {
     final lines = [
       if (intent.depositAddress != null)
         'Deposit address: ${intent.depositAddress}',
@@ -2661,14 +2638,14 @@ bool canRefreshSwapIntentStatus(SwapIntentStatus status) {
   return status != SwapIntentStatus.complete;
 }
 
-bool _showsExternalDepositPage(SwapPrototypeIntent intent) {
+bool _showsExternalDepositPage(SwapIntent intent) {
   return intent.direction == SwapDirection.externalToZec &&
       intent.status == SwapIntentStatus.awaitingExternalDeposit &&
       _ActivityDepositInstruction.fromIntent(intent) != null;
 }
 
 bool _showsHardwareZecDepositPage(
-  SwapPrototypeIntent intent, {
+  SwapIntent intent, {
   required bool intentIsHardware,
 }) {
   return intentIsHardware &&
@@ -2678,10 +2655,7 @@ bool _showsHardwareZecDepositPage(
       _ActivityDepositInstruction.fromIntent(intent) != null;
 }
 
-bool _showsDepositPage(
-  SwapPrototypeIntent intent, {
-  required bool intentIsHardware,
-}) {
+bool _showsDepositPage(SwapIntent intent, {required bool intentIsHardware}) {
   if (intent.status == SwapIntentStatus.expired) return true;
   return _showsExternalDepositPage(intent) ||
       _showsHardwareZecDepositPage(intent, intentIsHardware: intentIsHardware);
@@ -2697,7 +2671,7 @@ class _ActiveSwapSummaryPanel extends StatelessWidget {
     required this.statusRefreshing,
   });
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
   final _ActivityStatusPlan plan;
   final bool statusRefreshing;
 
@@ -2730,7 +2704,7 @@ class _ActivityDetailDivider extends StatelessWidget {
   }
 }
 
-SwapAsset? _activitySellAsset(SwapPrototypeIntent intent) {
+SwapAsset? _activitySellAsset(SwapIntent intent) {
   final direction = intent.direction;
   final externalAsset = intent.externalAsset;
   if (direction == null || externalAsset == null) {
@@ -2739,7 +2713,7 @@ SwapAsset? _activitySellAsset(SwapPrototypeIntent intent) {
   return direction.fromAsset(externalAsset);
 }
 
-SwapAsset? _activityReceiveAsset(SwapPrototypeIntent intent) {
+SwapAsset? _activityReceiveAsset(SwapIntent intent) {
   final direction = intent.direction;
   final externalAsset = intent.externalAsset;
   if (direction == null || externalAsset == null) {
@@ -2760,7 +2734,7 @@ SwapAsset? _activityAssetFromPair(String pair, int index) {
 class _ActiveSwapTradeLine extends StatelessWidget {
   const _ActiveSwapTradeLine({required this.intent});
 
-  final SwapPrototypeIntent intent;
+  final SwapIntent intent;
 
   @override
   Widget build(BuildContext context) {
@@ -2813,9 +2787,7 @@ class _ExternalRecipientSummary {
   final String value;
 }
 
-_ExternalRecipientSummary? _externalRecipientSummary(
-  SwapPrototypeIntent intent,
-) {
+_ExternalRecipientSummary? _externalRecipientSummary(SwapIntent intent) {
   if (intent.direction != SwapDirection.zecToExternal) return null;
   final recipient = intent.oneClickRecipient?.trim();
   if (recipient == null || recipient.isEmpty) return null;
@@ -2918,7 +2890,7 @@ class _ActivityDepositInstruction {
     this.memo,
   });
 
-  static _ActivityDepositInstruction? fromIntent(SwapPrototypeIntent intent) {
+  static _ActivityDepositInstruction? fromIntent(SwapIntent intent) {
     final direction = intent.direction;
     final externalAsset = intent.externalAsset;
     final depositAddress = intent.depositAddress;
@@ -3043,14 +3015,12 @@ class _ActivityDepositActionPanel extends StatelessWidget {
     required this.instruction,
     required this.onDepositTxHashChanged,
     required this.onSubmitDepositTransaction,
-    required this.liveFundsEnabled,
   });
 
-  final SwapPrototypeState state;
+  final SwapState state;
   final _ActivityDepositInstruction instruction;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
-  final bool liveFundsEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -3077,7 +3047,6 @@ class _ActivityDepositActionPanel extends StatelessWidget {
           instruction: instruction,
           onDepositTxHashChanged: onDepositTxHashChanged,
           onSubmitDepositTransaction: onSubmitDepositTransaction,
-          liveFundsEnabled: liveFundsEnabled,
         ),
       ],
     );
@@ -3160,14 +3129,12 @@ class _DepositTxHashDisclosure extends StatefulWidget {
     required this.instruction,
     required this.onDepositTxHashChanged,
     required this.onSubmitDepositTransaction,
-    required this.liveFundsEnabled,
   });
 
-  final SwapPrototypeState state;
+  final SwapState state;
   final _ActivityDepositInstruction instruction;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
-  final bool liveFundsEnabled;
 
   @override
   State<_DepositTxHashDisclosure> createState() =>
@@ -3188,8 +3155,7 @@ class _DepositTxHashDisclosureState extends State<_DepositTxHashDisclosure> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final canSubmit =
-        widget.state.canSubmitDepositTx && widget.liveFundsEnabled;
+    final canSubmit = widget.state.canSubmitDepositTx;
     final submitLabel = widget.state.depositSubmitting
         ? 'Submitting'
         : widget.instruction.submitLabel;
@@ -3225,9 +3191,7 @@ class _DepositTxHashDisclosureState extends State<_DepositTxHashDisclosure> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      widget.liveFundsEnabled
-                          ? 'Add the deposit transaction hash to speed up status checks.'
-                          : 'Live submit disabled',
+                      'Add the deposit transaction hash to speed up status checks.',
                       style: AppTypography.bodyExtraSmall.copyWith(
                         color: colors.text.secondary,
                       ),

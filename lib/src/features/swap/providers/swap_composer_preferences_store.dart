@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/app_secure_store.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 
 const _swapComposerPreferencesKey = 'zcash_swap_composer_preferences_v1';
 

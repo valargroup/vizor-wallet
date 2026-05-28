@@ -2,12 +2,12 @@ import 'package:flutter/widgets.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_icon.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 
 class PrivacyExposurePanel extends StatelessWidget {
   const PrivacyExposurePanel({required this.rows, super.key});
 
-  final List<SwapPrototypeField> rows;
+  final List<SwapDetailField> rows;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +48,7 @@ class PrivacyExposurePanel extends StatelessWidget {
 class _ExposureRow extends StatelessWidget {
   const _ExposureRow({required this.row});
 
-  final SwapPrototypeField row;
+  final SwapDetailField row;
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +96,7 @@ enum _ExposureScope {
   final String label;
   final String iconName;
 
-  static _ExposureScope from(SwapPrototypeField row) {
+  static _ExposureScope from(SwapDetailField row) {
     final haystack = '${row.label} ${row.value}'.toLowerCase();
     if (haystack.contains('third-party') ||
         haystack.contains('solver') ||

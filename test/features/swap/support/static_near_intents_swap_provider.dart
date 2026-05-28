@@ -1,4 +1,4 @@
-import 'swap_contract.dart';
+import 'package:zcash_wallet/src/features/swap/domain/swap_contract.dart';
 
 class StaticNearIntentsSwapProvider implements SwapProvider {
   const StaticNearIntentsSwapProvider();

@@ -7,7 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../models/swap_fiat_amount.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 import 'swap_asset_icon.dart';
 
 class SwapComposerPanel extends StatefulWidget {
@@ -31,7 +31,7 @@ class SwapComposerPanel extends StatefulWidget {
     super.key,
   });
 
-  final SwapPrototypeState state;
+  final SwapState state;
   final ValueChanged<String> onAmountChanged;
   final ValueChanged<String> onAmountFiatChanged;
   final ValueChanged<String> onReceiveAmountChanged;
@@ -101,13 +101,13 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
     );
   }
 
-  String _payInputText(SwapPrototypeState state) {
+  String _payInputText(SwapState state) {
     return state.amountInputMode == SwapAmountInputMode.fiat
         ? state.amountFiatText
         : state.amountText;
   }
 
-  String _receiveInputText(SwapPrototypeState state) {
+  String _receiveInputText(SwapState state) {
     return state.receiveAmountInputMode == SwapAmountInputMode.fiat
         ? state.receiveFiatText
         : state.receiveAmountText;
@@ -122,7 +122,10 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
         state.receiveAmountInputMode == SwapAmountInputMode.fiat;
     final targetDirection = state.direction.toggled;
     final rateText = _rateTextForState(state);
-    final quoteError = state.quoteError ?? state.previewQuoteError;
+    final quoteError =
+        state.quoteAmountPrecisionError ??
+        state.quoteError ??
+        state.previewQuoteError;
     final zecAmountOverAvailable = _zecAmountOverAvailable(
       state,
       widget.zecAvailableZatoshi,
@@ -150,6 +153,9 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
               : widget.onAmountChanged,
           hintText: payInputIsFiat ? '0.00' : (sendsZec ? '0.0000' : '0.00'),
           prefixText: payInputIsFiat ? r'$' : null,
+          maxFractionDigits: payInputIsFiat
+              ? null
+              : state.direction.fromAsset(state.externalAsset).decimals,
         ),
         asset: sendsZec
             ? const _TokenPill(asset: SwapAsset.zec, label: 'Zcash')
@@ -218,6 +224,9 @@ class _SwapComposerPanelState extends State<SwapComposerPanel> {
                     ? '0.0000'
                     : '0.00'),
           prefixText: receiveInputIsFiat ? r'$' : null,
+          maxFractionDigits: receiveInputIsFiat
+              ? null
+              : state.direction.toAsset(state.externalAsset).decimals,
         ),
         asset: sendsZec
             ? _ExternalAssetButton(
@@ -476,6 +485,7 @@ class _SwapAmountInput extends StatelessWidget {
     required this.onChanged,
     required this.hintText,
     this.prefixText,
+    this.maxFractionDigits,
     super.key,
   });
 
@@ -484,6 +494,7 @@ class _SwapAmountInput extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final String hintText;
   final String? prefixText;
+  final int? maxFractionDigits;
 
   @override
   Widget build(BuildContext context) {
@@ -506,7 +517,9 @@ class _SwapAmountInput extends StatelessWidget {
             onChanged: onChanged,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              _DecimalAmountInputFormatter(
+                maxFractionDigits: maxFractionDigits,
+              ),
             ],
             style: valueStyle,
             cursorColor: colors.text.accent,
@@ -702,7 +715,7 @@ class _MaxAmountTrigger extends StatelessWidget {
   }
 }
 
-String _rateTextForState(SwapPrototypeState state) {
+String _rateTextForState(SwapState state) {
   final quote = state.quote;
   if (quote != null) return quote.rateText;
 
@@ -716,10 +729,7 @@ String _rateTextForState(SwapPrototypeState state) {
   return '1 ${state.externalAsset.symbol} = ${(1 / externalPerZec).toStringAsFixed(4)} ZEC';
 }
 
-bool _zecAmountOverAvailable(
-  SwapPrototypeState state,
-  BigInt availableZatoshi,
-) {
+bool _zecAmountOverAvailable(SwapState state, BigInt availableZatoshi) {
   if (!state.direction.sendsZec) return false;
   final amount = parseZecAmount(state.amountText);
   if (amount == null || amount <= BigInt.zero) return false;
@@ -770,7 +780,7 @@ class SwapAddressEditModal extends StatefulWidget {
     super.key,
   });
 
-  final SwapPrototypeState state;
+  final SwapState state;
   final SwapAddressSubmitCallback onSubmitted;
   final VoidCallback onScan;
   final VoidCallback onOpenContacts;
@@ -1582,6 +1592,27 @@ class _SlippageCustomInputFormatter extends TextInputFormatter {
   }
 }
 
+class _DecimalAmountInputFormatter extends TextInputFormatter {
+  const _DecimalAmountInputFormatter({this.maxFractionDigits});
+
+  final int? maxFractionDigits;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+    final max = maxFractionDigits;
+    final pattern = max == null
+        ? RegExp(r'^\d*(\.\d*)?$')
+        : RegExp('^\\d*(\\.\\d{0,$max})?\$');
+    if (pattern.hasMatch(text)) return newValue;
+    return oldValue;
+  }
+}
+
 class _QuoteErrorBanner extends StatelessWidget {
   const _QuoteErrorBanner({required this.message});
 
@@ -1742,7 +1773,7 @@ class _TokenPill extends StatelessWidget {
 }
 
 String _amountMetaText(
-  SwapPrototypeState state, {
+  SwapState state, {
   required SwapAsset asset,
   required String tokenAmountText,
   required SwapAmountInputMode inputMode,

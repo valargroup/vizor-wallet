@@ -6,7 +6,7 @@ import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../rust/api/keystone.dart' as rust_keystone;
 import '../../../rust/api/sync.dart' as rust_sync;
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 
 final swapHardwareSigningServiceProvider = Provider<SwapHardwareSigningService>(
   (ref) => RustSwapHardwareSigningService(ref),
@@ -15,7 +15,7 @@ final swapHardwareSigningServiceProvider = Provider<SwapHardwareSigningService>(
 abstract interface class SwapHardwareSigningService {
   Future<SwapHardwarePcztDraft> createZecDepositPczt({
     required String accountUuid,
-    required SwapPrototypeIntent intent,
+    required SwapIntent intent,
   });
 
   Future<List<String>> encodeSigningUrParts({
@@ -56,7 +56,7 @@ class RustSwapHardwareSigningService implements SwapHardwareSigningService {
   @override
   Future<SwapHardwarePcztDraft> createZecDepositPczt({
     required String accountUuid,
-    required SwapPrototypeIntent intent,
+    required SwapIntent intent,
   }) async {
     if (intent.direction != SwapDirection.zecToExternal) {
       throw StateError('Only ZEC deposit swaps can create a deposit PCZT');
@@ -177,7 +177,7 @@ class RustSwapHardwareSigningService implements SwapHardwareSigningService {
   }
 }
 
-BigInt zecDepositAmountZatoshiForIntent(SwapPrototypeIntent intent) {
+BigInt zecDepositAmountZatoshiForIntent(SwapIntent intent) {
   if (intent.direction != SwapDirection.zecToExternal) {
     throw StateError('Only ZEC deposit swaps can create a deposit PCZT');
   }

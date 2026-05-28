@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/app_secure_store.dart';
-import '../models/swap_prototype_models.dart';
+import '../models/swap_models.dart';
 
 const _swapActivityKey = 'zcash_swap_activities_v1';
 const _swapActivityStorageVersion = 1;
@@ -87,11 +87,14 @@ class AppSecureStoreSwapActivityStore implements SwapActivityStore {
     if (records == null) {
       return null;
     }
-    return [
-      for (final item in records)
-        if (item is Map<String, dynamic>)
-          _recordFromJson(item).copyWith(accountUuid: accountUuid),
-    ];
+    final restored = <SwapIntentRecord>[];
+    for (final item in records) {
+      if (item is! Map<String, dynamic>) continue;
+      final record = _recordFromJsonOrNull(item);
+      if (record == null) continue;
+      restored.add(record.copyWith(accountUuid: accountUuid));
+    }
+    return restored;
   }
 
   @override
@@ -223,6 +226,17 @@ SwapIntentRecord _recordFromJson(Map<String, dynamic> json) {
   );
 }
 
+SwapIntentRecord? _recordFromJsonOrNull(Map<String, dynamic> json) {
+  if (_requiredString(json['id']) == null ||
+      _requiredString(json['provider']) == null ||
+      _requiredString(json['pair']) == null ||
+      _requiredString(json['sellAmount']) == null ||
+      _requiredString(json['receiveEstimate']) == null) {
+    return null;
+  }
+  return _recordFromJson(json);
+}
+
 Map<String, Object?>? _providerRefundInfoToJson(SwapProviderRefundInfo? info) {
   if (info == null || !info.hasAny) return null;
   return {
@@ -249,6 +263,11 @@ SwapProviderRefundInfo? _providerRefundInfoFromJson(Object? value) {
 String _string(Object? value) => value is String ? value : '';
 
 String? _optionalString(Object? value) => value is String ? value : null;
+
+String? _requiredString(Object? value) {
+  if (value is! String) return null;
+  return value.trim().isEmpty ? null : value;
+}
 
 BigInt? _optionalBigInt(Object? value) {
   if (value is int) return BigInt.from(value);
