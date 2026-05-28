@@ -46,6 +46,17 @@ SwapIntent swapIntentFromRecord(SwapIntentRecord record) {
   );
 }
 
+List<SwapIntent> swapIntentsFromRecords(Iterable<SwapIntentRecord> records) {
+  return [for (final record in records) swapIntentFromRecord(record)];
+}
+
+SwapIntentRecord swapIntentRecordForPersistence(
+  SwapIntent intent, {
+  required String accountUuid,
+}) {
+  return SwapIntentRecord.fromIntent(intent.copyWith(accountUuid: accountUuid));
+}
+
 SwapIntent swapIntentFromSnapshot({
   required SwapIntentSnapshot snapshot,
   required SwapQuote quote,
@@ -92,6 +103,67 @@ SwapIntent swapIntentFromSnapshot({
     completedAt: snapshot.status.isTerminal ? now : null,
   );
   return swapIntentFromRecord(record);
+}
+
+SwapIntent swapIntentWithBroadcastNotice(
+  SwapIntent intent, {
+  required String notice,
+  DateTime? updatedAt,
+}) {
+  return swapIntentFromRecord(
+    SwapIntentRecord.fromIntent(intent).copyWith(
+      statusError: notice,
+      broadcastNotice: notice,
+      updatedAt: updatedAt ?? DateTime.now().toUtc(),
+    ),
+  );
+}
+
+SwapIntent swapIntentWithDepositCheckpoint(
+  SwapIntent intent, {
+  required String txHash,
+  String? statusError,
+  String? broadcastNotice,
+  required bool clearStatusError,
+  required bool clearBroadcastNotice,
+  DateTime? updatedAt,
+}) {
+  return swapIntentFromRecord(
+    SwapIntentRecord.fromIntent(intent).copyWith(
+      depositTxHash: txHash,
+      statusError: statusError ?? broadcastNotice,
+      broadcastNotice: broadcastNotice,
+      clearStatusError: clearStatusError,
+      clearBroadcastNotice: clearBroadcastNotice,
+      updatedAt: updatedAt ?? DateTime.now().toUtc(),
+    ),
+  );
+}
+
+SwapIntent swapIntentWithDepositSnapshot(
+  SwapIntent intent,
+  SwapIntentSnapshot snapshot, {
+  required String txHash,
+  String? broadcastNotice,
+  DateTime? updatedAt,
+}) {
+  final timestamp = updatedAt ?? DateTime.now().toUtc();
+  final effectiveBroadcastNotice = broadcastNotice ?? intent.broadcastNotice;
+  final updated = updateSwapIntentFromSnapshot(
+    intent,
+    snapshot,
+    updatedAt: timestamp,
+  );
+  return swapIntentFromRecord(
+    SwapIntentRecord.fromIntent(updated).copyWith(
+      depositTxHash: txHash,
+      statusError: effectiveBroadcastNotice,
+      broadcastNotice: effectiveBroadcastNotice,
+      clearStatusError: effectiveBroadcastNotice == null,
+      clearBroadcastNotice: effectiveBroadcastNotice == null,
+      updatedAt: timestamp,
+    ),
+  );
 }
 
 SwapIntent updateSwapIntentFromSnapshot(

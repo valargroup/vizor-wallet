@@ -395,3 +395,36 @@ class SwapIntent {
     );
   }
 }
+
+extension SwapIntentIterable on Iterable<SwapIntent> {
+  SwapIntent? swapIntentById(String? intentId) {
+    if (intentId == null) return null;
+    for (final intent in this) {
+      if (intent.id == intentId) return intent;
+    }
+    return null;
+  }
+
+  List<SwapIntent> replaceSwapIntent(String intentId, SwapIntent updated) {
+    return [
+      for (final intent in this) intent.id == intentId ? updated : intent,
+    ];
+  }
+
+  List<SwapIntent> reconcileRefreshedSwapIntents({
+    required Iterable<SwapIntent> refreshedIntents,
+    required Set<String> refreshedIds,
+  }) {
+    final refreshedById = {
+      for (final intent in refreshedIntents)
+        if (refreshedIds.contains(intent.id)) intent.id: intent,
+    };
+    return [
+      for (final current in this)
+        if (refreshedIds.contains(current.id))
+          refreshedById[current.id] ?? current
+        else
+          current,
+    ];
+  }
+}

@@ -1130,6 +1130,11 @@ class _ContactFormModalState extends State<_ContactFormModal> {
     widget.onChanged(widget.draft.copyWith(label: label));
   }
 
+  void _clearLabel() {
+    _labelController.clear();
+    _emitLabel('');
+  }
+
   void _emitAddress(String address) {
     widget.onChanged(widget.draft.copyWith(address: address));
   }
@@ -1160,7 +1165,13 @@ class _ContactFormModalState extends State<_ContactFormModal> {
               showLabel: !widget.editing,
               controller: _labelController,
               hintText: 'Add label 1-20 characters',
-              trailing: widget.editing ? const AppIcon(AppIcons.cross) : null,
+              trailing: widget.editing
+                  ? _IconButtonLike(
+                      semanticLabel: 'Clear contact label',
+                      onTap: _clearLabel,
+                      child: const AppIcon(AppIcons.cross),
+                    )
+                  : null,
               trailingSlotWidth: 40,
               inputHorizontalPadding: AppSpacing.s,
               messageText:

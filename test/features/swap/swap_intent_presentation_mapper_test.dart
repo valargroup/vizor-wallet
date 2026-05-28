@@ -119,6 +119,104 @@ void main() {
     expect(updated.lastStatusCheckedAt, checkedAt);
     expect(_receiptValue(updated, 'Provider status'), 'SUCCESS');
   });
+
+  test('deposit helpers preserve tx hash and broadcast notice', () {
+    final createdAt = DateTime.utc(2026, 5, 7, 10);
+    final checkpointedAt = DateTime.utc(2026, 5, 7, 10, 5);
+    final completedAt = DateTime.utc(2026, 5, 7, 10, 30);
+    final intent = swapIntentFromRecord(
+      SwapIntentRecord(
+        id: 'swap-record',
+        providerLabel: 'NEAR Intents',
+        pairText: 'ZEC -> USDC',
+        sellAmountText: '0.0030 ZEC',
+        receiveEstimateText: '0.21 USDC',
+        status: SwapIntentStatus.awaitingDeposit,
+        nextAction: 'Deposit ZEC',
+        direction: SwapDirection.zecToExternal,
+        externalAsset: SwapAsset.usdc,
+        depositAddress: 't1deposit',
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      ),
+    );
+
+    final checkpointed = swapIntentWithDepositCheckpoint(
+      intent,
+      txHash: 'deposit-txid',
+      broadcastNotice: 'local storage failed after broadcast',
+      clearStatusError: false,
+      clearBroadcastNotice: false,
+      updatedAt: checkpointedAt,
+    );
+
+    final updated = swapIntentWithDepositSnapshot(
+      checkpointed,
+      SwapIntentSnapshot(
+        id: 'swap-record',
+        providerLabel: 'NEAR Intents',
+        pairText: 'ZEC -> USDC',
+        sellAmountText: '0.0030 ZEC',
+        receiveEstimateText: '0.21 USDC',
+        status: SwapIntentStatus.complete,
+        nextAction: 'Complete',
+        depositInstruction: const SwapDepositInstruction(
+          asset: SwapAsset.zec,
+          address: 't1deposit',
+          expiresInLabel: '2h',
+          reuseWarning: 'Do not reuse',
+        ),
+        providerStatusRaw: 'SUCCESS',
+      ),
+      txHash: 'deposit-txid',
+      updatedAt: completedAt,
+    );
+
+    expect(checkpointed.depositTxHash, 'deposit-txid');
+    expect(checkpointed.statusError, 'local storage failed after broadcast');
+    expect(
+      checkpointed.broadcastNotice,
+      'local storage failed after broadcast',
+    );
+    expect(updated.status, SwapIntentStatus.complete);
+    expect(updated.depositTxHash, 'deposit-txid');
+    expect(updated.statusError, 'local storage failed after broadcast');
+    expect(updated.broadcastNotice, 'local storage failed after broadcast');
+    expect(updated.createdAt, createdAt);
+    expect(updated.updatedAt, completedAt);
+    expect(updated.completedAt, completedAt);
+    expect(_receiptValue(updated, 'Deposit tx'), 'deposit-txid');
+    expect(
+      _receiptValue(updated, 'Broadcast status'),
+      'local storage failed after broadcast',
+    );
+  });
+
+  test('persistence records force the scoped account uuid', () {
+    final intent = swapIntentFromRecord(
+      SwapIntentRecord(
+        id: 'swap-record',
+        providerLabel: 'NEAR Intents',
+        pairText: 'ZEC -> USDC',
+        sellAmountText: '0.0030 ZEC',
+        receiveEstimateText: '0.21 USDC',
+        status: SwapIntentStatus.processing,
+        nextAction: 'Swap is processing',
+        direction: SwapDirection.zecToExternal,
+        externalAsset: SwapAsset.usdc,
+        depositAddress: 't1deposit',
+        providerQuoteId: 'quote-1',
+        accountUuid: 'stale-account',
+      ),
+    );
+
+    final record = swapIntentRecordForPersistence(
+      intent,
+      accountUuid: 'active-account',
+    );
+
+    expect(record.accountUuid, 'active-account');
+  });
 }
 
 String _receiptValue(SwapIntent intent, String label) {

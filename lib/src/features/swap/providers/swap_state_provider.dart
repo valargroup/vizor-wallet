@@ -675,7 +675,7 @@ class SwapNotifier extends Notifier<SwapState> {
   }
 
   void selectIntent(String intentId) {
-    final intent = _intentById(intentId);
+    final intent = state.intents.swapIntentById(intentId);
     if (intent == null) return;
     state = state.copyWith(
       selectedIntentId: intent.id,
@@ -699,7 +699,7 @@ class SwapNotifier extends Notifier<SwapState> {
         : state.selectedIntentId;
     final nextSelectedIntent = nextSelectedId == null
         ? null
-        : _intentByIdFrom(remaining, nextSelectedId);
+        : remaining.swapIntentById(nextSelectedId);
 
     state = state.copyWith(
       intents: remaining,
@@ -712,7 +712,7 @@ class SwapNotifier extends Notifier<SwapState> {
   }
 
   Future<void> removeUnsentHardwareDepositIntent(String intentId) async {
-    final intent = _intentById(intentId);
+    final intent = state.intents.swapIntentById(intentId);
     if (intent == null || !_isHardwareIntent(intent)) return;
     if (intent.direction != SwapDirection.zecToExternal) return;
     if (intent.depositTxHash?.trim().isNotEmpty ?? false) return;
@@ -787,7 +787,7 @@ class SwapNotifier extends Notifier<SwapState> {
     String? broadcastStatus,
     String? broadcastMessage,
   }) async {
-    final selected = _intentById(intentId);
+    final selected = state.intents.swapIntentById(intentId);
     final normalizedTxHash = txHash.trim();
     if (normalizedTxHash.isEmpty) return;
     final broadcastNotice = _hardwareBroadcastNotice(
@@ -811,21 +811,18 @@ class SwapNotifier extends Notifier<SwapState> {
       broadcastMessage: broadcastMessage,
     );
     if (broadcastNotice == null) return;
-    final current = _intentById(selected.id);
+    final current = state.intents.swapIntentById(selected.id);
     if (current == null ||
         current.statusError != null ||
         current.depositTxHash != normalizedTxHash) {
       return;
     }
-    final patched = swapIntentFromRecord(
-      SwapIntentRecord.fromIntent(current).copyWith(
-        statusError: broadcastNotice,
-        broadcastNotice: broadcastNotice,
-        updatedAt: DateTime.now().toUtc(),
-      ),
+    final patched = swapIntentWithBroadcastNotice(
+      current,
+      notice: broadcastNotice,
     );
     state = state.copyWith(
-      intents: _replaceIntent(state.intents, selected.id, patched),
+      intents: state.intents.replaceSwapIntent(selected.id, patched),
     );
     await _persistCurrentIntents();
   }
@@ -857,32 +854,26 @@ class SwapNotifier extends Notifier<SwapState> {
       status: broadcastStatus,
       message: broadcastMessage,
     );
-    final checkpointed = swapIntentFromRecord(
-      SwapIntentRecord.fromIntent(selected).copyWith(
-        depositTxHash: txHash,
-        statusError: broadcastNotice,
-        broadcastNotice: broadcastNotice,
-        clearStatusError: broadcastNotice == null,
-        clearBroadcastNotice: broadcastNotice == null,
-        updatedAt: DateTime.now().toUtc(),
-      ),
+    final checkpointed = _depositCheckpointIntent(
+      selected,
+      txHash: txHash,
+      broadcastNotice: broadcastNotice,
+      clearStatusError: broadcastNotice == null,
+      clearBroadcastNotice: broadcastNotice == null,
     );
     state = state.copyWith(
       depositTxHashText: state.selectedIntentId == selected.id
           ? txHash
           : state.depositTxHashText,
-      intents: _replaceIntent(state.intents, selected.id, checkpointed),
+      intents: state.intents.replaceSwapIntent(selected.id, checkpointed),
       clearStatusError: true,
     );
     await _persistCurrentIntents();
     try {
-      final snapshot = await ref
-          .read(swapIntentProvider)
-          .submitDepositTransaction(
-            depositAddress: _providerDepositAddress(checkpointed),
-            txHash: txHash,
-            depositMemo: checkpointed.depositMemo,
-          );
+      final snapshot = await _submitProviderDepositTransaction(
+        checkpointed,
+        txHash,
+      );
       final updated = _depositSnapshotIntent(
         checkpointed,
         snapshot,
@@ -905,7 +896,7 @@ class SwapNotifier extends Notifier<SwapState> {
         depositTxHashText: state.selectedIntentId == selected.id
             ? txHash
             : state.depositTxHashText,
-        intents: _replaceIntent(state.intents, checkpointed.id, updated),
+        intents: state.intents.replaceSwapIntent(checkpointed.id, updated),
         clearStatusError: true,
       );
       log(
@@ -945,55 +936,51 @@ class SwapNotifier extends Notifier<SwapState> {
     bool submitProviderStatus = true,
     String? statusError,
   }) async {
-    final scopedAccountUuid = accountUuid?.trim();
-    if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return;
     final storedIntents = await ref
         .read(swapActivityTrackerProvider)
-        .loadIntents(accountUuid: scopedAccountUuid);
-    final intent = _intentByIdFrom(storedIntents, intentId);
+        .loadIntents(accountUuid: accountUuid);
+    final intent = storedIntents.swapIntentById(intentId);
     if (intent == null) return;
 
     final broadcastNotice = _hardwareBroadcastNotice(
       status: broadcastStatus,
       message: broadcastMessage,
     );
-    final checkpointed = swapIntentFromRecord(
-      SwapIntentRecord.fromIntent(intent).copyWith(
-        depositTxHash: txHash,
-        statusError: statusError ?? broadcastNotice,
-        broadcastNotice: broadcastNotice,
-        clearStatusError: statusError == null && broadcastNotice == null,
-        clearBroadcastNotice: broadcastNotice == null,
-        updatedAt: DateTime.now().toUtc(),
-      ),
+    final checkpointed = _depositCheckpointIntent(
+      intent,
+      txHash: txHash,
+      statusError: statusError,
+      broadcastNotice: broadcastNotice,
+      clearStatusError: statusError == null && broadcastNotice == null,
+      clearBroadcastNotice: broadcastNotice == null,
     );
-    var updatedIntents = _replaceIntent(storedIntents, intentId, checkpointed);
-    await _persistIntentsForAccount(scopedAccountUuid, updatedIntents);
+    var updatedIntents = storedIntents.replaceSwapIntent(
+      intentId,
+      checkpointed,
+    );
+    await _persistIntentsForAccount(accountUuid, updatedIntents);
 
     if (!submitProviderStatus) return;
 
     try {
-      final snapshot = await ref
-          .read(swapIntentProvider)
-          .submitDepositTransaction(
-            depositAddress: _providerDepositAddress(checkpointed),
-            txHash: txHash,
-            depositMemo: checkpointed.depositMemo,
-          );
+      final snapshot = await _submitProviderDepositTransaction(
+        checkpointed,
+        txHash,
+      );
       final updated = _depositSnapshotIntent(
         checkpointed,
         snapshot,
         txHash: txHash,
         broadcastNotice: broadcastNotice,
       );
-      updatedIntents = _replaceIntent(updatedIntents, intentId, updated);
-      await _persistIntentsForAccount(scopedAccountUuid, updatedIntents);
+      updatedIntents = updatedIntents.replaceSwapIntent(intentId, updated);
+      await _persistIntentsForAccount(accountUuid, updatedIntents);
     } catch (e) {
       final failed = checkpointed.copyWith(
         statusError: swapFailureMessage(SwapFailureOperation.submitDeposit, e),
       );
-      updatedIntents = _replaceIntent(updatedIntents, intentId, failed);
-      await _persistIntentsForAccount(scopedAccountUuid, updatedIntents);
+      updatedIntents = updatedIntents.replaceSwapIntent(intentId, failed);
+      await _persistIntentsForAccount(accountUuid, updatedIntents);
     }
   }
 
@@ -1005,12 +992,10 @@ class SwapNotifier extends Notifier<SwapState> {
     String? broadcastStatus,
     String? broadcastMessage,
   }) async {
-    final scopedAccountUuid = accountUuid?.trim();
-    if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return;
     final storedIntents = await ref
         .read(swapActivityTrackerProvider)
-        .loadIntents(accountUuid: scopedAccountUuid);
-    final intent = _intentByIdFrom(storedIntents, intentId);
+        .loadIntents(accountUuid: accountUuid);
+    final intent = storedIntents.swapIntentById(intentId);
     if (intent == null) return;
 
     final broadcastNotice = _hardwareBroadcastNotice(
@@ -1024,8 +1009,8 @@ class SwapNotifier extends Notifier<SwapState> {
       broadcastNotice: broadcastNotice,
     );
     await _persistIntentsForAccount(
-      scopedAccountUuid,
-      _replaceIntent(storedIntents, intentId, updated),
+      accountUuid,
+      storedIntents.replaceSwapIntent(intentId, updated),
     );
   }
 
@@ -1073,7 +1058,7 @@ class SwapNotifier extends Notifier<SwapState> {
       );
       return;
     }
-    final intent = _intentById(intentId);
+    final intent = state.intents.swapIntentById(intentId);
     if (intent == null) {
       state = state.copyWith(
         depositTxHashText: txHash,
@@ -1083,33 +1068,27 @@ class SwapNotifier extends Notifier<SwapState> {
       );
       return;
     }
-    final checkpointed = swapIntentFromRecord(
-      SwapIntentRecord.fromIntent(
-        intent,
-      ).copyWith(depositTxHash: txHash, updatedAt: DateTime.now().toUtc()),
+    final checkpointed = _depositCheckpointIntent(
+      intent,
+      txHash: txHash,
+      clearStatusError: false,
+      clearBroadcastNotice: false,
     );
     state = state.copyWith(
       depositTxHashText: txHash,
-      intents: _replaceIntent(state.intents, intentId, checkpointed),
+      intents: state.intents.replaceSwapIntent(intentId, checkpointed),
     );
     await _persistCurrentIntents();
 
     try {
-      final snapshot = await ref
-          .read(swapIntentProvider)
-          .submitDepositTransaction(
-            depositAddress: _providerDepositAddress(intent),
-            txHash: txHash,
-            depositMemo: intent.depositMemo,
-          );
-      final updated = swapIntentFromRecord(
-        SwapIntentRecord.fromIntent(
-          updateSwapIntentFromSnapshot(checkpointed, snapshot),
-        ).copyWith(
-          depositTxHash: txHash,
-          clearStatusError: true,
-          updatedAt: DateTime.now().toUtc(),
-        ),
+      final snapshot = await _submitProviderDepositTransaction(
+        checkpointed,
+        txHash,
+      );
+      final updated = _depositSnapshotIntent(
+        checkpointed,
+        snapshot,
+        txHash: txHash,
       );
       if (!_isAccountActive(accountUuid)) {
         await _recordDepositSnapshotForStoredIntent(
@@ -1123,7 +1102,7 @@ class SwapNotifier extends Notifier<SwapState> {
       state = state.copyWith(
         depositTxHashText: txHash,
         depositSubmitting: false,
-        intents: _replaceIntent(state.intents, intentId, updated),
+        intents: state.intents.replaceSwapIntent(intentId, updated),
         clearStatusError: true,
       );
       log(
@@ -1317,8 +1296,10 @@ class SwapNotifier extends Notifier<SwapState> {
     required String? accountUuid,
     bool replaceExisting = false,
   }) async {
-    final scopedAccountUuid = accountUuid?.trim();
-    if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) {
+    final scopedAccountUuid = SwapActivityTracker.normalizeAccountUuid(
+      accountUuid,
+    );
+    if (scopedAccountUuid == null) {
       if (replaceExisting) {
         state = state.copyWith(
           intents: const [],
@@ -1442,19 +1423,9 @@ class SwapNotifier extends Notifier<SwapState> {
         return;
       }
 
-      final reconciledIntents = _reconcileRefreshedIntents(
-        currentIntents: state.intents,
-        refreshedIntents: result.intents,
-        refreshedIds: ids,
-      );
-      final refreshedCurrentIds = {
-        for (final intent in state.intents)
-          if (ids.contains(intent.id)) intent.id,
-      };
-      final hasRefreshedCurrentIntent = refreshedCurrentIds.isNotEmpty;
-      final staleRefreshReintroducedRemovedIntent = result.intents.any(
-        (intent) =>
-            ids.contains(intent.id) && !refreshedCurrentIds.contains(intent.id),
+      final reconciledIntents = result.reconcileInto(state.intents);
+      final hasRefreshedCurrentIntent = result.hasRequestedCurrentIntent(
+        state.intents,
       );
 
       _logStatusTransitions(state.intents, reconciledIntents);
@@ -1467,7 +1438,7 @@ class SwapNotifier extends Notifier<SwapState> {
         clearStatusError:
             result.refreshError == null || !hasRefreshedCurrentIntent,
       );
-      if (staleRefreshReintroducedRemovedIntent) {
+      if (result.includesRemovedRequestedIntent(state.intents)) {
         await _persistCurrentIntents(accountUuid: refreshAccountUuid);
       }
     } finally {
@@ -1475,27 +1446,9 @@ class SwapNotifier extends Notifier<SwapState> {
     }
   }
 
-  List<SwapIntent> _reconcileRefreshedIntents({
-    required List<SwapIntent> currentIntents,
-    required List<SwapIntent> refreshedIntents,
-    required Set<String> refreshedIds,
-  }) {
-    final refreshedById = {
-      for (final intent in refreshedIntents)
-        if (refreshedIds.contains(intent.id)) intent.id: intent,
-    };
-    return [
-      for (final current in currentIntents)
-        if (refreshedIds.contains(current.id))
-          refreshedById[current.id] ?? current
-        else
-          current,
-    ];
-  }
-
   void _logStatusTransitions(List<SwapIntent> before, List<SwapIntent> after) {
     for (final updated in after) {
-      final previous = _intentByIdFrom(before, updated.id);
+      final previous = before.swapIntentById(updated.id);
       if (previous == null || previous.status == updated.status) continue;
       log(
         'Swap: status transition intent=${_shortSwapValue(updated.id)} '
@@ -1514,15 +1467,15 @@ class SwapNotifier extends Notifier<SwapState> {
     String? accountUuid,
     List<SwapIntent> intentsToPersist,
   ) async {
-    final scopedAccountUuid = accountUuid?.trim();
-    if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return;
     await ref
         .read(swapActivityTrackerProvider)
-        .saveIntents(accountUuid: scopedAccountUuid, intents: intentsToPersist);
+        .saveIntents(accountUuid: accountUuid, intents: intentsToPersist);
   }
 
   bool _isAccountActive(String? accountUuid) {
-    final scopedAccountUuid = accountUuid?.trim();
+    final scopedAccountUuid = SwapActivityTracker.normalizeAccountUuid(
+      accountUuid,
+    );
     return scopedAccountUuid == null ||
         scopedAccountUuid.isEmpty ||
         scopedAccountUuid == _activeAccountUuidOrNull;
@@ -1571,18 +1524,43 @@ class SwapNotifier extends Notifier<SwapState> {
     required String txHash,
     String? broadcastNotice,
   }) {
-    final effectiveBroadcastNotice = broadcastNotice ?? intent.broadcastNotice;
-    final updated = updateSwapIntentFromSnapshot(intent, snapshot);
-    return swapIntentFromRecord(
-      SwapIntentRecord.fromIntent(updated).copyWith(
-        depositTxHash: txHash,
-        statusError: effectiveBroadcastNotice,
-        broadcastNotice: effectiveBroadcastNotice,
-        clearStatusError: effectiveBroadcastNotice == null,
-        clearBroadcastNotice: effectiveBroadcastNotice == null,
-        updatedAt: DateTime.now().toUtc(),
-      ),
+    return swapIntentWithDepositSnapshot(
+      intent,
+      snapshot,
+      txHash: txHash,
+      broadcastNotice: broadcastNotice,
     );
+  }
+
+  SwapIntent _depositCheckpointIntent(
+    SwapIntent intent, {
+    required String txHash,
+    String? statusError,
+    String? broadcastNotice,
+    required bool clearStatusError,
+    required bool clearBroadcastNotice,
+  }) {
+    return swapIntentWithDepositCheckpoint(
+      intent,
+      txHash: txHash,
+      statusError: statusError,
+      broadcastNotice: broadcastNotice,
+      clearStatusError: clearStatusError,
+      clearBroadcastNotice: clearBroadcastNotice,
+    );
+  }
+
+  Future<SwapIntentSnapshot> _submitProviderDepositTransaction(
+    SwapIntent intent,
+    String txHash,
+  ) {
+    return ref
+        .read(swapIntentProvider)
+        .submitDepositTransaction(
+          depositAddress: _providerDepositAddress(intent),
+          txHash: txHash,
+          depositMemo: intent.depositMemo,
+        );
   }
 
   bool _isHardwareIntent(SwapIntent intent) {
@@ -1609,28 +1587,6 @@ class SwapNotifier extends Notifier<SwapState> {
       return 'The transaction reached the network, but Vizor could not store it locally. Do not try again until sync or an explorer confirms the latest status.';
     }
     return null;
-  }
-
-  SwapIntent? _intentById(String intentId) {
-    return _intentByIdFrom(state.intents, intentId);
-  }
-
-  SwapIntent? _intentByIdFrom(List<SwapIntent> intents, String intentId) {
-    for (final intent in intents) {
-      if (intent.id == intentId) return intent;
-    }
-    return null;
-  }
-
-  List<SwapIntent> _replaceIntent(
-    List<SwapIntent> intents,
-    String intentId,
-    SwapIntent updated,
-  ) {
-    return [
-      for (final intent in intents)
-        if (intent.id == intentId) updated else intent,
-    ];
   }
 }
 

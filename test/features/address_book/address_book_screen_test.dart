@@ -71,6 +71,42 @@ void main() {
     expect(find.text("It's empty here..."), findsNothing);
   });
 
+  testWidgets('edit contact label x clears the draft label', (tester) async {
+    await _setDesktopViewport(tester);
+    final repo = _FakeAddressBookRepository([
+      _contact(id: 'mike', label: 'Mike', address: 'u1mike'),
+    ]);
+
+    await tester.pumpWidget(_addressBookHarness(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('address_book_contact_menu_mike')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit Contact'));
+    await tester.pumpAndSettle();
+
+    final labelFieldFinder = find.descendant(
+      of: find.byKey(const ValueKey('address_book_contact_label_field')),
+      matching: find.byType(TextField),
+    );
+    TextField labelField() => tester.widget<TextField>(labelFieldFinder);
+
+    expect(labelField().controller?.text, 'Mike');
+
+    await tester.tap(find.bySemanticsLabel('Clear contact label'));
+    await tester.pumpAndSettle();
+
+    expect(labelField().controller?.text, isEmpty);
+    expect(
+      tester
+          .widget<AppButton>(find.widgetWithText(AppButton, 'Save Edits'))
+          .onPressed,
+      isNull,
+    );
+  });
+
   testWidgets('filters contacts into the empty search state', (tester) async {
     await _setDesktopViewport(tester);
     final repo = _FakeAddressBookRepository([

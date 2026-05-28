@@ -28,13 +28,34 @@ final swapActivityStatusRefresherProvider =
 class SwapActivityRefreshResult {
   const SwapActivityRefreshResult({
     required this.intents,
+    this.requestedIds = const <String>{},
     this.refreshError,
     this.didRefresh = false,
   });
 
   final List<SwapIntent> intents;
+  final Set<String> requestedIds;
   final String? refreshError;
   final bool didRefresh;
+
+  List<SwapIntent> reconcileInto(List<SwapIntent> currentIntents) {
+    return currentIntents.reconcileRefreshedSwapIntents(
+      refreshedIntents: intents,
+      refreshedIds: requestedIds,
+    );
+  }
+
+  bool hasRequestedCurrentIntent(List<SwapIntent> currentIntents) {
+    return currentIntents.any((intent) => requestedIds.contains(intent.id));
+  }
+
+  bool includesRemovedRequestedIntent(List<SwapIntent> currentIntents) {
+    final currentIds = {for (final intent in currentIntents) intent.id};
+    return intents.any(
+      (intent) =>
+          requestedIds.contains(intent.id) && !currentIds.contains(intent.id),
+    );
+  }
 }
 
 class SwapActivityStatusRefresher {
@@ -53,8 +74,10 @@ class SwapActivityStatusRefresher {
     required String accountUuid,
     bool force = false,
   }) {
-    final scopedAccountUuid = accountUuid.trim();
-    if (scopedAccountUuid.isEmpty) return Future.value();
+    final scopedAccountUuid = SwapActivityTracker.normalizeAccountUuid(
+      accountUuid,
+    );
+    if (scopedAccountUuid == null) return Future.value();
 
     final running = _inFlight[scopedAccountUuid];
     if (running != null) return running;
@@ -133,22 +156,35 @@ class SwapActivityTracker {
   final SwapProvider _swapProvider;
   final void Function()? _onRecordsChanged;
 
-  Future<List<SwapIntent>> loadIntents({required String accountUuid}) async {
-    final records = await _activityStore.loadRecords(accountUuid: accountUuid);
+  static String? normalizeAccountUuid(String? accountUuid) {
+    final scopedAccountUuid = accountUuid?.trim();
+    if (scopedAccountUuid == null || scopedAccountUuid.isEmpty) return null;
+    return scopedAccountUuid;
+  }
+
+  Future<List<SwapIntent>> loadIntents({required String? accountUuid}) async {
+    final scopedAccountUuid = normalizeAccountUuid(accountUuid);
+    if (scopedAccountUuid == null) return const [];
+    final records = await _activityStore.loadRecords(
+      accountUuid: scopedAccountUuid,
+    );
     return _intentsFromRecords(records);
   }
 
   Future<void> saveIntents({
-    required String accountUuid,
+    required String? accountUuid,
     required List<SwapIntent> intents,
   }) async {
+    final scopedAccountUuid = normalizeAccountUuid(accountUuid);
+    if (scopedAccountUuid == null) return;
     await _activityStore.saveRecords(
-      accountUuid: accountUuid,
+      accountUuid: scopedAccountUuid,
       records: [
         for (final intent in intents)
-          if (_isPersistableIntent(intent, accountUuid: accountUuid))
-            SwapIntentRecord.fromIntent(
-              intent.copyWith(accountUuid: accountUuid),
+          if (_isPersistableIntent(intent, accountUuid: scopedAccountUuid))
+            swapIntentRecordForPersistence(
+              intent,
+              accountUuid: scopedAccountUuid,
             ),
       ],
     );
@@ -198,7 +234,10 @@ class SwapActivityTracker {
   }) async {
     final ids = intentIds.toSet();
     if (ids.isEmpty) {
-      return SwapActivityRefreshResult(intents: currentIntents);
+      return SwapActivityRefreshResult(
+        intents: currentIntents,
+        requestedIds: ids,
+      );
     }
 
     var updatedIntents = currentIntents;
@@ -220,15 +259,14 @@ class SwapActivityTracker {
           intent,
           checkedAt: checkedAt,
         );
-        updatedIntents = _replaceIntent(updatedIntents, intent.id, updated);
+        updatedIntents = updatedIntents.replaceSwapIntent(intent.id, updated);
       } catch (e) {
         final message = swapFailureMessage(
           SwapFailureOperation.refreshStatus,
           e,
         );
         refreshError ??= message;
-        updatedIntents = _replaceIntent(
-          updatedIntents,
+        updatedIntents = updatedIntents.replaceSwapIntent(
           intent.id,
           intent.copyWith(lastStatusCheckedAt: checkedAt, statusError: message),
         );
@@ -244,6 +282,7 @@ class SwapActivityTracker {
     }
     return SwapActivityRefreshResult(
       intents: updatedIntents,
+      requestedIds: ids,
       refreshError: refreshError,
       didRefresh: didRefresh,
     );
@@ -299,15 +338,5 @@ class SwapActivityTracker {
 }
 
 List<SwapIntent> _intentsFromRecords(List<SwapIntentRecord> records) {
-  return [for (final record in records) swapIntentFromRecord(record)];
-}
-
-List<SwapIntent> _replaceIntent(
-  List<SwapIntent> intents,
-  String intentId,
-  SwapIntent updated,
-) {
-  return [
-    for (final intent in intents) intent.id == intentId ? updated : intent,
-  ];
+  return swapIntentsFromRecords(records);
 }
