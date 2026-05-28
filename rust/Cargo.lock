@@ -3856,7 +3856,7 @@ dependencies = [
 [[package]]
 name = "vote-commitment-tree"
 version = "0.3.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=58cadd31464cbdd12d219431f5b522051dc8f625#58cadd31464cbdd12d219431f5b522051dc8f625"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98#bed14351a5152ce0203176e092e465887ef3ad98"
 dependencies = [
  "anyhow",
  "ff",
@@ -3872,7 +3872,7 @@ dependencies = [
 [[package]]
 name = "vote-commitment-tree-client"
 version = "0.5.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=58cadd31464cbdd12d219431f5b522051dc8f625#58cadd31464cbdd12d219431f5b522051dc8f625"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98#bed14351a5152ce0203176e092e465887ef3ad98"
 dependencies = [
  "base64",
  "ff",
@@ -3881,7 +3881,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=58cadd31464cbdd12d219431f5b522051dc8f625)",
+ "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98)",
 ]
 
 [[package]]
@@ -4593,7 +4593,7 @@ dependencies = [
 [[package]]
 name = "zcash_voting"
 version = "0.10.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=58cadd31464cbdd12d219431f5b522051dc8f625#58cadd31464cbdd12d219431f5b522051dc8f625"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98#bed14351a5152ce0203176e092e465887ef3ad98"
 dependencies = [
  "anyhow",
  "blake2b_simd",
@@ -4625,9 +4625,10 @@ dependencies = [
  "subtle",
  "thiserror 2.0.18",
  "tokio",
+ "uuid",
  "valar-spiral-rs",
  "valar-ypir",
- "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=58cadd31464cbdd12d219431f5b522051dc8f625)",
+ "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=bed14351a5152ce0203176e092e465887ef3ad98)",
  "vote-commitment-tree-client",
  "voting-circuits",
  "zcash_client_backend",

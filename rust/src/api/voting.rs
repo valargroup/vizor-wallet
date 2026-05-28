@@ -6,15 +6,12 @@ use crate::wallet::{
     voting::{
         bundle::{self, SelectedNotes},
         delegation,
-        delegation::{
-            BundleSetupResult, DelegationPirPrecomputeResult, KeystoneDelegationRequest,
-            KeystoneSignatureRecord, ProofEvent, SignedDelegationPayload,
-        },
+        delegation::ProofEvent,
         hotkey,
         progress::{cancel_voting_work, VotingWorkCancellation},
         recovery, state, tree_sync,
         tree_sync::VanWitness,
-        vote,
+        vote, workflow,
     },
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -489,8 +486,8 @@ impl From<bundle::NoteRef> for ApiVotingNoteRef {
     }
 }
 
-impl From<BundleSetupResult> for ApiVotingBundleSetupResult {
-    fn from(result: BundleSetupResult) -> Self {
+impl From<zcash_voting::round::BundleLayout> for ApiVotingBundleSetupResult {
+    fn from(result: zcash_voting::round::BundleLayout) -> Self {
         Self {
             bundle_count: result.bundle_count,
             eligible_weight_zatoshi: result.eligible_weight,
@@ -498,32 +495,37 @@ impl From<BundleSetupResult> for ApiVotingBundleSetupResult {
     }
 }
 
-impl From<DelegationPirPrecomputeResult> for ApiDelegationPirPrecomputeResult {
-    fn from(result: DelegationPirPrecomputeResult) -> Self {
+impl From<zcash_voting::delegate::PreparedDelegationReport> for ApiDelegationPirPrecomputeResult {
+    fn from(result: zcash_voting::delegate::PreparedDelegationReport) -> Self {
         Self {
-            cached_count: result.cached_count,
-            fetched_count: result.fetched_count,
-            bundle_count: result.bundle_count,
+            cached_count: result.report.cached,
+            fetched_count: result.report.fetched,
+            bundle_count: result.layout.bundle_count,
             bundle_index: result.bundle_index,
         }
     }
 }
 
-impl From<SignedDelegationPayload> for ApiSignedDelegationPayload {
-    fn from(result: SignedDelegationPayload) -> Self {
+impl From<zcash_voting::delegate::SignedDelegationBundle> for ApiSignedDelegationPayload {
+    fn from(result: zcash_voting::delegate::SignedDelegationBundle) -> Self {
         Self {
             pczt_bytes: result.pczt_bytes,
-            status: result.status,
-            message: result.message,
-            proof: result.proof,
-            rk: result.rk,
-            spend_auth_sig: result.spend_auth_sig,
-            sighash: result.sighash,
-            nf_signed: result.nf_signed,
-            cmx_new: result.cmx_new,
-            gov_comm: result.gov_comm,
-            gov_nullifiers: result.gov_nullifiers,
-            vote_round_id: result.vote_round_id,
+            status: "ready_for_submission".to_string(),
+            message: None,
+            proof: result.submission.proof,
+            rk: result.submission.rk.to_vec(),
+            spend_auth_sig: result.submission.spend_auth_sig.to_vec(),
+            sighash: result.submission.sighash.to_vec(),
+            nf_signed: result.submission.nf_signed.to_vec(),
+            cmx_new: result.submission.cmx_new.to_vec(),
+            gov_comm: result.submission.gov_comm.to_vec(),
+            gov_nullifiers: result
+                .submission
+                .gov_nullifiers
+                .iter()
+                .map(|nf| nf.to_vec())
+                .collect(),
+            vote_round_id: result.submission.vote_round_id,
             eligible_weight_zatoshi: result.eligible_weight_zatoshi,
             delegated_weight_zatoshi: result.delegated_weight_zatoshi,
             bundle_count: result.bundle_count,
@@ -532,14 +534,15 @@ impl From<SignedDelegationPayload> for ApiSignedDelegationPayload {
     }
 }
 
-impl From<KeystoneDelegationRequest> for ApiKeystoneDelegationRequest {
-    fn from(result: KeystoneDelegationRequest) -> Self {
+impl From<zcash_voting::delegate::KeystoneSigningRequest> for ApiKeystoneDelegationRequest {
+    fn from(result: zcash_voting::delegate::KeystoneSigningRequest) -> Self {
+        let action_index = u32::try_from(result.setup.action_index).unwrap_or(u32::MAX);
         Self {
-            pczt_bytes: result.pczt_bytes,
+            pczt_bytes: result.setup.pczt_bytes,
             redacted_pczt_bytes: result.redacted_pczt_bytes,
-            pczt_sighash: result.pczt_sighash,
-            rk: result.rk,
-            action_index: result.action_index,
+            pczt_sighash: result.setup.pczt_sighash.to_vec(),
+            rk: result.setup.rk.to_vec(),
+            action_index,
             display_memo: result.display_memo,
             eligible_weight_zatoshi: result.eligible_weight_zatoshi,
             delegated_weight_zatoshi: result.delegated_weight_zatoshi,
@@ -549,8 +552,8 @@ impl From<KeystoneDelegationRequest> for ApiKeystoneDelegationRequest {
     }
 }
 
-impl From<KeystoneSignatureRecord> for ApiKeystoneSignatureRecord {
-    fn from(record: KeystoneSignatureRecord) -> Self {
+impl From<zcash_voting::storage::KeystoneSignatureRecord> for ApiKeystoneSignatureRecord {
+    fn from(record: zcash_voting::storage::KeystoneSignatureRecord) -> Self {
         Self {
             bundle_index: record.bundle_index,
             sig: record.sig,
@@ -1126,6 +1129,17 @@ fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result
     }
 }
 
+fn require_len(bytes: &[u8], expected: usize, field: &str) -> Result<(), String> {
+    if bytes.len() == expected {
+        Ok(())
+    } else {
+        Err(format!(
+            "{field} must be exactly {expected} bytes, got {}",
+            bytes.len()
+        ))
+    }
+}
+
 /// Initialize or load a voting round in the local voting database.
 ///
 /// `session_json` is stored with the round when provided and can contain
@@ -1148,7 +1162,11 @@ pub fn get_bundle_count(
     wallet_id: String,
     round_id: String,
 ) -> Result<u32, String> {
-    catch(|| delegation::get_bundle_count(&db_path, &wallet_id, &round_id))
+    catch(|| {
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        db.get_bundle_count(&round_id)
+            .map_err(|e| format!("get_bundle_count failed: {e}"))
+    })
 }
 
 /// Select voting-eligible notes at `snapshot_height` using lightwalletd data.
@@ -1396,7 +1414,11 @@ pub async fn build_keystone_delegation_request(
 
 /// Extract the ZIP-244 sighash from PCZT bytes.
 pub fn extract_pczt_sighash(pczt_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
-    catch(|| delegation::extract_pczt_sighash(&pczt_bytes))
+    catch(|| {
+        zcash_voting::delegate::pczt_sighash(&pczt_bytes)
+            .map(|sighash| sighash.to_vec())
+            .map_err(|e| format!("extract_pczt_sighash failed: {e}"))
+    })
 }
 
 /// Extract a Keystone SpendAuth signature from signed PCZT bytes.
@@ -1405,7 +1427,9 @@ pub fn extract_spend_auth_signature_from_signed_pczt(
     action_index: u32,
 ) -> Result<Vec<u8>, String> {
     catch(|| {
-        delegation::extract_spend_auth_signature_from_signed_pczt(&signed_pczt_bytes, action_index)
+        zcash_voting::delegate::spend_auth_signature(&signed_pczt_bytes, action_index as usize)
+            .map(|sig| sig.to_vec())
+            .map_err(|e| format!("extract_spend_auth_sig failed: {e}"))
     })
 }
 
@@ -1420,15 +1444,12 @@ pub fn store_keystone_signature(
     rk: Vec<u8>,
 ) -> Result<(), String> {
     catch(|| {
-        delegation::store_keystone_signature(
-            &db_path,
-            &wallet_id,
-            &round_id,
-            bundle_index,
-            &sig,
-            &sighash,
-            &rk,
-        )
+        require_len(&sig, 64, "sig")?;
+        require_len(&sighash, 32, "sighash")?;
+        require_len(&rk, 32, "rk")?;
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        db.store_keystone_signature(&round_id, bundle_index, &sig, &sighash, &rk)
+            .map_err(|e| format!("store_keystone_signature failed: {e}"))
     })
 }
 
@@ -1439,7 +1460,9 @@ pub fn get_keystone_signatures(
     round_id: String,
 ) -> Result<Vec<ApiKeystoneSignatureRecord>, String> {
     catch(|| {
-        delegation::get_keystone_signatures(&db_path, &wallet_id, &round_id)
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        db.get_keystone_signatures(&round_id)
+            .map_err(|e| format!("get_keystone_signatures failed: {e}"))
             .map(|records| records.into_iter().map(Into::into).collect())
     })
 }
@@ -1517,13 +1540,7 @@ pub fn store_delegation_tx_hash(
     tx_hash: String,
 ) -> Result<(), String> {
     catch(|| {
-        delegation::store_delegation_tx_hash(
-            &db_path,
-            &wallet_id,
-            &round_id,
-            bundle_index,
-            &tx_hash,
-        )
+        workflow::mark_delegation_submitted(&db_path, &wallet_id, &round_id, bundle_index, &tx_hash)
     })
 }
 
@@ -1535,13 +1552,7 @@ pub fn mark_delegation_submitted(
     tx_hash: String,
 ) -> Result<(), String> {
     catch(|| {
-        delegation::store_delegation_tx_hash(
-            &db_path,
-            &wallet_id,
-            &round_id,
-            bundle_index,
-            &tx_hash,
-        )
+        workflow::mark_delegation_submitted(&db_path, &wallet_id, &round_id, bundle_index, &tx_hash)
     })
 }
 
@@ -1587,7 +1598,11 @@ pub fn get_delegation_tx_hash(
     round_id: String,
     bundle_index: u32,
 ) -> Result<Option<String>, String> {
-    catch(|| delegation::get_delegation_tx_hash(&db_path, &wallet_id, &round_id, bundle_index))
+    catch(|| {
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        db.get_delegation_tx_hash(&round_id, bundle_index)
+            .map_err(|e| format!("get_delegation_tx_hash failed: {e}"))
+    })
 }
 
 /// Delete bundle rows at or above `keep_count` for partial-bundle recovery.
@@ -1599,7 +1614,16 @@ pub fn delete_skipped_bundles(
     round_id: String,
     keep_count: u32,
 ) -> Result<u32, String> {
-    catch(|| delegation::delete_skipped_bundles(&db_path, &wallet_id, &round_id, keep_count))
+    catch(|| {
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        db.delete_skipped_bundles(&round_id, keep_count)
+            .and_then(|deleted| {
+                u32::try_from(deleted).map_err(|_| zcash_voting::VotingError::Internal {
+                    message: format!("deleted bundle count {deleted} does not fit in u32"),
+                })
+            })
+            .map_err(|e| format!("delete_skipped_bundles failed: {e}"))
+    })
 }
 
 /// Sync vote commitment tree state for a voting round.
@@ -1670,11 +1694,9 @@ pub fn reset_voting_session_state(
         } else {
             0
         };
-        let pczt_count = delegation::clear_prepared_delegation_pczt_cache(
-            &db_path,
-            &wallet_id,
-            round_id.as_deref(),
-        )?;
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        let pczt_count = zcash_voting::delegate::clear_prepared_setups(&db, round_id.as_deref())
+            .map_err(|e| format!("clear prepared delegation PCZTs failed: {e}"))?;
         log::info!(
             "voting: reset process-local session state \
              (wallet_id={}, round_id={:?}, tree_entries={}, prepared_pczts={})",
@@ -2070,7 +2092,7 @@ mod tests {
 
     #[test]
     fn api_bundle_setup_result_preserves_core_fields() {
-        let api = ApiVotingBundleSetupResult::from(BundleSetupResult {
+        let api = ApiVotingBundleSetupResult::from(zcash_voting::round::BundleLayout {
             bundle_count: 2,
             eligible_weight: 50,
             dropped_count: 0,
@@ -2082,28 +2104,30 @@ mod tests {
 
     #[test]
     fn api_signed_delegation_payload_preserves_core_fields() {
-        let api = ApiSignedDelegationPayload::from(SignedDelegationPayload {
-            pczt_bytes: vec![1, 2, 3],
-            status: "ready_for_submission".to_string(),
-            message: Some("ok".to_string()),
-            proof: vec![4],
-            rk: vec![5],
-            spend_auth_sig: vec![6],
-            sighash: vec![7],
-            nf_signed: vec![8],
-            cmx_new: vec![9],
-            gov_comm: vec![10],
-            gov_nullifiers: vec![vec![11]],
-            vote_round_id: "round".to_string(),
-            eligible_weight_zatoshi: 20,
-            delegated_weight_zatoshi: 10,
-            bundle_count: 2,
-            bundle_index: 1,
-        });
+        let api =
+            ApiSignedDelegationPayload::from(zcash_voting::delegate::SignedDelegationBundle {
+                submission: zcash_voting::delegate::DelegationSubmission {
+                    proof: vec![4],
+                    rk: [5; 32],
+                    nf_signed: [8; 32],
+                    cmx_new: [9; 32],
+                    gov_comm: [10; 32],
+                    gov_nullifiers: [[11; 32]; 5],
+                    alpha: [12; 32],
+                    vote_round_id: "round".to_string(),
+                    spend_auth_sig: [6; 64],
+                    sighash: [7; 32],
+                },
+                pczt_bytes: vec![1, 2, 3],
+                eligible_weight_zatoshi: 20,
+                delegated_weight_zatoshi: 10,
+                bundle_count: 2,
+                bundle_index: 1,
+            });
 
         assert_eq!(api.pczt_bytes, vec![1, 2, 3]);
         assert_eq!(api.status, "ready_for_submission");
-        assert_eq!(api.message.as_deref(), Some("ok"));
+        assert_eq!(api.message, None);
         assert_eq!(api.proof, vec![4]);
         assert_eq!(api.vote_round_id, "round");
         assert_eq!(api.eligible_weight_zatoshi, 20);
@@ -2114,18 +2138,22 @@ mod tests {
 
     #[test]
     fn api_keystone_delegation_request_preserves_display_memo() {
-        let api = ApiKeystoneDelegationRequest::from(KeystoneDelegationRequest {
-            pczt_bytes: vec![1],
-            redacted_pczt_bytes: vec![2],
-            pczt_sighash: vec![3],
-            rk: vec![4],
-            action_index: 5,
-            display_memo: "I am authorizing this hotkey.".to_string(),
-            eligible_weight_zatoshi: 20,
-            delegated_weight_zatoshi: 10,
-            bundle_count: 2,
-            bundle_index: 1,
-        });
+        let api =
+            ApiKeystoneDelegationRequest::from(zcash_voting::delegate::KeystoneSigningRequest {
+                setup: zcash_voting::delegate::DelegationSetup {
+                    pczt_bytes: vec![1],
+                    pczt_sighash: [3; 32],
+                    rk: [4; 32],
+                    action_index: 5,
+                    action_bytes: vec![],
+                },
+                redacted_pczt_bytes: vec![2],
+                display_memo: "I am authorizing this hotkey.".to_string(),
+                eligible_weight_zatoshi: 20,
+                delegated_weight_zatoshi: 10,
+                bundle_count: 2,
+                bundle_index: 1,
+            });
 
         assert_eq!(api.display_memo, "I am authorizing this hotkey.");
         assert_eq!(api.bundle_count, 2);
@@ -2974,11 +3002,11 @@ mod tests {
             output_index: commitment_tree_position as u32,
             value_zatoshi,
             voting_weight_zatoshi,
-            commitment: vec![],
-            nullifier: vec![],
-            diversifier: vec![],
-            rho: vec![],
-            rseed: vec![],
+            commitment: vec![0x01; 32],
+            nullifier: vec![0x02; 32],
+            diversifier: vec![0x03; 11],
+            rho: vec![0x04; 32],
+            rseed: vec![0x05; 32],
             scope: 0,
             ufvk_str: String::new(),
             commitment_tree_position,
