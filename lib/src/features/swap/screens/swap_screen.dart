@@ -15,7 +15,6 @@ import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/app_pane_modal_overlay.dart';
-import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
@@ -24,11 +23,9 @@ import '../../address_book/providers/address_book_provider.dart';
 import '../../address_book/widgets/address_book_contact_picker_modal.dart';
 import '../models/swap_models.dart';
 import '../providers/swap_state_provider.dart';
-import '../widgets/redacted_receipt_drawer.dart';
 import '../widgets/swap_activity_panel.dart';
 import '../widgets/swap_address_qr_scan_modal.dart';
 import '../widgets/swap_composer_panel.dart';
-import '../widgets/swap_copy_feedback.dart';
 import '../widgets/swap_near_intents_attribution.dart';
 
 class SwapScreen extends ConsumerStatefulWidget {
@@ -79,7 +76,6 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
   final _toastOverlayContextKey = GlobalKey(
     debugLabel: 'swap_toast_overlay_context',
   );
-  bool _commandPaletteOpen = false;
   _SwapModalSurface? _swapModal;
 
   @override
@@ -100,54 +96,24 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
     super.dispose();
   }
 
-  void _openCommandPalette() {
-    setState(() {
-      _commandPaletteOpen = true;
-      _swapModal = null;
-    });
-  }
-
-  void _closeCommandPalette() {
-    setState(() => _commandPaletteOpen = false);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _shortcutFocusNode.requestFocus();
-    });
-  }
-
   void _openAssetSelector() {
-    setState(() {
-      _commandPaletteOpen = false;
-      _swapModal = _SwapModalSurface.assetSelector;
-    });
+    setState(() => _swapModal = _SwapModalSurface.assetSelector);
   }
 
   void _openAddressEditor() {
-    setState(() {
-      _commandPaletteOpen = false;
-      _swapModal = _SwapModalSurface.addressEditor;
-    });
+    setState(() => _swapModal = _SwapModalSurface.addressEditor);
   }
 
   void _openAddressScanner() {
-    setState(() {
-      _commandPaletteOpen = false;
-      _swapModal = _SwapModalSurface.addressScanner;
-    });
+    setState(() => _swapModal = _SwapModalSurface.addressScanner);
   }
 
   void _openAddressContactPicker() {
-    setState(() {
-      _commandPaletteOpen = false;
-      _swapModal = _SwapModalSurface.contactPicker;
-    });
+    setState(() => _swapModal = _SwapModalSurface.contactPicker);
   }
 
   void _openSlippageSettings() {
-    setState(() {
-      _commandPaletteOpen = false;
-      _swapModal = _SwapModalSurface.slippageSettings;
-    });
+    setState(() => _swapModal = _SwapModalSurface.slippageSettings);
   }
 
   void _closeSwapModal() {
@@ -202,10 +168,7 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
       accountProvider.select((value) => value.value?.activeAccountUuid),
       (previous, next) {
         if (previous == next || !mounted) return;
-        setState(() {
-          _commandPaletteOpen = false;
-          _swapModal = null;
-        });
+        setState(() => _swapModal = null);
       },
     );
     final swapState = ref.watch(swapStateProvider);
@@ -221,8 +184,6 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
     final zecAvailableText = ZecAmount.fromZatoshi(
       sync.spendableBalance,
     ).pretty(denomStyle: ZecDenomStyle.upper).toString();
-    final selectedIntent = swapState.selectedIntentOrNull;
-
     void openReview() {
       unawaited(() async {
         await swapNotifier.showReview();
@@ -244,94 +205,6 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
       unawaited(swapNotifier.refreshSelectedIntentStatus());
     }
 
-    void reviewFreshQuote() {
-      swapNotifier.prepareRetryFromSelectedIntent();
-      context.go('/swap');
-    }
-
-    void runPaletteAction(VoidCallback action) {
-      _closeCommandPalette();
-      _closeSwapModal();
-      action();
-    }
-
-    final activeReceiptText = selectedIntent == null
-        ? ''
-        : redactedReceiptText(selectedIntent.receipt);
-    final activeDepositAddress = selectedIntent?.depositAddress;
-    final canReviewFreshQuote =
-        selectedIntent?.status == SwapIntentStatus.incompleteDeposit ||
-        selectedIntent?.status == SwapIntentStatus.refunded ||
-        selectedIntent?.status == SwapIntentStatus.expired ||
-        selectedIntent?.status == SwapIntentStatus.failed;
-    final commandItems = [
-      _SwapCommandItem(
-        id: 'open_swap',
-        title: 'Open swap',
-        detail: 'Composer and quote review',
-        iconName: AppIcons.sync,
-        onRun: () => runPaletteAction(() => context.go('/swap')),
-      ),
-      _SwapCommandItem(
-        id: 'open_activity',
-        title: 'Open activity',
-        detail: 'Status, receipt, and recovery',
-        iconName: AppIcons.history,
-        onRun: () => runPaletteAction(() => context.go('/activity')),
-      ),
-      _SwapCommandItem(
-        id: 'refresh_status',
-        title: 'Refresh status',
-        detail: selectedIntent?.statusLabel ?? 'No active swap',
-        iconName: AppIcons.renew,
-        enabled:
-            selectedIntent != null &&
-            canRefreshSwapIntentStatus(selectedIntent.status) &&
-            !swapState.statusRefreshing,
-        onRun: () => runPaletteAction(() {
-          context.go('/activity');
-          refreshStatus();
-        }),
-      ),
-      _SwapCommandItem(
-        id: 'copy_receipt',
-        title: 'Copy receipt',
-        detail: 'Redacted activity evidence',
-        iconName: AppIcons.copy,
-        enabled: activeReceiptText.isNotEmpty,
-        onRun: () => runPaletteAction(() {
-          copySwapText(
-            context,
-            text: activeReceiptText,
-            toastMessage: 'Receipt copied',
-          );
-        }),
-      ),
-      _SwapCommandItem(
-        id: 'copy_deposit',
-        title: 'Copy deposit address',
-        detail: activeDepositAddress ?? 'No active deposit address',
-        iconName: AppIcons.copy,
-        enabled:
-            activeDepositAddress != null && activeDepositAddress.isNotEmpty,
-        onRun: () => runPaletteAction(() {
-          copySwapText(
-            context,
-            text: activeDepositAddress!,
-            toastMessage: 'Address copied',
-          );
-        }),
-      ),
-      _SwapCommandItem(
-        id: 'review_fresh_quote',
-        title: 'Review fresh quote',
-        detail: 'Reuse the selected swap route draft',
-        iconName: AppIcons.renew,
-        enabled: canReviewFreshQuote,
-        onRun: () => runPaletteAction(reviewFreshQuote),
-      ),
-    ];
-
     KeyEventResult handleShortcut(FocusNode node, KeyEvent event) {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       final keyboard = HardwareKeyboard.instance;
@@ -349,10 +222,6 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
       }
       if (event.logicalKey == LogicalKeyboardKey.keyR) {
         refreshStatus();
-        return KeyEventResult.handled;
-      }
-      if (event.logicalKey == LogicalKeyboardKey.keyK) {
-        _commandPaletteOpen ? _closeCommandPalette() : _openCommandPalette();
         return KeyEventResult.handled;
       }
 
@@ -439,14 +308,6 @@ class _SwapScreenState extends ConsumerState<SwapScreen> {
                   ],
                 ),
               ),
-              if (_commandPaletteOpen)
-                AppPaneModalOverlay(
-                  onDismiss: _closeCommandPalette,
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: _SwapCommandPalette(commands: commandItems),
-                  ),
-                ),
               if (_swapModal != null)
                 AppPaneModalOverlay(
                   onDismiss: _closeSwapModal,
@@ -536,282 +397,6 @@ class _SwapViewportFrame extends StatelessWidget {
     return ConstrainedBox(
       constraints: BoxConstraints(minHeight: height),
       child: content,
-    );
-  }
-}
-
-class _SwapCommandItem {
-  const _SwapCommandItem({
-    required this.id,
-    required this.title,
-    required this.detail,
-    required this.iconName,
-    required this.onRun,
-    this.enabled = true,
-  });
-
-  final String id;
-  final String title;
-  final String detail;
-  final String iconName;
-  final VoidCallback onRun;
-  final bool enabled;
-}
-
-class _SwapCommandPalette extends StatefulWidget {
-  const _SwapCommandPalette({required this.commands});
-
-  final List<_SwapCommandItem> commands;
-
-  @override
-  State<_SwapCommandPalette> createState() => _SwapCommandPaletteState();
-}
-
-class _SwapCommandPaletteState extends State<_SwapCommandPalette> {
-  late final TextEditingController _queryController;
-  late final FocusNode _queryFocusNode;
-  var _selectedIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _queryController = TextEditingController();
-    _queryFocusNode = FocusNode(debugLabel: 'SwapCommandPaletteQuery');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _queryFocusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _queryController.dispose();
-    _queryFocusNode.dispose();
-    super.dispose();
-  }
-
-  List<_SwapCommandItem> get _filteredCommands {
-    final query = _queryController.text.trim().toLowerCase();
-    if (query.isEmpty) return widget.commands;
-    return [
-      for (final command in widget.commands)
-        if (command.title.toLowerCase().contains(query) ||
-            command.detail.toLowerCase().contains(query))
-          command,
-    ];
-  }
-
-  void _selectRelative(int delta) {
-    final commands = _filteredCommands;
-    if (commands.isEmpty) return;
-    setState(() {
-      _selectedIndex = (_selectedIndex + delta) % commands.length;
-      if (_selectedIndex < 0) _selectedIndex += commands.length;
-    });
-  }
-
-  void _runSelected() {
-    final commands = _filteredCommands;
-    if (commands.isEmpty) return;
-    final command = commands[_clampedSelectedIndex(commands)];
-    if (!command.enabled) return;
-    command.onRun();
-  }
-
-  int _clampedSelectedIndex(List<_SwapCommandItem> commands) {
-    if (commands.isEmpty) return 0;
-    return _selectedIndex.clamp(0, commands.length - 1).toInt();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final commands = _filteredCommands;
-    final selectedIndex = _clampedSelectedIndex(commands);
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (_, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          _selectRelative(1);
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          _selectRelative(-1);
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-          _runSelected();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Container(
-        key: const ValueKey('swap_command_palette'),
-        width: 520,
-        constraints: const BoxConstraints(maxHeight: 560),
-        padding: const EdgeInsets.all(AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: colors.background.ground,
-          border: Border.all(color: colors.border.regular),
-          borderRadius: BorderRadius.circular(AppRadii.medium),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                AppIcon(AppIcons.endpoint, size: 18, color: colors.icon.muted),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: Text(
-                    'Command palette',
-                    style: AppTypography.headlineSmall.copyWith(
-                      color: colors.text.accent,
-                    ),
-                  ),
-                ),
-                Text(
-                  'Swap',
-                  style: AppTypography.codeSmall.copyWith(
-                    color: colors.text.secondary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            AppTextField(
-              key: const ValueKey('swap_command_palette_query'),
-              label: 'Command',
-              showLabel: false,
-              hintText: 'Search commands',
-              controller: _queryController,
-              focusNode: _queryFocusNode,
-              leading: const AppIcon(AppIcons.link),
-              onChanged: (_) {
-                setState(() => _selectedIndex = 0);
-              },
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _runSelected(),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Flexible(
-              child: commands.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.md,
-                      ),
-                      child: Text(
-                        'No matching commands',
-                        textAlign: TextAlign.center,
-                        style: AppTypography.bodySmall.copyWith(
-                          color: colors.text.secondary,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: commands.length,
-                      separatorBuilder: (_, _) =>
-                          const SizedBox(height: AppSpacing.xxs),
-                      itemBuilder: (context, index) {
-                        final command = commands[index];
-                        return _SwapCommandRow(
-                          command: command,
-                          selected: index == selectedIndex,
-                          onTap: command.enabled ? command.onRun : null,
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SwapCommandRow extends StatelessWidget {
-  const _SwapCommandRow({
-    required this.command,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _SwapCommandItem command;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final enabled = command.enabled;
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: GestureDetector(
-        key: ValueKey('swap_command_${command.id}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.46,
-          child: Container(
-            padding: const EdgeInsets.all(AppSpacing.xs),
-            decoration: BoxDecoration(
-              color: selected ? colors.state.selectedOpacity : null,
-              border: Border.all(
-                color: selected ? colors.border.regular : colors.border.subtle,
-              ),
-              borderRadius: BorderRadius.circular(AppRadii.xSmall),
-            ),
-            child: Row(
-              children: [
-                AppIcon(
-                  command.iconName,
-                  size: 18,
-                  color: enabled ? colors.icon.regular : colors.icon.muted,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        command.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.labelLarge.copyWith(
-                          color: enabled
-                              ? colors.text.accent
-                              : colors.text.secondary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        command.detail,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.bodyExtraSmall.copyWith(
-                          color: colors.text.secondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                AppIcon(
-                  AppIcons.arrowForwardIos,
-                  size: 12,
-                  color: selected
-                      ? colors.icon.brandCrimson
-                      : colors.icon.muted,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

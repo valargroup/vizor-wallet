@@ -24,7 +24,6 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/receive_address_provider.dart';
 import '../../../providers/wallet_provider.dart';
-import '../models/receive_prefill_args.dart';
 
 enum _ReceiveAddressType { shielded, transparent }
 
@@ -32,9 +31,7 @@ const _renewShieldedAddressErrorMessage =
     "We couldn't refresh your shielded address. Try again, or use your current one.";
 
 class ReceiveScreen extends ConsumerStatefulWidget {
-  const ReceiveScreen({super.key, this.prefill});
-
-  final ReceivePrefillArgs? prefill;
+  const ReceiveScreen({super.key});
 
   @override
   ConsumerState<ReceiveScreen> createState() => _ReceiveScreenState();
@@ -56,11 +53,6 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedType = switch (widget.prefill?.addressType) {
-      ReceivePrefillAddressType.transparent => _ReceiveAddressType.transparent,
-      ReceivePrefillAddressType.shielded ||
-      null => _ReceiveAddressType.shielded,
-    };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(appLayoutProvider.notifier).setMode(AppLayoutMode.large);
@@ -296,7 +288,6 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
               errorText: selectedErrorText,
               isLoading: isLoadingSelectedAddress,
               isRenewingShielded: _isRenewingShielded,
-              prefill: widget.prefill,
               onTypeChanged: _selectAddressType,
               onRenewShielded: isShielded ? _renewShieldedAddress : null,
               onCopy: _copySelectedAddress,
@@ -324,7 +315,6 @@ class _ReceivePane extends StatelessWidget {
     required this.errorText,
     required this.isLoading,
     required this.isRenewingShielded,
-    required this.prefill,
     required this.onTypeChanged,
     required this.onRenewShielded,
     required this.onCopy,
@@ -336,7 +326,6 @@ class _ReceivePane extends StatelessWidget {
   final String? errorText;
   final bool isLoading;
   final bool isRenewingShielded;
-  final ReceivePrefillArgs? prefill;
   final ValueChanged<_ReceiveAddressType> onTypeChanged;
   final VoidCallback? onRenewShielded;
   final VoidCallback onCopy;
@@ -356,10 +345,6 @@ class _ReceivePane extends StatelessWidget {
           children: [
             Align(alignment: Alignment.centerLeft, child: AppRouteBackLink()),
             const SizedBox(height: AppSpacing.s),
-            if (prefill != null) ...[
-              _ReceivePrefillNotice(prefill: prefill!),
-              const SizedBox(height: AppSpacing.s),
-            ],
             Expanded(
               child: Center(
                 child: ConstrainedBox(
@@ -408,55 +393,6 @@ class _ReceivePane extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ReceivePrefillNotice extends StatelessWidget {
-  const _ReceivePrefillNotice({required this.prefill});
-
-  final ReceivePrefillArgs prefill;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      key: const ValueKey('receive_prefill_notice'),
-      padding: const EdgeInsets.all(AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: colors.background.raised,
-        border: Border.all(color: colors.border.subtle),
-        borderRadius: BorderRadius.circular(AppRadii.xSmall),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AppIcon(AppIcons.link, size: 18, color: colors.icon.muted),
-          const SizedBox(width: AppSpacing.xs),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  prefill.title,
-                  style: AppTypography.labelLarge.copyWith(
-                    color: colors.text.accent,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${prefill.source} / ${prefill.detail}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyExtraSmall.copyWith(
-                    color: colors.text.secondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

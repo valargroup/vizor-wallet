@@ -9,7 +9,6 @@ import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/core/layout/app_desktop_shell.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/core/widgets/app_icon.dart';
-import 'package:zcash_wallet/src/features/receive/models/receive_prefill_args.dart';
 import 'package:zcash_wallet/src/features/receive/screens/receive_screen.dart';
 import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/receive_address_provider.dart';
@@ -121,44 +120,13 @@ void main() {
 
     await tester.tap(
       find.ancestor(
-        of: find.text('Send'),
+        of: find.text('Activity'),
         matching: find.byType(AppSidebarItem),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('send route'), findsOneWidget);
-  });
-
-  testWidgets('receive handoff opens transparent address with swap context', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1512, 982));
-    addTearDown(() async {
-      await tester.binding.setSurfaceSize(null);
-    });
-
-    await tester.pumpWidget(
-      _receiveHarness(
-        prefill: const ReceivePrefillArgs(
-          source: 'Swap / NEAR Intents',
-          title: 'Swap ZEC staging',
-          detail: 'swap-6c44 / Awaiting external deposit',
-          addressType: ReceivePrefillAddressType.transparent,
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-
-    expect(
-      find.byKey(const ValueKey('receive_prefill_notice')),
-      findsOneWidget,
-    );
-    expect(find.text('Swap ZEC staging'), findsOneWidget);
-    expect(find.textContaining('Swap / NEAR Intents'), findsOneWidget);
-    expect(find.text('Copy Transparent Address'), findsOneWidget);
-    expect(_findAddressRichText('t1testtransparentaddress'), findsOneWidget);
+    expect(find.text('activity route'), findsOneWidget);
   });
 
   testWidgets('ignores stale shielded load failure after account switch', (
@@ -231,16 +199,15 @@ Finder _findRenewShieldedAddressButton() {
 Widget _receiveHarness({
   AppBootstrapState? bootstrap,
   ReceiveAddressService Function(Ref ref)? receiveAddressService,
-  ReceivePrefillArgs? prefill,
 }) {
   final router = GoRouter(
     initialLocation: '/receive',
     routes: [
+      GoRoute(path: '/receive', builder: (_, _) => const ReceiveScreen()),
       GoRoute(
-        path: '/receive',
-        builder: (_, _) => ReceiveScreen(prefill: prefill),
+        path: '/activity',
+        builder: (_, _) => const Text('activity route'),
       ),
-      GoRoute(path: '/send', builder: (_, _) => const Text('send route')),
     ],
   );
 

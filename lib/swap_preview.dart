@@ -11,7 +11,6 @@ import 'src/core/config/rpc_endpoint_config.dart';
 import 'src/core/theme/app_theme.dart';
 import 'src/features/activity/screens/activity_screen.dart';
 import 'src/features/activity/screens/swap_activity_detail_screen.dart';
-import 'src/features/receive/models/receive_prefill_args.dart';
 import 'src/features/send/models/send_prefill_args.dart';
 import 'src/features/swap/models/swap_models.dart';
 import 'src/features/swap/models/swap_activity_navigation.dart';
@@ -72,17 +71,7 @@ Future<void> main() async {
       ),
       GoRoute(
         path: '/receive',
-        builder: (_, state) {
-          final extra = state.extra;
-          if (extra is! ReceivePrefillArgs) {
-            return const Center(child: Text('Receive preview'));
-          }
-          return Center(
-            child: Text(
-              'Receive prefill: ${extra.title} / ${extra.addressType.name}',
-            ),
-          );
-        },
+        builder: (_, _) => const Center(child: Text('Receive preview')),
       ),
     ],
   );
