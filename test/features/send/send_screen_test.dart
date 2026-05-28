@@ -100,6 +100,30 @@ void main() {
     );
     expect(_fieldText(tester, 'send_address_field'), _shieldedAddress);
   });
+
+  testWidgets('hides imported memo controls for transparent recipients', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+
+    await tester.pumpWidget(
+      _sendHarness(
+        prefill: const SendPrefillArgs(
+          id: 'zip321-transparent',
+          source: 'ZIP-321',
+          address: _transparentAddress,
+          amountText: '0.5',
+          memoText: 'Transparent memo',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Transparent Address'), findsOneWidget);
+    expect(find.text('Transparent memo'), findsNothing);
+    expect(find.text('Add a message'), findsNothing);
+    expect(find.text('Encrypted, for Shielded Addresses only.'), findsNothing);
+  });
 }
 
 Widget _sendHarness({
@@ -214,6 +238,12 @@ class _RustApiFake implements RustLibApi {
   Future<AddressValidationResult> crateApiSyncValidateAddress({
     required String address,
   }) async {
+    if (address == _transparentAddress) {
+      return const AddressValidationResult(
+        isValid: true,
+        addressType: 'transparent',
+      );
+    }
     return const AddressValidationResult(isValid: true, addressType: 'unified');
   }
 
@@ -235,3 +265,4 @@ class _RustApiFake implements RustLibApi {
 
 const _shieldedAddress =
     'u1testshieldedaddress000000000000000000000000000000000000000000000000000';
+const _transparentAddress = 't1transparentdestination0000000000000000000';

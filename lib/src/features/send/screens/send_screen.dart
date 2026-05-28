@@ -291,9 +291,16 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
     try {
       final result = await rust_sync.validateAddress(address: addr);
       if (!mounted || seq != _addressSeq) return;
-      setState(
-        () => _addressType = result.isValid ? result.addressType : 'invalid',
-      );
+      final nextAddressType = result.isValid ? result.addressType : 'invalid';
+      setState(() {
+        _addressType = nextAddressType;
+        if (nextAddressType == 'transparent') {
+          _messageExpanded = false;
+        }
+      });
+      if (nextAddressType == 'transparent' && _memoController.text.isNotEmpty) {
+        _memoController.clear();
+      }
       _handleAddressValidationSettled();
     } catch (e) {
       log('Send: address validation error: $e');
@@ -948,89 +955,90 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
                                 height: _singleLineFieldOverlayReserve,
                               ),
                               const SizedBox(height: _singleLineFieldGap),
-                              if (!_messageExpanded &&
-                                  _memoController.text.isEmpty) ...[
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: AppSpacing.xs,
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const AppDecorativeDivider(
-                                        width: 256,
-                                        middleWidth: 53.553,
-                                        middleHeight: 14,
-                                      ),
-                                      const SizedBox(height: AppSpacing.sm),
-                                      _SendAddMessageCard(
-                                        onTap: () {
-                                          setState(() {
-                                            _messageExpanded = true;
-                                          });
-                                          _memoFocusNode.requestFocus();
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ] else ...[
-                                AppTextField(
-                                  label: 'Message',
-                                  tone: _memoError != null
-                                      ? AppTextFieldTone.destructive
-                                      : AppTextFieldTone.neutral,
-                                  focusNode: _memoFocusNode,
-                                  controller: _memoController,
-                                  hintText: 'Add a message',
-                                  leading: AppIcon(
-                                    AppIcons.scroll,
-                                    size: 20,
-                                    color: colors.icon.regular,
-                                  ),
-                                  rightSlot: Text(
-                                    '$_memoLength/512',
-                                    style: AppTypography.labelMedium.copyWith(
-                                      color: _memoError != null
-                                          ? colors.text.destructive
-                                          : colors.text.secondary,
+                              if (_showMemoControls) ...[
+                                if (!_messageExpanded &&
+                                    _memoController.text.isEmpty) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: AppSpacing.xs,
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const AppDecorativeDivider(
+                                          width: 256,
+                                          middleWidth: 53.553,
+                                          middleHeight: 14,
+                                        ),
+                                        const SizedBox(height: AppSpacing.sm),
+                                        _SendAddMessageCard(
+                                          onTap: () {
+                                            setState(() {
+                                              _messageExpanded = true;
+                                            });
+                                            _memoFocusNode.requestFocus();
+                                          },
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  messageText: _memoError,
-                                  messageIcon: _memoError != null
-                                      ? AppIcon(
-                                          AppIcons.warning,
-                                          size: 16,
-                                          color: colors.text.destructive,
-                                        )
-                                      : null,
-                                  minLines: 6,
-                                  maxLines: 6,
-                                  scrollController: _memoScrollController,
-                                  textStyle: AppTypography.bodyMedium.copyWith(
-                                    color: colors.text.accent,
-                                  ),
-                                  onChanged: (_) => setState(() {
-                                    _error = null;
-                                  }),
-                                  showClearButton: true,
-                                  clearButtonRequiresText: false,
-                                  clearButtonSemanticLabel: 'Close message',
-                                  onClear: () {
-                                    setState(() {
-                                      _messageExpanded = false;
+                                ] else ...[
+                                  AppTextField(
+                                    label: 'Message',
+                                    tone: _memoError != null
+                                        ? AppTextFieldTone.destructive
+                                        : AppTextFieldTone.neutral,
+                                    focusNode: _memoFocusNode,
+                                    controller: _memoController,
+                                    hintText: 'Add a message',
+                                    leading: AppIcon(
+                                      AppIcons.scroll,
+                                      size: 20,
+                                      color: colors.icon.regular,
+                                    ),
+                                    rightSlot: Text(
+                                      '$_memoLength/512',
+                                      style: AppTypography.labelMedium.copyWith(
+                                        color: _memoError != null
+                                            ? colors.text.destructive
+                                            : colors.text.secondary,
+                                      ),
+                                    ),
+                                    messageText: _memoError,
+                                    messageIcon: _memoError != null
+                                        ? AppIcon(
+                                            AppIcons.warning,
+                                            size: 16,
+                                            color: colors.text.destructive,
+                                          )
+                                        : null,
+                                    minLines: 6,
+                                    maxLines: 6,
+                                    scrollController: _memoScrollController,
+                                    textStyle: AppTypography.bodyMedium
+                                        .copyWith(color: colors.text.accent),
+                                    onChanged: (_) => setState(() {
                                       _error = null;
-                                    });
-                                    if (_isMaxMode) {
-                                      _scheduleMaxEstimate();
-                                    } else {
-                                      _validateAmount();
-                                    }
-                                  },
-                                ),
-                                const SizedBox(
-                                  height: _multilineFieldOverlayReserve,
-                                ),
+                                    }),
+                                    showClearButton: true,
+                                    clearButtonRequiresText: false,
+                                    clearButtonSemanticLabel: 'Close message',
+                                    onClear: () {
+                                      setState(() {
+                                        _messageExpanded = false;
+                                        _error = null;
+                                      });
+                                      if (_isMaxMode) {
+                                        _scheduleMaxEstimate();
+                                      } else {
+                                        _validateAmount();
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(
+                                    height: _multilineFieldOverlayReserve,
+                                  ),
+                                ],
                               ],
                               if (_error != null) ...[
                                 const SizedBox(height: AppSpacing.xs),
