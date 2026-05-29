@@ -103,7 +103,8 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         return;
       }
       final activeSession = afterWalletSync ?? session;
-      final recoveredDraftVotes = userDraftVotes.isEmpty
+      final recoveredDraftVotes =
+          userDraftVotes.isEmpty && _roundPlanHasNoOpenProposals(activeSession)
           ? _draftVotesFromRoundPlan(activeSession.roundPlan, proposals)
           : const <rust_voting.ApiDraftVote>[];
       final draftVotes = userDraftVotes.isNotEmpty
@@ -113,7 +114,13 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
           ? proposalIds
           : const <int>[];
       final canRecoverWithoutDraft = _canRecoverWithoutDraft(activeSession);
-      if (draftVotes.isEmpty && !canRecoverWithoutDraft) {
+      final canPollDelegationWithoutDraft = _canPollDelegationWithoutDraft(
+        activeSession,
+      );
+      final needsDelegation = _sessionNeedsDelegation(activeSession);
+      if (draftVotes.isEmpty &&
+          !canRecoverWithoutDraft &&
+          !canPollDelegationWithoutDraft) {
         _setRunError('Choose at least one vote before submitting.');
         return;
       }
@@ -121,12 +128,13 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
       if (activeSession.isHardwareAccount) {
         _pendingDraftVotes = draftVotes;
         _pendingProposalIds = intentProposalIds;
-        _pendingRecoveryWithoutDraft = canRecoverWithoutDraft;
+        _pendingRecoveryWithoutDraft =
+            canRecoverWithoutDraft || canPollDelegationWithoutDraft;
         await _prepareKeystoneSigning(sessionNotifier);
         return;
       }
 
-      if (draftVotes.isNotEmpty || _sessionNeedsDelegation(activeSession)) {
+      if (draftVotes.isNotEmpty || needsDelegation) {
         final mnemonic = await ref
             .read(accountProvider.notifier)
             .getMnemonicForAccount(accountUuid);
@@ -150,6 +158,10 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
       }
       final afterDelegation = ref.read(votingSessionProvider(roundId)).value;
       final votePollingSession = afterDelegation ?? activeSession;
+      if (draftVotes.isEmpty && !_canRecoverWithoutDraft(votePollingSession)) {
+        _setRunError('Choose at least one vote before submitting.');
+        return;
+      }
       if (draftVotes.isNotEmpty ||
           _sessionNeedsVotePolling(votePollingSession)) {
         await sessionNotifier.castVotes(
@@ -296,6 +308,12 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         .read(votingSessionProvider(widget.roundId))
         .value;
     if (afterDelegation?.phase == VotingSessionPhase.error) return;
+    if (draftVotes.isEmpty &&
+        (afterDelegation == null ||
+            !_canRecoverWithoutDraft(afterDelegation))) {
+      _setRunError('Choose at least one vote before submitting.');
+      return;
+    }
     if (draftVotes.isNotEmpty || _sessionNeedsVotePolling(afterDelegation)) {
       await sessionNotifier.castVotes(
         draftVotes: draftVotes,
@@ -340,14 +358,41 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   bool _canRecoverWithoutDraft(VotingSessionState session) {
     final roundPlan = session.roundPlan;
     if (roundPlan != null) {
-      return roundPlan.pendingRecovery;
+      return _roundPlanHasNoOpenProposals(session) &&
+          roundPlan.nextSteps.any(_stepCanRecoverWithoutDraft);
     }
     final resumePlan = session.resumePlan;
     return resumePlan != null &&
-        (resumePlan.submittedDelegationBundleIndexes.isNotEmpty ||
-            resumePlan.pendingVoteSubmissionKeys.isNotEmpty ||
+        (resumePlan.pendingVoteSubmissionKeys.isNotEmpty ||
             resumePlan.submittedVoteConfirmationKeys.isNotEmpty ||
             resumePlan.unconfirmedShareDelegations.isNotEmpty);
+  }
+
+  bool _roundPlanHasNoOpenProposals(VotingSessionState session) {
+    final roundPlan = session.roundPlan;
+    return roundPlan != null && roundPlan.openProposals.isEmpty;
+  }
+
+  bool _canPollDelegationWithoutDraft(VotingSessionState session) {
+    final roundPlan = session.roundPlan;
+    if (roundPlan != null) {
+      var hasSubmittedDelegation = false;
+      for (final step in roundPlan.nextSteps) {
+        if (step.kind == 'delegate') return false;
+        if (step.kind == 'poll_delegation') hasSubmittedDelegation = true;
+      }
+      return hasSubmittedDelegation;
+    }
+    final resumePlan = session.resumePlan;
+    return resumePlan != null &&
+        resumePlan.submittedDelegationBundleIndexes.isNotEmpty &&
+        resumePlan.pendingDelegationBundleIndexes.isEmpty;
+  }
+
+  bool _stepCanRecoverWithoutDraft(rust_voting.ApiNextStep step) {
+    return step.kind == 'submit_vote' ||
+        step.kind == 'poll_vote' ||
+        step.kind == 'confirm_share';
   }
 
   bool _sessionNeedsDelegation(VotingSessionState session) {

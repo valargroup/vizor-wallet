@@ -129,6 +129,228 @@ void main() {
     expect(find.text('Retry'), findsOne);
   });
 
+  testWidgets(
+    'status screen polls delegation-only recovery before draft error',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1512, 982));
+      addTearDown(() async {
+        await tester.binding.setSurfaceSize(null);
+      });
+
+      final http = FakeVotingHttpClient(
+        responses: _votingHttpResponses()
+          ..['/shielded-vote/v1/tx/delegation-tx'] = {
+            'height': 10,
+            'code': 0,
+            'log': '',
+            'events': [
+              {
+                'type': 'delegate_vote',
+                'attributes': [
+                  {'key': 'leaf_index', 'value': '0'},
+                ],
+              },
+            ],
+          },
+      );
+      final recoveryApi = _MutableVotingRecoveryApi()
+        ..state = _recoveryState(
+          bundleCount: 1,
+          delegationWorkflows: const [
+            rust_voting.ApiDelegationWorkflowRecovery(
+              bundleIndex: 0,
+              phase: 'submitted_delegation',
+              txHash: 'delegation-tx',
+              vanLeafPosition: null,
+            ),
+          ],
+        )
+        ..roundPlan = rust_voting.ApiRoundPlan(
+          roundId: _roundId,
+          pendingRecovery: true,
+          nextSteps: const [
+            rust_voting.ApiNextStep(
+              kind: 'poll_delegation',
+              bundleIndex: 0,
+              proposalId: 0,
+              choice: 0,
+              shareIndex: 0,
+            ),
+          ],
+          openProposals: Uint32List.fromList(const [1]),
+          allDecided: false,
+        );
+      final container = _statusContainer(
+        http: http,
+        accountOverride: _MnemonicAccountNotifier.new,
+        recoveryApi: recoveryApi,
+        rust: _VotingStatusRustApi(recoveryApi),
+        hotkeyStore: const _FakeVotingHotkeyStore([9, 9, 9]),
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: _statusHarness(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _pumpUntilFound(
+        tester,
+        find.text('Choose at least one vote before submitting.'),
+      );
+
+      expect(
+        find.text('Choose at least one vote before submitting.'),
+        findsOne,
+      );
+      expect(find.text('submission confirmed route'), findsNothing);
+      expect(
+        http.requests.any(
+          (request) =>
+              request.method == 'GET' &&
+              request.uri.path == '/shielded-vote/v1/tx/delegation-tx',
+        ),
+        isTrue,
+      );
+      expect(recoveryApi.ballotIntents, isEmpty);
+    },
+  );
+
+  testWidgets('status screen blocks mixed delegation recovery without draft', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/tx/delegation-tx'] = {
+          'height': 10,
+          'code': 0,
+          'log': '',
+          'events': [
+            {
+              'type': 'delegate_vote',
+              'attributes': [
+                {'key': 'leaf_index', 'value': '0'},
+              ],
+            },
+          ],
+        },
+    );
+    final recoveryApi = _MutableVotingRecoveryApi()
+      ..state = _recoveryState(
+        bundleCount: 2,
+        delegationWorkflows: const [
+          rust_voting.ApiDelegationWorkflowRecovery(
+            bundleIndex: 0,
+            phase: 'submitted_delegation',
+            txHash: 'delegation-tx',
+            vanLeafPosition: null,
+          ),
+        ],
+      )
+      ..roundPlan = rust_voting.ApiRoundPlan(
+        roundId: _roundId,
+        pendingRecovery: true,
+        nextSteps: const [
+          rust_voting.ApiNextStep(
+            kind: 'poll_delegation',
+            bundleIndex: 0,
+            proposalId: 0,
+            choice: 0,
+            shareIndex: 0,
+          ),
+          rust_voting.ApiNextStep(
+            kind: 'delegate',
+            bundleIndex: 1,
+            proposalId: 0,
+            choice: 0,
+            shareIndex: 0,
+          ),
+        ],
+        openProposals: Uint32List.fromList(const [1]),
+        allDecided: false,
+      );
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
+      hotkeyStore: const _FakeVotingHotkeyStore([9, 9, 9]),
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(
+      tester,
+      find.text('Choose at least one vote before submitting.'),
+    );
+
+    expect(find.text('Choose at least one vote before submitting.'), findsOne);
+    expect(find.text('submission confirmed route'), findsNothing);
+    expect(
+      http.requests.any(
+        (request) =>
+            request.method == 'GET' &&
+            request.uri.path == '/shielded-vote/v1/tx/delegation-tx',
+      ),
+      isFalse,
+    );
+  });
+
+  testWidgets('status screen requires closed ballot for no-draft recovery', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final recoveryApi = _MutableVotingRecoveryApi()
+      ..roundPlan = rust_voting.ApiRoundPlan(
+        roundId: _roundId,
+        pendingRecovery: true,
+        nextSteps: const [
+          rust_voting.ApiNextStep(
+            kind: 'confirm_share',
+            bundleIndex: 0,
+            proposalId: 1,
+            choice: 0,
+            shareIndex: 0,
+          ),
+        ],
+        openProposals: Uint32List.fromList(const [2]),
+        allDecided: false,
+      );
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(
+      tester,
+      find.text('Choose at least one vote before submitting.'),
+    );
+
+    expect(find.text('Choose at least one vote before submitting.'), findsOne);
+    expect(find.text('submission confirmed route'), findsNothing);
+    expect(recoveryApi.ballotIntents, isEmpty);
+  });
+
   testWidgets('status screen resumes share recovery without draft choices', (
     tester,
   ) async {
@@ -175,7 +397,7 @@ void main() {
           ),
         ],
         openProposals: Uint32List(0),
-        allDecided: true,
+        allDecided: false,
       );
     final http = FakeVotingHttpClient(
       responses: _votingHttpResponses()
@@ -1168,6 +1390,8 @@ Map<String, dynamic> _roundStatusJson() => {
 
 rust_voting.ApiRoundRecoveryState _recoveryState({
   int bundleCount = 1,
+  List<rust_voting.ApiDelegationWorkflowRecovery> delegationWorkflows =
+      const [],
   List<rust_voting.ApiDelegationTxRecovery> delegationTxHashes = const [],
   List<rust_voting.ApiVoteRecord> votes = const [],
   List<rust_voting.ApiVoteWorkflowRecovery> voteWorkflows = const [],
@@ -1181,7 +1405,7 @@ rust_voting.ApiRoundRecoveryState _recoveryState({
   return rust_voting.ApiRoundRecoveryState(
     roundId: _roundId,
     bundleCount: bundleCount,
-    delegationWorkflows: const [],
+    delegationWorkflows: delegationWorkflows,
     delegationTxHashes: delegationTxHashes,
     votes: votes,
     voteWorkflows: voteWorkflows,
