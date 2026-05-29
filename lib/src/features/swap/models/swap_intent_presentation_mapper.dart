@@ -60,6 +60,29 @@ List<SwapIntent> swapIntentsFromRecords(
   ];
 }
 
+/// Applies the same deadline-derived status resolution as [swapIntentsFromRecords]
+/// (e.g. a past-deadline awaiting deposit with no on-chain evidence becomes
+/// `expired`) but returns a record, so list surfaces agree with the detail
+/// panel instead of showing a stale raw status. Returns the record unchanged
+/// when no resolution applies.
+SwapIntentRecord resolveSwapRecordForDisplay(
+  SwapIntentRecord record, {
+  DateTime? now,
+}) {
+  final status = _resolveDepositDeadlineStatus(
+    providerStatus: record.status,
+    deadline: record.depositDeadline,
+    hasDepositEvidence:
+        _hasText(record.depositTxHash) || _hasText(record.originChainTxHash),
+    now: now ?? DateTime.now().toUtc(),
+  );
+  if (status == record.status) return record;
+  return record.copyWith(
+    status: status,
+    nextAction: _nextActionForRestoredStatus(status, record),
+  );
+}
+
 SwapIntentRecord swapIntentRecordForPersistence(
   SwapIntent intent, {
   required String accountUuid,

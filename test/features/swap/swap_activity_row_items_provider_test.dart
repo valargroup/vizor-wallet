@@ -87,6 +87,35 @@ void main() {
       expect(count, 1);
     },
   );
+
+  test('row items use resolved status so the list agrees with the panel', () async {
+    final past = DateTime.utc(2020, 1, 1);
+    final store = _FakeSwapActivityStore({
+      'account-1': [
+        // Past deadline, no on-chain evidence -> the row must show the resolved
+        // `expired` (Swap failed), not the raw `awaitingDeposit` ("Swapping...").
+        _pendingCountRecord(id: 'no-evidence', depositDeadline: past),
+        // Past deadline but a deposit tx exists -> carve-out keeps awaitingDeposit.
+        _pendingCountRecord(
+          id: 'with-evidence',
+          depositDeadline: past,
+          depositTxHash: 'zec-deposit-txid',
+        ),
+      ],
+    });
+    final container = ProviderContainer(
+      overrides: [swapActivityStoreProvider.overrideWithValue(store)],
+    );
+    addTearDown(container.dispose);
+
+    final items = await container.read(
+      swapActivityRowItemsProvider('account-1').future,
+    );
+    final byId = {for (final item in items) item.intentId: item};
+
+    expect(byId['no-evidence']!.status, SwapIntentStatus.expired);
+    expect(byId['with-evidence']!.status, SwapIntentStatus.awaitingDeposit);
+  });
 }
 
 SwapIntentRecord _pendingCountRecord({
