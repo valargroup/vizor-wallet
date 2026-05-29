@@ -107,6 +107,7 @@ pub fn store_signed_vote_commitment(
             "vote commitment_bundle_json",
         )?;
     }
+    #[allow(deprecated)]
     queries::store_commitment_bundle(
         &tx,
         round_id,
@@ -146,10 +147,8 @@ pub fn mark_vote_submitted(
     let stored = queries::get_vote_tx_hash(&tx, round_id, wallet_id, bundle_index, proposal_id)
         .map_err(|e| format!("get_vote_tx_hash failed: {e}"))?;
     check_text_conflict(stored.as_deref(), tx_hash, "vote tx_hash")?;
-    queries::store_vote_tx_hash(&tx, round_id, wallet_id, bundle_index, proposal_id, tx_hash)
-        .map_err(|e| format!("store_vote_tx_hash failed: {e}"))?;
-    queries::mark_vote_submitted(&tx, round_id, wallet_id, bundle_index, proposal_id)
-        .map_err(|e| format!("mark_vote_submitted failed: {e}"))?;
+    queries::record_vote_submission(&tx, round_id, wallet_id, bundle_index, proposal_id, tx_hash)
+        .map_err(|e| format!("record_vote_submission failed: {e}"))?;
     tx.commit()
         .map_err(|e| format!("commit vote submitted transaction failed: {e}"))
 }
@@ -194,12 +193,11 @@ pub fn mark_vote_confirmed(
         "vote commitment_bundle_json",
     )?;
     check_vote_position_conflict(stored_position, vc_tree_position)?;
-    queries::store_vote_tx_hash(&tx, round_id, wallet_id, bundle_index, proposal_id, tx_hash)
-        .map_err(|e| format!("store_vote_tx_hash failed: {e}"))?;
-    queries::mark_vote_submitted(&tx, round_id, wallet_id, bundle_index, proposal_id)
-        .map_err(|e| format!("mark_vote_submitted failed: {e}"))?;
+    queries::record_vote_submission(&tx, round_id, wallet_id, bundle_index, proposal_id, tx_hash)
+        .map_err(|e| format!("record_vote_submission failed: {e}"))?;
     queries::store_van_position(&tx, round_id, wallet_id, bundle_index, van_position)
         .map_err(|e| format!("store_van_position failed: {e}"))?;
+    #[allow(deprecated)]
     queries::store_commitment_bundle(
         &tx,
         round_id,

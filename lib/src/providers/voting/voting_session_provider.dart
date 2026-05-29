@@ -665,11 +665,17 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             bundleIndexes: bundleIndexesByProposal[draftVote.proposalId]!,
           ),
       ].where((work) => work.bundleIndexes.isNotEmpty).toList();
-      final totalQuestions = voteWork.length;
-      final totalBundleTasks = voteWork.fold<int>(
-        0,
-        (total, work) => total + work.bundleIndexes.length,
+      final submitVoteKeys = _pendingCommittedVoteSubmissionKeys(
+        plan,
+        context.roundPlan,
       );
+      final totalQuestions = submitVoteKeys.length + voteWork.length;
+      final totalBundleTasks =
+          submitVoteKeys.length +
+          voteWork.fold<int>(
+            0,
+            (total, work) => total + work.bundleIndexes.length,
+          );
       var completedBundleTasks = 0;
       var completedQuestions = 0;
       debugPrint(
@@ -678,6 +684,77 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         'proposals=$totalQuestions '
         'lastMoment=${context.round.isLastMoment()}',
       );
+      for (final key in submitVoteKeys) {
+        final voteTimer = Stopwatch()..start();
+        state = AsyncData(
+          (state.value ?? current).copyWith(
+            phase: VotingSessionPhase.castingVotes,
+            currentBundleIndex: key.bundleIndex,
+            currentVoteKey: key,
+            voteSubmissionCompletedCount: completedQuestions,
+            voteSubmissionTotalCount: totalQuestions,
+            voteSubmissionProgress: _voteSubmissionProgress(
+              completedBundleTasks: completedBundleTasks,
+              totalBundleTasks: totalBundleTasks,
+            ),
+          ),
+        );
+        debugPrint(
+          '[zcash] Voting: recovering committed cast-vote '
+          'round=${context.round.roundId} bundle=${key.bundleIndex} '
+          'proposal=${key.proposalId}',
+        );
+        final commitments = await rust.recoverVoteCommitment(
+          dbPath: context.dbPath,
+          walletId: context.accountUuid,
+          roundId: context.round.roundId,
+          bundleIndex: key.bundleIndex,
+          proposalId: key.proposalId,
+        );
+        final vcTreePositions = await _submitVoteCommitments(
+          context,
+          commitments,
+        );
+        await _submitCommitmentShares(
+          context,
+          commitments,
+          vcTreePositions: vcTreePositions,
+          singleShare: _commitmentsUseSingleShare(commitments),
+          completedQuestions: completedQuestions,
+          totalQuestions: totalQuestions,
+          voteSubmissionProgress: _voteSubmissionProgress(
+            completedBundleTasks: completedBundleTasks,
+            totalBundleTasks: totalBundleTasks,
+            currentBundleProgress: 0.95,
+          ),
+        );
+        completedBundleTasks++;
+        completedQuestions++;
+        progress[key] = VotingSessionProgress(
+          phase: 'completed',
+          bundleIndex: key.bundleIndex,
+          proposalId: key.proposalId,
+        );
+        state = AsyncData(
+          (state.value ?? current).copyWith(
+            phase: VotingSessionPhase.castingVotes,
+            voteProgress: progress,
+            currentVoteKey: key,
+            voteSubmissionCompletedCount: completedQuestions,
+            voteSubmissionTotalCount: totalQuestions,
+            voteSubmissionProgress: _voteSubmissionProgress(
+              completedBundleTasks: completedBundleTasks,
+              totalBundleTasks: totalBundleTasks,
+            ),
+          ),
+        );
+        debugPrint(
+          '[zcash] Voting: recovered vote flow completed '
+          'round=${context.round.roundId} bundle=${key.bundleIndex} '
+          'proposal=${key.proposalId} '
+          'total=${_formatElapsed(voteTimer.elapsed)}',
+        );
+      }
       for (final work in voteWork) {
         final draftVote = work.draftVote;
         for (final bundleIndex in work.bundleIndexes) {
@@ -2242,6 +2319,34 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         ))
           bundleIndex,
     };
+  }
+
+  static List<VotingVoteKey> _pendingCommittedVoteSubmissionKeys(
+    VotingResumePlan plan,
+    rust_voting.ApiRoundPlan? roundPlan,
+  ) {
+    if (roundPlan != null) {
+      return [
+        for (final step in roundPlan.nextSteps)
+          if (step.kind == 'submit_vote')
+            VotingVoteKey(
+              bundleIndex: step.bundleIndex,
+              proposalId: step.proposalId,
+            ),
+      ];
+    }
+    return plan.pendingVoteSubmissionKeys
+        .where((key) => plan.commitmentBundleFor(key) != null)
+        .toList(growable: false);
+  }
+
+  static bool _commitmentsUseSingleShare(
+    rust_voting.ApiSignedVoteCommitments commitments,
+  ) {
+    return commitments.commitments.isNotEmpty &&
+        commitments.commitments.every(
+          (commitment) => commitment.sharePayloads.length <= 1,
+        );
   }
 
   static bool _shouldSubmitVoteBundle(

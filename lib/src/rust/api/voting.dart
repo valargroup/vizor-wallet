@@ -536,6 +536,21 @@ Future<ApiSignedVoteCommitments> buildVoteCommitments({
   draftVotes: draftVotes,
 );
 
+/// Recover a committed but unsubmitted vote from persisted local recovery data.
+Future<ApiSignedVoteCommitments> recoverVoteCommitment({
+  required String dbPath,
+  required String walletId,
+  required String roundId,
+  required int bundleIndex,
+  required int proposalId,
+}) => RustLib.instance.api.crateApiVotingRecoverVoteCommitment(
+  dbPath: dbPath,
+  walletId: walletId,
+  roundId: roundId,
+  bundleIndex: bundleIndex,
+  proposalId: proposalId,
+);
+
 /// Streaming variant of `build_vote_commitments`.
 ///
 /// Emits per-proposal progress events, then a terminal `"result"` event carrying
@@ -1103,12 +1118,15 @@ class ApiKeystoneSignatureRecord {
 
 /// One unit of remaining work for a round, flattened for the FRB boundary.
 class ApiNextStep {
-  /// "delegate" | "poll_delegation" | "cast_vote" | "poll_vote" | "confirm_share".
+  /// "delegate" | "poll_delegation" | "cast_vote" | "submit_vote" | "poll_vote" | "confirm_share".
   final String kind;
   final int bundleIndex;
 
   /// 0 for delegation steps.
   final int proposalId;
+
+  /// 0 unless `cast_vote`.
+  final int choice;
 
   /// 0 unless `confirm_share`.
   final int shareIndex;
@@ -1117,6 +1135,7 @@ class ApiNextStep {
     required this.kind,
     required this.bundleIndex,
     required this.proposalId,
+    required this.choice,
     required this.shareIndex,
   });
 
@@ -1125,6 +1144,7 @@ class ApiNextStep {
       kind.hashCode ^
       bundleIndex.hashCode ^
       proposalId.hashCode ^
+      choice.hashCode ^
       shareIndex.hashCode;
 
   @override
@@ -1135,6 +1155,7 @@ class ApiNextStep {
           kind == other.kind &&
           bundleIndex == other.bundleIndex &&
           proposalId == other.proposalId &&
+          choice == other.choice &&
           shareIndex == other.shareIndex;
 }
 

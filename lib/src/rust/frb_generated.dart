@@ -175,6 +175,14 @@ abstract class RustLibApi extends BaseApi {
     required List<ApiDraftVote> draftVotes,
   });
 
+  Future<ApiSignedVoteCommitments> crateApiVotingRecoverVoteCommitment({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+  });
+
   Stream<ApiVoteCommitEvent> crateApiVotingBuildVoteCommitmentsWithProgress({
     required String dbPath,
     required String walletId,
@@ -1417,6 +1425,53 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "hotkeySeed",
           "vanWitness",
           "draftVotes",
+        ],
+      );
+
+  @override
+  Future<ApiSignedVoteCommitments> crateApiVotingRecoverVoteCommitment({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(walletId, serializer);
+          sse_encode_String(roundId, serializer);
+          sse_encode_u_32(bundleIndex, serializer);
+          sse_encode_u_32(proposalId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 121,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_api_signed_vote_commitments,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiVotingRecoverVoteCommitmentConstMeta,
+        argValues: [dbPath, walletId, roundId, bundleIndex, proposalId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVotingRecoverVoteCommitmentConstMeta =>
+      const TaskConstMeta(
+        debugName: "recover_vote_commitment",
+        argNames: [
+          "dbPath",
+          "walletId",
+          "roundId",
+          "bundleIndex",
+          "proposalId",
         ],
       );
 
@@ -6149,13 +6204,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ApiNextStep dco_decode_api_next_step(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return ApiNextStep(
       kind: dco_decode_String(arr[0]),
       bundleIndex: dco_decode_u_32(arr[1]),
       proposalId: dco_decode_u_32(arr[2]),
-      shareIndex: dco_decode_u_32(arr[3]),
+      choice: dco_decode_u_32(arr[3]),
+      shareIndex: dco_decode_u_32(arr[4]),
     );
   }
 
@@ -7466,11 +7522,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_kind = sse_decode_String(deserializer);
     var var_bundleIndex = sse_decode_u_32(deserializer);
     var var_proposalId = sse_decode_u_32(deserializer);
+    var var_choice = sse_decode_u_32(deserializer);
     var var_shareIndex = sse_decode_u_32(deserializer);
     return ApiNextStep(
       kind: var_kind,
       bundleIndex: var_bundleIndex,
       proposalId: var_proposalId,
+      choice: var_choice,
       shareIndex: var_shareIndex,
     );
   }
@@ -9124,6 +9182,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.kind, serializer);
     sse_encode_u_32(self.bundleIndex, serializer);
     sse_encode_u_32(self.proposalId, serializer);
+    sse_encode_u_32(self.choice, serializer);
     sse_encode_u_32(self.shareIndex, serializer);
   }
 

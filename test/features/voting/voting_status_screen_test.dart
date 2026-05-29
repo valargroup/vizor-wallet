@@ -170,6 +170,7 @@ void main() {
             kind: 'confirm_share',
             bundleIndex: 0,
             proposalId: 1,
+            choice: 0,
             shareIndex: 0,
           ),
         ],
