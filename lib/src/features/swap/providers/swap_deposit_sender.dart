@@ -10,6 +10,7 @@ import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../domain/swap_contract.dart';
+import '../models/swap_deposit_broadcast_result.dart';
 
 final swapDepositSenderProvider = Provider<SwapDepositSender>((ref) {
   return RustSwapDepositSender(ref);
@@ -21,7 +22,7 @@ abstract interface class SwapDepositSender {
     required SwapQuote quote,
   });
 
-  Future<String> sendZecDeposit({
+  Future<SwapDepositBroadcastResult> sendZecDeposit({
     required String accountUuid,
     required SwapQuote quote,
   });
@@ -62,7 +63,7 @@ class RustSwapDepositSender implements SwapDepositSender {
   }
 
   @override
-  Future<String> sendZecDeposit({
+  Future<SwapDepositBroadcastResult> sendZecDeposit({
     required String accountUuid,
     required SwapQuote quote,
   }) async {
@@ -157,9 +158,13 @@ class RustSwapDepositSender implements SwapDepositSender {
       }
       log(
         'SwapDepositSender: broadcast complete flow=$sendFlowId '
-        'tx=${_shortSwapValue(txid)}',
+        'tx=${_shortSwapValue(txid)} status=${result.status}',
       );
-      return txid;
+      return SwapDepositBroadcastResult(
+        txHash: txid,
+        status: result.status,
+        message: result.message,
+      );
     } catch (e) {
       log('SwapDepositSender: failed flow=$sendFlowId error=$e');
       rethrow;

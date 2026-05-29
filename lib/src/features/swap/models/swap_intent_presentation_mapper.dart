@@ -63,14 +63,23 @@ SwapIntent swapIntentFromSnapshot({
   required String accountUuid,
   required DateTime now,
 }) {
+  final depositDeadline =
+      snapshot.depositInstruction.deadline ?? quote.depositInstruction.deadline;
+  final status = _resolveDepositDeadlineStatus(
+    providerStatus: snapshot.status,
+    deadline: depositDeadline,
+    hasDepositEvidence: _hasText(snapshot.originChainTxHash),
+    now: now,
+  );
+  final nextAction = _nextActionForResolvedStatus(status, snapshot);
   final record = SwapIntentRecord(
     id: snapshot.id,
     providerLabel: snapshot.providerLabel,
     pairText: snapshot.pairText,
     sellAmountText: snapshot.sellAmountText,
     receiveEstimateText: snapshot.receiveEstimateText,
-    status: snapshot.status,
-    nextAction: snapshot.nextAction,
+    status: status,
+    nextAction: nextAction,
     sellAmountBaseUnits:
         snapshot.sellAmountBaseUnits ?? quote.sellAmountBaseUnits,
     direction: quote.direction,
@@ -94,11 +103,11 @@ SwapIntent swapIntentFromSnapshot({
     fiatValueBasis: snapshot.fiatValueBasis ?? quote.fiatValueBasis,
     oneClickRecipient: addressPlan.oneClickRecipient,
     oneClickRefundTo: addressPlan.oneClickRefundTo,
-    depositDeadline: quote.depositInstruction.deadline,
+    depositDeadline: depositDeadline,
     accountUuid: accountUuid,
     createdAt: now,
     updatedAt: now,
-    completedAt: snapshot.status.isTerminal ? now : null,
+    completedAt: status.isTerminal ? now : null,
   );
   return _swapIntentFromRecord(record);
 }
@@ -174,14 +183,25 @@ SwapIntent updateSwapIntentFromSnapshot(
   final providerRefundInfo =
       intent.providerRefundInfo?.merge(snapshot.providerRefundInfo) ??
       snapshot.providerRefundInfo;
-  final status = snapshot.status;
+  final depositDeadline =
+      snapshot.depositInstruction.deadline ?? intent.depositDeadline;
+  final status = _resolveDepositDeadlineStatus(
+    providerStatus: snapshot.status,
+    deadline: depositDeadline,
+    hasDepositEvidence:
+        _hasText(intent.depositTxHash) ||
+        _hasText(intent.originChainTxHash) ||
+        _hasText(snapshot.originChainTxHash),
+    now: timestamp,
+  );
+  final nextAction = _nextActionForResolvedStatus(status, snapshot);
   final record = SwapIntentRecord.fromIntent(intent).copyWith(
     providerLabel: snapshot.providerLabel,
     pairText: snapshot.pairText,
     sellAmountText: snapshot.sellAmountText,
     receiveEstimateText: snapshot.receiveEstimateText,
     status: status,
-    nextAction: snapshot.nextAction,
+    nextAction: nextAction,
     sellAmountBaseUnits: snapshot.sellAmountBaseUnits,
     swapFeeText: snapshot.swapFeeText,
     totalFeesText: snapshot.totalFeesText,
@@ -199,13 +219,45 @@ SwapIntent updateSwapIntentFromSnapshot(
     depositAddress:
         intent.depositAddress ?? snapshot.depositInstruction.address,
     depositMemo: intent.depositMemo ?? snapshot.depositInstruction.memo,
-    depositDeadline:
-        snapshot.depositInstruction.deadline ?? intent.depositDeadline,
+    depositDeadline: depositDeadline,
     updatedAt: timestamp,
     completedAt: intent.completedAt ?? (status.isTerminal ? timestamp : null),
   );
   return _swapIntentFromRecord(record);
 }
+
+SwapIntentStatus _resolveDepositDeadlineStatus({
+  required SwapIntentStatus providerStatus,
+  required DateTime? deadline,
+  required bool hasDepositEvidence,
+  required DateTime now,
+}) {
+  if (!_isAwaitingDepositStatus(providerStatus) ||
+      deadline == null ||
+      hasDepositEvidence ||
+      now.toUtc().isBefore(deadline.toUtc())) {
+    return providerStatus;
+  }
+  return SwapIntentStatus.expired;
+}
+
+bool _isAwaitingDepositStatus(SwapIntentStatus status) {
+  return status == SwapIntentStatus.awaitingDeposit ||
+      status == SwapIntentStatus.awaitingExternalDeposit;
+}
+
+String _nextActionForResolvedStatus(
+  SwapIntentStatus status,
+  SwapIntentSnapshot snapshot,
+) {
+  if (status == SwapIntentStatus.expired &&
+      snapshot.status != SwapIntentStatus.expired) {
+    return 'Start a fresh quote';
+  }
+  return snapshot.nextAction;
+}
+
+bool _hasText(String? value) => value?.trim().isNotEmpty ?? false;
 
 String _swapIntentTitle(SwapIntentRecord record) {
   final direction = record.direction;

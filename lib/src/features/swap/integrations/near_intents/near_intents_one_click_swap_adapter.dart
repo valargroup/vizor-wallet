@@ -237,7 +237,7 @@ class NearIntentsOneClickSwapAdapter
       sellToken: sellToken,
       receiveToken: receiveToken,
     );
-    final status = _statusFromOneClick(response.status, quote, _now());
+    final status = _statusFromOneClick(response.status, quote);
     final statusRefundInfo = _statusRefundInfo(
       response.swapDetails,
       sellAsset: sellAsset,

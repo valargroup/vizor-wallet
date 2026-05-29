@@ -10,6 +10,7 @@ import '../../../rust/api/sync.dart' as rust_sync;
 import '../../keystone/widgets/keystone_signing_modal.dart';
 import '../../send/services/sapling_params.dart';
 import '../../send/widgets/sapling_params_prompt.dart';
+import '../models/swap_deposit_broadcast_result.dart';
 import '../models/swap_keystone_broadcast_result.dart';
 import '../models/swap_models.dart';
 import '../providers/swap_hardware_signing_service.dart';
@@ -202,7 +203,7 @@ class _SwapKeystoneSigningOverlayState
         });
         return;
       }
-      if (result.status != 'broadcasted') {
+      if (result.status != SwapDepositBroadcastStatus.broadcasted) {
         log(
           'SwapKeystoneSigning: broadcast returned ${result.status} '
           'with tx=${_shortSwapValue(result.txid)}; recording txid for swap tracking',
@@ -226,9 +227,10 @@ class _SwapKeystoneSigningOverlayState
 
   bool _hasBroadcastTxid(rust_sync.ExtractAndBroadcastPcztResult result) {
     return switch (result.status) {
-      'broadcasted' ||
-      'broadcast_unknown' ||
-      'broadcasted_storage_failed' => result.txid.trim().isNotEmpty,
+      SwapDepositBroadcastStatus.broadcasted ||
+      SwapDepositBroadcastStatus.broadcastUnknown ||
+      SwapDepositBroadcastStatus.broadcastedStorageFailed =>
+        result.txid.trim().isNotEmpty,
       _ => false,
     };
   }

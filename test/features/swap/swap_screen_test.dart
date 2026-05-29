@@ -18,6 +18,7 @@ import 'package:zcash_wallet/src/features/address_book/providers/address_book_pr
 import 'package:zcash_wallet/src/features/swap/integrations/near_intents/near_intents_one_click_swap_adapter.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_activity_navigation.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_detail_tooltips.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_deposit_broadcast_result.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_intent_presentation_mapper.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_hardware_signing_service.dart';
@@ -5253,6 +5254,12 @@ void main() {
         find.byKey(const ValueKey('swap_copy_deposit_address')),
         findsOneWidget,
       );
+      expect(find.text('Memo'), findsOneWidget);
+      expect(find.text('memo-live'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('swap_copy_deposit_memo')),
+        findsOneWidget,
+      );
       final copyDepositAddress = find.byKey(
         const ValueKey('swap_copy_deposit_address'),
       );
@@ -5303,6 +5310,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(clipboardWrites.last, '0xlive-deposit');
       expect(find.text('Address copied'), findsOneWidget);
+      final copyDepositMemo = find.byKey(
+        const ValueKey('swap_copy_deposit_memo'),
+      );
+      await tester.ensureVisible(copyDepositMemo);
+      await tester.pumpAndSettle();
+      await tester.tap(copyDepositMemo);
+      await tester.pumpAndSettle();
+      expect(clipboardWrites.last, 'memo-live');
+      expect(find.text('Memo copied'), findsOneWidget);
       expect(find.text('Receive address'), findsNothing);
       expect(
         find.byKey(const ValueKey('swap_copy_receive_address')),
@@ -5423,6 +5439,63 @@ void main() {
     expect(find.text('Submit ZEC deposit'), findsNothing);
     expect(find.text('zec-auto-txid'), findsWidgets);
   });
+
+  testWidgets(
+    'pending ZEC deposit broadcast is checkpointed without provider submit',
+    (tester) async {
+      await _setDesktopViewport(tester);
+      final swapProvider = _FakeSwapProvider();
+      final depositSender = _FakeSwapDepositSender(
+        broadcastStatus: SwapDepositBroadcastStatus.pendingBroadcast,
+        broadcastMessage: 'Broadcast could not start after local creation',
+      );
+      final sessionStore = _FakeSwapPersistenceStore();
+
+      await tester.pumpWidget(
+        _routerHarness(
+          GoRouter(
+            initialLocation: '/swap',
+            routes: [_swapRoute(), _swapActivityRoute()],
+          ),
+          swapProvider: swapProvider,
+          depositSender: depositSender,
+          sessionStore: sessionStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('swap_amount_field')),
+        '1.5',
+      );
+      await _enterDestinationText(tester, '0xrecipient');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('swap_review_button')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('swap_start_button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('swap_start_button')));
+      await tester.pumpAndSettle();
+
+      expect(depositSender.requests, hasLength(1));
+      expect(swapProvider.submittedDeposits, isEmpty);
+      expect(sessionStore.savedIntents, hasLength(1));
+      expect(sessionStore.savedIntents.single.depositTxHash, 'zec-auto-txid');
+      expect(
+        sessionStore.savedIntents.single.broadcastNotice,
+        'Broadcast could not start after local creation',
+      );
+      await _openSwapStatusDetails(tester, expand: true);
+      expect(find.text('zec-auto-txid'), findsWidgets);
+      expect(
+        find.text('Broadcast could not start after local creation'),
+        findsWidgets,
+      );
+    },
+  );
 
   testWidgets('ZEC swap opens activity before deposit broadcast finishes', (
     tester,

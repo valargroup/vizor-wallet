@@ -120,6 +120,104 @@ void main() {
     expect(_receiptValue(updated, 'Provider status'), 'SUCCESS');
   });
 
+  test(
+    'creates expired intent only when a pending deposit has no evidence',
+    () {
+      final now = DateTime.utc(2026, 5, 7, 12, 1);
+      final quote = _quoteWithDepositDeadline(DateTime.utc(2026, 5, 7, 12));
+
+      final intent = swapIntentFromSnapshot(
+        snapshot: _pendingDepositSnapshot(),
+        quote: quote,
+        addressPlan: const SwapAddressPlan(
+          direction: SwapDirection.zecToExternal,
+          externalAsset: SwapAsset.usdc,
+          userExternalAddress: '0xrecipient',
+          walletZecAddress: 'u1refund',
+          oneClickRecipient: '0xrecipient',
+          oneClickRefundTo: 'u1refund',
+        ),
+        accountUuid: 'account-1',
+        now: now,
+      );
+
+      expect(intent.status, SwapIntentStatus.expired);
+      expect(intent.nextAction, 'Start a fresh quote');
+      expect(intent.completedAt, now);
+    },
+  );
+
+  test('keeps expired pending deposit non-terminal when a local tx exists', () {
+    final createdAt = DateTime.utc(2026, 5, 7, 10);
+    final checkedAt = DateTime.utc(2026, 5, 7, 12, 1);
+    final intent = _intentFromRecord(
+      SwapIntentRecord(
+        id: 'swap-record',
+        providerLabel: 'NEAR Intents',
+        pairText: 'ZEC -> USDC',
+        sellAmountText: '0.0030 ZEC',
+        receiveEstimateText: '0.21 USDC',
+        status: SwapIntentStatus.awaitingDeposit,
+        nextAction: 'Deposit ZEC',
+        direction: SwapDirection.zecToExternal,
+        externalAsset: SwapAsset.usdc,
+        depositAddress: 't1deposit',
+        depositTxHash: 'local-deposit-txid',
+        depositDeadline: DateTime.utc(2026, 5, 7, 12),
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      ),
+    );
+
+    final updated = updateSwapIntentFromSnapshot(
+      intent,
+      _pendingDepositSnapshot(),
+      updatedAt: checkedAt,
+      lastStatusCheckedAt: checkedAt,
+    );
+
+    expect(updated.status, SwapIntentStatus.awaitingDeposit);
+    expect(updated.status.isTerminal, false);
+    expect(updated.depositTxHash, 'local-deposit-txid');
+    expect(updated.lastStatusCheckedAt, checkedAt);
+  });
+
+  test(
+    'keeps expired pending deposit non-terminal when provider reports origin tx',
+    () {
+      final createdAt = DateTime.utc(2026, 5, 7, 10);
+      final checkedAt = DateTime.utc(2026, 5, 7, 12, 1);
+      final intent = _intentFromRecord(
+        SwapIntentRecord(
+          id: 'swap-record',
+          providerLabel: 'NEAR Intents',
+          pairText: 'ZEC -> USDC',
+          sellAmountText: '0.0030 ZEC',
+          receiveEstimateText: '0.21 USDC',
+          status: SwapIntentStatus.awaitingDeposit,
+          nextAction: 'Deposit ZEC',
+          direction: SwapDirection.zecToExternal,
+          externalAsset: SwapAsset.usdc,
+          depositAddress: 't1deposit',
+          depositDeadline: DateTime.utc(2026, 5, 7, 12),
+          createdAt: createdAt,
+          updatedAt: createdAt,
+        ),
+      );
+
+      final updated = updateSwapIntentFromSnapshot(
+        intent,
+        _pendingDepositSnapshot(originChainTxHash: 'provider-origin-txid'),
+        updatedAt: checkedAt,
+        lastStatusCheckedAt: checkedAt,
+      );
+
+      expect(updated.status, SwapIntentStatus.awaitingDeposit);
+      expect(updated.status.isTerminal, false);
+      expect(updated.originChainTxHash, 'provider-origin-txid');
+    },
+  );
+
   test('deposit helpers preserve tx hash and broadcast notice', () {
     final createdAt = DateTime.utc(2026, 5, 7, 10);
     final checkpointedAt = DateTime.utc(2026, 5, 7, 10, 5);
@@ -225,4 +323,34 @@ String _receiptValue(SwapIntent intent, String label) {
 
 SwapIntent _intentFromRecord(SwapIntentRecord record) {
   return swapIntentsFromRecords([record]).single;
+}
+
+SwapQuote _quoteWithDepositDeadline(DateTime deadline) {
+  return SwapQuote.estimate(
+    direction: SwapDirection.zecToExternal,
+    externalAsset: SwapAsset.usdc,
+    amount: 0.003,
+    depositDeadline: deadline,
+  );
+}
+
+SwapIntentSnapshot _pendingDepositSnapshot({String? originChainTxHash}) {
+  return SwapIntentSnapshot(
+    id: 'swap-record',
+    providerLabel: 'NEAR Intents',
+    pairText: 'ZEC -> USDC',
+    sellAmountText: '0.0030 ZEC',
+    receiveEstimateText: '0.21 USDC',
+    status: SwapIntentStatus.awaitingDeposit,
+    nextAction: 'Send ZEC to the one-time deposit address',
+    depositInstruction: const SwapDepositInstruction(
+      asset: SwapAsset.zec,
+      address: 't1deposit',
+      expiresInLabel: 'expired',
+      reuseWarning: 'Do not reuse',
+      deadline: null,
+    ),
+    providerStatusRaw: 'PENDING_DEPOSIT',
+    originChainTxHash: originChainTxHash,
+  );
 }

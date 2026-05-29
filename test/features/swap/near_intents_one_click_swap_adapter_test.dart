@@ -1384,34 +1384,37 @@ void main() {
     },
   );
 
-  test('pending deposit becomes expired after the deposit deadline', () async {
-    final transport = _FakeOneClickTransport([
-      _FakeResponse.get('/v0/tokens', _tokens),
-      _FakeResponse.get(
-        '/v0/status',
-        _quoteResponse(
-          originAsset: 'nep141:zec.omft.near',
-          destinationAsset: 'nep141:usdc.example',
-          amountInFormatted: '1',
-          amountOutFormatted: '70',
-          minAmountOut: '69650000',
-          depositAddress: 'expired-deposit',
-          quoteDeadline: '2026-05-10T12:00:00Z',
-          status: 'PENDING_DEPOSIT',
+  test(
+    'pending deposit status keeps provider status after the deposit deadline',
+    () async {
+      final transport = _FakeOneClickTransport([
+        _FakeResponse.get('/v0/tokens', _tokens),
+        _FakeResponse.get(
+          '/v0/status',
+          _quoteResponse(
+            originAsset: 'nep141:zec.omft.near',
+            destinationAsset: 'nep141:usdc.example',
+            amountInFormatted: '1',
+            amountOutFormatted: '70',
+            minAmountOut: '69650000',
+            depositAddress: 'expired-deposit',
+            quoteDeadline: '2026-05-10T12:00:00Z',
+            status: 'PENDING_DEPOSIT',
+          ),
         ),
-      ),
-    ]);
-    final provider = NearIntentsOneClickSwapAdapter(
-      transport: transport,
-      now: () => DateTime.utc(2026, 5, 7, 12, 1),
-    );
+      ]);
+      final provider = NearIntentsOneClickSwapAdapter(
+        transport: transport,
+        now: () => DateTime.utc(2026, 5, 7, 12, 1),
+      );
 
-    final status = await provider.getStatus('expired-deposit');
+      final status = await provider.getStatus('expired-deposit');
 
-    expect(status.status, SwapIntentStatus.expired);
-    expect(status.nextAction, 'Start a fresh quote');
-    expect(status.depositInstruction.deadline, DateTime.utc(2026, 5, 7, 12));
-  });
+      expect(status.status, SwapIntentStatus.awaitingDeposit);
+      expect(status.nextAction, 'Send ZEC to the one-time deposit address');
+      expect(status.depositInstruction.deadline, DateTime.utc(2026, 5, 7, 12));
+    },
+  );
 }
 
 const _tokens = [

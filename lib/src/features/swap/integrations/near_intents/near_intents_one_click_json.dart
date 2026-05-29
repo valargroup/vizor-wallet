@@ -238,15 +238,7 @@ String _rateText({
       '${rate.toStringAsFixed(precision)} ${receiveAsset.symbol}';
 }
 
-SwapIntentStatus _statusFromOneClick(
-  String status,
-  SwapQuote quote,
-  DateTime now,
-) {
-  if (status == 'PENDING_DEPOSIT' &&
-      _isDepositDeadlineExpired(quote.depositInstruction, now)) {
-    return SwapIntentStatus.expired;
-  }
+SwapIntentStatus _statusFromOneClick(String status, SwapQuote quote) {
   return switch (status) {
     'PENDING_DEPOSIT' =>
       quote.direction.sendsZec
@@ -260,15 +252,6 @@ SwapIntentStatus _statusFromOneClick(
     'FAILED' => SwapIntentStatus.failed,
     _ => SwapIntentStatus.providerStatusUnknown,
   };
-}
-
-bool _isDepositDeadlineExpired(
-  SwapDepositInstruction instruction,
-  DateTime now,
-) {
-  final deadline = instruction.deadline;
-  if (deadline == null) return false;
-  return !now.toUtc().isBefore(deadline);
 }
 
 String _nextAction(SwapIntentStatus status, SwapQuote quote) {

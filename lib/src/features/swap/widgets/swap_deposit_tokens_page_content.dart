@@ -154,6 +154,7 @@ class _SwapDepositPageShell extends StatelessWidget {
           _DepositDetailsList(
             amountText: amountText,
             depositAddress: depositAddress,
+            memo: memo,
           ),
           actionArea,
         ],
@@ -670,10 +671,12 @@ class _DepositDetailsList extends StatelessWidget {
   const _DepositDetailsList({
     required this.amountText,
     required this.depositAddress,
+    this.memo,
   });
 
   final String amountText;
   final String depositAddress;
+  final String? memo;
 
   @override
   Widget build(BuildContext context) {
@@ -697,6 +700,14 @@ class _DepositDetailsList extends StatelessWidget {
             toastMessage: 'Address copied',
             copyKey: const ValueKey('swap_copy_deposit_address'),
           ),
+          if (memo?.trim().isNotEmpty ?? false)
+            _DepositDetailRow(
+              label: 'Memo',
+              value: memo!.trim(),
+              copyText: memo!.trim(),
+              toastMessage: 'Memo copied',
+              copyKey: const ValueKey('swap_copy_deposit_memo'),
+            ),
         ],
       ),
     );

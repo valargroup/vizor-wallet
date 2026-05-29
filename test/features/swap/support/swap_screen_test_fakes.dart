@@ -625,9 +625,15 @@ class _SubmittedDeposit {
 }
 
 class _FakeSwapDepositSender implements SwapDepositSender {
-  _FakeSwapDepositSender({this.preflightError});
+  _FakeSwapDepositSender({
+    this.preflightError,
+    this.broadcastStatus = SwapDepositBroadcastStatus.broadcasted,
+    this.broadcastMessage,
+  });
 
   final Object? preflightError;
+  final String broadcastStatus;
+  final String? broadcastMessage;
   final preflightRequests = <_DepositSendRequest>[];
   final requests = <_DepositSendRequest>[];
 
@@ -650,7 +656,7 @@ class _FakeSwapDepositSender implements SwapDepositSender {
   }
 
   @override
-  Future<String> sendZecDeposit({
+  Future<SwapDepositBroadcastResult> sendZecDeposit({
     required String accountUuid,
     required SwapQuote quote,
   }) async {
@@ -662,21 +668,30 @@ class _FakeSwapDepositSender implements SwapDepositSender {
         sellAmountBaseUnits: quote.sellAmountBaseUnits,
       ),
     );
-    return 'zec-auto-txid';
+    return SwapDepositBroadcastResult(
+      txHash: 'zec-auto-txid',
+      status: broadcastStatus,
+      message: broadcastMessage,
+    );
   }
 }
 
 class _DelayedSwapDepositSender extends _FakeSwapDepositSender {
-  final _sendGate = Completer<String>();
+  final _sendGate = Completer<SwapDepositBroadcastResult>();
 
   void completeSend([String txid = 'zec-auto-txid']) {
     if (!_sendGate.isCompleted) {
-      _sendGate.complete(txid);
+      _sendGate.complete(
+        SwapDepositBroadcastResult(
+          txHash: txid,
+          status: SwapDepositBroadcastStatus.broadcasted,
+        ),
+      );
     }
   }
 
   @override
-  Future<String> sendZecDeposit({
+  Future<SwapDepositBroadcastResult> sendZecDeposit({
     required String accountUuid,
     required SwapQuote quote,
   }) async {

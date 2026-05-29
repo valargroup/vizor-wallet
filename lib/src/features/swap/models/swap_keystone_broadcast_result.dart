@@ -1,13 +1,9 @@
-class SwapKeystoneBroadcastResult {
+import 'swap_deposit_broadcast_result.dart';
+
+class SwapKeystoneBroadcastResult extends SwapDepositBroadcastResult {
   const SwapKeystoneBroadcastResult({
-    required this.txHash,
-    required this.status,
-    this.message,
+    required super.txHash,
+    required super.status,
+    super.message,
   });
-
-  final String txHash;
-  final String status;
-  final String? message;
-
-  bool get isCertain => status == 'broadcasted';
 }

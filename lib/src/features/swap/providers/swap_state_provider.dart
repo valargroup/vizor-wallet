@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../main.dart' show log;
 import '../../../core/formatting/zec_amount.dart';
 import '../models/swap_amount_input_mapper.dart';
+import '../models/swap_deposit_broadcast_result.dart';
 import '../models/swap_intent_presentation_mapper.dart';
 import '../models/swap_models.dart';
 import '../../../providers/account_provider.dart';
@@ -735,7 +736,7 @@ class SwapNotifier extends Notifier<SwapState> {
     final selected = state.intents.swapIntentById(intentId);
     final normalizedTxHash = txHash.trim();
     if (normalizedTxHash.isEmpty) return;
-    final broadcastNotice = _hardwareBroadcastNotice(
+    final broadcastNotice = _depositBroadcastNotice(
       status: broadcastStatus,
       message: broadcastMessage,
     );
@@ -795,7 +796,7 @@ class SwapNotifier extends Notifier<SwapState> {
       'tx=${_shortSwapValue(txHash)}',
     );
     state = state.copyWith(depositSubmitting: true, clearStatusError: true);
-    final broadcastNotice = _hardwareBroadcastNotice(
+    final broadcastNotice = _depositBroadcastNotice(
       status: broadcastStatus,
       message: broadcastMessage,
     );
@@ -887,7 +888,7 @@ class SwapNotifier extends Notifier<SwapState> {
     final intent = storedIntents.swapIntentById(intentId);
     if (intent == null) return;
 
-    final broadcastNotice = _hardwareBroadcastNotice(
+    final broadcastNotice = _depositBroadcastNotice(
       status: broadcastStatus,
       message: broadcastMessage,
     );
@@ -943,7 +944,7 @@ class SwapNotifier extends Notifier<SwapState> {
     final intent = storedIntents.swapIntentById(intentId);
     if (intent == null) return;
 
-    final broadcastNotice = _hardwareBroadcastNotice(
+    final broadcastNotice = _depositBroadcastNotice(
       status: broadcastStatus,
       message: broadcastMessage,
     );
@@ -970,9 +971,9 @@ class SwapNotifier extends Notifier<SwapState> {
       'deposit=${_shortSwapValue(quote.depositInstruction.address)}',
     );
     state = state.copyWith(depositSubmitting: true, clearStatusError: true);
-    late final String txHash;
+    late final SwapDepositBroadcastResult broadcast;
     try {
-      txHash = await ref
+      broadcast = await ref
           .read(swapDepositSenderProvider)
           .sendZecDeposit(accountUuid: accountUuid, quote: quote);
     } catch (e) {
@@ -992,60 +993,78 @@ class SwapNotifier extends Notifier<SwapState> {
     }
 
     log(
-      'Swap: live ZEC deposit broadcast tx=${_shortSwapValue(txHash)} '
-      'intent=${_shortSwapValue(intentId)}',
+      'Swap: live ZEC deposit broadcast tx=${_shortSwapValue(broadcast.txHash)} '
+      'status=${broadcast.status} intent=${_shortSwapValue(intentId)}',
     );
     if (!_isAccountActive(accountUuid)) {
       await _submitDepositTransactionForStoredIntent(
         accountUuid: accountUuid,
         intentId: intentId,
-        txHash: txHash,
+        txHash: broadcast.txHash,
+        broadcastStatus: broadcast.status,
+        broadcastMessage: broadcast.message,
+        submitProviderStatus: broadcast.isCertain,
       );
       return;
     }
+    final broadcastNotice = _depositBroadcastNotice(
+      status: broadcast.status,
+      message: broadcast.message,
+    );
     final intent = state.intents.swapIntentById(intentId);
     if (intent == null) {
       state = state.copyWith(
-        depositTxHashText: txHash,
+        depositTxHashText: broadcast.txHash,
         depositSubmitting: false,
-        statusError:
-            'ZEC deposit was broadcast, but the saved swap intent was not found. Copy the transaction hash before leaving this screen.',
+        statusError: broadcast.isCertain
+            ? 'ZEC deposit was broadcast, but the saved swap intent was not found. Copy the transaction hash before leaving this screen.'
+            : broadcastNotice,
       );
       return;
     }
     final checkpointed = swapIntentWithDepositCheckpoint(
       intent,
-      txHash: txHash,
-      clearStatusError: false,
-      clearBroadcastNotice: false,
+      txHash: broadcast.txHash,
+      broadcastNotice: broadcastNotice,
+      clearStatusError: broadcastNotice == null,
+      clearBroadcastNotice: broadcastNotice == null,
     );
     state = state.copyWith(
-      depositTxHashText: txHash,
+      depositTxHashText: broadcast.txHash,
       intents: state.intents.replaceSwapIntent(intentId, checkpointed),
     );
     await _persistCurrentIntents();
 
+    if (!broadcast.isCertain) {
+      state = state.copyWith(
+        depositSubmitting: false,
+        intents: state.intents.replaceSwapIntent(intentId, checkpointed),
+        statusError: broadcastNotice,
+      );
+      return;
+    }
+
     try {
       final snapshot = await _submitProviderDepositTransaction(
         checkpointed,
-        txHash,
+        broadcast.txHash,
       );
       final updated = swapIntentWithDepositSnapshot(
         checkpointed,
         snapshot,
-        txHash: txHash,
+        txHash: broadcast.txHash,
       );
       if (!_isAccountActive(accountUuid)) {
         await _recordDepositSnapshotForStoredIntent(
           accountUuid: accountUuid,
           intentId: intentId,
-          txHash: txHash,
+          txHash: broadcast.txHash,
           snapshot: snapshot,
         );
         return;
       }
       state = state.copyWith(
-        depositTxHashText: txHash,
+        depositTxHashText: broadcast.txHash,
         depositSubmitting: false,
         intents: state.intents.replaceSwapIntent(intentId, updated),
         clearStatusError: true,
@@ -1058,7 +1077,7 @@ class SwapNotifier extends Notifier<SwapState> {
     } catch (e) {
       log(
         'Swap: live ZEC deposit submit failed after broadcast '
-        'intent=${_shortSwapValue(intentId)} tx=${_shortSwapValue(txHash)} '
+        'intent=${_shortSwapValue(intentId)} tx=${_shortSwapValue(broadcast.txHash)} '
         'error=$e',
       );
       final message = swapFailureMessage(SwapFailureOperation.submitDeposit, e);
@@ -1066,7 +1085,7 @@ class SwapNotifier extends Notifier<SwapState> {
         await _submitDepositTransactionForStoredIntent(
           accountUuid: accountUuid,
           intentId: intentId,
-          txHash: txHash,
+          txHash: broadcast.txHash,
           submitProviderStatus: false,
           statusError: message,
         );
@@ -1360,24 +1379,31 @@ class SwapNotifier extends Notifier<SwapState> {
     return ref.read(accountProvider.notifier).isHardwareAccount(accountUuid);
   }
 
-  String? _hardwareBroadcastNotice({String? status, String? message}) {
+  String? _depositBroadcastNotice({String? status, String? message}) {
     final normalizedStatus = status?.trim();
     if (normalizedStatus == null ||
         normalizedStatus.isEmpty ||
-        normalizedStatus == 'broadcasted') {
+        normalizedStatus == SwapDepositBroadcastStatus.broadcasted) {
       return null;
     }
     final trimmedMessage = message?.trim();
     if (trimmedMessage != null && trimmedMessage.isNotEmpty) {
       return trimmedMessage;
     }
-    if (normalizedStatus == 'broadcast_unknown') {
+    if (normalizedStatus == SwapDepositBroadcastStatus.partialBroadcast) {
+      return 'Some deposit transactions may have reached the network. Check activity before trying again.';
+    }
+    if (normalizedStatus == SwapDepositBroadcastStatus.pendingBroadcast) {
+      return 'The deposit was created locally but could not be broadcast. Check activity before trying again.';
+    }
+    if (normalizedStatus == SwapDepositBroadcastStatus.broadcastUnknown) {
       return 'The transaction may have reached the network, but confirmation timed out. Check activity before trying again.';
     }
-    if (normalizedStatus == 'broadcasted_storage_failed') {
+    if (normalizedStatus ==
+        SwapDepositBroadcastStatus.broadcastedStorageFailed) {
       return 'The transaction reached the network, but Vizor could not store it locally. Do not try again until sync or an explorer confirms the latest status.';
     }
-    return null;
+    return 'The deposit status is uncertain. Check activity before trying again.';
   }
 }
 
