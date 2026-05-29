@@ -20,6 +20,7 @@ import 'account_models.dart';
 import 'app_security_provider.dart';
 import 'rpc_endpoint_failover_provider.dart';
 import 'rpc_endpoint_provider.dart';
+import 'voting/voting_submission_guard_provider.dart';
 
 export 'account_models.dart';
 
@@ -275,6 +276,9 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   /// Switch active account.
   Future<void> switchAccount(String uuid) async {
     final previousActiveUuid = state.value?.activeAccountUuid;
+    if (previousActiveUuid != uuid) {
+      ref.read(votingSubmissionGuardProvider.notifier).throwIfActive();
+    }
     if (previousActiveUuid != null && previousActiveUuid != uuid) {
       await _resetVotingProcessStateForAccount(previousActiveUuid);
     }
@@ -342,6 +346,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
   /// Remove an account from the wallet.
   Future<void> removeAccount(String uuid) async {
+    ref.read(votingSubmissionGuardProvider.notifier).throwIfActive();
     final prev = state.value ?? const AccountState();
     final targetIndex = prev.accounts.indexWhere((a) => a.uuid == uuid);
     if (targetIndex < 0) {
@@ -426,6 +431,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
   /// Delete all wallet data (DB + keychain). Caller must stop sync first.
   Future<void> resetWallet() async {
+    ref.read(votingSubmissionGuardProvider.notifier).throwIfActive();
     final dbPath = await _getDbPath();
     for (final account in state.value?.accounts ?? const <AccountInfo>[]) {
       await _resetVotingProcessStateForAccount(account.uuid, dbPath: dbPath);
