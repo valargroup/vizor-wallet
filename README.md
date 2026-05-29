@@ -147,41 +147,6 @@ repo root:
 flutter_rust_bridge_codegen generate
 ```
 
-### Rust Zcash Dependency Bump Notes
-
-When bumping the Zcash Rust crate stack, keep the PR scoped to upstream Zcash
-crate API changes. Do not include voting feature work in that dependency-only
-PR.
-
-The `zcash_client_backend 0.22.0` upstream changelog is the primary reference:
-[`zcash_client_backend-0.22.0`](https://github.com/zcash/librustzcash/releases/tag/zcash_client_backend-0.22.0).
-The related upstream crate changelogs used by the current bump are:
-[`zip321-0.7.0`](https://github.com/zcash/librustzcash/releases/tag/zip321-0.7.0)
-and
-[`zcash_transparent-0.7.0`](https://github.com/zcash/librustzcash/releases/tag/zcash_transparent-0.7.0).
-
-Upstream API breaks handled by this bump:
-
-- `zip321::Payment::new` now takes `Option<Zatoshis>` instead of `Zatoshis` and
-  returns `Result<Self, PaymentError>` instead of `Option<Self>`.
-- `zip321::Payment::amount` now returns `Option<Zatoshis>` instead of
-  `Zatoshis`.
-- `zip321::TransactionRequest::total` now returns an optional total, because a
-  payment may omit its amount.
-- `WalletRead::get_transparent_balances` now returns `TransparentBalances`
-  keyed by `TransparentKeyOrigin`, not directly by `TransparentKeyScope`.
-- `wallet::propose_shielding` and
-  `wallet::input_selection::ShieldingSelector::propose_shielding` now take a
-  `TransparentOutputFilter`.
-- Under the `unstable` feature, `wallet::create_proposed_transactions` and
-  `wallet::propose_transfer` now take `proposed_version: Option<TxVersion>`.
-- The generated lightwallet protocol `BlockRange` type now includes
-  `pool_types`; callers must populate it, even when requesting all pools.
-- Transparent transaction component types are imported from the
-  `zcash_transparent` crate (`transparent::bundle::{OutPoint, TxOut}`), not via
-  the old `zcash_primitives` transparent component path.
-- The bumped Zcash crates require Rust 1.85.1.
-
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
