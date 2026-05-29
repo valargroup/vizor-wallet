@@ -54,7 +54,6 @@ class _SwapActivityDetailSurfaceState
     debugLabel: 'swap_activity_toast_overlay_context',
   );
   _SwapKeystoneSigningRequest? _keystoneSigningRequest;
-  String? _depositCheckWarningIntentId;
   String? _depositCheckingIntentId;
   var _initialIntentApplied = false;
 
@@ -128,6 +127,12 @@ class _SwapActivityDetailSurfaceState
     unawaited(_refreshStatusForSelectedIntent());
   }
 
+  void _markDepositClaimed() {
+    unawaited(
+      ref.read(swapStateProvider.notifier).markSelectedDepositClaimed(),
+    );
+  }
+
   Future<void> _refreshStatusForSelectedIntent() async {
     final selected = ref.read(swapStateProvider).selectedIntentOrNull;
     if (selected == null || !canRefreshSwapIntentStatus(selected.status)) {
@@ -136,26 +141,13 @@ class _SwapActivityDetailSurfaceState
     if (mounted) {
       setState(() {
         _depositCheckingIntentId = selected.id;
-        if (_depositCheckWarningIntentId == selected.id) {
-          _depositCheckWarningIntentId = null;
-        }
       });
     }
     await ref.read(swapStateProvider.notifier).refreshSelectedIntentStatus();
     if (!mounted) return;
 
-    final state = ref.read(swapStateProvider);
-    final refreshed = state.selectedIntentOrNull;
-    final shouldWarn =
-        swapActivityShowsExternalDepositPage(selected) &&
-        refreshed != null &&
-        refreshed.id == selected.id &&
-        refreshed.status == SwapIntentStatus.awaitingExternalDeposit &&
-        refreshed.statusError == null &&
-        state.statusError == null;
     setState(() {
       _depositCheckingIntentId = null;
-      _depositCheckWarningIntentId = shouldWarn ? selected.id : null;
     });
   }
 
@@ -262,11 +254,9 @@ class _SwapActivityDetailSurfaceState
             intent: activityDetailIntent,
             depositChecking:
                 _depositCheckingIntentId == activityDetailIntent.id,
-            depositCheckWarning:
-                _depositCheckWarningIntentId == activityDetailIntent.id
-                ? _depositConfirmationPendingMessage
-                : null,
+            depositCheckWarning: null,
             onRefreshStatus: _refreshStatus,
+            onMarkDeposited: _markDepositClaimed,
             onDepositTxHashChanged: ref
                 .read(swapStateProvider.notifier)
                 .updateDepositTxHash,
@@ -374,9 +364,6 @@ SwapIntent? _intentById(List<SwapIntent> intents, String? intentId) {
   return null;
 }
 
-const _depositConfirmationPendingMessage =
-    'Deposit confirmation not found yet.\nCheck again in a few minutes.';
-
 class SwapActivityDetailPagePanel extends StatelessWidget {
   const SwapActivityDetailPagePanel({
     required this.state,
@@ -384,6 +371,7 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
     required this.depositChecking,
     required this.depositCheckWarning,
     required this.onRefreshStatus,
+    required this.onMarkDeposited,
     required this.onDepositTxHashChanged,
     required this.onSubmitDepositTransaction,
     required this.onReviewFreshQuote,
@@ -398,6 +386,7 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
   final bool depositChecking;
   final String? depositCheckWarning;
   final VoidCallback onRefreshStatus;
+  final VoidCallback onMarkDeposited;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
   final VoidCallback onReviewFreshQuote;
@@ -413,6 +402,7 @@ class SwapActivityDetailPagePanel extends StatelessWidget {
       depositChecking: depositChecking,
       depositCheckWarning: depositCheckWarning,
       onRefreshStatus: onRefreshStatus,
+      onMarkDeposited: onMarkDeposited,
       onDepositTxHashChanged: onDepositTxHashChanged,
       onSubmitDepositTransaction: onSubmitDepositTransaction,
       onReviewFreshQuote: onReviewFreshQuote,
@@ -454,6 +444,7 @@ class _SwapActivityFlowContent extends StatelessWidget {
     required this.depositChecking,
     required this.depositCheckWarning,
     required this.onRefreshStatus,
+    required this.onMarkDeposited,
     required this.onDepositTxHashChanged,
     required this.onSubmitDepositTransaction,
     required this.onReviewFreshQuote,
@@ -467,6 +458,7 @@ class _SwapActivityFlowContent extends StatelessWidget {
   final bool depositChecking;
   final String? depositCheckWarning;
   final VoidCallback onRefreshStatus;
+  final VoidCallback onMarkDeposited;
   final ValueChanged<String> onDepositTxHashChanged;
   final VoidCallback onSubmitDepositTransaction;
   final VoidCallback onReviewFreshQuote;
@@ -501,7 +493,7 @@ class _SwapActivityFlowContent extends StatelessWidget {
           memo: depositInstruction.memo,
           checking: depositChecking || state.statusRefreshing,
           checkWarning: depositCheckWarning,
-          onDeposited: onRefreshStatus,
+          onDeposited: onMarkDeposited,
         ),
       _ when showHardwareDepositPage && depositInstruction != null =>
         SwapHardwareZecDepositPageContent(

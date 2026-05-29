@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/storage/app_secure_store.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_deposit_broadcast_result.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_activity_store.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_composer_preferences_store.dart';
@@ -69,6 +70,7 @@ void main() {
       oneClickRefundTo: 'u1refund',
       depositDeadline: DateTime.utc(2026, 5, 7, 12),
       accountUuid: 'account-1',
+      broadcastStatus: SwapDepositBroadcastStatus.broadcastedStorageFailed,
     );
 
     await activityStore.saveRecords(
@@ -120,6 +122,75 @@ void main() {
     expect(restored.single.oneClickRefundTo, 'u1refund');
     expect(restored.single.depositDeadline, DateTime.utc(2026, 5, 7, 12));
     expect(restored.single.status, SwapIntentStatus.processing);
+    expect(
+      restored.single.broadcastStatus,
+      SwapDepositBroadcastStatus.broadcastedStorageFailed,
+    );
+  });
+
+  test('broadcastStatus survives save and load round-trip', () async {
+    final intentWithStatus = _minimalIntent(
+      id: 'swap-bcast',
+      accountUuid: 'account-1',
+    ).copyWith(
+      depositTxHash: 'bcast-txid',
+      broadcastStatus: SwapDepositBroadcastStatus.broadcastedStorageFailed,
+    );
+
+    await activityStore.saveRecords(
+      accountUuid: 'account-1',
+      records: [SwapIntentRecord.fromIntent(intentWithStatus)],
+    );
+
+    final restored = await activityStore.loadRecords(accountUuid: 'account-1');
+    expect(restored, hasLength(1));
+    expect(
+      restored.single.broadcastStatus,
+      SwapDepositBroadcastStatus.broadcastedStorageFailed,
+    );
+
+    // A record without broadcastStatus (old records) restores as null.
+    final intentNoStatus = _minimalIntent(
+      id: 'swap-no-bcast',
+      accountUuid: 'account-1',
+    );
+    await activityStore.saveRecords(
+      accountUuid: 'account-1',
+      records: [SwapIntentRecord.fromIntent(intentNoStatus)],
+    );
+    final restoredNoStatus = await activityStore.loadRecords(
+      accountUuid: 'account-1',
+    );
+    expect(restoredNoStatus.single.broadcastStatus, isNull);
+  });
+
+  test('depositClaimedAt survives save and load round-trip', () async {
+    final claimedAt = DateTime.utc(2026, 5, 29, 14, 30);
+    final intent = _minimalIntent(id: 'swap-claimed', accountUuid: 'account-1')
+        .copyWith(depositClaimedAt: claimedAt);
+
+    await activityStore.saveRecords(
+      accountUuid: 'account-1',
+      records: [SwapIntentRecord.fromIntent(intent)],
+    );
+
+    final restored = await activityStore.loadRecords(accountUuid: 'account-1');
+    expect(restored, hasLength(1));
+    expect(restored.single.depositClaimedAt, claimedAt);
+
+    // A record without depositClaimedAt (backward compatibility) restores as null.
+    final withoutClaim = _minimalIntent(
+      id: 'swap-no-claim',
+      accountUuid: 'account-1',
+    );
+    await activityStore.saveRecords(
+      accountUuid: 'account-1',
+      records: [SwapIntentRecord.fromIntent(withoutClaim)],
+    );
+    final restoredNoClaim = await activityStore.loadRecords(
+      accountUuid: 'account-1',
+    );
+    expect(restoredNoClaim.single.depositClaimedAt, isNull);
   });
 
   test('keeps persisted swap activity scoped to its account', () async {

@@ -1,4 +1,5 @@
 import '../domain/swap_contract.dart';
+import 'swap_deposit_broadcast_result.dart';
 
 class SwapIntentRecord {
   const SwapIntentRecord({
@@ -30,6 +31,7 @@ class SwapIntentRecord {
     this.lastStatusCheckedAt,
     this.statusError,
     this.broadcastNotice,
+    this.broadcastStatus,
     this.oneClickRecipient,
     this.oneClickRefundTo,
     this.depositDeadline,
@@ -37,6 +39,7 @@ class SwapIntentRecord {
     this.createdAt,
     this.updatedAt,
     this.completedAt,
+    this.depositClaimedAt,
   });
 
   factory SwapIntentRecord.fromIntent(SwapIntent intent) {
@@ -69,6 +72,7 @@ class SwapIntentRecord {
       lastStatusCheckedAt: intent.lastStatusCheckedAt,
       statusError: intent.statusError,
       broadcastNotice: intent.broadcastNotice,
+      broadcastStatus: intent.broadcastStatus,
       oneClickRecipient: intent.oneClickRecipient,
       oneClickRefundTo: intent.oneClickRefundTo,
       depositDeadline: intent.depositDeadline,
@@ -76,6 +80,7 @@ class SwapIntentRecord {
       createdAt: intent.createdAt,
       updatedAt: intent.updatedAt,
       completedAt: intent.completedAt,
+      depositClaimedAt: intent.depositClaimedAt,
     );
   }
 
@@ -107,6 +112,7 @@ class SwapIntentRecord {
   final DateTime? lastStatusCheckedAt;
   final String? statusError;
   final String? broadcastNotice;
+  final String? broadcastStatus;
   final String? oneClickRecipient;
   final String? oneClickRefundTo;
   final DateTime? depositDeadline;
@@ -114,6 +120,7 @@ class SwapIntentRecord {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? completedAt;
+  final DateTime? depositClaimedAt;
 
   DateTime? get activityTimestamp =>
       createdAt ?? updatedAt ?? lastStatusCheckedAt;
@@ -147,6 +154,7 @@ class SwapIntentRecord {
     DateTime? lastStatusCheckedAt,
     String? statusError,
     String? broadcastNotice,
+    String? broadcastStatus,
     String? oneClickRecipient,
     String? oneClickRefundTo,
     DateTime? depositDeadline,
@@ -154,8 +162,10 @@ class SwapIntentRecord {
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? completedAt,
+    DateTime? depositClaimedAt,
     bool clearStatusError = false,
     bool clearBroadcastNotice = false,
+    bool clearBroadcastStatus = false,
   }) {
     return SwapIntentRecord(
       id: id ?? this.id,
@@ -190,6 +200,9 @@ class SwapIntentRecord {
       broadcastNotice: clearBroadcastNotice
           ? null
           : broadcastNotice ?? this.broadcastNotice,
+      broadcastStatus: clearBroadcastStatus
+          ? null
+          : broadcastStatus ?? this.broadcastStatus,
       oneClickRecipient: oneClickRecipient ?? this.oneClickRecipient,
       oneClickRefundTo: oneClickRefundTo ?? this.oneClickRefundTo,
       depositDeadline: depositDeadline ?? this.depositDeadline,
@@ -197,6 +210,7 @@ class SwapIntentRecord {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: completedAt ?? this.completedAt,
+      depositClaimedAt: depositClaimedAt ?? this.depositClaimedAt,
     );
   }
 }
@@ -238,6 +252,8 @@ class SwapIntent {
     this.updatedAt,
     this.completedAt,
     this.broadcastNotice,
+    this.broadcastStatus,
+    this.depositClaimedAt,
   });
 
   final String id;
@@ -275,8 +291,18 @@ class SwapIntent {
   final DateTime? updatedAt;
   final DateTime? completedAt;
   final String? broadcastNotice;
+  final String? broadcastStatus;
+  final DateTime? depositClaimedAt;
 
   String get statusLabel => status.label;
+
+  /// On-chain evidence that funds genuinely moved, used by the account-removal
+  /// gate and the deadline-expiry carve-out.
+  bool get hasConfirmedDepositEvidence => swapHasConfirmedDepositEvidence(
+    originChainTxHash: originChainTxHash,
+    depositTxHash: depositTxHash,
+    broadcastStatus: broadcastStatus,
+  );
 
   SwapIntent copyWith({
     String? id,
@@ -314,8 +340,11 @@ class SwapIntent {
     DateTime? updatedAt,
     DateTime? completedAt,
     String? broadcastNotice,
+    String? broadcastStatus,
+    DateTime? depositClaimedAt,
     bool clearStatusError = false,
     bool clearBroadcastNotice = false,
+    bool clearBroadcastStatus = false,
   }) {
     return SwapIntent(
       id: id ?? this.id,
@@ -357,6 +386,10 @@ class SwapIntent {
       broadcastNotice: clearBroadcastNotice
           ? null
           : broadcastNotice ?? this.broadcastNotice,
+      broadcastStatus: clearBroadcastStatus
+          ? null
+          : broadcastStatus ?? this.broadcastStatus,
+      depositClaimedAt: depositClaimedAt ?? this.depositClaimedAt,
     );
   }
 }
@@ -392,4 +425,24 @@ extension SwapIntentIterable on Iterable<SwapIntent> {
           current,
     ];
   }
+}
+
+/// On-chain evidence that funds moved: a provider-observed source-chain
+/// deposit, or a ZEC deposit that reached (or may have reached) the network.
+/// Only [pendingBroadcast] means the tx never left the device; all other
+/// statuses (null, broadcasted, partial, unknown, storage_failed) are treated
+/// conservatively as potential on-network funds.
+bool swapHasConfirmedDepositEvidence({
+  String? originChainTxHash,
+  String? depositTxHash,
+  String? broadcastStatus,
+}) {
+  bool has(String? v) => v != null && v.trim().isNotEmpty;
+  // Only a deposit that never (fully) reached the network is not evidence.
+  // Clean/storage-failed/unknown/partial broadcasts may have funds in flight,
+  // so they keep blocking removal and suppress expiry. null status (old records
+  // or no broadcast) is treated conservatively as on-chain.
+  final notOnNetwork =
+      broadcastStatus == SwapDepositBroadcastStatus.pendingBroadcast;
+  return has(originChainTxHash) || (has(depositTxHash) && !notOnNetwork);
 }

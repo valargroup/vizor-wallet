@@ -336,6 +336,60 @@ void main() {
     expect(canRefreshSwapIntentStatus(SwapIntentStatus.complete), false);
     expect(canRefreshSwapIntentStatus(SwapIntentStatus.failed), true);
   });
+
+  test('swapActivityShowsExternalDepositPage returns false once depositClaimedAt is set', () {
+    final base = _intent(
+      status: SwapIntentStatus.awaitingExternalDeposit,
+      direction: SwapDirection.externalToZec,
+      externalAsset: SwapAsset.usdc,
+      depositAddress: '0xdeposit-address',
+    );
+    expect(swapActivityShowsExternalDepositPage(base), isTrue);
+
+    final claimed = base.copyWith(
+      depositClaimedAt: DateTime.utc(2026, 5, 29, 12),
+    );
+    expect(swapActivityShowsExternalDepositPage(claimed), isFalse);
+  });
+
+  test('claimed external deposit advances progress to the confirmation step', () {
+    final awaiting = _intent(
+      status: SwapIntentStatus.awaitingExternalDeposit,
+      direction: SwapDirection.externalToZec,
+      externalAsset: SwapAsset.usdc,
+      depositAddress: '0xdeposit-address',
+    );
+    expect(
+      swapActivityStatusPresentationForIntent(_state(), awaiting).progressIndex,
+      0,
+    );
+
+    final claimed = awaiting.copyWith(
+      depositClaimedAt: DateTime.utc(2026, 5, 29, 12),
+    );
+    expect(
+      swapActivityStatusPresentationForIntent(_state(), claimed).progressIndex,
+      1,
+    );
+  });
+
+  test('status details keep the deposit memo reachable after a claim', () {
+    final claimed = _intent(
+      status: SwapIntentStatus.awaitingExternalDeposit,
+      direction: SwapDirection.externalToZec,
+      externalAsset: SwapAsset.usdc,
+      pair: 'USDC -> ZEC',
+      depositAddress: '0xdeposit-address',
+      depositMemo: 'required-memo-123',
+    ).copyWith(depositClaimedAt: DateTime.utc(2026, 5, 29, 12));
+    final memo = _detailRow(
+      swapActivityStatusPresentationForIntent(_state(), claimed).details,
+      'Memo',
+    );
+    expect(memo.value, 'required-memo-123');
+    expect(memo.copyable, isTrue);
+    expect(memo.copyText, 'required-memo-123');
+  });
 }
 
 SwapState _state({Map<SwapAsset, double> indicativeExternalPerZec = const {}}) {

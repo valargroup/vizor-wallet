@@ -5,8 +5,11 @@ SwapIntent _swapIntentFromRecord(SwapIntentRecord record, {DateTime? now}) {
   final status = _resolveDepositDeadlineStatus(
     providerStatus: record.status,
     deadline: record.depositDeadline,
-    hasDepositEvidence:
-        _hasText(record.depositTxHash) || _hasText(record.originChainTxHash),
+    hasDepositEvidence: swapHasConfirmedDepositEvidence(
+      originChainTxHash: record.originChainTxHash,
+      depositTxHash: record.depositTxHash,
+      broadcastStatus: record.broadcastStatus,
+    ),
     now: timestamp,
   );
   final nextAction = _nextActionForRestoredStatus(status, record);
@@ -39,6 +42,7 @@ SwapIntent _swapIntentFromRecord(SwapIntentRecord record, {DateTime? now}) {
     lastStatusCheckedAt: record.lastStatusCheckedAt,
     statusError: record.statusError,
     broadcastNotice: record.broadcastNotice,
+    broadcastStatus: record.broadcastStatus,
     oneClickRecipient: record.oneClickRecipient,
     oneClickRefundTo: record.oneClickRefundTo,
     depositDeadline: record.depositDeadline,
@@ -48,6 +52,7 @@ SwapIntent _swapIntentFromRecord(SwapIntentRecord record, {DateTime? now}) {
     completedAt:
         record.completedAt ??
         (status.isTerminal && record.status != status ? timestamp : null),
+    depositClaimedAt: record.depositClaimedAt,
   );
 }
 
@@ -72,8 +77,11 @@ SwapIntentRecord resolveSwapRecordForDisplay(
   final status = _resolveDepositDeadlineStatus(
     providerStatus: record.status,
     deadline: record.depositDeadline,
-    hasDepositEvidence:
-        _hasText(record.depositTxHash) || _hasText(record.originChainTxHash),
+    hasDepositEvidence: swapHasConfirmedDepositEvidence(
+      originChainTxHash: record.originChainTxHash,
+      depositTxHash: record.depositTxHash,
+      broadcastStatus: record.broadcastStatus,
+    ),
     now: now ?? DateTime.now().toUtc(),
   );
   if (status == record.status) return record;
@@ -102,7 +110,10 @@ SwapIntent swapIntentFromSnapshot({
   final status = _resolveDepositDeadlineStatus(
     providerStatus: snapshot.status,
     deadline: depositDeadline,
-    hasDepositEvidence: _hasText(snapshot.originChainTxHash),
+    hasDepositEvidence: swapHasConfirmedDepositEvidence(
+      originChainTxHash: snapshot.originChainTxHash,
+      broadcastStatus: null,
+    ),
     now: now,
   );
   final nextAction = _nextActionForResolvedStatus(status, snapshot);
@@ -147,12 +158,14 @@ SwapIntent swapIntentFromSnapshot({
 SwapIntent swapIntentWithBroadcastNotice(
   SwapIntent intent, {
   required String notice,
+  String? broadcastStatus,
   DateTime? updatedAt,
 }) {
   return _swapIntentFromRecord(
     SwapIntentRecord.fromIntent(intent).copyWith(
       statusError: notice,
       broadcastNotice: notice,
+      broadcastStatus: broadcastStatus,
       updatedAt: updatedAt ?? DateTime.now().toUtc(),
     ),
   );
@@ -163,6 +176,7 @@ SwapIntent swapIntentWithDepositCheckpoint(
   required String txHash,
   String? statusError,
   String? broadcastNotice,
+  String? broadcastStatus,
   required bool clearStatusError,
   required bool clearBroadcastNotice,
   DateTime? updatedAt,
@@ -172,8 +186,10 @@ SwapIntent swapIntentWithDepositCheckpoint(
       depositTxHash: txHash,
       statusError: statusError ?? broadcastNotice,
       broadcastNotice: broadcastNotice,
+      broadcastStatus: broadcastStatus,
       clearStatusError: clearStatusError,
       clearBroadcastNotice: clearBroadcastNotice,
+      clearBroadcastStatus: broadcastStatus == null && broadcastNotice == null,
       updatedAt: updatedAt ?? DateTime.now().toUtc(),
     ),
   );
@@ -220,10 +236,14 @@ SwapIntent updateSwapIntentFromSnapshot(
   final status = _resolveDepositDeadlineStatus(
     providerStatus: snapshot.status,
     deadline: depositDeadline,
-    hasDepositEvidence:
-        _hasText(intent.depositTxHash) ||
-        _hasText(intent.originChainTxHash) ||
-        _hasText(snapshot.originChainTxHash),
+    hasDepositEvidence: swapHasConfirmedDepositEvidence(
+      originChainTxHash:
+          _hasText(intent.originChainTxHash)
+          ? intent.originChainTxHash
+          : snapshot.originChainTxHash,
+      depositTxHash: intent.depositTxHash,
+      broadcastStatus: intent.broadcastStatus,
+    ),
     now: timestamp,
   );
   final nextAction = _nextActionForResolvedStatus(status, snapshot);

@@ -96,9 +96,10 @@ SwapStatusBadgeKind _swapActivityStatusBadgeKind(SwapIntentStatus status) {
 
 int _swapActivityStatusProgressIndex(SwapIntent intent) {
   final hasDepositTx = intent.depositTxHash?.trim().isNotEmpty ?? false;
+  final depositSent = hasDepositTx || intent.depositClaimedAt != null;
   return switch (intent.status) {
     SwapIntentStatus.awaitingDeposit ||
-    SwapIntentStatus.awaitingExternalDeposit => hasDepositTx ? 1 : 0,
+    SwapIntentStatus.awaitingExternalDeposit => depositSent ? 1 : 0,
     SwapIntentStatus.depositObserved => 1,
     SwapIntentStatus.processing ||
     SwapIntentStatus.providerStatusUnknown ||
@@ -241,6 +242,7 @@ List<SwapStatusDetailRowData> _swapActivityStatusDetails(
     );
   }
 
+  final depositMemo = intent.depositMemo?.trim();
   return [
     _accountDetailRow(accountDetail),
     if (sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
@@ -263,6 +265,16 @@ List<SwapStatusDetailRowData> _swapActivityStatusDetails(
         value: compactSwapAddress(depositAddress),
         copyable: true,
         copyText: depositAddress,
+      ),
+    // externalToZec deposits the user sends manually: keep a required memo
+    // reachable after the optimistic claim hides the deposit page (memo/tag
+    // deposits cannot complete without it).
+    if (!sendsZec && depositMemo != null && depositMemo.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: 'Memo',
+        value: depositMemo,
+        copyable: true,
+        copyText: depositMemo,
       ),
     SwapStatusDetailRowData(
       label: 'Swap fee',
@@ -569,6 +581,7 @@ bool canRefreshSwapIntentStatus(SwapIntentStatus status) {
 bool swapActivityShowsExternalDepositPage(SwapIntent intent) {
   return intent.direction == SwapDirection.externalToZec &&
       intent.status == SwapIntentStatus.awaitingExternalDeposit &&
+      intent.depositClaimedAt == null &&
       SwapActivityDepositInstruction.fromIntent(intent) != null;
 }
 

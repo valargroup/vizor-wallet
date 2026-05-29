@@ -20,6 +20,7 @@ class SwapActivityRowItem {
     this.direction,
     this.externalAsset,
     this.depositTxHash,
+    this.depositClaimedAt,
     this.completedAt,
     this.lastStatusCheckedAt,
     this.updatedAt,
@@ -35,6 +36,7 @@ class SwapActivityRowItem {
       direction: record.direction,
       externalAsset: record.externalAsset,
       depositTxHash: record.depositTxHash,
+      depositClaimedAt: record.depositClaimedAt,
       activityTimestamp: record.activityTimestamp,
       completedAt: record.completedAt,
       lastStatusCheckedAt: record.lastStatusCheckedAt,
@@ -50,6 +52,7 @@ class SwapActivityRowItem {
   final SwapDirection? direction;
   final SwapAsset? externalAsset;
   final String? depositTxHash;
+  final DateTime? depositClaimedAt;
   final DateTime? activityTimestamp;
   final DateTime? completedAt;
   final DateTime? lastStatusCheckedAt;
@@ -322,10 +325,11 @@ bool _swapActivityShowsReceiveLeg(SwapActivityRowItem item) {
 _SwapActivityProgress? _swapActivityProgress(SwapActivityRowItem item) {
   const totalSteps = 4;
   final hasDepositTx = item.depositTxHash?.trim().isNotEmpty ?? false;
+  final depositSent = hasDepositTx || item.depositClaimedAt != null;
   return switch (item.status) {
     SwapIntentStatus.awaitingDeposit ||
     SwapIntentStatus.awaitingExternalDeposit => _SwapActivityProgress(
-      currentStep: hasDepositTx ? 2 : 1,
+      currentStep: depositSent ? 2 : 1,
       totalSteps: totalSteps,
     ),
     SwapIntentStatus.depositObserved => const _SwapActivityProgress(

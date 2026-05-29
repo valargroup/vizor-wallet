@@ -48,13 +48,19 @@ final swapPendingIntentCountProvider = FutureProvider.family<int, String>((
   final records = await ref.watch(
     swapActivityRecordsProvider(accountUuid).future,
   );
-  // Resolve each record the same way the UI does (e.g. a past-deadline
-  // awaiting deposit with no on-chain evidence becomes `expired`), so the
-  // account-removal gate counts the status the user actually sees instead of
-  // the raw persisted status. Otherwise a swap shown as Expired would still
-  // hard-block account removal with an instruction the user cannot follow.
+  // Block removal only while ZEC may still arrive at this account and strand:
+  // a non-terminal swap with confirmed deposit evidence or a user-claimed
+  // deposit. Resolving first means false claims and unbroadcast deposits expire
+  // on their deadline rather than blocking forever.
   final intents = swapIntentsFromRecords(records);
-  return intents.where((intent) => !intent.status.isTerminal).length;
+  return intents
+      .where(
+        (intent) =>
+            !intent.status.isTerminal &&
+            (intent.hasConfirmedDepositEvidence ||
+                intent.depositClaimedAt != null),
+      )
+      .length;
 });
 
 abstract interface class SwapActivityStore {
@@ -181,6 +187,7 @@ Map<String, Object?> _recordToJson(SwapIntentRecord record) {
         record.lastStatusCheckedAt?.toUtc().toIso8601String(),
     'statusError': record.statusError,
     'broadcastNotice': record.broadcastNotice,
+    'broadcastStatus': record.broadcastStatus,
     'oneClickRecipient': record.oneClickRecipient,
     'oneClickRefundTo': record.oneClickRefundTo,
     'depositDeadline': record.depositDeadline?.toUtc().toIso8601String(),
@@ -188,6 +195,7 @@ Map<String, Object?> _recordToJson(SwapIntentRecord record) {
     'createdAt': record.createdAt?.toUtc().toIso8601String(),
     'updatedAt': record.updatedAt?.toUtc().toIso8601String(),
     'completedAt': record.completedAt?.toUtc().toIso8601String(),
+    'depositClaimedAt': record.depositClaimedAt?.toUtc().toIso8601String(),
   };
 }
 
@@ -225,6 +233,7 @@ SwapIntentRecord _recordFromJson(Map<String, dynamic> json) {
     lastStatusCheckedAt: _optionalDateTime(json['lastStatusCheckedAt']),
     statusError: _optionalString(json['statusError']),
     broadcastNotice: _optionalString(json['broadcastNotice']),
+    broadcastStatus: _optionalString(json['broadcastStatus']),
     oneClickRecipient: _optionalString(json['oneClickRecipient']),
     oneClickRefundTo: _optionalString(json['oneClickRefundTo']),
     depositDeadline: _optionalDateTime(json['depositDeadline']),
@@ -232,6 +241,7 @@ SwapIntentRecord _recordFromJson(Map<String, dynamic> json) {
     createdAt: _optionalDateTime(json['createdAt']),
     updatedAt: _optionalDateTime(json['updatedAt']),
     completedAt: _optionalDateTime(json['completedAt']),
+    depositClaimedAt: _optionalDateTime(json['depositClaimedAt']),
   );
 }
 
