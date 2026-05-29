@@ -1824,7 +1824,7 @@ version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a1886916523694cd6ea3d175f03a1e5010699a2a4cc13696d83d7bea1d80638"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3850,7 +3850,7 @@ dependencies = [
 [[package]]
 name = "vote-commitment-tree"
 version = "0.3.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=580d32fd59d15211022c9d830d65ed1ffd352d5c#580d32fd59d15211022c9d830d65ed1ffd352d5c"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=9aba915e39b2113a37e0b76fa8305ae3d711eeea#9aba915e39b2113a37e0b76fa8305ae3d711eeea"
 dependencies = [
  "anyhow",
  "ff",
@@ -3866,7 +3866,7 @@ dependencies = [
 [[package]]
 name = "vote-commitment-tree-client"
 version = "0.5.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=580d32fd59d15211022c9d830d65ed1ffd352d5c#580d32fd59d15211022c9d830d65ed1ffd352d5c"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=9aba915e39b2113a37e0b76fa8305ae3d711eeea#9aba915e39b2113a37e0b76fa8305ae3d711eeea"
 dependencies = [
  "base64",
  "ff",
@@ -3875,7 +3875,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=580d32fd59d15211022c9d830d65ed1ffd352d5c)",
+ "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=9aba915e39b2113a37e0b76fa8305ae3d711eeea)",
 ]
 
 [[package]]
@@ -4587,7 +4587,7 @@ dependencies = [
 [[package]]
 name = "zcash_voting"
 version = "0.10.1"
-source = "git+https://github.com/valargroup/zcash_voting.git?rev=580d32fd59d15211022c9d830d65ed1ffd352d5c#580d32fd59d15211022c9d830d65ed1ffd352d5c"
+source = "git+https://github.com/valargroup/zcash_voting.git?rev=9aba915e39b2113a37e0b76fa8305ae3d711eeea#9aba915e39b2113a37e0b76fa8305ae3d711eeea"
 dependencies = [
  "anyhow",
  "blake2b_simd",
@@ -4623,7 +4623,7 @@ dependencies = [
  "uuid",
  "valar-spiral-rs",
  "valar-ypir",
- "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=580d32fd59d15211022c9d830d65ed1ffd352d5c)",
+ "vote-commitment-tree 0.3.1 (git+https://github.com/valargroup/zcash_voting.git?rev=9aba915e39b2113a37e0b76fa8305ae3d711eeea)",
  "vote-commitment-tree-client",
  "voting-circuits",
  "zcash_client_backend",
