@@ -1053,7 +1053,7 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let progress_cancellation = cancellation.clone();
-    let signed = delegation::build_prove_and_sign_delegation_payload(
+    let signed_result = delegation::build_prove_and_sign_delegation_payload(
         &db_path,
         &lightwalletd_url,
         &pir_server_url,
@@ -1073,7 +1073,16 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
         cancellation,
     )
     .await
-    .map(ApiSignedDelegationPayload::from)?;
+    .map(ApiSignedDelegationPayload::from);
+    let signed = match signed_result {
+        Ok(signed) => signed,
+        Err(error) => {
+            if sink.add_error(error.clone()).is_err() {
+                log::warn!("voting delegation: StreamSink closed before error delivery");
+            }
+            return Ok(());
+        }
+    };
 
     if sink
         .add(ApiDelegationProofEvent {
@@ -1200,7 +1209,7 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let progress_cancellation = cancellation.clone();
-    let signed = delegation::build_prove_delegation_payload_with_keystone_signature(
+    let signed_result = delegation::build_prove_delegation_payload_with_keystone_signature(
         &db_path,
         &lightwalletd_url,
         &pir_server_url,
@@ -1222,7 +1231,16 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
         cancellation,
     )
     .await
-    .map(ApiSignedDelegationPayload::from)?;
+    .map(ApiSignedDelegationPayload::from);
+    let signed = match signed_result {
+        Ok(signed) => signed,
+        Err(error) => {
+            if sink.add_error(error.clone()).is_err() {
+                log::warn!("voting delegation: StreamSink closed before error delivery");
+            }
+            return Ok(());
+        }
+    };
 
     if sink
         .add(ApiDelegationProofEvent {
@@ -1472,7 +1490,7 @@ pub async fn build_vote_commitments_with_progress(
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let progress_cancellation = cancellation.clone();
-    let commitments = tokio::task::spawn_blocking(move || {
+    let commitment_result = tokio::task::spawn_blocking(move || {
         vote::build_vote_commitments(
             &db_path,
             &wallet_id,
@@ -1492,7 +1510,17 @@ pub async fn build_vote_commitments_with_progress(
         )
     })
     .await
-    .map_err(|e| format!("vote commitment task failed: {e}"))??;
+    .map_err(|e| format!("vote commitment task failed: {e}"))
+    .and_then(|result| result);
+    let commitments = match commitment_result {
+        Ok(commitments) => commitments,
+        Err(error) => {
+            if sink.add_error(error.clone()).is_err() {
+                log::warn!("voting vote: StreamSink closed before error delivery");
+            }
+            return Ok(());
+        }
+    };
 
     if sink
         .add(ApiVoteCommitEvent {
@@ -1807,22 +1835,24 @@ pub fn get_round_plan(
                     proposal_id: 0,
                     share_index: 0,
                 },
-                zcash_voting::session::NextStep::CastVote { bundle_index, proposal_id } => {
-                    ApiNextStep {
-                        kind: "cast_vote".to_string(),
-                        bundle_index,
-                        proposal_id,
-                        share_index: 0,
-                    }
-                }
-                zcash_voting::session::NextStep::PollVote { bundle_index, proposal_id } => {
-                    ApiNextStep {
-                        kind: "poll_vote".to_string(),
-                        bundle_index,
-                        proposal_id,
-                        share_index: 0,
-                    }
-                }
+                zcash_voting::session::NextStep::CastVote {
+                    bundle_index,
+                    proposal_id,
+                } => ApiNextStep {
+                    kind: "cast_vote".to_string(),
+                    bundle_index,
+                    proposal_id,
+                    share_index: 0,
+                },
+                zcash_voting::session::NextStep::PollVote {
+                    bundle_index,
+                    proposal_id,
+                } => ApiNextStep {
+                    kind: "poll_vote".to_string(),
+                    bundle_index,
+                    proposal_id,
+                    share_index: 0,
+                },
                 zcash_voting::session::NextStep::ConfirmShare {
                     bundle_index,
                     proposal_id,
