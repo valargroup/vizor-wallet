@@ -202,12 +202,6 @@ abstract class RustLibApi extends BaseApi {
     required String roundId,
   });
 
-  Future<String> crateApiVotingComputeShareNullifierHex({
-    required List<int> voteCommitment,
-    required int shareIndex,
-    required List<int> primaryBlind,
-  });
-
   Future<Uint8List> crateApiSyncCreatePcztFromProposal({
     required String dbPath,
     required String network,
@@ -665,7 +659,6 @@ abstract class RustLibApi extends BaseApi {
     required int proposalId,
     required int shareIndex,
     required List<String> sentToUrls,
-    required List<int> nullifier,
     required BigInt submitAt,
   });
 
@@ -1583,43 +1576,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(
         debugName: "clear_recovery_state",
         argNames: ["dbPath", "walletId", "roundId"],
-      );
-
-  @override
-  Future<String> crateApiVotingComputeShareNullifierHex({
-    required List<int> voteCommitment,
-    required int shareIndex,
-    required List<int> primaryBlind,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_list_prim_u_8_loose(voteCommitment, serializer);
-          sse_encode_u_32(shareIndex, serializer);
-          sse_encode_list_prim_u_8_loose(primaryBlind, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 12,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiVotingComputeShareNullifierHexConstMeta,
-        argValues: [voteCommitment, shareIndex, primaryBlind],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiVotingComputeShareNullifierHexConstMeta =>
-      const TaskConstMeta(
-        debugName: "compute_share_nullifier_hex",
-        argNames: ["voteCommitment", "shareIndex", "primaryBlind"],
       );
 
   @override
@@ -4570,7 +4526,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required int proposalId,
     required int shareIndex,
     required List<String> sentToUrls,
-    required List<int> nullifier,
     required BigInt submitAt,
   }) {
     return handler.executeNormal(
@@ -4584,7 +4539,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_u_32(proposalId, serializer);
           sse_encode_u_32(shareIndex, serializer);
           sse_encode_list_String(sentToUrls, serializer);
-          sse_encode_list_prim_u_8_loose(nullifier, serializer);
           sse_encode_u_64(submitAt, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -4606,7 +4560,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           proposalId,
           shareIndex,
           sentToUrls,
-          nullifier,
           submitAt,
         ],
         apiImpl: this,
@@ -4625,7 +4578,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "proposalId",
           "shareIndex",
           "sentToUrls",
-          "nullifier",
           "submitAt",
         ],
       );
