@@ -575,6 +575,31 @@ void main() {
     expect(rust.storedVanPositions, ['0:0']);
   });
 
+  test('delegation stream errors surface the Rust failure', () async {
+    final rust = FakeVotingRustApi(
+      delegationStreamError: StateError(
+        'network: gRPC connect failed: transport error',
+      ),
+    );
+    final container = _sessionContainer(rust: rust);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(state.phase, VotingSessionPhase.error);
+    expect(state.error?.message, contains('gRPC connect failed'));
+    expect(
+      state.error?.message,
+      isNot(contains('Delegation proof completed without submission payload')),
+    );
+    expect(rust.delegationBundleCalls, [0]);
+    expect(rust.storedDelegationTxHashes, isEmpty);
+  });
+
   test('hardware voting prepares Keystone signing request', () async {
     final rust = FakeVotingRustApi();
     final hotkeyStore = FakeVotingHotkeyStore(null);
@@ -2655,6 +2680,7 @@ class FakeVotingRustApi implements VotingRustApi {
     this.failPrecompute = false,
     this.bundleCount = 1,
     this.mismatchKeystoneSubmission = false,
+    this.delegationStreamError,
     this.onDeleteSkippedBundles,
   });
 
@@ -2664,6 +2690,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final bool failPrecompute;
   final int bundleCount;
   final bool mismatchKeystoneSubmission;
+  final Object? delegationStreamError;
   final void Function(int keepCount)? onDeleteSkippedBundles;
   int setupCalls = 0;
   int _activeSetups = 0;
@@ -2735,6 +2762,8 @@ class FakeVotingRustApi implements VotingRustApi {
   }) async* {
     accountUuids.add(accountUuid);
     delegationBundleCalls.add(bundleIndex);
+    final error = delegationStreamError;
+    if (error != null) throw error;
     yield rust_voting.ApiDelegationProofEvent(
       phase: 'result',
       proofProgress: null,
