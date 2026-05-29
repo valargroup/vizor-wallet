@@ -459,15 +459,6 @@ abstract interface class VotingRustApi {
     required BigInt submitAt,
   });
 
-  Future<void> storeVoteTxHash({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required int proposalId,
-    required String txHash,
-  });
-
   Future<void> markVoteSubmitted({
     required String dbPath,
     required String walletId,
@@ -485,17 +476,6 @@ abstract interface class VotingRustApi {
     required int proposalId,
     required String txHash,
     required int vanPosition,
-    required BigInt vcTreePosition,
-    required String commitmentBundleJson,
-  });
-
-  Future<void> storeCommitmentBundle({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required int proposalId,
-    required String commitmentBundleJson,
     required BigInt vcTreePosition,
   });
 
@@ -961,25 +941,6 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<void> storeVoteTxHash({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required int proposalId,
-    required String txHash,
-  }) {
-    return rust_voting.storeVoteTxHash(
-      dbPath: dbPath,
-      walletId: walletId,
-      roundId: roundId,
-      bundleIndex: bundleIndex,
-      proposalId: proposalId,
-      txHash: txHash,
-    );
-  }
-
-  @override
   Future<void> markVoteSubmitted({
     required String dbPath,
     required String walletId,
@@ -1008,7 +969,6 @@ class FrbVotingRustApi implements VotingRustApi {
     required String txHash,
     required int vanPosition,
     required BigInt vcTreePosition,
-    required String commitmentBundleJson,
   }) {
     return rust_voting.markVoteConfirmed(
       dbPath: dbPath,
@@ -1018,28 +978,6 @@ class FrbVotingRustApi implements VotingRustApi {
       proposalId: proposalId,
       txHash: txHash,
       vanPosition: vanPosition,
-      vcTreePosition: vcTreePosition,
-      commitmentBundleJson: commitmentBundleJson,
-    );
-  }
-
-  @override
-  Future<void> storeCommitmentBundle({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required int proposalId,
-    required String commitmentBundleJson,
-    required BigInt vcTreePosition,
-  }) {
-    return rust_voting.storeCommitmentBundle(
-      dbPath: dbPath,
-      walletId: walletId,
-      roundId: roundId,
-      bundleIndex: bundleIndex,
-      proposalId: proposalId,
-      commitmentBundleJson: commitmentBundleJson,
       vcTreePosition: vcTreePosition,
     );
   }

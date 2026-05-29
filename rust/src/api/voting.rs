@@ -635,21 +635,8 @@ fn recovered_vote_share_wire_json_inner(
     vc_tree_position: u64,
     submit_at: u64,
 ) -> Result<String, String> {
-    let recovery = match zcash_voting::vote::parse_recovery(commitment_bundle_json) {
-        Ok(recovery) => recovery,
-        Err(parse_error) => {
-            return recovered_legacy_vote_share_wire_json_inner(
-                commitment_bundle_json,
-                proposal_id,
-                share_index,
-                vc_tree_position,
-                submit_at,
-            )
-            .map_err(|legacy_error| {
-                format!("parse vote recovery failed: {parse_error}; legacy parse failed: {legacy_error}")
-            });
-        }
-    };
+    let recovery = zcash_voting::vote::parse_recovery(commitment_bundle_json)
+        .map_err(|e| format!("parse vote recovery failed: {e}"))?;
     if recovery.proposal_id != proposal_id {
         return Err(format!(
             "recovery proposal_id {} does not match requested {proposal_id}",
@@ -681,145 +668,6 @@ fn recovered_vote_share_wire_json_inner(
         primary_blind: payload.primary_blind,
     };
     vote_share_wire_json_inner(&api_payload, Some(vc_tree_position), submit_at)
-}
-
-fn recovered_legacy_vote_share_wire_json_inner(
-    commitment_bundle_json: &str,
-    proposal_id: u32,
-    share_index: u32,
-    vc_tree_position: u64,
-    submit_at: u64,
-) -> Result<String, String> {
-    let decoded: serde_json::Value = serde_json::from_str(commitment_bundle_json)
-        .map_err(|e| format!("commitment bundle recovery JSON is malformed: {e}"))?;
-    let object = decoded
-        .as_object()
-        .ok_or_else(|| "commitment bundle recovery JSON is not an object".to_string())?;
-    let format = object
-        .get("format")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| "commitment bundle recovery JSON has no format".to_string())?;
-    if format != "vizor_vote_commitment_bundle_recovery_v1" {
-        return Err(format!(
-            "unsupported commitment bundle recovery format: {format}"
-        ));
-    }
-    let payloads = object
-        .get("share_payloads")
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| "commitment bundle recovery JSON has no share_payloads list".to_string())?;
-    let payload = payloads
-        .iter()
-        .find(|payload| {
-            payload
-                .get("proposal_id")
-                .and_then(serde_json::Value::as_u64)
-                == Some(u64::from(proposal_id))
-                && payload
-                    .get("enc_share")
-                    .and_then(|share| share.get("share_index"))
-                    .and_then(serde_json::Value::as_u64)
-                    == Some(u64::from(share_index))
-        })
-        .ok_or_else(|| {
-            format!("no stored share payload for proposal {proposal_id} share {share_index}")
-        })?;
-
-    recovered_legacy_share_payload_json(
-        payload,
-        proposal_id,
-        share_index,
-        vc_tree_position,
-        submit_at,
-    )
-}
-
-fn recovered_legacy_share_payload_json(
-    payload: &serde_json::Value,
-    proposal_id: u32,
-    share_index: u32,
-    vc_tree_position: u64,
-    submit_at: u64,
-) -> Result<String, String> {
-    serde_json::to_string(&serde_json::json!({
-        "shares_hash": b64_hex_field(payload, "shares_hash")?,
-        "proposal_id": proposal_id,
-        "vote_decision": u32_field(payload, "vote_decision")?,
-        "enc_share": recovered_legacy_wire_share_json(
-            payload
-                .get("enc_share")
-                .ok_or_else(|| "stored share payload has no enc_share".to_string())?,
-        )?,
-        "share_index": share_index,
-        "tree_position": json_safe_u64(vc_tree_position, "tree_position")?,
-        "all_enc_shares": recovered_legacy_wire_shares_json(
-            payload
-                .get("all_enc_shares")
-                .ok_or_else(|| "stored share payload has no all_enc_shares list".to_string())?,
-        )?,
-        "share_comms": hex_list_field(payload, "share_comms")?
-            .into_iter()
-            .map(|hex| b64_hex(&hex, "share_comms entry"))
-            .collect::<Result<Vec<_>, _>>()?,
-        "primary_blind": b64_hex_field(payload, "primary_blind")?,
-        "submit_at": json_safe_u64(submit_at, "submit_at")?,
-    }))
-    .map_err(|e| format!("serialize recovered vote share wire JSON failed: {e}"))
-}
-
-fn recovered_legacy_wire_share_json(
-    share: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({
-        "c1": b64_hex_field(share, "c1")?,
-        "c2": b64_hex_field(share, "c2")?,
-        "share_index": u32_field(share, "share_index")?,
-    }))
-}
-
-fn recovered_legacy_wire_shares_json(
-    shares: &serde_json::Value,
-) -> Result<Vec<serde_json::Value>, String> {
-    let shares = shares
-        .as_array()
-        .ok_or_else(|| "stored share payload all_enc_shares is not a list".to_string())?;
-    shares
-        .iter()
-        .map(recovered_legacy_wire_share_json)
-        .collect()
-}
-
-fn b64_hex_field(object: &serde_json::Value, key: &str) -> Result<String, String> {
-    let value = object
-        .get(key)
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| format!("stored share payload field {key} is not a hex string"))?;
-    b64_hex(value, key)
-}
-
-fn hex_list_field(object: &serde_json::Value, key: &str) -> Result<Vec<String>, String> {
-    let values = object
-        .get(key)
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| format!("stored share payload field {key} is not a hex string list"))?;
-    values
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::to_string)
-                .ok_or_else(|| format!("stored share payload field {key} is not a hex string list"))
-        })
-        .collect()
-}
-
-fn u32_field(object: &serde_json::Value, key: &str) -> Result<u32, String> {
-    let value = object
-        .get(key)
-        .and_then(serde_json::Value::as_u64)
-        .ok_or_else(|| format!("stored share payload field {key} is not an unsigned integer"))?;
-    u32::try_from(value)
-        .map_err(|_| format!("stored share payload field {key} does not fit in u32"))
 }
 
 fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result<T, String> {
@@ -1579,30 +1427,6 @@ pub fn get_round_recovery_state(
     catch(|| recovery::get_round_recovery_state(&db_path, &wallet_id, &round_id))
 }
 
-/// Store the broadcast transaction hash for one vote.
-///
-/// Keyed by `(round_id, wallet_id, bundle_index, proposal_id)` so multi-bundle
-/// and multi-proposal rounds can resume without ambiguous "current vote" state.
-pub fn store_vote_tx_hash(
-    db_path: String,
-    wallet_id: String,
-    round_id: String,
-    bundle_index: u32,
-    proposal_id: u32,
-    tx_hash: String,
-) -> Result<(), String> {
-    catch(|| {
-        workflow::mark_vote_submitted(
-            &db_path,
-            &wallet_id,
-            &round_id,
-            bundle_index,
-            proposal_id,
-            &tx_hash,
-        )
-    })
-}
-
 pub fn mark_vote_submitted(
     db_path: String,
     wallet_id: String,
@@ -1623,7 +1447,6 @@ pub fn mark_vote_submitted(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn mark_vote_confirmed(
     db_path: String,
     wallet_id: String,
@@ -1633,7 +1456,6 @@ pub fn mark_vote_confirmed(
     tx_hash: String,
     van_position: u32,
     vc_tree_position: u64,
-    commitment_bundle_json: String,
 ) -> Result<(), String> {
     catch(|| {
         workflow::mark_vote_confirmed(
@@ -1645,7 +1467,6 @@ pub fn mark_vote_confirmed(
             &tx_hash,
             van_position,
             vc_tree_position,
-            &commitment_bundle_json,
         )
     })
 }
@@ -1659,37 +1480,6 @@ pub fn get_vote_tx_hash(
     proposal_id: u32,
 ) -> Result<Option<String>, String> {
     catch(|| recovery::get_vote_tx_hash(&db_path, &wallet_id, &round_id, bundle_index, proposal_id))
-}
-
-#[allow(clippy::too_many_arguments)]
-/// Record the confirmed vote-tree position for an already stored vote recovery bundle.
-pub fn store_commitment_bundle(
-    db_path: String,
-    wallet_id: String,
-    round_id: String,
-    bundle_index: u32,
-    proposal_id: u32,
-    _commitment_bundle_json: String,
-    vc_tree_position: u64,
-) -> Result<(), String> {
-    catch(|| {
-        let db = state::open_voting_db(&db_path, &wallet_id)?;
-        zcash_voting::vote::recovery_bundle(&db, &round_id, bundle_index, proposal_id)
-            .map_err(|e| format!("load vote recovery bundle failed: {e}"))?
-            .ok_or_else(|| {
-                format!(
-                    "vote recovery bundle missing for round={round_id}, bundle={bundle_index}, proposal={proposal_id}"
-                )
-            })?;
-        zcash_voting::vote::record_vc_position(
-            &db,
-            &round_id,
-            bundle_index,
-            proposal_id,
-            vc_tree_position,
-        )
-        .map_err(|e| format!("record_vc_position failed: {e}"))
-    })
 }
 
 /// Load commitment bundle recovery JSON and vote-tree position for one vote.
@@ -2178,28 +1968,6 @@ mod tests {
         assert_eq!(recovered["shares_hash"], b64(&[1; 32]));
         assert_eq!(recovered["primary_blind"], b64(&[9; 32]));
         assert_eq!(recovered["share_comms"][0], b64(&[7; 32]));
-
-        let legacy_recovery_json = serde_json::json!({
-            "format": "vizor_vote_commitment_bundle_recovery_v1",
-            "share_payloads": [{
-                "shares_hash": "01",
-                "proposal_id": 42,
-                "vote_decision": 2,
-                "enc_share": {"c1": "03", "c2": "04", "share_index": 1},
-                "tree_position": 55,
-                "all_enc_shares": [
-                    {"c1": "03", "c2": "04", "share_index": 1},
-                    {"c1": "05", "c2": "06", "share_index": 2}
-                ],
-                "share_comms": ["07", "08"],
-                "primary_blind": "09"
-            }]
-        })
-        .to_string();
-        let legacy_recovered =
-            recovered_vote_share_wire_json(legacy_recovery_json, 42, 1, 99, 0).unwrap();
-        let expected_legacy = r#"{"all_enc_shares":[{"c1":"Aw==","c2":"BA==","share_index":1},{"c1":"BQ==","c2":"Bg==","share_index":2}],"enc_share":{"c1":"Aw==","c2":"BA==","share_index":1},"primary_blind":"CQ==","proposal_id":42,"share_comms":["Bw==","CA=="],"share_index":1,"shares_hash":"AQ==","submit_at":0,"tree_position":99,"vote_decision":2}"#;
-        assert_eq!(legacy_recovered, expected_legacy);
     }
 
     #[test]
@@ -2772,7 +2540,7 @@ mod tests {
         zcash_voting::storage::queries::store_vote(&conn, ROUND_ID, wallet_id, 1, 2, 1, b"vote-1")
             .unwrap();
         drop(conn);
-        store_vote_tx_hash(
+        mark_vote_submitted(
             db_path.to_str().unwrap().to_string(),
             wallet_id.to_string(),
             ROUND_ID.to_string(),

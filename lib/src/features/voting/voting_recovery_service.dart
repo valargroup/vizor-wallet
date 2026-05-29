@@ -16,8 +16,8 @@ class VotingRecoveryService {
   /// Loads the crate planner's derived resume plan for a round.
   ///
   /// `proposalIds` must be the full set of proposal IDs for the round (as
-  /// returned by [proposalsFromRound]).  Returns null on error so a plan-load
-  /// failure never blocks the session.
+  /// returned by [proposalsFromRound]). Errors propagate so voting cannot
+  /// proceed without durable intent and recovery planning.
   Future<rust_voting.ApiRoundPlan> loadRoundPlan({
     required String dbPath,
     required String walletId,

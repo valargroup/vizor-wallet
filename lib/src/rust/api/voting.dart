@@ -610,26 +610,6 @@ Future<ApiRoundRecoveryState> getRoundRecoveryState({
   roundId: roundId,
 );
 
-/// Store the broadcast transaction hash for one vote.
-///
-/// Keyed by `(round_id, wallet_id, bundle_index, proposal_id)` so multi-bundle
-/// and multi-proposal rounds can resume without ambiguous "current vote" state.
-Future<void> storeVoteTxHash({
-  required String dbPath,
-  required String walletId,
-  required String roundId,
-  required int bundleIndex,
-  required int proposalId,
-  required String txHash,
-}) => RustLib.instance.api.crateApiVotingStoreVoteTxHash(
-  dbPath: dbPath,
-  walletId: walletId,
-  roundId: roundId,
-  bundleIndex: bundleIndex,
-  proposalId: proposalId,
-  txHash: txHash,
-);
-
 Future<void> markVoteSubmitted({
   required String dbPath,
   required String walletId,
@@ -655,7 +635,6 @@ Future<void> markVoteConfirmed({
   required String txHash,
   required int vanPosition,
   required BigInt vcTreePosition,
-  required String commitmentBundleJson,
 }) => RustLib.instance.api.crateApiVotingMarkVoteConfirmed(
   dbPath: dbPath,
   walletId: walletId,
@@ -665,7 +644,6 @@ Future<void> markVoteConfirmed({
   txHash: txHash,
   vanPosition: vanPosition,
   vcTreePosition: vcTreePosition,
-  commitmentBundleJson: commitmentBundleJson,
 );
 
 /// Load the broadcast transaction hash for one vote, if present.
@@ -681,25 +659,6 @@ Future<String?> getVoteTxHash({
   roundId: roundId,
   bundleIndex: bundleIndex,
   proposalId: proposalId,
-);
-
-/// Store commitment bundle recovery JSON and confirmed vote-tree position for one vote.
-Future<void> storeCommitmentBundle({
-  required String dbPath,
-  required String walletId,
-  required String roundId,
-  required int bundleIndex,
-  required int proposalId,
-  required String commitmentBundleJson,
-  required BigInt vcTreePosition,
-}) => RustLib.instance.api.crateApiVotingStoreCommitmentBundle(
-  dbPath: dbPath,
-  walletId: walletId,
-  roundId: roundId,
-  bundleIndex: bundleIndex,
-  proposalId: proposalId,
-  commitmentBundleJson: commitmentBundleJson,
-  vcTreePosition: vcTreePosition,
 );
 
 /// Load commitment bundle recovery JSON and vote-tree position for one vote.
@@ -1625,21 +1584,16 @@ class ApiVoteRecord {
   final int proposalId;
   final int bundleIndex;
   final int choice;
-  final bool submitted;
 
   const ApiVoteRecord({
     required this.proposalId,
     required this.bundleIndex,
     required this.choice,
-    required this.submitted,
   });
 
   @override
   int get hashCode =>
-      proposalId.hashCode ^
-      bundleIndex.hashCode ^
-      choice.hashCode ^
-      submitted.hashCode;
+      proposalId.hashCode ^ bundleIndex.hashCode ^ choice.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1648,8 +1602,7 @@ class ApiVoteRecord {
           runtimeType == other.runtimeType &&
           proposalId == other.proposalId &&
           bundleIndex == other.bundleIndex &&
-          choice == other.choice &&
-          submitted == other.submitted;
+          choice == other.choice;
 }
 
 /// Helper-server payload for one encrypted vote share.

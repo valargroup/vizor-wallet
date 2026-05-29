@@ -69,7 +69,7 @@ pub fn mark_delegation_confirmed(
         .map_err(|e| format!("commit delegation confirmed transaction failed: {e}"))
 }
 
-/// Marks a vote as submitted by storing its tx hash and `submitted = 1`.
+/// Marks a vote as submitted by storing its tx hash.
 ///
 /// The write is atomic and idempotent for the same `tx_hash`. A different
 /// existing hash for the same vote key is rejected.
@@ -102,8 +102,8 @@ pub fn mark_vote_submitted(
 
 /// Marks a vote as confirmed and persists the confirmation fields.
 ///
-/// Stores the vote tx hash, `submitted = 1`, VAN position, and vote commitment
-/// tree position. Repeated calls with identical data are accepted; any
+/// Stores the vote tx hash, VAN position, and vote commitment tree position.
+/// Repeated calls with identical data are accepted; any
 /// conflicting existing value is rejected.
 ///
 /// # Errors
@@ -111,7 +111,6 @@ pub fn mark_vote_submitted(
 /// Returns an error if the voting DB cannot be opened, the vote row is missing,
 /// the transaction cannot be committed, `vc_tree_position` does not fit SQLite's
 /// signed integer representation, or stored data conflicts.
-#[allow(clippy::too_many_arguments)]
 pub fn mark_vote_confirmed(
     db_path: &str,
     wallet_id: &str,
@@ -121,7 +120,6 @@ pub fn mark_vote_confirmed(
     tx_hash: &str,
     van_position: u32,
     vc_tree_position: u64,
-    _commitment_bundle_json: &str,
 ) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
     {

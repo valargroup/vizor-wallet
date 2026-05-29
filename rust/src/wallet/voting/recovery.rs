@@ -120,7 +120,6 @@ pub fn get_round_recovery_state(
             proposal_id: record.proposal_id,
             bundle_index: record.bundle_index,
             choice: record.choice,
-            submitted: record.submitted,
         })
         .collect::<Vec<_>>();
 
@@ -384,14 +383,15 @@ fn map_share_records(
         .collect())
 }
 
-/// Reads commitment recovery without failing on legacy signed-only rows.
+/// Reads commitment recovery without failing on rows whose vote tree position is
+/// not known yet.
 ///
-/// Older Vizor builds could persist `commitment_bundle_json` before the
-/// corresponding vote commitment tree position was known. If no cast-vote tx hash
-/// was stored yet, normal retry should rebuild the commitment instead of trying
-/// to reuse that partial row. If a tx hash was stored, return the JSON with the
-/// same placeholder position zodl-ios uses so confirmation recovery can recover
-/// the real position from chain data and replace it before share submission.
+/// Committed votes persist recovery JSON before cast-vote confirmation provides
+/// the vote commitment tree position. If no cast-vote tx hash was stored yet,
+/// normal retry should rebuild the commitment instead of trying to reuse that
+/// partial row. If a tx hash was stored, return the JSON with a placeholder
+/// position so confirmation recovery can replace it with the chain value before
+/// share submission.
 fn get_recoverable_commitment_bundle_from_db(
     voting_db: &zcash_voting::storage::VotingDb,
     round_id: &str,
@@ -539,8 +539,7 @@ mod tests {
     use super::*;
     use crate::wallet::voting::{state, workflow};
     use workflow::{
-        mark_share_confirmed, mark_vote_confirmed, mark_vote_submitted as store_vote_tx_hash,
-        record_share_delegation,
+        mark_share_confirmed, mark_vote_confirmed, mark_vote_submitted, record_share_delegation,
     };
 
     const WALLET_ID: &str = "wallet-recovery";
@@ -553,8 +552,8 @@ mod tests {
         fixture.insert_vote(0, 2, 1, b"vote-0-2");
         fixture.insert_vote(1, 1, 1, b"vote-1-1");
 
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "tx-0-1").unwrap();
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 1, 1, "tx-1-1").unwrap();
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "tx-0-1").unwrap();
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 1, 1, "tx-1-1").unwrap();
 
         assert_eq!(
             get_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1)
@@ -602,7 +601,7 @@ mod tests {
     fn vote_confirmation_records_tree_position_for_stored_recovery() {
         let fixture = RecoveryFixture::new();
         fixture.insert_vote(0, 1, 0, b"vote-0-1");
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
         let recovery_json = vote_recovery_json(0, 1, 0, 0);
         fixture.insert_commitment_bundle(0, 1, &recovery_json, None);
 
@@ -615,7 +614,6 @@ mod tests {
             "vote-tx-0-1",
             1,
             2,
-            &recovery_json,
         )
         .unwrap();
 
@@ -742,7 +740,7 @@ mod tests {
             .unwrap();
         fixture.insert_vote(0, 1, 0, b"vote-0-1");
         fixture.insert_vote(1, 2, 1, b"vote-1-2");
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 1, 2, "vote-tx-1-2").unwrap();
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 1, 2, "vote-tx-1-2").unwrap();
         fixture.insert_commitment_bundle(1, 2, r#"{"bundle":"two"}"#, Some(77));
         record_share_delegation(
             fixture.path(),
@@ -770,10 +768,10 @@ mod tests {
     }
 
     #[test]
-    fn round_recovery_state_ignores_legacy_signed_only_bundle_without_position() {
+    fn round_recovery_state_ignores_unsubmitted_bundle_without_position() {
         let fixture = RecoveryFixture::new();
         fixture.insert_vote(0, 1, 0, b"vote-0-1");
-        fixture.insert_legacy_commitment_bundle_without_position(0, 1, r#"{"bundle":"legacy"}"#);
+        fixture.insert_commitment_bundle_without_position(0, 1, r#"{"bundle":"pending"}"#);
 
         let state = get_round_recovery_state(fixture.path(), WALLET_ID, ROUND_ID).unwrap();
 
@@ -797,11 +795,11 @@ mod tests {
     }
 
     #[test]
-    fn round_recovery_state_recovers_legacy_submitted_bundle_without_position() {
+    fn round_recovery_state_recovers_submitted_bundle_without_position() {
         let fixture = RecoveryFixture::new();
         fixture.insert_vote(0, 1, 0, b"vote-0-1");
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
-        fixture.insert_legacy_commitment_bundle_without_position(0, 1, r#"{"bundle":"legacy"}"#);
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
+        fixture.insert_commitment_bundle_without_position(0, 1, r#"{"bundle":"pending"}"#);
 
         let state = get_round_recovery_state(fixture.path(), WALLET_ID, ROUND_ID).unwrap();
 
@@ -822,7 +820,7 @@ mod tests {
             vec![CommitmentBundleRecovery {
                 bundle_index: 0,
                 proposal_id: 1,
-                commitment_bundle_json: r#"{"bundle":"legacy"}"#.to_string(),
+                commitment_bundle_json: r#"{"bundle":"pending"}"#.to_string(),
                 vc_tree_position: 0,
             }]
         );
@@ -850,18 +848,7 @@ mod tests {
         insert_vote(&db, 0, 1, 0, b"vote-0-1");
         let recovery_json = vote_recovery_json(0, 1, 0, 0);
         store_commitment_bundle_fixture(&db, 0, 1, &recovery_json, None);
-        mark_vote_confirmed(
-            &path,
-            WALLET_ID,
-            ROUND_ID,
-            0,
-            1,
-            "vote-tx-0-1",
-            5,
-            9,
-            &recovery_json,
-        )
-        .unwrap();
+        mark_vote_confirmed(&path, WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1", 5, 9).unwrap();
         record_share_delegation(
             &path,
             WALLET_ID,
@@ -972,9 +959,9 @@ mod tests {
         .unwrap_err()
         .contains("delegation tx_hash conflict"));
 
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
-        assert!(store_vote_tx_hash(
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
+        assert!(mark_vote_submitted(
             fixture.path(),
             WALLET_ID,
             ROUND_ID,
@@ -1056,17 +1043,22 @@ mod tests {
     }
 
     #[test]
-    fn store_vote_tx_hash_marks_vote_submitted() {
+    fn mark_vote_submitted_records_vote_tx_hash() {
         let fixture = RecoveryFixture::new();
         fixture.insert_vote(0, 1, 0, b"vote-0-1");
 
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
 
         let votes = fixture.db.get_votes(ROUND_ID).unwrap();
         assert_eq!(votes.len(), 1);
         assert_eq!(votes[0].proposal_id, 1);
         assert_eq!(votes[0].bundle_index, 0);
-        assert!(votes[0].submitted);
+        assert_eq!(
+            get_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1)
+                .unwrap()
+                .as_deref(),
+            Some("vote-tx-0-1")
+        );
     }
 
     #[test]
@@ -1077,7 +1069,7 @@ mod tests {
             .store_delegation_tx_hash(ROUND_ID, 0, "delegation-tx-0")
             .unwrap();
         fixture.insert_vote(0, 1, 0, b"vote-0-1");
-        store_vote_tx_hash(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
+        mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
         fixture.insert_commitment_bundle(0, 1, r#"{"bundle":"one"}"#, Some(11));
         record_share_delegation(
             fixture.path(),
@@ -1163,7 +1155,7 @@ mod tests {
             );
         }
 
-        fn insert_legacy_commitment_bundle_without_position(
+        fn insert_commitment_bundle_without_position(
             &self,
             bundle_index: u32,
             proposal_id: u32,

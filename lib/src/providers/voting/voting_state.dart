@@ -245,7 +245,7 @@ class VotingSessionState {
 
   /// Crate planner's derived resume plan for this round.
   ///
-  /// Null when loading, or when the plan load failed (best-effort).
+  /// Null before the crate planner has loaded for this session.
   /// When [pendingRecovery] is true the proposal-detail screen shows a
   /// "Continue voting" button instead of the dead-end _PendingVoteContent.
   final rust_voting.ApiRoundPlan? roundPlan;

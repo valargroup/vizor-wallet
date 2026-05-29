@@ -3213,7 +3213,6 @@ fn wire__crate__api__voting__mark_vote_confirmed_impl(
             let api_tx_hash = <String>::sse_decode(&mut deserializer);
             let api_van_position = <u32>::sse_decode(&mut deserializer);
             let api_vc_tree_position = <u64>::sse_decode(&mut deserializer);
-            let api_commitment_bundle_json = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
@@ -3226,7 +3225,6 @@ fn wire__crate__api__voting__mark_vote_confirmed_impl(
                         api_tx_hash,
                         api_van_position,
                         api_vc_tree_position,
-                        api_commitment_bundle_json,
                     )?;
                     Ok(output_ok)
                 })())
@@ -4295,53 +4293,6 @@ fn wire__crate__api__sync__stop_mempool_observer_impl(
         },
     )
 }
-fn wire__crate__api__voting__store_commitment_bundle_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "store_commitment_bundle",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
-            let api_round_id = <String>::sse_decode(&mut deserializer);
-            let api_bundle_index = <u32>::sse_decode(&mut deserializer);
-            let api_proposal_id = <u32>::sse_decode(&mut deserializer);
-            let api_commitment_bundle_json = <String>::sse_decode(&mut deserializer);
-            let api_vc_tree_position = <u64>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, String>((move || {
-                    let output_ok = crate::api::voting::store_commitment_bundle(
-                        api_db_path,
-                        api_wallet_id,
-                        api_round_id,
-                        api_bundle_index,
-                        api_proposal_id,
-                        api_commitment_bundle_json,
-                        api_vc_tree_position,
-                    )?;
-                    Ok(output_ok)
-                })())
-            }
-        },
-    )
-}
 fn wire__crate__api__voting__store_delegation_tx_hash_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -4468,51 +4419,6 @@ fn wire__crate__api__voting__store_van_position_impl(
                         api_round_id,
                         api_bundle_index,
                         api_position,
-                    )?;
-                    Ok(output_ok)
-                })())
-            }
-        },
-    )
-}
-fn wire__crate__api__voting__store_vote_tx_hash_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "store_vote_tx_hash",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
-            let api_round_id = <String>::sse_decode(&mut deserializer);
-            let api_bundle_index = <u32>::sse_decode(&mut deserializer);
-            let api_proposal_id = <u32>::sse_decode(&mut deserializer);
-            let api_tx_hash = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, String>((move || {
-                    let output_ok = crate::api::voting::store_vote_tx_hash(
-                        api_db_path,
-                        api_wallet_id,
-                        api_round_id,
-                        api_bundle_index,
-                        api_proposal_id,
-                        api_tx_hash,
                     )?;
                     Ok(output_ok)
                 })())
@@ -5412,12 +5318,10 @@ impl SseDecode for crate::api::voting::ApiVoteRecord {
         let mut var_proposalId = <u32>::sse_decode(deserializer);
         let mut var_bundleIndex = <u32>::sse_decode(deserializer);
         let mut var_choice = <u32>::sse_decode(deserializer);
-        let mut var_submitted = <bool>::sse_decode(deserializer);
         return crate::api::voting::ApiVoteRecord {
             proposal_id: var_proposalId,
             bundle_index: var_bundleIndex,
             choice: var_choice,
-            submitted: var_submitted,
         };
     }
 }
@@ -6522,11 +6426,9 @@ fn pde_ffi_dispatcher_primary_impl(
 101 => wire__crate__api__sync__shield_transparent_balance_with_macos_stored_mnemonic_impl(port, ptr, rust_vec_len, data_len),
 102 => wire__crate__api__sync__start_full_sync_impl(port, ptr, rust_vec_len, data_len),
 103 => wire__crate__api__sync__start_mempool_observer_impl(port, ptr, rust_vec_len, data_len),
-105 => wire__crate__api__voting__store_commitment_bundle_impl(port, ptr, rust_vec_len, data_len),
 106 => wire__crate__api__voting__store_delegation_tx_hash_impl(port, ptr, rust_vec_len, data_len),
 107 => wire__crate__api__voting__store_keystone_signature_impl(port, ptr, rust_vec_len, data_len),
 108 => wire__crate__api__voting__store_van_position_impl(port, ptr, rust_vec_len, data_len),
-109 => wire__crate__api__voting__store_vote_tx_hash_impl(port, ptr, rust_vec_len, data_len),
 110 => wire__crate__api__sync__suggest_scan_ranges_impl(port, ptr, rust_vec_len, data_len),
 111 => wire__crate__api__voting__sync_vote_tree_impl(port, ptr, rust_vec_len, data_len),
 112 => wire__crate__api__sync__update_chain_tip_impl(port, ptr, rust_vec_len, data_len),
@@ -7170,7 +7072,6 @@ impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiVoteRecord {
             self.proposal_id.into_into_dart().into_dart(),
             self.bundle_index.into_into_dart().into_dart(),
             self.choice.into_into_dart().into_dart(),
-            self.submitted.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -8278,7 +8179,6 @@ impl SseEncode for crate::api::voting::ApiVoteRecord {
         <u32>::sse_encode(self.proposal_id, serializer);
         <u32>::sse_encode(self.bundle_index, serializer);
         <u32>::sse_encode(self.choice, serializer);
-        <bool>::sse_encode(self.submitted, serializer);
     }
 }
 

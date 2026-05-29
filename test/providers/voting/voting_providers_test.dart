@@ -1472,7 +1472,7 @@ void main() {
 
       expect(recoveryApi.ballotIntents, isEmpty);
       expect(rust.voteCommitBundleCalls, isEmpty);
-      expect(rust.storedCommitmentBundles, ['0:7:2:{"proposal_id":7}']);
+      expect(rust.storedCommitmentBundles, ['0:7:2']);
     },
   );
 
@@ -1561,7 +1561,50 @@ void main() {
     expect(rust.recordedShares.single.proposalId, 7);
     expect(rust.recordedShares.single.submitAt, BigInt.zero);
     expect(rust.storedVoteTxHashes, ['0:7:vote-tx']);
-    expect(rust.storedCommitmentBundles, ['0:7:2:{"proposal_id":7}']);
+    expect(rust.storedCommitmentBundles, ['0:7:2']);
+  });
+
+  test('ballot intent write failure aborts before vote submission', () async {
+    final rust = FakeVotingRustApi(emitCommitments: true);
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(
+        bundleCount: 1,
+        delegationTxHashes: [
+          rust_voting.ApiDelegationTxRecovery(
+            bundleIndex: 0,
+            txHash: 'delegation-0',
+          ),
+        ],
+        votes: [vote(bundleIndex: 0, proposalId: 7)],
+      ),
+      setBallotIntentError: StateError('intent write failed'),
+    );
+    final container = _sessionContainer(rust: rust, recoveryApi: recoveryApi);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .castVotes(
+          draftVotes: [
+            rust_voting.ApiDraftVote(
+              proposalId: 7,
+              choice: 1,
+              numOptions: 2,
+              vcTreePosition: BigInt.zero,
+              singleShare: false,
+            ),
+          ],
+          allProposalIds: const [7, 8],
+        );
+
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+    expect(state.phase, VotingSessionPhase.error);
+    expect(state.error?.message, contains('intent write failed'));
+    expect(recoveryApi.ballotIntents, isEmpty);
+    expect(rust.voteCommitBundleCalls, isEmpty);
+    expect(rust.storedVoteTxHashes, isEmpty);
+    expect(rust.recordedShares, isEmpty);
   });
 
   test('initial share submission uses planned helper targets', () async {
@@ -2439,7 +2482,6 @@ rust_voting.ApiVoteRecord vote({
     proposalId: proposalId,
     bundleIndex: bundleIndex,
     choice: 1,
-    submitted: false,
   );
 }
 
@@ -2488,8 +2530,13 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   final walletIds = <String>[];
   final addedSentServers = <_AddedSentServers>[];
   final ballotIntents = <String>[];
+  final Object? setBallotIntentError;
 
-  FakeVotingRecoveryApi({required this.state, this.roundPlan});
+  FakeVotingRecoveryApi({
+    required this.state,
+    this.roundPlan,
+    this.setBallotIntentError,
+  });
 
   @override
   Future<void> addSentServers({
@@ -2549,6 +2596,10 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
     required bool skipped,
     int? choice,
   }) async {
+    final error = setBallotIntentError;
+    if (error != null) {
+      throw error;
+    }
     ballotIntents.add('$proposalId:$skipped:${choice ?? 'null'}');
   }
 }
@@ -3308,18 +3359,6 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<void> storeVoteTxHash({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required int proposalId,
-    required String txHash,
-  }) async {
-    _addUnique(storedVoteTxHashes, '$bundleIndex:$proposalId:$txHash');
-  }
-
-  @override
   Future<void> markVoteSubmitted({
     required String dbPath,
     required String walletId,
@@ -3341,28 +3380,10 @@ class FakeVotingRustApi implements VotingRustApi {
     required String txHash,
     required int vanPosition,
     required BigInt vcTreePosition,
-    required String commitmentBundleJson,
   }) async {
     _addUnique(storedVoteTxHashes, '$bundleIndex:$proposalId:$txHash');
     storedVanPositions.add('$bundleIndex:$vanPosition');
-    storedCommitmentBundles.add(
-      '$bundleIndex:$proposalId:$vcTreePosition:$commitmentBundleJson',
-    );
-  }
-
-  @override
-  Future<void> storeCommitmentBundle({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required int proposalId,
-    required String commitmentBundleJson,
-    required BigInt vcTreePosition,
-  }) async {
-    storedCommitmentBundles.add(
-      '$bundleIndex:$proposalId:$vcTreePosition:$commitmentBundleJson',
-    );
+    storedCommitmentBundles.add('$bundleIndex:$proposalId:$vcTreePosition');
   }
 
   @override

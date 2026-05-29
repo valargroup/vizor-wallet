@@ -81,8 +81,8 @@ Key: `(round_id, bundle_index, proposal_id)`
 | --- | --- | --- |
 | `prepared` | `votes` row exists without `tx_hash` or commitment recovery data | Build and sign vote commitment. |
 | `signed` | `commitment_bundle_json` exists without submitted vote transaction state. | Submit cast-vote transaction. |
-| `submitted_vote` | `tx_hash` exists and `submitted = 1`, but confirmation data is incomplete | Poll transaction confirmation and store vote confirmation data. Do not resubmit. |
-| `confirmed` | `tx_hash`, `submitted = 1`, `vc_tree_position`, and `commitment_bundle_json` exist | No vote recovery work remains. |
+| `submitted_vote` | `tx_hash` exists, but confirmation data is incomplete | Poll transaction confirmation and store vote confirmation data. Do not resubmit. |
+| `confirmed` | `tx_hash`, `vc_tree_position`, and `commitment_bundle_json` exist | No vote recovery work remains. |
 
 ### Helper Share Delegation
 
@@ -159,13 +159,12 @@ sign_cast_vote error --> prepared
 ### Vote Submission
 
 `workflow::mark_vote_submitted` is the only transition for recording cast-vote
-submission. It stores `votes.tx_hash` and marks `votes.submitted = 1` in one
-SQLite transaction.
+submission. It stores `votes.tx_hash` in one SQLite transaction.
 
 Transition:
 
 ```text
-signed --store tx_hash + submitted=1--> submitted_vote
+signed --store tx_hash--> submitted_vote
 submitted_vote --same tx_hash--> submitted_vote
 submitted_vote --different tx_hash--> error
 ```
@@ -175,7 +174,6 @@ submitted_vote --different tx_hash--> error
 `workflow::mark_vote_confirmed` stores:
 
 - `votes.tx_hash`
-- `votes.submitted = 1`
 - `bundles.van_leaf_position`
 - `votes.vc_tree_position`
 
