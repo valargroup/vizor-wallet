@@ -3547,16 +3547,24 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<void> markDelegationConfirmed({
+  Future<rust_voting.ApiDelegationConfirmation> markDelegationConfirmed({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required String txHash,
-    required int vanLeafPosition,
+    required List<rust_voting.ApiTxEvent> events,
   }) async {
+    _expectEventRoundId(events, 'delegate_vote', roundId);
+    final vanLeafPosition = int.parse(
+      _eventAttribute(events, 'delegate_vote', 'leaf_index'),
+    );
     _addUnique(storedDelegationTxHashes, '$bundleIndex:$txHash');
     storedVanPositions.add('$bundleIndex:$vanLeafPosition');
+    return rust_voting.ApiDelegationConfirmation(
+      txHash: txHash,
+      vanLeafPosition: vanLeafPosition,
+    );
   }
 
   @override
@@ -3839,20 +3847,28 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<void> markVoteConfirmed({
+  Future<rust_voting.ApiVoteConfirmation> markVoteConfirmed({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
     required String txHash,
-    required int vanPosition,
-    required BigInt vcTreePosition,
+    required List<rust_voting.ApiTxEvent> events,
   }) async {
+    _expectEventRoundId(events, 'cast_vote', roundId);
+    final positions = _voteLeafPositions(events);
     _addUnique(storedVoteTxHashes, '$bundleIndex:$proposalId:$txHash');
     operationLog.add('mark_vote_confirmed:$bundleIndex:$proposalId');
-    storedVanPositions.add('$bundleIndex:$vanPosition');
-    storedCommitmentBundles.add('$bundleIndex:$proposalId:$vcTreePosition');
+    storedVanPositions.add('$bundleIndex:${positions.vanPosition}');
+    storedCommitmentBundles.add(
+      '$bundleIndex:$proposalId:${positions.vcTreePosition}',
+    );
+    return rust_voting.ApiVoteConfirmation(
+      txHash: txHash,
+      vanLeafPosition: positions.vanPosition,
+      vcTreePosition: positions.vcTreePosition,
+    );
   }
 
   @override
@@ -3910,6 +3926,57 @@ void _addUnique<T>(List<T> values, T value) {
   if (!values.contains(value)) {
     values.add(value);
   }
+}
+
+String _eventAttribute(
+  List<rust_voting.ApiTxEvent> events,
+  String eventType,
+  String key,
+) {
+  final value = _optionalEventAttribute(events, eventType, key);
+  if (value != null) return value;
+  throw StateError('Missing $eventType $key.');
+}
+
+String? _optionalEventAttribute(
+  List<rust_voting.ApiTxEvent> events,
+  String eventType,
+  String key,
+) {
+  for (final event in events) {
+    if (event.eventType != eventType) continue;
+    for (final attribute in event.attributes) {
+      if (attribute.key == key) return attribute.value;
+    }
+  }
+  return null;
+}
+
+void _expectEventRoundId(
+  List<rust_voting.ApiTxEvent> events,
+  String eventType,
+  String roundId,
+) {
+  final eventRoundId =
+      _optionalEventAttribute(events, eventType, 'vote_round_id') ??
+      _optionalEventAttribute(events, eventType, 'round_id');
+  if (eventRoundId != roundId) {
+    throw StateError('Missing $eventType round id.');
+  }
+}
+
+({int vanPosition, BigInt vcTreePosition}) _voteLeafPositions(
+  List<rust_voting.ApiTxEvent> events,
+) {
+  final rawLeafIndex = _eventAttribute(events, 'cast_vote', 'leaf_index');
+  final parts = rawLeafIndex.split(',');
+  if (parts.length != 2) {
+    throw StateError('Malformed cast_vote leaf_index: $rawLeafIndex');
+  }
+  return (
+    vanPosition: int.parse(parts[0].trim()),
+    vcTreePosition: BigInt.parse(parts[1].trim()),
+  );
 }
 
 class _RecordedShare {

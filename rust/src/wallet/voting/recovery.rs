@@ -541,9 +541,34 @@ mod tests {
     use workflow::{
         mark_share_confirmed, mark_vote_confirmed, mark_vote_submitted, record_share_delegation,
     };
+    use zcash_voting::confirmation::{TxEvent, TxEventAttribute};
 
     const WALLET_ID: &str = "wallet-recovery";
     const ROUND_ID: &str = "round-recovery";
+
+    fn confirmation_events(event_type: &str, leaf_index: String) -> Vec<TxEvent> {
+        vec![TxEvent {
+            event_type: event_type.to_string(),
+            attributes: vec![
+                TxEventAttribute {
+                    key: "vote_round_id".to_string(),
+                    value: ROUND_ID.to_string(),
+                },
+                TxEventAttribute {
+                    key: "leaf_index".to_string(),
+                    value: leaf_index,
+                },
+            ],
+        }]
+    }
+
+    fn delegation_events(van_position: u32) -> Vec<TxEvent> {
+        confirmation_events("delegate_vote", van_position.to_string())
+    }
+
+    fn vote_events(van_position: u32, vc_tree_position: u64) -> Vec<TxEvent> {
+        confirmation_events("cast_vote", format!("{van_position},{vc_tree_position}"))
+    }
 
     #[test]
     fn vote_tx_hashes_are_isolated_by_bundle_and_proposal() {
@@ -600,7 +625,8 @@ mod tests {
     #[test]
     fn vote_confirmation_records_tree_position_for_stored_recovery() {
         let fixture = RecoveryFixture::new();
-        fixture.insert_vote(0, 1, 0, b"vote-0-1");
+        let commitment = vote_commitment_json();
+        fixture.insert_vote(0, 1, 0, &commitment);
         mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
         let recovery_json = vote_recovery_json(0, 1, 0, 0);
         fixture.insert_commitment_bundle(0, 1, &recovery_json, None);
@@ -612,8 +638,7 @@ mod tests {
             0,
             1,
             "vote-tx-0-1",
-            1,
-            2,
+            &vote_events(1, 2),
         )
         .unwrap();
 
@@ -842,12 +867,29 @@ mod tests {
         } = fixture;
         let path = db_path.to_str().unwrap().to_string();
 
-        workflow::mark_delegation_confirmed(&path, WALLET_ID, ROUND_ID, 0, "delegation-tx-0", 5)
-            .unwrap();
-        insert_vote(&db, 0, 1, 0, b"vote-0-1");
+        workflow::mark_delegation_confirmed(
+            &path,
+            WALLET_ID,
+            ROUND_ID,
+            0,
+            "delegation-tx-0",
+            &delegation_events(5),
+        )
+        .unwrap();
+        let commitment = vote_commitment_json();
+        insert_vote(&db, 0, 1, 0, &commitment);
         let recovery_json = vote_recovery_json(0, 1, 0, 0);
         store_commitment_bundle_fixture(&db, 0, 1, &recovery_json, None);
-        mark_vote_confirmed(&path, WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1", 5, 9).unwrap();
+        mark_vote_confirmed(
+            &path,
+            WALLET_ID,
+            ROUND_ID,
+            0,
+            1,
+            "vote-tx-0-1",
+            &vote_events(5, 9),
+        )
+        .unwrap();
         record_share_delegation(
             &path,
             WALLET_ID,
@@ -959,7 +1001,7 @@ mod tests {
             "delegation-tx-conflict",
         )
         .unwrap_err()
-        .contains("delegation tx_hash conflict"));
+        .contains("delegation tx hash already recorded"));
 
         mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
         mark_vote_submitted(fixture.path(), WALLET_ID, ROUND_ID, 0, 1, "vote-tx-0-1").unwrap();
@@ -972,7 +1014,7 @@ mod tests {
             "vote-tx-conflict",
         )
         .unwrap_err()
-        .contains("vote tx_hash conflict"));
+        .contains("vote tx hash already recorded"));
 
         record_share_delegation(
             fixture.path(),
@@ -1264,6 +1306,16 @@ mod tests {
             "share_comms": [vec![13u8; 32]],
         })
         .to_string()
+    }
+
+    fn vote_commitment_json() -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "van_nullifier": hex::encode([1u8; 32]),
+            "vote_authority_note_new": hex::encode([2u8; 32]),
+            "vote_commitment": hex::encode([3u8; 32]),
+            "proof": hex::encode([4u8; 8]),
+        }))
+        .unwrap()
     }
 
     fn expected_share_nullifier() -> Vec<u8> {

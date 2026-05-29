@@ -41,8 +41,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     final context = await _loadContext(_roundId);
     final rust = ref.read(votingRustApiProvider);
     ref.onDispose(() {
-      // Provider disposal is round-scoped: clear abandoned prepared PCZTs but
-      // keep account-wide vote-tree sync state reusable across rounds.
+      // Provider disposal is round-scoped so account-wide vote-tree sync state
+      // stays reusable across rounds.
       _delegationPirPrecomputes.clear();
       _shareTrackingTimer?.cancel();
       unawaited(
@@ -635,7 +635,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                 : confirmation.log,
           );
         }
-        final leafPositions = _castVoteLeafPositions(confirmation);
         await rust.markVoteConfirmed(
           dbPath: context.dbPath,
           walletId: context.accountUuid,
@@ -643,8 +642,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           bundleIndex: key.bundleIndex,
           proposalId: key.proposalId,
           txHash: txHash,
-          vanPosition: leafPositions.vanPosition,
-          vcTreePosition: leafPositions.vcTreePosition,
+          events: _confirmationEvents(
+            confirmation,
+            roundId: context.round.roundId,
+          ),
         );
         progress[key] = VotingSessionProgress(
           phase: 'confirmed',
@@ -1366,23 +1367,24 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         );
       }
 
-      final leafPositions = _castVoteLeafPositions(confirmation);
-      debugPrint(
-        '[zcash] Voting: cast-vote confirmed '
-        'proposal=${commitment.proposalId} vanPosition=${leafPositions.vanPosition} '
-        'vcTreePosition=${leafPositions.vcTreePosition}',
-      );
-      await rust.markVoteConfirmed(
+      final confirmed = await rust.markVoteConfirmed(
         dbPath: context.dbPath,
         walletId: context.accountUuid,
         roundId: context.round.roundId,
         bundleIndex: commitments.bundleIndex,
         proposalId: commitment.proposalId,
         txHash: result.txHash,
-        vanPosition: leafPositions.vanPosition,
-        vcTreePosition: leafPositions.vcTreePosition,
+        events: _confirmationEvents(
+          confirmation,
+          roundId: context.round.roundId,
+        ),
       );
-      vcTreePositions[commitment.proposalId] = leafPositions.vcTreePosition;
+      debugPrint(
+        '[zcash] Voting: cast-vote confirmed '
+        'proposal=${commitment.proposalId} vanPosition=${confirmed.vanLeafPosition} '
+        'vcTreePosition=${confirmed.vcTreePosition}',
+      );
+      vcTreePositions[commitment.proposalId] = confirmed.vcTreePosition;
     }
     return vcTreePositions;
   }
@@ -1432,14 +1434,16 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               : confirmation.log,
         );
       }
-      final leafIndex = _delegationLeafIndex(confirmation, bundleIndex);
       await rust.markDelegationConfirmed(
         dbPath: context.dbPath,
         walletId: context.accountUuid,
         roundId: context.round.roundId,
         bundleIndex: bundleIndex,
         txHash: txHash,
-        vanLeafPosition: leafIndex,
+        events: _confirmationEvents(
+          confirmation,
+          roundId: context.round.roundId,
+        ),
       );
       completedBundleIndexes.add(bundleIndex);
       progress[bundleIndex] = VotingSessionProgress(
@@ -1507,31 +1511,51 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             : confirmation.log,
       );
     }
-    final leafIndex = _delegationLeafIndex(confirmation, bundleIndex);
-    await rust.markDelegationConfirmed(
+    final confirmed = await rust.markDelegationConfirmed(
       dbPath: context.dbPath,
       walletId: context.accountUuid,
       roundId: context.round.roundId,
       bundleIndex: bundleIndex,
       txHash: result.txHash,
-      vanLeafPosition: leafIndex,
+      events: _confirmationEvents(confirmation, roundId: context.round.roundId),
     );
-    return (txHash: result.txHash, leafIndex: leafIndex);
+    return (txHash: result.txHash, leafIndex: confirmed.vanLeafPosition);
   }
 
-  static int _delegationLeafIndex(
-    VotingTxConfirmation confirmation,
-    int bundleIndex,
-  ) {
-    final leafIndex = int.tryParse(
-      confirmation.event('delegate_vote')?.attribute('leaf_index') ?? '',
+  static List<rust_voting.ApiTxEvent> _confirmationEvents(
+    VotingTxConfirmation confirmation, {
+    required String roundId,
+  }) {
+    return [
+      for (final event in confirmation.events)
+        _confirmationEvent(event, roundId: roundId),
+    ];
+  }
+
+  static rust_voting.ApiTxEvent _confirmationEvent(
+    VotingTxEvent event, {
+    required String roundId,
+  }) {
+    final attributes = [
+      for (final attribute in event.attributes)
+        rust_voting.ApiTxEventAttribute(
+          key: attribute.key,
+          value: attribute.value,
+        ),
+    ];
+    final hasRoundId = attributes.any(
+      (attribute) =>
+          attribute.key == 'vote_round_id' || attribute.key == 'round_id',
     );
-    if (leafIndex == null) {
-      throw StateError(
-        'Missing delegate_vote leaf_index for bundle $bundleIndex.',
+    if (!hasRoundId) {
+      attributes.add(
+        rust_voting.ApiTxEventAttribute(key: 'vote_round_id', value: roundId),
       );
     }
-    return leafIndex;
+    return rust_voting.ApiTxEvent(
+      eventType: event.type,
+      attributes: attributes,
+    );
   }
 
   Future<VotingTxConfirmation?> _awaitTxConfirmation(
@@ -2308,7 +2332,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   /// Clear round-scoped Rust voting caches for this session.
   ///
   /// Passing the round ID intentionally preserves the account-wide vote-tree
-  /// sync client while discarding prepared delegation PCZTs for abandoned work.
+  /// sync client while cancelling abandoned round work.
   static Future<void> _resetVotingSessionState({
     required VotingRustApi rust,
     required _VotingSessionContext context,
@@ -2493,27 +2517,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     final decoded = jsonDecode(await wireJson);
     if (decoded is Map<String, dynamic>) return decoded;
     throw const FormatException('Rust voting wire JSON is not an object.');
-  }
-
-  static ({int vanPosition, BigInt vcTreePosition}) _castVoteLeafPositions(
-    VotingTxConfirmation confirmation,
-  ) {
-    final rawLeafIndex = confirmation
-        .event('cast_vote')
-        ?.attribute('leaf_index');
-    if (rawLeafIndex == null) {
-      throw StateError('Missing cast_vote leaf_index.');
-    }
-    final parts = rawLeafIndex.split(',');
-    if (parts.length != 2) {
-      throw StateError('Malformed cast_vote leaf_index: $rawLeafIndex');
-    }
-    final vanPosition = int.tryParse(parts[0].trim());
-    final vcTreePosition = BigInt.tryParse(parts[1].trim());
-    if (vanPosition == null || vcTreePosition == null) {
-      throw StateError('Malformed cast_vote leaf_index: $rawLeafIndex');
-    }
-    return (vanPosition: vanPosition, vcTreePosition: vcTreePosition);
   }
 
   static void _verifyKeystoneDelegationSignature({

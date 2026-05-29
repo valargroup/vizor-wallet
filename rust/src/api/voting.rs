@@ -256,6 +256,35 @@ pub struct ApiVoteTxRecovery {
     pub tx_hash: String,
 }
 
+/// FRB-safe chain transaction event returned by the voting API.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiTxEvent {
+    pub event_type: String,
+    pub attributes: Vec<ApiTxEventAttribute>,
+}
+
+/// FRB-safe chain transaction event attribute.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiTxEventAttribute {
+    pub key: String,
+    pub value: String,
+}
+
+/// Parsed delegation confirmation data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiDelegationConfirmation {
+    pub tx_hash: String,
+    pub van_leaf_position: u32,
+}
+
+/// Parsed cast-vote confirmation data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiVoteConfirmation {
+    pub tx_hash: String,
+    pub van_leaf_position: u32,
+    pub vc_tree_position: u64,
+}
+
 /// Helper-server share delegation state used for retry/resume.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApiShareDelegationRecord {
@@ -458,6 +487,43 @@ impl From<recovery::VoteTxRecovery> for ApiVoteTxRecovery {
             bundle_index: record.bundle_index,
             proposal_id: record.proposal_id,
             tx_hash: record.tx_hash,
+        }
+    }
+}
+
+impl From<ApiTxEventAttribute> for zcash_voting::confirmation::TxEventAttribute {
+    fn from(attribute: ApiTxEventAttribute) -> Self {
+        Self {
+            key: attribute.key,
+            value: attribute.value,
+        }
+    }
+}
+
+impl From<ApiTxEvent> for zcash_voting::confirmation::TxEvent {
+    fn from(event: ApiTxEvent) -> Self {
+        Self {
+            event_type: event.event_type,
+            attributes: event.attributes.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<zcash_voting::confirmation::DelegationConfirmation> for ApiDelegationConfirmation {
+    fn from(confirmation: zcash_voting::confirmation::DelegationConfirmation) -> Self {
+        Self {
+            tx_hash: confirmation.tx_hash,
+            van_leaf_position: confirmation.van_leaf_position,
+        }
+    }
+}
+
+impl From<zcash_voting::confirmation::VoteConfirmation> for ApiVoteConfirmation {
+    fn from(confirmation: zcash_voting::confirmation::VoteConfirmation) -> Self {
+        Self {
+            tx_hash: confirmation.tx_hash,
+            van_leaf_position: confirmation.van_leaf_position,
+            vc_tree_position: confirmation.vc_tree_position,
         }
     }
 }
@@ -1591,17 +1657,19 @@ pub fn mark_delegation_confirmed(
     round_id: String,
     bundle_index: u32,
     tx_hash: String,
-    van_leaf_position: u32,
-) -> Result<(), String> {
+    events: Vec<ApiTxEvent>,
+) -> Result<ApiDelegationConfirmation, String> {
     catch(|| {
+        let events = events.into_iter().map(Into::into).collect::<Vec<_>>();
         workflow::mark_delegation_confirmed(
             &db_path,
             &wallet_id,
             &round_id,
             bundle_index,
             &tx_hash,
-            van_leaf_position,
+            &events,
         )
+        .map(ApiDelegationConfirmation::from)
     })
 }
 
@@ -1918,10 +1986,10 @@ pub fn mark_vote_confirmed(
     bundle_index: u32,
     proposal_id: u32,
     tx_hash: String,
-    van_position: u32,
-    vc_tree_position: u64,
-) -> Result<(), String> {
+    events: Vec<ApiTxEvent>,
+) -> Result<ApiVoteConfirmation, String> {
     catch(|| {
+        let events = events.into_iter().map(Into::into).collect::<Vec<_>>();
         workflow::mark_vote_confirmed(
             &db_path,
             &wallet_id,
@@ -1929,9 +1997,9 @@ pub fn mark_vote_confirmed(
             bundle_index,
             proposal_id,
             &tx_hash,
-            van_position,
-            vc_tree_position,
+            &events,
         )
+        .map(ApiVoteConfirmation::from)
     })
 }
 

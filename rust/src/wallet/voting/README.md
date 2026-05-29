@@ -27,12 +27,12 @@ account inside individual session actions except through the session-pinned
 account helper.
 
 Durable voting state and process-local caches are account scoped. Any key or
-cleanup path that touches prepared delegation PCZTs, vote-tree sync state,
-hotkeys, recovery rows, or share-delegation history must include the wallet DB
-path plus the session account UUID where applicable. Account-wide lifecycle
-events such as account switch, account removal, wallet reset, or lock/sign-out
-invalidate process-local state for the abandoned account; they do not delete
-durable `zcash_voting` recovery rows.
+cleanup path that touches vote-tree sync state, hotkeys, recovery rows, or
+share-delegation history must include the wallet DB path plus the session
+account UUID where applicable. Account-wide lifecycle events such as account
+switch, account removal, wallet reset, or lock/sign-out invalidate process-local
+state for the abandoned account; they do not delete durable `zcash_voting`
+recovery rows.
 
 ## State Diagram
 
@@ -114,9 +114,9 @@ existing bundle rows --note mismatch--> error
 
 ### Delegation Submission
 
-`workflow::mark_delegation_submitted` is the only transition for recording a
-delegation transaction hash. It starts a SQLite transaction, checks any existing
-hash for same-data idempotency, stores `bundles.delegation_tx_hash`, and commits.
+`workflow::mark_delegation_submitted` records a delegation transaction hash
+through the shared `zcash_voting` storage API. The write is idempotent for the
+same hash and rejects a conflicting hash for the same bundle.
 
 Transition:
 
@@ -128,17 +128,24 @@ submitted_delegation --different tx_hash--> error
 
 ### Delegation Confirmation
 
-`workflow::mark_delegation_confirmed` atomically stores both
-`bundles.delegation_tx_hash` and `bundles.van_leaf_position`. It accepts repeated
-calls with the same tx hash and VAN position, but rejects conflicting data.
+`workflow::mark_delegation_confirmed` passes confirmed chain transaction events
+to `zcash_voting::confirmation::confirm_delegation_submission`. The shared crate
+parses the delegation `leaf_index`, checks the round id, then atomically stores
+`bundles.delegation_tx_hash` and `bundles.van_leaf_position`. Before this Rust
+call, Dart adds the active session `vote_round_id` to legacy transaction events
+that do not already include `vote_round_id` or `round_id`, so older API
+responses can still use the shared confirmation validator.
 
 Transition:
 
 ```text
 submitted_delegation --store van_leaf_position--> confirmed
-confirmed --same tx_hash and same van_leaf_position--> confirmed
-confirmed --conflicting tx_hash or van_leaf_position--> error
+confirmed --same tx_hash and same/later van_leaf_position--> confirmed
+confirmed --conflicting tx_hash or earlier van_leaf_position--> error
 ```
+
+Replaying a delegation confirmation after a cast vote has advanced the bundle's
+current VAN position must not rewind that position.
 
 ### Vote Signing Recovery
 
@@ -159,8 +166,9 @@ sign_cast_vote error --> prepared
 
 ### Vote Submission
 
-`workflow::mark_vote_submitted` is the only transition for recording cast-vote
-submission. It stores `votes.tx_hash` in one SQLite transaction.
+`workflow::mark_vote_submitted` records cast-vote submission through the shared
+`zcash_voting` storage API. The write is idempotent for the same hash and
+rejects a conflicting hash for the same vote key.
 
 Transition:
 
@@ -172,7 +180,11 @@ submitted_vote --different tx_hash--> error
 
 ### Vote Confirmation
 
-`workflow::mark_vote_confirmed` stores:
+`workflow::mark_vote_confirmed` passes confirmed chain transaction events to
+`zcash_voting::confirmation::confirm_vote_submission`. Before this Rust call,
+Dart adds the active session `vote_round_id` to legacy transaction events that
+do not already include `vote_round_id` or `round_id`. The shared crate then
+checks the round id, parses the cast-vote `leaf_index`, and stores:
 
 - `votes.tx_hash`
 - `bundles.van_leaf_position`
@@ -248,6 +260,25 @@ voting state must not delete recovery rows, signed artifacts, transaction hashes
 or share submission history. It only clears Rust memory owned by the current app
 process.
 
+### Delegation Precompute Work
+
+`precompute_delegation_pir` warms durable delegation inputs through
+`zcash_voting`: round setup, note witnesses, padded-note secrets, and PIR-backed
+nullifier proofs. It does not keep a process-local prepared PCZT cache. The
+software and Keystone delegation paths build the governance PCZT through
+`zcash_voting::delegate::setup` when the signed payload or Keystone signing
+request is actually needed.
+
+Round-scoped cleanup calls `reset_voting_session_state` with a non-empty
+`round_id`. This cancels abandoned work for that round while preserving durable
+recovery rows and account-wide vote-tree sync state.
+
+Round-scoped cleanup runs when:
+
+- a `votingSessionProvider(roundId)` instance is disposed
+- a voting session action fails before completion
+- delegation PIR precompute fails
+
 ### VoteTreeSync Registry
 
 `tree_sync.rs` keeps `TREE_SYNC_REGISTRY`, keyed only by:
@@ -262,7 +293,8 @@ TTL eviction for this registry; clearing it on time alone would throw away usefu
 cross-round tree state.
 
 Account-wide cleanup calls `reset_voting_session_state` with `round_id = None`
-or an empty round ID. This drops the cached `VoteTreeSync` for that wallet.
+or an empty round ID. This cancels abandoned work and drops the cached
+`VoteTreeSync` for that wallet.
 
 Account-wide cleanup runs when:
 

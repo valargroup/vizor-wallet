@@ -2959,7 +2959,7 @@ fn wire__crate__api__voting__mark_delegation_confirmed_impl(
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_tx_hash = <String>::sse_decode(&mut deserializer);
-            let api_van_leaf_position = <u32>::sse_decode(&mut deserializer);
+            let api_events = <Vec<crate::api::voting::ApiTxEvent>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
@@ -2969,7 +2969,7 @@ fn wire__crate__api__voting__mark_delegation_confirmed_impl(
                         api_round_id,
                         api_bundle_index,
                         api_tx_hash,
-                        api_van_leaf_position,
+                        api_events,
                     )?;
                     Ok(output_ok)
                 })())
@@ -3093,8 +3093,7 @@ fn wire__crate__api__voting__mark_vote_confirmed_impl(
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_proposal_id = <u32>::sse_decode(&mut deserializer);
             let api_tx_hash = <String>::sse_decode(&mut deserializer);
-            let api_van_position = <u32>::sse_decode(&mut deserializer);
-            let api_vc_tree_position = <u64>::sse_decode(&mut deserializer);
+            let api_events = <Vec<crate::api::voting::ApiTxEvent>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
@@ -3105,8 +3104,7 @@ fn wire__crate__api__voting__mark_vote_confirmed_impl(
                         api_bundle_index,
                         api_proposal_id,
                         api_tx_hash,
-                        api_van_position,
-                        api_vc_tree_position,
+                        api_events,
                     )?;
                     Ok(output_ok)
                 })())
@@ -4921,6 +4919,18 @@ impl SseDecode for crate::api::voting::ApiCommitmentBundleRecovery {
     }
 }
 
+impl SseDecode for crate::api::voting::ApiDelegationConfirmation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_txHash = <String>::sse_decode(deserializer);
+        let mut var_vanLeafPosition = <u32>::sse_decode(deserializer);
+        return crate::api::voting::ApiDelegationConfirmation {
+            tx_hash: var_txHash,
+            van_leaf_position: var_vanLeafPosition,
+        };
+    }
+}
+
 impl SseDecode for crate::api::voting::ApiDelegationPirPrecomputeResult {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5307,6 +5317,31 @@ impl SseDecode for crate::api::sync::ApiSyncProgressEvent {
     }
 }
 
+impl SseDecode for crate::api::voting::ApiTxEvent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_eventType = <String>::sse_decode(deserializer);
+        let mut var_attributes =
+            <Vec<crate::api::voting::ApiTxEventAttribute>>::sse_decode(deserializer);
+        return crate::api::voting::ApiTxEvent {
+            event_type: var_eventType,
+            attributes: var_attributes,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voting::ApiTxEventAttribute {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_key = <String>::sse_decode(deserializer);
+        let mut var_value = <String>::sse_decode(deserializer);
+        return crate::api::voting::ApiTxEventAttribute {
+            key: var_key,
+            value: var_value,
+        };
+    }
+}
+
 impl SseDecode for crate::api::voting::ApiVanWitness {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5336,6 +5371,20 @@ impl SseDecode for crate::api::voting::ApiVoteCommitEvent {
             bundle_index: var_bundleIndex,
             proof_progress: var_proofProgress,
             commitments: var_commitments,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voting::ApiVoteConfirmation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_txHash = <String>::sse_decode(deserializer);
+        let mut var_vanLeafPosition = <u32>::sse_decode(deserializer);
+        let mut var_vcTreePosition = <u64>::sse_decode(deserializer);
+        return crate::api::voting::ApiVoteConfirmation {
+            tx_hash: var_txHash,
+            van_leaf_position: var_vanLeafPosition,
+            vc_tree_position: var_vcTreePosition,
         };
     }
 }
@@ -5736,6 +5785,32 @@ impl SseDecode for Vec<crate::api::voting::ApiSignedVoteCommitment> {
         let mut ans_ = vec![];
         for idx_ in 0..len_ {
             ans_.push(<crate::api::voting::ApiSignedVoteCommitment>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voting::ApiTxEvent> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voting::ApiTxEvent>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voting::ApiTxEventAttribute> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voting::ApiTxEventAttribute>::sse_decode(
                 deserializer,
             ));
         }
@@ -6614,6 +6689,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiCommitmentBundleRe
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiDelegationConfirmation {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.tx_hash.into_into_dart().into_dart(),
+            self.van_leaf_position.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiDelegationConfirmation
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiDelegationConfirmation>
+    for crate::api::voting::ApiDelegationConfirmation
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiDelegationConfirmation {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiDelegationPirPrecomputeResult {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -7073,6 +7169,48 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::sync::ApiSyncProgressEvent>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiTxEvent {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.event_type.into_into_dart().into_dart(),
+            self.attributes.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiTxEvent
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiTxEvent>
+    for crate::api::voting::ApiTxEvent
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiTxEvent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiTxEventAttribute {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.key.into_into_dart().into_dart(),
+            self.value.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiTxEventAttribute
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiTxEventAttribute>
+    for crate::api::voting::ApiTxEventAttribute
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiTxEventAttribute {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiVanWitness {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -7115,6 +7253,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiVoteCommitEvent>
     for crate::api::voting::ApiVoteCommitEvent
 {
     fn into_into_dart(self) -> crate::api::voting::ApiVoteCommitEvent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiVoteConfirmation {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.tx_hash.into_into_dart().into_dart(),
+            self.van_leaf_position.into_into_dart().into_dart(),
+            self.vc_tree_position.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiVoteConfirmation
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiVoteConfirmation>
+    for crate::api::voting::ApiVoteConfirmation
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiVoteConfirmation {
         self
     }
 }
@@ -7930,6 +8090,14 @@ impl SseEncode for crate::api::voting::ApiCommitmentBundleRecovery {
     }
 }
 
+impl SseEncode for crate::api::voting::ApiDelegationConfirmation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.tx_hash, serializer);
+        <u32>::sse_encode(self.van_leaf_position, serializer);
+    }
+}
+
 impl SseEncode for crate::api::voting::ApiDelegationPirPrecomputeResult {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -8183,6 +8351,22 @@ impl SseEncode for crate::api::sync::ApiSyncProgressEvent {
     }
 }
 
+impl SseEncode for crate::api::voting::ApiTxEvent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.event_type, serializer);
+        <Vec<crate::api::voting::ApiTxEventAttribute>>::sse_encode(self.attributes, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voting::ApiTxEventAttribute {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.key, serializer);
+        <String>::sse_encode(self.value, serializer);
+    }
+}
+
 impl SseEncode for crate::api::voting::ApiVanWitness {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -8203,6 +8387,15 @@ impl SseEncode for crate::api::voting::ApiVoteCommitEvent {
             self.commitments,
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::voting::ApiVoteConfirmation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.tx_hash, serializer);
+        <u32>::sse_encode(self.van_leaf_position, serializer);
+        <u64>::sse_encode(self.vc_tree_position, serializer);
     }
 }
 
@@ -8484,6 +8677,26 @@ impl SseEncode for Vec<crate::api::voting::ApiSignedVoteCommitment> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::voting::ApiSignedVoteCommitment>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voting::ApiTxEvent> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voting::ApiTxEvent>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voting::ApiTxEventAttribute> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voting::ApiTxEventAttribute>::sse_encode(item, serializer);
         }
     }
 }

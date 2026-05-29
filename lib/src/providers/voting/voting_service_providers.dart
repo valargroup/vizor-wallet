@@ -375,13 +375,13 @@ abstract interface class VotingRustApi {
     required String txHash,
   });
 
-  Future<void> markDelegationConfirmed({
+  Future<rust_voting.ApiDelegationConfirmation> markDelegationConfirmed({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required String txHash,
-    required int vanLeafPosition,
+    required List<rust_voting.ApiTxEvent> events,
   });
 
   Future<void> storeVanPosition({
@@ -409,9 +409,9 @@ abstract interface class VotingRustApi {
 
   /// Clear process-local Rust voting caches for a round or wallet.
   ///
-  /// A non-null, non-empty `roundId` clears only prepared delegation PCZTs for
-  /// that round. `null` performs account-wide cleanup, including vote-tree sync
-  /// state for `walletId`.
+  /// A non-null, non-empty `roundId` cancels only abandoned work for that round.
+  /// `null` performs account-wide cleanup, including vote-tree sync state for
+  /// `walletId`.
   Future<void> resetVotingSessionState({
     required String dbPath,
     required String walletId,
@@ -484,15 +484,14 @@ abstract interface class VotingRustApi {
     required String txHash,
   });
 
-  Future<void> markVoteConfirmed({
+  Future<rust_voting.ApiVoteConfirmation> markVoteConfirmed({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
     required String txHash,
-    required int vanPosition,
-    required BigInt vcTreePosition,
+    required List<rust_voting.ApiTxEvent> events,
   });
 
   Future<void> recordShareDelegation({
@@ -784,13 +783,13 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<void> markDelegationConfirmed({
+  Future<rust_voting.ApiDelegationConfirmation> markDelegationConfirmed({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required String txHash,
-    required int vanLeafPosition,
+    required List<rust_voting.ApiTxEvent> events,
   }) {
     return rust_voting.markDelegationConfirmed(
       dbPath: dbPath,
@@ -798,7 +797,7 @@ class FrbVotingRustApi implements VotingRustApi {
       roundId: roundId,
       bundleIndex: bundleIndex,
       txHash: txHash,
-      vanLeafPosition: vanLeafPosition,
+      events: events,
     );
   }
 
@@ -1004,15 +1003,14 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<void> markVoteConfirmed({
+  Future<rust_voting.ApiVoteConfirmation> markVoteConfirmed({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
     required String txHash,
-    required int vanPosition,
-    required BigInt vcTreePosition,
+    required List<rust_voting.ApiTxEvent> events,
   }) {
     return rust_voting.markVoteConfirmed(
       dbPath: dbPath,
@@ -1021,8 +1019,7 @@ class FrbVotingRustApi implements VotingRustApi {
       bundleIndex: bundleIndex,
       proposalId: proposalId,
       txHash: txHash,
-      vanPosition: vanPosition,
-      vcTreePosition: vcTreePosition,
+      events: events,
     );
   }
 

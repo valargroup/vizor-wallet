@@ -63,6 +63,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ApiDelegationConfirmation dco_decode_api_delegation_confirmation(dynamic raw);
+
+  @protected
   ApiDelegationPirPrecomputeResult
   dco_decode_api_delegation_pir_precompute_result(dynamic raw);
 
@@ -126,10 +129,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ApiSyncProgressEvent dco_decode_api_sync_progress_event(dynamic raw);
 
   @protected
+  ApiTxEvent dco_decode_api_tx_event(dynamic raw);
+
+  @protected
+  ApiTxEventAttribute dco_decode_api_tx_event_attribute(dynamic raw);
+
+  @protected
   ApiVanWitness dco_decode_api_van_witness(dynamic raw);
 
   @protected
   ApiVoteCommitEvent dco_decode_api_vote_commit_event(dynamic raw);
+
+  @protected
+  ApiVoteConfirmation dco_decode_api_vote_confirmation(dynamic raw);
 
   @protected
   ApiVoteRecord dco_decode_api_vote_record(dynamic raw);
@@ -278,6 +290,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ApiSignedVoteCommitment> dco_decode_list_api_signed_vote_commitment(
     dynamic raw,
   );
+
+  @protected
+  List<ApiTxEvent> dco_decode_list_api_tx_event(dynamic raw);
+
+  @protected
+  List<ApiTxEventAttribute> dco_decode_list_api_tx_event_attribute(dynamic raw);
 
   @protected
   List<ApiVoteRecord> dco_decode_list_api_vote_record(dynamic raw);
@@ -482,6 +500,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ApiDelegationConfirmation sse_decode_api_delegation_confirmation(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ApiDelegationPirPrecomputeResult
   sse_decode_api_delegation_pir_precompute_result(SseDeserializer deserializer);
 
@@ -565,10 +588,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ApiTxEvent sse_decode_api_tx_event(SseDeserializer deserializer);
+
+  @protected
+  ApiTxEventAttribute sse_decode_api_tx_event_attribute(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ApiVanWitness sse_decode_api_van_witness(SseDeserializer deserializer);
 
   @protected
   ApiVoteCommitEvent sse_decode_api_vote_commit_event(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ApiVoteConfirmation sse_decode_api_vote_confirmation(
     SseDeserializer deserializer,
   );
 
@@ -741,6 +777,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ApiSignedVoteCommitment> sse_decode_list_api_signed_vote_commitment(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ApiTxEvent> sse_decode_list_api_tx_event(SseDeserializer deserializer);
+
+  @protected
+  List<ApiTxEventAttribute> sse_decode_list_api_tx_event_attribute(
     SseDeserializer deserializer,
   );
 
@@ -998,6 +1042,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_api_delegation_confirmation(
+    ApiDelegationConfirmation self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_api_delegation_pir_precompute_result(
     ApiDelegationPirPrecomputeResult self,
     SseSerializer serializer,
@@ -1097,11 +1147,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_api_tx_event(ApiTxEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_api_tx_event_attribute(
+    ApiTxEventAttribute self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_api_van_witness(ApiVanWitness self, SseSerializer serializer);
 
   @protected
   void sse_encode_api_vote_commit_event(
     ApiVoteCommitEvent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_api_vote_confirmation(
+    ApiVoteConfirmation self,
     SseSerializer serializer,
   );
 
@@ -1309,6 +1374,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_api_signed_vote_commitment(
     List<ApiSignedVoteCommitment> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_api_tx_event(
+    List<ApiTxEvent> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_api_tx_event_attribute(
+    List<ApiTxEventAttribute> self,
     SseSerializer serializer,
   );
 
