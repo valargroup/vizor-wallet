@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
@@ -1029,6 +1030,43 @@ void main() {
 
     expect(rust.accountUuids.toSet(), {'account-1'});
     expect(recoveryApi.walletIds.toSet(), {'account-1'});
+  });
+
+  test('session reloads same round when active account changes', () async {
+    final rust = FakeVotingRustApi();
+    final recoveryApi = FakeVotingRecoveryApi(state: recoveryState());
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final container = _sessionContainer(
+      rust: rust,
+      recoveryApi: recoveryApi,
+      activeAccountUuidListenable: activeAccountProvider,
+      hardwareAccountUuids: {'account-2'},
+    );
+    final subscription = container.listen(
+      votingSessionProvider(kRoundId),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    final first = await container.read(votingSessionProvider(kRoundId).future);
+    expect(first.accountUuid, 'account-1');
+    expect(first.isHardwareAccount, isFalse);
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    await Future<void>.delayed(Duration.zero);
+    final second = await container.read(votingSessionProvider(kRoundId).future);
+
+    expect(second.accountUuid, 'account-2');
+    expect(second.isHardwareAccount, isTrue);
+    expect(
+      recoveryApi.walletIds,
+      containsAllInOrder(['account-1', 'account-2']),
+    );
+    expect(rust.resetVotingSessionStateCalls, contains('account-1:$kRoundId'));
   });
 
   test('draft choices are isolated by pinned voting account', () async {
@@ -2621,6 +2659,7 @@ ProviderContainer _sessionContainer({
   PirSnapshotResolver? pirResolver,
   VotingHotkeyStore? hotkeyStore,
   Future<String?> Function()? activeAccountUuid,
+  ProviderListenable<String?>? activeAccountUuidListenable,
   bool accountIsHardware = false,
   Set<String>? hardwareAccountUuids,
   VotingTxConfirmationPolling? txConfirmationPolling,
@@ -2647,9 +2686,16 @@ ProviderContainer _sessionContainer({
         ),
       ),
       votingWalletDbPathProvider.overrideWithValue(() async => 'wallet.db'),
-      votingActiveAccountUuidProvider.overrideWithValue(
-        activeAccountUuid ?? () async => 'account-1',
-      ),
+      votingActiveAccountUuidProvider.overrideWith((ref) {
+        final activeAccountUuidFromProvider =
+            activeAccountUuidListenable == null
+            ? null
+            : ref.watch(activeAccountUuidListenable);
+        if (activeAccountUuidListenable != null) {
+          return () async => activeAccountUuidFromProvider;
+        }
+        return activeAccountUuid ?? () async => 'account-1';
+      }),
       votingAccountIsHardwareProvider.overrideWithValue(
         (uuid) async => effectiveHardwareAccountUuids.contains(uuid),
       ),
@@ -3125,6 +3171,15 @@ class _MutableActiveAccount {
   String? value;
 
   Future<String?> call() async => value;
+}
+
+class _ActiveVotingAccountNotifier extends Notifier<String?> {
+  @override
+  String? build() => 'account-1';
+
+  void set(String? accountUuid) {
+    state = accountUuid;
+  }
 }
 
 class FakePirResolver implements PirSnapshotResolver {

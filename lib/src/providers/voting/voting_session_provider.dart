@@ -34,25 +34,15 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   Timer? _shareTrackingTimer;
   String? _sessionAccountUuid;
   bool? _sessionIsHardwareAccount;
+  _VotingSessionContext? _currentContext;
+  bool _disposeHandlerRegistered = false;
 
   @override
   Future<VotingSessionState> build() async {
-    await _accountUuidForSession();
+    _registerDisposeHandler();
+    await _refreshSessionAccountFromActiveAccount();
     final context = await _loadContext(_roundId);
-    final rust = ref.read(votingRustApiProvider);
-    ref.onDispose(() {
-      // Provider disposal is round-scoped: clear abandoned prepared PCZTs but
-      // keep account-wide vote-tree sync state reusable across rounds.
-      _delegationPirPrecomputes.clear();
-      _shareTrackingTimer?.cancel();
-      unawaited(
-        _resetVotingSessionState(
-          rust: rust,
-          context: context,
-          reason: 'provider-dispose',
-        ),
-      );
-    });
+    _currentContext = context;
     final initialState = VotingSessionState(
       roundId: _roundId,
       accountUuid: context.accountUuid,
@@ -63,8 +53,54 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       roundPlan: context.roundPlan,
       phase: _phaseForPlans(context.resumePlan, context.roundPlan),
     );
+    _shareTrackingTimer?.cancel();
     unawaited(_scheduleShareTracking(context, context.resumePlan));
     return initialState;
+  }
+
+  void _registerDisposeHandler() {
+    if (_disposeHandlerRegistered) return;
+    _disposeHandlerRegistered = true;
+    final rust = ref.read(votingRustApiProvider);
+    ref.onDispose(() {
+      // Provider disposal is round-scoped: clear abandoned prepared PCZTs but
+      // keep account-wide vote-tree sync state reusable across rounds.
+      final context = _currentContext;
+      _delegationPirPrecomputes.clear();
+      _shareTrackingTimer?.cancel();
+      if (context == null) return;
+      unawaited(
+        _resetVotingSessionState(
+          rust: rust,
+          context: context,
+          reason: 'provider-dispose',
+        ),
+      );
+    });
+  }
+
+  Future<void> _refreshSessionAccountFromActiveAccount() async {
+    final accountUuidLoader = ref.watch(votingActiveAccountUuidProvider);
+    final accountUuid = await accountUuidLoader.call();
+    if (accountUuid == null) {
+      throw StateError('No active account for voting session.');
+    }
+    if (_sessionAccountUuid == accountUuid) return;
+
+    final previousContext = _currentContext;
+    if (previousContext != null) {
+      unawaited(
+        _resetVotingSessionState(
+          rust: ref.read(votingRustApiProvider),
+          context: previousContext,
+          reason: 'active-account-switch',
+        ),
+      );
+    }
+    _sessionAccountUuid = accountUuid;
+    _sessionIsHardwareAccount = null;
+    _delegationPirPrecomputes.clear();
+    _shareTrackingTimer?.cancel();
   }
 
   Future<void> prepareDelegation() {

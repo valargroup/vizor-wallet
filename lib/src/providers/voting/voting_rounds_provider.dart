@@ -25,6 +25,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
   @override
   Future<List<VotingRoundView>> build() async {
     ref.onDispose(stopPolling);
+    ref.watch(votingActiveAccountUuidProvider);
     return _load();
   }
 
