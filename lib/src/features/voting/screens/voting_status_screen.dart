@@ -391,6 +391,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
 
   bool _stepCanRecoverWithoutDraft(rust_voting.ApiNextStep step) {
     return step.kind == 'submit_vote' ||
+        step.kind == 'submit_shares' ||
         step.kind == 'poll_vote' ||
         step.kind == 'confirm_share';
   }
@@ -419,7 +420,10 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
 
   bool _planNeedsVotePolling(rust_voting.ApiRoundPlan? roundPlan) {
     return roundPlan?.nextSteps.any(
-          (step) => step.kind == 'submit_vote' || step.kind == 'poll_vote',
+          (step) =>
+              step.kind == 'submit_vote' ||
+              step.kind == 'submit_shares' ||
+              step.kind == 'poll_vote',
         ) ??
         false;
   }

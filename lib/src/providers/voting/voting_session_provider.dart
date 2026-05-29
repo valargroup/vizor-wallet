@@ -656,13 +656,13 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             bundleIndexes: bundleIndexesByProposal[draftVote.proposalId]!,
           ),
       ].where((work) => work.bundleIndexes.isNotEmpty).toList();
-      final submitVoteKeys = _pendingCommittedVoteSubmissionKeys(
+      final recoveredVoteWork = _pendingRecoveredVoteWork(
         plan,
         context.roundPlan,
       );
-      final totalQuestions = submitVoteKeys.length + voteWork.length;
+      final totalQuestions = recoveredVoteWork.length + voteWork.length;
       final totalBundleTasks =
-          submitVoteKeys.length +
+          recoveredVoteWork.length +
           voteWork.fold<int>(
             0,
             (total, work) => total + work.bundleIndexes.length,
@@ -675,7 +675,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         'proposals=$totalQuestions '
         'lastMoment=${context.round.isLastMoment()}',
       );
-      for (final key in submitVoteKeys) {
+      for (final recoveredWork in recoveredVoteWork) {
+        final key = recoveredWork.key;
         final voteTimer = Stopwatch()..start();
         state = AsyncData(
           (state.value ?? current).copyWith(
@@ -691,7 +692,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           ),
         );
         debugPrint(
-          '[zcash] Voting: recovering committed cast-vote '
+          '[zcash] Voting: recovering ${recoveredWork.logLabel} '
           'round=${context.round.roundId} bundle=${key.bundleIndex} '
           'proposal=${key.proposalId}',
         );
@@ -702,15 +703,27 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           bundleIndex: key.bundleIndex,
           proposalId: key.proposalId,
         );
-        final vcTreePositions = await _submitVoteCommitments(
-          context,
-          commitments,
-        );
+        final Map<int, BigInt> vcTreePositions;
+        Set<int>? shareIndexFilter;
+        if (recoveredWork.kind == _RecoveredVoteWorkKind.submitVote) {
+          vcTreePositions = await _submitVoteCommitments(context, commitments);
+        } else {
+          final commitmentBundle = plan.commitmentBundleFor(key);
+          if (commitmentBundle == null) {
+            throw StateError(
+              'Missing recovery bundle for submitted shares '
+              'bundle=${key.bundleIndex} proposal=${key.proposalId}.',
+            );
+          }
+          vcTreePositions = {key.proposalId: commitmentBundle.vcTreePosition};
+          shareIndexFilter = _missingShareIndexesFor(plan, key, commitments);
+        }
         await _submitCommitmentShares(
           context,
           commitments,
           vcTreePositions: vcTreePositions,
           singleShare: _commitmentsUseSingleShare(commitments),
+          shareIndexFilter: shareIndexFilter,
           completedQuestions: completedQuestions,
           totalQuestions: totalQuestions,
           voteSubmissionProgress: _voteSubmissionProgress(
@@ -740,7 +753,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           ),
         );
         debugPrint(
-          '[zcash] Voting: recovered vote flow completed '
+          '[zcash] Voting: recovered ${recoveredWork.logLabel} completed '
           'round=${context.round.roundId} bundle=${key.bundleIndex} '
           'proposal=${key.proposalId} '
           'total=${_formatElapsed(voteTimer.elapsed)}',
@@ -1020,6 +1033,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     _VotingSessionContext context,
     rust_voting.ApiSignedVoteCommitments commitments, {
     Map<int, BigInt> vcTreePositions = const {},
+    Set<int>? shareIndexFilter,
     required bool singleShare,
     required int completedQuestions,
     required int totalQuestions,
@@ -1049,28 +1063,38 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     );
 
     for (final commitment in commitments.commitments) {
+      final sharePayloads = shareIndexFilter == null
+          ? commitment.sharePayloads
+          : commitment.sharePayloads
+                .where(
+                  (payload) => shareIndexFilter.contains(
+                    payload.encryptedShare.shareIndex,
+                  ),
+                )
+                .toList(growable: false);
+      if (sharePayloads.isEmpty) continue;
       final vcTreePosition = vcTreePositions[commitment.proposalId];
       final plans = await rust.planShareSubmissions(
-        shareCount: commitment.sharePayloads.length,
+        shareCount: sharePayloads.length,
         serverUrls: serverUrls,
         nowSeconds: BigInt.from(nowSeconds),
         voteEndTimeSeconds: BigInt.from(voteEndSeconds),
         lastMomentBufferSeconds: lastMomentBufferSeconds,
         singleShare: singleShare,
       );
-      if (plans.length != commitment.sharePayloads.length) {
+      if (plans.length != sharePayloads.length) {
         throw StateError(
           'Share submission policy returned ${plans.length} plan(s) for '
-          '${commitment.sharePayloads.length} payload(s).',
+          '${sharePayloads.length} payload(s).',
         );
       }
 
       for (
         var payloadIndex = 0;
-        payloadIndex < commitment.sharePayloads.length;
+        payloadIndex < sharePayloads.length;
         payloadIndex++
       ) {
-        final payload = commitment.sharePayloads[payloadIndex];
+        final payload = sharePayloads[payloadIndex];
         final plan = plans[payloadIndex];
         final acceptedServers = <String>[];
         final targetCount = plan.targetCount
@@ -2295,23 +2319,66 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     };
   }
 
-  static List<VotingVoteKey> _pendingCommittedVoteSubmissionKeys(
+  static List<_RecoveredVoteWork> _pendingRecoveredVoteWork(
     VotingResumePlan plan,
     rust_voting.ApiRoundPlan? roundPlan,
   ) {
     if (roundPlan != null) {
-      return [
-        for (final step in roundPlan.nextSteps)
-          if (step.kind == 'submit_vote')
-            VotingVoteKey(
-              bundleIndex: step.bundleIndex,
-              proposalId: step.proposalId,
+      final work = <_RecoveredVoteWork>[];
+      for (final step in roundPlan.nextSteps) {
+        final key = VotingVoteKey(
+          bundleIndex: step.bundleIndex,
+          proposalId: step.proposalId,
+        );
+        if (step.kind == 'submit_vote') {
+          work.add(
+            _RecoveredVoteWork(
+              kind: _RecoveredVoteWorkKind.submitVote,
+              key: key,
             ),
-      ];
+          );
+        } else if (step.kind == 'submit_shares') {
+          work.add(
+            _RecoveredVoteWork(
+              kind: _RecoveredVoteWorkKind.submitShares,
+              key: key,
+            ),
+          );
+        }
+      }
+      return work;
     }
     return plan.pendingVoteSubmissionKeys
         .where((key) => plan.commitmentBundleFor(key) != null)
+        .map(
+          (key) => _RecoveredVoteWork(
+            kind: _RecoveredVoteWorkKind.submitVote,
+            key: key,
+          ),
+        )
         .toList(growable: false);
+  }
+
+  static Set<int> _missingShareIndexesFor(
+    VotingResumePlan plan,
+    VotingVoteKey key,
+    rust_voting.ApiSignedVoteCommitments commitments,
+  ) {
+    final recordedShareIndexes = {
+      for (final share in plan.shareDelegations)
+        if (share.bundleIndex == key.bundleIndex &&
+            share.proposalId == key.proposalId)
+          share.shareIndex,
+    };
+    return {
+      for (final commitment in commitments.commitments)
+        if (commitment.proposalId == key.proposalId)
+          for (final payload in commitment.sharePayloads)
+            if (!recordedShareIndexes.contains(
+              payload.encryptedShare.shareIndex,
+            ))
+              payload.encryptedShare.shareIndex,
+    };
   }
 
   static bool _commitmentsUseSingleShare(
@@ -2423,6 +2490,24 @@ class _DraftVoteWork {
 
   final rust_voting.ApiDraftVote draftVote;
   final List<int> bundleIndexes;
+}
+
+enum _RecoveredVoteWorkKind { submitVote, submitShares }
+
+class _RecoveredVoteWork {
+  const _RecoveredVoteWork({required this.kind, required this.key});
+
+  final _RecoveredVoteWorkKind kind;
+  final VotingVoteKey key;
+
+  String get logLabel {
+    switch (kind) {
+      case _RecoveredVoteWorkKind.submitVote:
+        return 'committed cast-vote';
+      case _RecoveredVoteWorkKind.submitShares:
+        return 'confirmed vote shares';
+    }
+  }
 }
 
 class _VotingSessionContext {
