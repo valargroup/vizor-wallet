@@ -424,6 +424,14 @@ abstract interface class VotingRustApi {
     required List<rust_voting.ApiDraftVote> draftVotes,
   });
 
+  Future<rust_voting.ApiSignedVoteCommitments> recoverVoteCommitment({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+  });
+
   Future<String> voteCommitmentWireJson({
     required rust_voting.ApiSignedVoteCommitment commitment,
   });
@@ -876,6 +884,23 @@ class FrbVotingRustApi implements VotingRustApi {
       hotkeySeed: hotkeySeed,
       vanWitness: vanWitness,
       draftVotes: draftVotes,
+    );
+  }
+
+  @override
+  Future<rust_voting.ApiSignedVoteCommitments> recoverVoteCommitment({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+  }) {
+    return rust_voting.recoverVoteCommitment(
+      dbPath: dbPath,
+      walletId: walletId,
+      roundId: roundId,
+      bundleIndex: bundleIndex,
+      proposalId: proposalId,
     );
   }
 

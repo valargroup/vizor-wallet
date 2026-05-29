@@ -265,6 +265,63 @@ where
     })
 }
 
+/// Reconstruct a signed vote commitment from persisted recovery state.
+pub fn recover_vote_commitment(
+    db_path: &str,
+    wallet_id: &str,
+    round_id: &str,
+    bundle_index: u32,
+    proposal_id: u32,
+) -> Result<SignedVoteCommitments, String> {
+    let voting_db = open_voting_db(db_path, wallet_id)?;
+    let recovery =
+        zcash_voting::vote::recovery_bundle(&voting_db, round_id, bundle_index, proposal_id)
+            .map_err(|e| format!("load vote recovery bundle failed: {e}"))?
+            .ok_or_else(|| {
+                format!(
+                    "vote recovery bundle not found for round={round_id}, bundle={bundle_index}, proposal={proposal_id}"
+                )
+            })?;
+    let commit =
+        zcash_voting::vote::recover_commit(&voting_db, round_id, bundle_index, proposal_id)
+            .map_err(|e| format!("vote commitment recovery failed: {e}"))?;
+    let commitment_json = zcash_voting::vote::serialize_recovery(&recovery)
+        .map_err(|e| format!("serialize vote recovery failed: {e}"))?;
+
+    Ok(SignedVoteCommitments {
+        bundle_index,
+        commitments: vec![SignedVoteCommitment {
+            proposal_id,
+            choice: recovery.vote_decision,
+            vote_round_id: recovery.vote_round_id,
+            van_nullifier: commit.van_nullifier.to_vec(),
+            vote_authority_note_new: commit.vote_authority_note_new.to_vec(),
+            vote_commitment: commit.vote_commitment.to_vec(),
+            proof: commit.proof,
+            encrypted_shares: commit
+                .encrypted_shares
+                .iter()
+                .map(wire_share_from_upstream)
+                .collect(),
+            share_payloads: commit
+                .share_payloads
+                .iter()
+                .map(share_payload_from_upstream)
+                .collect(),
+            anchor_height: commit.anchor_height,
+            shares_hash: recovery.shares_hash.to_vec(),
+            share_comms: recovery
+                .share_comms
+                .iter()
+                .map(|comm| comm.to_vec())
+                .collect(),
+            r_vpk_bytes: commit.r_vpk.to_vec(),
+            vote_auth_sig: commit.vote_auth_sig.to_vec(),
+            commitment_bundle_json: commitment_json,
+        }],
+    })
+}
+
 /// Load stored vote rows for `round_id` in this wallet.
 pub fn get_votes(
     db_path: &str,

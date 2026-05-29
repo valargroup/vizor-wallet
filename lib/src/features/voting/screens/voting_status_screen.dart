@@ -93,7 +93,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
           .read(votingDraftProvider(draftKey).notifier)
           .ensureLoaded();
       if (!mounted) return;
-      final draftVotes = draft.toDraftVotes(proposals);
+      final userDraftVotes = draft.toDraftVotes(proposals);
       final proposalIds = proposals.map((proposal) => proposal.id).toList();
       await sessionNotifier.ensureWalletReadyForVoting();
       if (!mounted) return;
@@ -103,6 +103,15 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         return;
       }
       final activeSession = afterWalletSync ?? session;
+      final recoveredDraftVotes = userDraftVotes.isEmpty
+          ? _draftVotesFromRoundPlan(activeSession.roundPlan, proposals)
+          : const <rust_voting.ApiDraftVote>[];
+      final draftVotes = userDraftVotes.isNotEmpty
+          ? userDraftVotes
+          : recoveredDraftVotes;
+      final intentProposalIds = userDraftVotes.isNotEmpty
+          ? proposalIds
+          : const <int>[];
       final canRecoverWithoutDraft = _canRecoverWithoutDraft(activeSession);
       if (draftVotes.isEmpty && !canRecoverWithoutDraft) {
         _setRunError('Choose at least one vote before submitting.');
@@ -111,7 +120,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
 
       if (activeSession.isHardwareAccount) {
         _pendingDraftVotes = draftVotes;
-        _pendingProposalIds = proposalIds;
+        _pendingProposalIds = intentProposalIds;
         _pendingRecoveryWithoutDraft = canRecoverWithoutDraft;
         await _prepareKeystoneSigning(sessionNotifier);
         return;
@@ -145,7 +154,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
           _sessionNeedsVotePolling(votePollingSession)) {
         await sessionNotifier.castVotes(
           draftVotes: draftVotes,
-          allProposalIds: proposalIds,
+          allProposalIds: intentProposalIds,
         );
       }
       if (!mounted) return;
@@ -331,12 +340,12 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   bool _canRecoverWithoutDraft(VotingSessionState session) {
     final roundPlan = session.roundPlan;
     if (roundPlan != null) {
-      if (!roundPlan.pendingRecovery) return false;
-      return !roundPlan.nextSteps.any((step) => step.kind == 'cast_vote');
+      return roundPlan.pendingRecovery;
     }
     final resumePlan = session.resumePlan;
     return resumePlan != null &&
         (resumePlan.submittedDelegationBundleIndexes.isNotEmpty ||
+            resumePlan.pendingVoteSubmissionKeys.isNotEmpty ||
             resumePlan.submittedVoteConfirmationKeys.isNotEmpty ||
             resumePlan.unconfirmedShareDelegations.isNotEmpty);
   }
@@ -364,8 +373,34 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   }
 
   bool _planNeedsVotePolling(rust_voting.ApiRoundPlan? roundPlan) {
-    return roundPlan?.nextSteps.any((step) => step.kind == 'poll_vote') ??
+    return roundPlan?.nextSteps.any(
+          (step) => step.kind == 'submit_vote' || step.kind == 'poll_vote',
+        ) ??
         false;
+  }
+
+  List<rust_voting.ApiDraftVote> _draftVotesFromRoundPlan(
+    rust_voting.ApiRoundPlan? roundPlan,
+    List<VotingProposalView> proposals,
+  ) {
+    if (roundPlan == null) return const [];
+    final choicesByProposal = <int, int>{};
+    for (final step in roundPlan.nextSteps) {
+      if (step.kind != 'cast_vote') continue;
+      choicesByProposal.putIfAbsent(step.proposalId, () => step.choice);
+    }
+    if (choicesByProposal.isEmpty) return const [];
+    return [
+      for (final proposal in proposals)
+        if (choicesByProposal[proposal.id] != null)
+          rust_voting.ApiDraftVote(
+            proposalId: proposal.id,
+            choice: choicesByProposal[proposal.id]!,
+            numOptions: proposal.options.length,
+            vcTreePosition: BigInt.zero,
+            singleShare: false,
+          ),
+    ];
   }
 
   @override

@@ -1468,6 +1468,19 @@ pub fn build_vote_commitments(
     )
 }
 
+/// Recover a committed but unsubmitted vote from persisted local recovery data.
+pub fn recover_vote_commitment(
+    db_path: String,
+    wallet_id: String,
+    round_id: String,
+    bundle_index: u32,
+    proposal_id: u32,
+) -> Result<ApiSignedVoteCommitments, String> {
+    catch(|| {
+        vote::recover_vote_commitment(&db_path, &wallet_id, &round_id, bundle_index, proposal_id)
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 /// Streaming variant of `build_vote_commitments`.
 ///
@@ -1661,6 +1674,7 @@ pub fn store_commitment_bundle(
 ) -> Result<(), String> {
     catch(|| {
         let db = state::open_voting_db(&db_path, &wallet_id)?;
+        #[allow(deprecated)]
         db.store_commitment_bundle(
             &round_id,
             bundle_index,
@@ -1789,11 +1803,13 @@ pub fn clear_recovery_state(
 
 /// One unit of remaining work for a round, flattened for the FRB boundary.
 pub struct ApiNextStep {
-    /// "delegate" | "poll_delegation" | "cast_vote" | "poll_vote" | "confirm_share".
+    /// "delegate" | "poll_delegation" | "cast_vote" | "submit_vote" | "poll_vote" | "confirm_share".
     pub kind: String,
     pub bundle_index: u32,
     /// 0 for delegation steps.
     pub proposal_id: u32,
+    /// 0 unless `cast_vote`.
+    pub choice: u32,
     /// 0 unless `confirm_share`.
     pub share_index: u32,
 }
@@ -1822,49 +1838,72 @@ pub fn get_round_plan(
         let next_steps = plan
             .next_steps
             .into_iter()
-            .map(|step| match step {
-                zcash_voting::session::NextStep::Delegate { bundle_index } => ApiNextStep {
-                    kind: "delegate".to_string(),
-                    bundle_index,
-                    proposal_id: 0,
-                    share_index: 0,
-                },
-                zcash_voting::session::NextStep::PollDelegation { bundle_index } => ApiNextStep {
-                    kind: "poll_delegation".to_string(),
-                    bundle_index,
-                    proposal_id: 0,
-                    share_index: 0,
-                },
-                zcash_voting::session::NextStep::CastVote {
-                    bundle_index,
-                    proposal_id,
-                } => ApiNextStep {
-                    kind: "cast_vote".to_string(),
-                    bundle_index,
-                    proposal_id,
-                    share_index: 0,
-                },
-                zcash_voting::session::NextStep::PollVote {
-                    bundle_index,
-                    proposal_id,
-                } => ApiNextStep {
-                    kind: "poll_vote".to_string(),
-                    bundle_index,
-                    proposal_id,
-                    share_index: 0,
-                },
-                zcash_voting::session::NextStep::ConfirmShare {
-                    bundle_index,
-                    proposal_id,
-                    share_index,
-                } => ApiNextStep {
-                    kind: "confirm_share".to_string(),
-                    bundle_index,
-                    proposal_id,
-                    share_index,
-                },
+            .map(|step| {
+                Ok(match step {
+                    zcash_voting::session::NextStep::Delegate { bundle_index } => ApiNextStep {
+                        kind: "delegate".to_string(),
+                        bundle_index,
+                        proposal_id: 0,
+                        choice: 0,
+                        share_index: 0,
+                    },
+                    zcash_voting::session::NextStep::PollDelegation { bundle_index } => {
+                        ApiNextStep {
+                            kind: "poll_delegation".to_string(),
+                            bundle_index,
+                            proposal_id: 0,
+                            choice: 0,
+                            share_index: 0,
+                        }
+                    }
+                    zcash_voting::session::NextStep::CastVote {
+                        bundle_index,
+                        proposal_id,
+                        choice,
+                    } => ApiNextStep {
+                        kind: "cast_vote".to_string(),
+                        bundle_index,
+                        proposal_id,
+                        choice,
+                        share_index: 0,
+                    },
+                    zcash_voting::session::NextStep::SubmitVote {
+                        bundle_index,
+                        proposal_id,
+                    } => ApiNextStep {
+                        kind: "submit_vote".to_string(),
+                        bundle_index,
+                        proposal_id,
+                        choice: 0,
+                        share_index: 0,
+                    },
+                    zcash_voting::session::NextStep::PollVote {
+                        bundle_index,
+                        proposal_id,
+                    } => ApiNextStep {
+                        kind: "poll_vote".to_string(),
+                        bundle_index,
+                        proposal_id,
+                        choice: 0,
+                        share_index: 0,
+                    },
+                    zcash_voting::session::NextStep::ConfirmShare {
+                        bundle_index,
+                        proposal_id,
+                        share_index,
+                    } => ApiNextStep {
+                        kind: "confirm_share".to_string(),
+                        bundle_index,
+                        proposal_id,
+                        choice: 0,
+                        share_index,
+                    },
+                    _ => {
+                        return Err("resume_plan returned an unsupported next step".to_string());
+                    }
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, String>>()?;
         Ok(ApiRoundPlan {
             round_id: plan.round_id,
             pending_recovery: plan.pending_recovery,

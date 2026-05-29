@@ -224,6 +224,7 @@ void main() {
               kind: 'confirm_share',
               bundleIndex: 0,
               proposalId: 7,
+              choice: 0,
               shareIndex: 0,
             ),
           ],
@@ -2766,6 +2767,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final delegationBundleCalls = <int>[];
   final voteCommitBundleCalls = <int>[];
   final voteCommitmentKeys = <String>[];
+  final recoveredVoteCommitmentKeys = <String>[];
   final storedDelegationTxHashes = <String>[];
   final storedVoteTxHashes = <String>[];
   final storedCommitmentBundles = <String>[];
@@ -3169,6 +3171,23 @@ class FakeVotingRustApi implements VotingRustApi {
             : null,
       );
     }
+  }
+
+  @override
+  Future<rust_voting.ApiSignedVoteCommitments> recoverVoteCommitment({
+    required String dbPath,
+    required String walletId,
+    required String roundId,
+    required int bundleIndex,
+    required int proposalId,
+  }) async {
+    recoveredVoteCommitmentKeys.add('$bundleIndex:$proposalId');
+    return _commitments(
+      roundId: roundId,
+      bundleIndex: bundleIndex,
+      proposalId: proposalId,
+      choice: 1,
+    );
   }
 
   @override
