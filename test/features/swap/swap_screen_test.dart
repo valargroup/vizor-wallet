@@ -379,7 +379,7 @@ void main() {
       final liveQuoteBadgeRect = tester.getRect(
         find.byKey(const ValueKey('swap_status_badge_liveQuote')),
       );
-      final liveQuoteTextRect = tester.getRect(find.text('Live Quote'));
+      final liveQuoteTextRect = tester.getRect(find.text('In progress'));
       expect(
         (liveQuoteTextRect.top - liveQuoteBadgeRect.top).abs(),
         lessThan(1),
