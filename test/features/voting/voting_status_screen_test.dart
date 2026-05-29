@@ -379,12 +379,7 @@ void main() {
     final recoveryApi = _MutableVotingRecoveryApi()
       ..state = _recoveryState(
         votes: const [
-          rust_voting.ApiVoteRecord(
-            proposalId: 1,
-            bundleIndex: 0,
-            choice: 0,
-            submitted: true,
-          ),
+          rust_voting.ApiVoteRecord(proposalId: 1, bundleIndex: 0, choice: 0),
         ],
       );
     final container = _statusContainer(
@@ -1859,7 +1854,6 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required String txHash,
     required int vanPosition,
     required BigInt vcTreePosition,
-    required String commitmentBundleJson,
   }) async {
     recoveryApi.state = _recoveryState(
       delegationTxHashes: [

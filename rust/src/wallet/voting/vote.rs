@@ -98,7 +98,6 @@ pub struct VoteRecord {
     pub proposal_id: u32,
     pub bundle_index: u32,
     pub choice: u32,
-    pub submitted: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -338,7 +337,6 @@ pub fn get_votes(
                     proposal_id: record.proposal_id,
                     bundle_index: record.bundle_index,
                     choice: record.choice,
-                    submitted: record.submitted,
                 })
                 .collect()
         })

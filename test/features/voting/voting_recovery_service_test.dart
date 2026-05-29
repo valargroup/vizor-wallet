@@ -590,7 +590,6 @@ rust_voting.ApiVoteRecord vote({
     proposalId: proposalId,
     bundleIndex: bundleIndex,
     choice: choice,
-    submitted: false,
   );
 }
 

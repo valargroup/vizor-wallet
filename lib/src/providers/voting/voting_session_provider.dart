@@ -581,34 +581,26 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       if (effectiveDraftVotes.isNotEmpty) {
         // Write durable ballot intent before the cast loop so recovery can
         // resume from the correct choice if the user quits mid-vote.
-        try {
-          final draftVotesByProposal = {
-            for (final draftVote in effectiveDraftVotes)
-              draftVote.proposalId: draftVote,
-          };
-          final intentProposalIds = {
-            ...?allProposalIds,
-            ...draftVotesByProposal.keys,
-          }.toList()..sort();
-          for (final proposalId in intentProposalIds) {
-            final draftVote = draftVotesByProposal[proposalId];
-            await ref
-                .read(votingRecoveryServiceProvider)
-                .setBallotIntent(
-                  dbPath: context.dbPath,
-                  walletId: context.accountUuid,
-                  roundId: context.round.roundId,
-                  proposalId: proposalId,
-                  skipped: draftVote == null,
-                  choice: draftVote?.choice,
-                );
-          }
-        } catch (e) {
-          // Intent writes are advisory; a failure here must not abort casting.
-          debugPrint(
-            '[zcash] Voting: ballot intent write failed (non-fatal) '
-            'round=${context.round.roundId} error=$e',
-          );
+        final draftVotesByProposal = {
+          for (final draftVote in effectiveDraftVotes)
+            draftVote.proposalId: draftVote,
+        };
+        final intentProposalIds = {
+          ...?allProposalIds,
+          ...draftVotesByProposal.keys,
+        }.toList()..sort();
+        for (final proposalId in intentProposalIds) {
+          final draftVote = draftVotesByProposal[proposalId];
+          await ref
+              .read(votingRecoveryServiceProvider)
+              .setBallotIntent(
+                dbPath: context.dbPath,
+                walletId: context.accountUuid,
+                roundId: context.round.roundId,
+                proposalId: proposalId,
+                skipped: draftVote == null,
+                choice: draftVote?.choice,
+              );
         }
       }
       for (final key in plan.submittedVoteConfirmationKeys) {
@@ -642,7 +634,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           txHash: txHash,
           vanPosition: leafPositions.vanPosition,
           vcTreePosition: leafPositions.vcTreePosition,
-          commitmentBundleJson: commitmentBundle.commitmentBundleJson,
         );
         progress[key] = VotingSessionProgress(
           phase: 'confirmed',
@@ -957,7 +948,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         'round=${context.round.roundId} '
         'pendingVotes=${refreshedPlan.pendingVoteSubmissionKeys.length} '
         'unconfirmedShares=${refreshedPlan.unconfirmedShareDelegations.length} '
-        'pendingRecovery=${refreshedRoundPlan?.pendingRecovery} '
+        'pendingRecovery=${refreshedRoundPlan.pendingRecovery} '
         'elapsed=${_formatElapsed(resumeTimer.elapsed)}',
       );
       state = AsyncData(
@@ -1314,7 +1305,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         proposalId: commitment.proposalId,
         txHash: result.txHash,
         vanPosition: leafPositions.vanPosition,
-        commitmentBundleJson: commitment.commitmentBundleJson,
         vcTreePosition: leafPositions.vcTreePosition,
       );
       vcTreePositions[commitment.proposalId] = leafPositions.vcTreePosition;
@@ -2046,22 +2036,14 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     // Build a temporary context without roundPlan to derive proposalIds.
     final proposals = proposalsFromRound(round);
     final proposalIds = proposals.map((p) => p.id).toList();
-    rust_voting.ApiRoundPlan? roundPlan;
-    try {
-      roundPlan = await ref
-          .read(votingRecoveryServiceProvider)
-          .loadRoundPlan(
-            dbPath: dbPath,
-            walletId: accountUuid,
-            roundId: round.roundId,
-            proposalIds: proposalIds,
-          );
-    } catch (e) {
-      debugPrint(
-        '[zcash] Voting: round plan load failed (best-effort) '
-        'round=${round.roundId} error=$e',
-      );
-    }
+    final roundPlan = await ref
+        .read(votingRecoveryServiceProvider)
+        .loadRoundPlan(
+          dbPath: dbPath,
+          walletId: accountUuid,
+          roundId: round.roundId,
+          proposalIds: proposalIds,
+        );
     final context = _VotingSessionContext(
       dbPath: dbPath,
       accountUuid: accountUuid,
@@ -2110,27 +2092,19 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         );
   }
 
-  /// Loads the crate planner's round plan. Returns null on error (best-effort).
-  Future<rust_voting.ApiRoundPlan?> _loadRoundPlan(
+  /// Loads the crate planner's round plan.
+  Future<rust_voting.ApiRoundPlan> _loadRoundPlan(
     _VotingSessionContext context,
-  ) async {
-    try {
-      final proposals = proposalsFromRound(context.round);
-      return await ref
-          .read(votingRecoveryServiceProvider)
-          .loadRoundPlan(
-            dbPath: context.dbPath,
-            walletId: context.accountUuid,
-            roundId: context.round.roundId,
-            proposalIds: proposals.map((p) => p.id).toList(),
-          );
-    } catch (e) {
-      debugPrint(
-        '[zcash] Voting: round plan reload failed (best-effort) '
-        'round=${context.round.roundId} error=$e',
-      );
-      return null;
-    }
+  ) {
+    final proposals = proposalsFromRound(context.round);
+    return ref
+        .read(votingRecoveryServiceProvider)
+        .loadRoundPlan(
+          dbPath: context.dbPath,
+          walletId: context.accountUuid,
+          roundId: context.round.roundId,
+          proposalIds: proposals.map((p) => p.id).toList(),
+        );
   }
 
   Future<void> _waitUntilWalletReadyForVoting(
