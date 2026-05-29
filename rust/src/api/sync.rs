@@ -6,7 +6,7 @@ use flutter_rust_bridge::frb;
 use zeroize::Zeroizing;
 
 use crate::frb_generated::StreamSink;
-use crate::wallet::{keys, secret_store, sync as wallet_sync, sync_engine};
+use crate::wallet::{keys, network::WalletNetwork, secret_store, sync as wallet_sync, sync_engine};
 
 // ======================== Sync Mode ========================
 // 0 = None, 1 = Foreground, 2 = Background
@@ -64,7 +64,7 @@ where
     DESIRED_SYNC_MODE.store(mode, Ordering::SeqCst);
 
     let result = catch(panic::AssertUnwindSafe(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let cancel = SYNC_CANCEL.clone();
         cancel.store(false, Ordering::Relaxed);
 
@@ -254,7 +254,7 @@ pub fn start_mempool_observer(
     };
 
     let result = catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
         rt.block_on(async {
             crate::wallet::sync_engine::mempool::run_mempool_observer(
@@ -392,11 +392,17 @@ fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result
     }
 }
 
+fn parse_network_and_migrate(db_path: &str, network: &str) -> Result<WalletNetwork, String> {
+    let network = keys::parse_network(network)?;
+    keys::ensure_db_migrated_once(db_path, network)?;
+    Ok(network)
+}
+
 // ======================== Sync Functions ========================
 
 pub fn update_chain_tip(db_path: String, network: String, height: u64) -> Result<(), String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         wallet_sync::update_chain_tip(&db_path, network, height)
     })
 }
@@ -411,7 +417,7 @@ pub fn get_next_subtree_indices(
     network: String,
 ) -> Result<SubtreeIndices, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let (s, o) = wallet_sync::get_next_subtree_indices(&db_path, network)?;
         Ok(SubtreeIndices {
             next_sapling: s,
@@ -429,7 +435,7 @@ pub fn put_subtree_roots(
     orchard_roots: Vec<SubtreeRoot>,
 ) -> Result<(), String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let sapling: Vec<(u64, Vec<u8>)> = sapling_roots
             .into_iter()
             .map(|r| (r.completing_block_height, r.root_hash))
@@ -446,7 +452,7 @@ pub fn put_subtree_roots(
 
 pub fn suggest_scan_ranges(db_path: String, network: String) -> Result<Vec<ScanRangeInfo>, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let ranges = wallet_sync::suggest_scan_ranges(&db_path, network)?;
         Ok(ranges
             .into_iter()
@@ -491,7 +497,7 @@ pub fn scan_blocks(
     limit: u64,
 ) -> Result<ScanResult, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let scanned = wallet_sync::scan_blocks(
             &db_path,
             &cache_path,
@@ -515,7 +521,7 @@ pub fn scan_blocks(
 
 pub fn get_sync_status(db_path: String, network: String) -> Result<SyncProgress, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let p = wallet_sync::get_sync_progress(&db_path, network)?;
         Ok(SyncProgress {
             scanned_height: p.scanned_height,
@@ -531,7 +537,7 @@ pub fn get_balance(
     account_uuid: String,
 ) -> Result<WalletBalance, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let b = wallet_sync::get_wallet_balance(&db_path, network, &account_uuid)?;
         let spendable = b.sapling + b.orchard;
         let total_spendable = b.transparent + b.sapling + b.orchard;
@@ -553,7 +559,7 @@ pub fn get_balance(
 
 pub fn rewind_to_height(db_path: String, network: String, height: u64) -> Result<u64, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         wallet_sync::rewind_to_height(&db_path, network, height)
     })
 }
@@ -636,7 +642,7 @@ pub fn propose_send(
     memo: Option<String>,
 ) -> Result<ProposalResult, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let r = wallet_sync::propose_send(
             &db_path,
             network,
@@ -664,7 +670,7 @@ pub fn estimate_fee(
     memo: Option<String>,
 ) -> Result<u64, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         wallet_sync::estimate_fee(
             &db_path,
             network,
@@ -685,7 +691,7 @@ pub fn estimate_send_max(
     memo: Option<String>,
 ) -> Result<SendMaxEstimateResult, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let r = wallet_sync::estimate_send_max(
             &db_path,
             network,
@@ -784,7 +790,7 @@ pub fn get_shield_transparent_status(
     account_uuid: String,
 ) -> Result<ShieldTransparentStatus, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let r = wallet_sync::get_shield_transparent_status(&db_path, network, &account_uuid)?;
         Ok(ShieldTransparentStatus {
             can_shield: r.can_shield,
@@ -802,7 +808,7 @@ pub fn create_shield_transparent_pczt(
     account_uuid: String,
 ) -> Result<ShieldTransparentPcztResult, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let r = wallet_sync::create_shield_transparent_pczt(&db_path, network, &account_uuid)?;
         Ok(ShieldTransparentPcztResult {
             pczt_bytes: r.pczt_bytes,
@@ -824,7 +830,7 @@ pub fn shield_transparent_balance(
     mnemonic_bytes: Vec<u8>,
 ) -> Result<ShieldTransparentResult, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let mnemonic_bytes = Zeroizing::new(mnemonic_bytes);
         let seed = keys::mnemonic_bytes_to_seed(mnemonic_bytes.as_slice())?;
         drop(mnemonic_bytes);
@@ -860,7 +866,7 @@ pub fn shield_transparent_balance_with_macos_stored_mnemonic(
     password: String,
 ) -> Result<ShieldTransparentResult, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let password = Zeroizing::new(password.into_bytes());
         let seed = secret_store::seed_from_macos_stored_mnemonic(network, &account_uuid, password)?;
 
@@ -893,7 +899,7 @@ pub fn get_next_available_address(
     address_request: String,
 ) -> Result<String, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let address_request = wallet_sync::parse_address_request_kind(&address_request)?;
         wallet_sync::get_next_available_address(&db_path, network, &account_uuid, address_request)
     })
@@ -914,7 +920,7 @@ pub fn get_transaction_data_requests(
     network: String,
 ) -> Result<Vec<TxDataRequest>, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let reqs = wallet_sync::get_transaction_data_requests(&db_path, network)?;
         Ok(reqs
             .into_iter()
@@ -936,7 +942,7 @@ pub fn decrypt_and_store_transaction(
     mined_height: Option<u64>,
 ) -> Result<(), String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         wallet_sync::decrypt_and_store_transaction(&db_path, network, &tx_bytes, mined_height)
     })
 }
@@ -948,7 +954,7 @@ pub fn set_transaction_status(
     status: i64,
 ) -> Result<(), String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         wallet_sync::set_transaction_status(&db_path, network, &txid_hex, status)
     })
 }
@@ -990,7 +996,7 @@ pub fn get_transaction_history(
     account_uuid: String,
 ) -> Result<Vec<TransactionInfo>, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let txs = wallet_sync::get_transaction_history(&db_path, network, limit, &account_uuid)?;
         Ok(txs
             .into_iter()
@@ -1017,7 +1023,7 @@ pub fn get_export_birthday_height(
     account_uuid: String,
 ) -> Result<u64, String> {
     catch(|| {
-        let _network = keys::parse_network(&network)?;
+        let _network = parse_network_and_migrate(&db_path, &network)?;
         let anchor = wallet_sync::get_export_birthday_anchor(&db_path, &account_uuid)?;
         Ok(anchor.block_height)
     })
@@ -1060,7 +1066,7 @@ pub fn get_transaction_detail(
     tx_kind: String,
 ) -> Result<TransactionDetail, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let detail = wallet_sync::get_transaction_detail(
             &db_path,
             network,
@@ -1103,7 +1109,7 @@ pub fn create_pczt_from_proposal(
     send_flow_id: String,
 ) -> Result<Vec<u8>, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         wallet_sync::create_pczt_from_proposal(&db_path, network, proposal_id, &send_flow_id)
     })
 }
@@ -1164,7 +1170,7 @@ pub async fn extract_and_broadcast_pczt(
     spend_params_path: Option<String>,
     output_params_path: Option<String>,
 ) -> Result<ExtractAndBroadcastPcztResult, String> {
-    let network = keys::parse_network(&network)?;
+    let network = parse_network_and_migrate(&db_path, &network)?;
     let result = wallet_sync::extract_and_broadcast_pczt(
         &db_path,
         &lightwalletd_url,

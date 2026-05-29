@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `catch`, `fetch_block_time`, `run_full_sync_internal`
+// These functions are ignored because they are not marked as `pub`: `catch`, `fetch_block_time`, `parse_network_and_migrate`, `run_full_sync_internal`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MempoolObserverState`
 
 /// Set the desired sync mode. 0=none, 1=foreground, 2=background.

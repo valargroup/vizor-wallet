@@ -1,4 +1,8 @@
-use std::path::Path;
+use std::{
+    collections::HashSet,
+    path::Path,
+    sync::{Mutex, OnceLock},
+};
 
 use bip0039::{Count, English, Language, Mnemonic};
 use rusqlite::named_params;
@@ -109,6 +113,34 @@ pub fn ensure_db_initialized(db_path: &str, network: WalletNetwork) -> Result<()
     })
 }
 
+/// Ensure the wallet DB schema is initialized and migrated once per process.
+///
+/// This intentionally runs without a seed. Most migrations, including the
+/// current zcash_client_sqlite 0.20.x migrations, do not require one; passing an
+/// arbitrary seed would be incorrect for Imported-only and multi-seed wallets.
+pub fn ensure_db_migrated_once(db_path: &str, network: WalletNetwork) -> Result<(), String> {
+    static MIGRATED_DBS: OnceLock<Mutex<HashSet<(String, WalletNetwork)>>> = OnceLock::new();
+
+    let key = (db_path.to_string(), network);
+    let migrated_dbs = MIGRATED_DBS.get_or_init(|| Mutex::new(HashSet::new()));
+    let mut migrated = match migrated_dbs.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            log::error!("wallet DB migration gate poisoned; continuing");
+            poisoned.into_inner()
+        }
+    };
+
+    if migrated.contains(&key) {
+        return Ok(());
+    }
+
+    log::info!("wallet DB migration gate: ensuring schema for {db_path}");
+    ensure_db_initialized(db_path, network)?;
+    migrated.insert(key);
+    Ok(())
+}
+
 /// Initialize DB with seed for the first account (creates a Derived account).
 /// The seed is needed so that seed-requiring migrations can run in the future.
 fn ensure_db_initialized_with_seed(
@@ -207,7 +239,7 @@ pub fn import_hardware_account(
     birthday_height: Option<u64>,
 ) -> Result<(String, String), String> {
     // Ensure DB is initialized (without seed — hardware wallet has no local seed)
-    ensure_db_initialized(db_path, network)?;
+    ensure_db_migrated_once(db_path, network)?;
 
     let birthday = make_birthday(network, birthday_height);
 

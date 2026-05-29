@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `catch`
+// These functions are ignored because they are not marked as `pub`: `catch`, `parse_network_and_migrate`
 
 /// Get the latest block height from lightwalletd.
 Future<BigInt> getLatestBlockHeight({required String lightwalletdUrl}) =>
@@ -125,6 +125,15 @@ List<String> mnemonicWordList() =>
 /// Check if a wallet database exists at the given path.
 bool walletExists({required String dbPath}) =>
     RustLib.instance.api.crateApiWalletWalletExists(dbPath: dbPath);
+
+/// Ensure an existing wallet database has the schema required by this build.
+Future<void> ensureWalletDbMigrated({
+  required String dbPath,
+  required String network,
+}) => RustLib.instance.api.crateApiWalletEnsureWalletDbMigrated(
+  dbPath: dbPath,
+  network: network,
+);
 
 /// Validate a mnemonic phrase (checks word count and validity).
 bool validateMnemonic({required String mnemonic}) =>
