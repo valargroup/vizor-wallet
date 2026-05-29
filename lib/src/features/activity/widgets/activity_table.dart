@@ -71,7 +71,7 @@ class ActivityTable extends StatelessWidget {
               _ActivityTableMessage(text: emptyText)
             else
               for (var i = 0; i < rows.length; i++) ...[
-                ActivityTableRow(
+                ActivityTableRowGroup(
                   key: rowKeyPrefix == null
                       ? null
                       : ValueKey('${rowKeyPrefix}_row_$i'),
@@ -160,13 +160,26 @@ class _ActivityTableHeader extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
         child: _ActivityColumnLayout(
-          txType: Text('Type', style: mutedStyle),
+          txType: Text('Tx Type', style: mutedStyle),
           amount: Text('Amount', style: mutedStyle),
           status: Text('Status', style: mutedStyle),
-          timestamp: Text(
-            'Date & time',
-            textAlign: TextAlign.end,
-            style: mutedStyle,
+          timestamp: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  'Time Stamp',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: AppTypography.labelMedium.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xxs),
+              AppIcon(AppIcons.arrowDown, size: 12, color: colors.icon.accent),
+            ],
           ),
         ),
       ),
@@ -181,6 +194,32 @@ const double _activityFixedColumnsWidth =
     _activityLeftCellWidth +
     (_activityMiddleCellWidth * 2) +
     _activityRightCellWidth;
+const double _activityAvatarSize = 32;
+const double _activityProgressRingSize = 37;
+const double _activityTableHeaderHeight = 32 + AppSpacing.s;
+const double _activityTableMessageHeight = 120;
+const double _activityTableRowHeight = 48;
+const double _activityTableCompactRowHeight = 40;
+const double _activityTableRowDividerHeight = AppSpacing.xs + 1 + AppSpacing.xs;
+const double _activityPaginationHeight = AppSpacing.xs + 40;
+
+double estimateActivityTableContentHeight({
+  required List<ActivityRowData> rows,
+  bool showPagination = false,
+}) {
+  final rowGroupsHeight = rows.isEmpty
+      ? _activityTableMessageHeight
+      : rows.fold<double>(0, (height, row) {
+              return height +
+                  _activityTableRowHeight +
+                  ((AppSpacing.xxs + _activityTableCompactRowHeight) *
+                      row.childRows.length);
+            }) +
+            (_activityTableRowDividerHeight * math.max(0, rows.length - 1));
+  return _activityTableHeaderHeight +
+      rowGroupsHeight +
+      (showPagination ? _activityPaginationHeight : 0);
+}
 
 class _ActivityTableDivider extends StatelessWidget {
   const _ActivityTableDivider();
@@ -300,10 +339,40 @@ class _StatusLabel extends StatelessWidget {
   }
 }
 
-class ActivityTableRow extends StatefulWidget {
-  const ActivityTableRow({required this.row, super.key});
+class ActivityTableRowGroup extends StatelessWidget {
+  const ActivityTableRowGroup({required this.row, super.key});
 
   final ActivityRowData row;
+
+  @override
+  Widget build(BuildContext context) {
+    if (row.childRows.isEmpty) {
+      return ActivityTableRow(row: row);
+    }
+
+    return Column(
+      children: [
+        ActivityTableRow(row: row),
+        for (final childRow in row.childRows) ...[
+          const SizedBox(height: AppSpacing.xxs),
+          ActivityTableRow(row: childRow, compact: true, childRow: true),
+        ],
+      ],
+    );
+  }
+}
+
+class ActivityTableRow extends StatefulWidget {
+  const ActivityTableRow({
+    required this.row,
+    this.compact = false,
+    this.childRow = false,
+    super.key,
+  });
+
+  final ActivityRowData row;
+  final bool compact;
+  final bool childRow;
 
   @override
   State<ActivityTableRow> createState() => _ActivityTableRowState();
@@ -348,23 +417,27 @@ class _ActivityTableRowState extends State<ActivityTableRow> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final row = widget.row;
-    final isInteractive = row.onTap != null;
+    final isInteractive = row.onTap != null && !widget.childRow;
+    final rowHeight = widget.compact ? 40.0 : 48.0;
+    final showSelectedBorder = row.selected && !widget.childRow;
     final content = Stack(
       clipBehavior: Clip.none,
       children: [
         Container(
-          height: 48,
+          height: rowHeight,
           padding: const EdgeInsets.all(AppSpacing.xxs),
           decoration: BoxDecoration(
             color: isInteractive && _hovered
                 ? _neutralHoverBackgroundColor(context)
-                : null,
+                : row.backgroundColor,
             borderRadius: BorderRadius.circular(AppRadii.xSmall),
           ),
           child: _ActivityColumnLayout(
             txType: Row(
               children: [
-                _ActivityAvatar(row: row),
+                widget.childRow
+                    ? const _ActivityChildConnector()
+                    : _ActivityAvatar(row: row),
                 const SizedBox(width: AppSpacing.s),
                 Flexible(
                   child: Column(
@@ -423,6 +496,21 @@ class _ActivityTableRowState extends State<ActivityTableRow> {
             ),
           ),
         ),
+        if (showSelectedBorder)
+          Positioned(
+            left: -1,
+            top: -1,
+            right: -1,
+            bottom: -1,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: colors.state.focusRing, width: 2),
+                  borderRadius: BorderRadius.circular(AppRadii.xSmall),
+                ),
+              ),
+            ),
+          ),
         if (isInteractive && _focused)
           Positioned(
             left: -1,
@@ -487,6 +575,86 @@ class _AmountLabel extends StatelessWidget {
       style: AppTypography.labelLarge.copyWith(color: color),
     );
 
+    final value = _AmountValue(row: row, text: text, color: color);
+    final subtitle = row.amountSubtitle;
+    if (subtitle == null) return value;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        value,
+        _AmountSubtitle(
+          iconName: row.amountSubtitleIconName,
+          iconColor: row.amountSubtitleIconColor,
+          text: subtitle,
+        ),
+      ],
+    );
+  }
+}
+
+class _AmountSubtitle extends StatelessWidget {
+  const _AmountSubtitle({
+    required this.iconName,
+    required this.iconColor,
+    required this.text,
+  });
+
+  final String? iconName;
+  final Color? iconColor;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final style = AppTypography.labelMedium.copyWith(
+      color: colors.text.secondary,
+    );
+    if (iconName == null) {
+      return Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppIcon(
+          iconName!,
+          size: AppIconSize.medium,
+          color: iconColor ?? colors.text.secondary,
+        ),
+        const SizedBox(width: AppSpacing.xxs),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AmountValue extends StatelessWidget {
+  const _AmountValue({
+    required this.row,
+    required this.text,
+    required this.color,
+  });
+
+  final ActivityRowData row;
+  final Text text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
     final iconName = row.amountIconName;
     if (iconName == null) return text;
 
@@ -515,9 +683,35 @@ class _ActivityAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final progress = row.leadingProgressValue;
+    if (progress != null) {
+      return SizedBox(
+        width: _activityAvatarSize,
+        height: _activityAvatarSize,
+        child: OverflowBox(
+          maxWidth: _activityProgressRingSize,
+          maxHeight: _activityProgressRingSize,
+          child: SizedBox(
+            width: _activityProgressRingSize,
+            height: _activityProgressRingSize,
+            child: CustomPaint(
+              painter: _ActivityAvatarProgressPainter(progress: progress),
+              child: Center(
+                child: AppIcon(
+                  row.leadingIconName,
+                  size: 16,
+                  color: row.leadingIconColor,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
-      width: 32,
-      height: 32,
+      width: _activityAvatarSize,
+      height: _activityAvatarSize,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: row.leadingBackgroundColor,
@@ -532,6 +726,131 @@ class _ActivityAvatar extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _ActivityAvatarProgressPainter extends CustomPainter {
+  const _ActivityAvatarProgressPainter({required this.progress});
+
+  final double progress;
+
+  static const _segmentCount = 4;
+  static const _viewBoxSize = 37.0;
+  static const _center = Offset(18.1836, 18.1842);
+  static const _ringRadius = 17.0;
+  static const _ringStrokeWidth = 2.5;
+  static const _segmentGapAngle = 0.32;
+  static const _trackColor = Color(0xFFD4D4D4);
+  static const _progressColor = Color(0xFFC2546A);
+  static const _innerFillColor = Color(0x339A9A9A);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / _viewBoxSize, size.height / _viewBoxSize);
+    _paintProgressRing(canvas);
+    _paintInnerCircle(canvas);
+    canvas.restore();
+  }
+
+  void _paintProgressRing(Canvas canvas) {
+    final trackPaint = Paint()
+      ..color = _trackColor
+      ..strokeWidth = _ringStrokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final progressPaint = Paint()
+      ..color = _progressColor
+      ..strokeWidth = _ringStrokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final rect = Rect.fromCircle(center: _center, radius: _ringRadius);
+    const segmentStep = math.pi * 2 / _segmentCount;
+    const segmentSweep = segmentStep - _segmentGapAngle;
+    const firstStartAngle = -math.pi + (_segmentGapAngle / 2);
+    final normalizedProgress = progress.clamp(0.0, 1.0);
+    final filledSegments = normalizedProgress <= 0
+        ? 0
+        : math.max(
+            1,
+            math.min(
+              _segmentCount,
+              (normalizedProgress * _segmentCount).ceil(),
+            ),
+          );
+
+    for (var index = 0; index < _segmentCount; index++) {
+      final startAngle = firstStartAngle + (segmentStep * index);
+      canvas.drawArc(rect, startAngle, segmentSweep, false, trackPaint);
+    }
+    for (var index = 0; index < filledSegments; index++) {
+      final startAngle = firstStartAngle + (segmentStep * index);
+      canvas.drawArc(rect, startAngle, segmentSweep, false, progressPaint);
+    }
+  }
+
+  void _paintInnerCircle(Canvas canvas) {
+    final fillPaint = Paint()
+      ..color = _innerFillColor
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(const Offset(18.1836, 18.1841), 13, fillPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ActivityAvatarProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+class _ActivityChildConnector extends StatelessWidget {
+  const _ActivityChildConnector();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: Center(
+        child: CustomPaint(
+          size: const Size(14, 14),
+          painter: _ActivityChildConnectorPainter(
+            color: context.colors.icon.disabled,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityChildConnectorPainter extends CustomPainter {
+  const _ActivityChildConnectorPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final path = Path()
+      ..moveTo(size.width * 0.25, size.height * 0.15)
+      ..lineTo(size.width * 0.25, size.height * 0.72)
+      ..quadraticBezierTo(
+        size.width * 0.25,
+        size.height * 0.86,
+        size.width * 0.39,
+        size.height * 0.86,
+      )
+      ..lineTo(size.width * 0.82, size.height * 0.86);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ActivityChildConnectorPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 

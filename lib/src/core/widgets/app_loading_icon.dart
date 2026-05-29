@@ -30,16 +30,20 @@ class AppLoadingIcon extends StatefulWidget {
 
 class _AppLoadingIconState extends State<AppLoadingIcon>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: AppLoadingIconTiming.period,
-  );
+  AnimationController? _controller;
+
+  AnimationController get _activeController {
+    return _controller ??= AnimationController(
+      vsync: this,
+      duration: AppLoadingIconTiming.period,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     if (widget.animated) {
-      _controller.repeat();
+      _activeController.repeat();
     }
   }
 
@@ -50,17 +54,20 @@ class _AppLoadingIconState extends State<AppLoadingIcon>
       return;
     }
     if (widget.animated) {
-      _controller.repeat();
+      _activeController.repeat();
     } else {
-      _controller
-        ..stop()
-        ..value = 0;
+      final controller = _controller;
+      if (controller != null) {
+        controller
+          ..stop()
+          ..value = 0;
+      }
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -73,7 +80,7 @@ class _AppLoadingIconState extends State<AppLoadingIcon>
     final icon = CustomPaint(
       painter: _LoaderIconPainter(
         color: resolved,
-        repaint: widget.animated ? _controller : null,
+        repaint: widget.animated ? _activeController : null,
       ),
       size: Size.square(widget.size),
     );

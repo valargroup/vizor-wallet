@@ -29,7 +29,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(_findAppIcon(AppIcons.renew), findsOneWidget);
+    expect(_findRenewShieldedAddressButton(), findsOneWidget);
   });
 
   testWidgets('shows shielded renew button for hardware accounts', (
@@ -44,7 +44,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(_findAppIcon(AppIcons.renew), findsOneWidget);
+    expect(_findRenewShieldedAddressButton(), findsOneWidget);
   });
 
   testWidgets('renews shielded address for hardware accounts', (tester) async {
@@ -66,7 +66,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(_findAppIcon(AppIcons.renew));
+    await tester.tap(_findRenewShieldedAddressButton());
     await tester.pump();
 
     expect(service.renewedAccountUuid, 'account-1');
@@ -120,13 +120,13 @@ void main() {
 
     await tester.tap(
       find.ancestor(
-        of: find.text('Send'),
+        of: find.text('Activity'),
         matching: find.byType(AppSidebarItem),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('send route'), findsOneWidget);
+    expect(find.text('activity route'), findsOneWidget);
   });
 
   testWidgets('ignores stale shielded load failure after account switch', (
@@ -192,6 +192,10 @@ Finder _findAppIcon(String iconName) {
   );
 }
 
+Finder _findRenewShieldedAddressButton() {
+  return find.byKey(const ValueKey('receive_renew_shielded_address_button'));
+}
+
 Widget _receiveHarness({
   AppBootstrapState? bootstrap,
   ReceiveAddressService Function(Ref ref)? receiveAddressService,
@@ -200,7 +204,10 @@ Widget _receiveHarness({
     initialLocation: '/receive',
     routes: [
       GoRoute(path: '/receive', builder: (_, _) => const ReceiveScreen()),
-      GoRoute(path: '/send', builder: (_, _) => const Text('send route')),
+      GoRoute(
+        path: '/activity',
+        builder: (_, _) => const Text('activity route'),
+      ),
     ],
   );
 

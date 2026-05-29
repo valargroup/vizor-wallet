@@ -248,7 +248,7 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
   Future<void> _copyRecipientAddress() async {
     await Clipboard.setData(ClipboardData(text: widget.args.address.trim()));
     if (!mounted) return;
-    showAppToast(context, 'Address Copied');
+    showAppToast(context, 'Address copied');
   }
 
   Future<bool> _abortIfUnmounted() async {

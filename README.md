@@ -126,7 +126,6 @@ TeamIdentifier=SZTB68DXM4
 - Some exchanges only support transparent withdrawals. Shield those funds after
   they arrive.
 - Sending uses shielded balance. Transparent funds must be shielded first.
-- Keystone accounts require an existing software wallet in this branch.
 - Local rebuilds are not expected to match the official DMG byte-for-byte
   because Apple signing, notarization, timestamps, and DMG metadata differ.
 
@@ -139,6 +138,11 @@ fvm flutter analyze
 
 cd rust && cargo test
 ```
+
+Reviewing a quote calls the configured 1Click/proxy quote API and can return a
+real one-time deposit instruction. Reviewing a quote does not move funds by
+itself. Starting a ZEC-to-external swap sends the software-wallet deposit by
+default; hardware-wallet accounts wait for Keystone signing.
 
 After changing Rust API files in `rust/src/api/`, regenerate bindings from the
 repo root:

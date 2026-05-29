@@ -7,11 +7,15 @@ import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../src/core/theme/app_theme.dart';
+import 'address_book_use_cases.dart';
+import 'activity_use_cases.dart';
 import 'button_use_cases.dart';
 import 'chip_use_cases.dart';
+import 'context_menu_use_cases.dart';
 import 'color_use_cases.dart';
 import 'icon_use_cases.dart';
 import 'screen_use_cases.dart';
+import 'swap_use_cases.dart';
 import 'text_field_use_cases.dart';
 import 'token_use_cases.dart';
 import 'toast_use_cases.dart';
@@ -27,6 +31,11 @@ import 'typography_use_cases.dart';
 class WidgetbookApp extends StatelessWidget {
   const WidgetbookApp({super.key});
 
+  static const _initialRoute = String.fromEnvironment(
+    'VIZOR_WIDGETBOOK_INITIAL_ROUTE',
+    defaultValue: '/',
+  );
+
   @override
   Widget build(BuildContext context) {
     // `.material` instead of the default `Widgetbook()` because the default
@@ -35,6 +44,7 @@ class WidgetbookApp extends StatelessWidget {
     // wrapper is only chrome for Widgetbook's own navigation — use cases
     // still render inside `AppTheme` via the ThemeAddon below.
     return Widgetbook.material(
+      initialRoute: _initialRoute,
       addons: [
         ThemeAddon<AppThemeData>(
           themes: const [
@@ -93,6 +103,285 @@ class WidgetbookApp extends StatelessWidget {
                     WidgetbookUseCase(
                       name: 'Enabled',
                       builder: buildLostPasswordEnabledUseCase,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            WidgetbookFolder(
+              name: 'Swap',
+              children: [
+                WidgetbookComponent(
+                  name: 'Swap Page',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Input active - Pay amount',
+                      builder: buildSwapPageFigmaNode1UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Input active - Receive amount',
+                      builder: buildSwapPageFigmaNode2UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Amount entered',
+                      builder: buildSwapPageFigmaNode3UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Direction switched',
+                      builder: buildSwapPageFigmaNode5UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Fiat value input',
+                      builder: buildSwapPageFigmaNode6UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Unsupported fiat price',
+                      builder: buildSwapPageUnsupportedFiatUseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Swap Modals',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Address modal',
+                      builder: buildSwapAddressModalFigmaNode7UseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Address scan - Permission',
+                      builder: buildSwapAddressScanModalPermissionUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Address scan - Denied',
+                      builder: buildSwapAddressScanModalDeniedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Address scan - Active',
+                      builder: buildSwapAddressScanModalActiveUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Address scan - Loading',
+                      builder: buildSwapAddressScanModalLoadingUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Slippage modal',
+                      builder: buildSwapSlippageModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Slippage custom',
+                      builder: buildSwapSlippageModalCustomUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Slippage invalid',
+                      builder: buildSwapSlippageModalInvalidUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Asset modal',
+                      builder: buildSwapAssetModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Asset modal - Empty',
+                      builder: buildSwapAssetModalEmptyUseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Swap Review',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Default',
+                      builder: buildSwapReviewDefaultUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'ZEC to external',
+                      builder: buildSwapReviewZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amount - Left',
+                      builder: buildSwapReviewLargeLeftAmountUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amount - Right',
+                      builder: buildSwapReviewLargeRightAmountUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amounts - Both',
+                      builder: buildSwapReviewLargeAmountsUseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Swap Deposit',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Duration',
+                      builder: buildSwapDepositDurationUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Countdown',
+                      builder: buildSwapDepositCountdownUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Memo QR',
+                      builder: buildSwapDepositMemoQrUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Hardware ZEC',
+                      builder: buildSwapDepositHardwareZecUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Timeout',
+                      builder: buildSwapDepositTimeoutUseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Swap Status',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Progress',
+                      builder: buildSwapStatusProgressUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Progress next step',
+                      builder: buildSwapStatusProgressNextStepUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amount - Left',
+                      builder: buildSwapStatusLargeLeftAmountUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amount - Right',
+                      builder: buildSwapStatusLargeRightAmountUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Large amounts - Both',
+                      builder: buildSwapStatusLargeAmountsUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Captured fiat basis',
+                      builder: buildSwapStatusCapturedFiatUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Details collapsed',
+                      builder: buildSwapStatusDetailsCollapsedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Details expanded',
+                      builder: buildSwapStatusDetailsExpandedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Completed',
+                      builder: buildSwapStatusCompletedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Failed',
+                      builder: buildSwapStatusFailedUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Incomplete deposit',
+                      builder: buildSwapStatusIncompleteDepositUseCase,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            WidgetbookFolder(
+              name: 'Address book',
+              children: [
+                WidgetbookComponent(
+                  name: 'Page',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Contacts list',
+                      builder: buildAddressBookContactsListUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Contacts list - Solana menu',
+                      builder: buildAddressBookSolanaMenuUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'No contacts',
+                      builder: buildAddressBookNoContactsUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Empty search',
+                      builder: buildAddressBookEmptySearchUseCase,
+                    ),
+                  ],
+                ),
+                WidgetbookComponent(
+                  name: 'Modals',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'Add contact',
+                      builder: buildAddressBookAddContactModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Avatar picker',
+                      builder: buildAddressBookAvatarModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Network selector',
+                      builder: buildAddressBookNetworkModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Network selector - Empty',
+                      builder: buildAddressBookNetworkModalEmptyUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Edit contact',
+                      builder: buildAddressBookEditContactModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Remove contact',
+                      builder: buildAddressBookRemoveContactModalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Contact picker',
+                      builder: buildAddressBookContactPickerModalUseCase,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            WidgetbookFolder(
+              name: 'Activity',
+              children: [
+                WidgetbookComponent(
+                  name: 'Swap Activity',
+                  useCases: [
+                    WidgetbookUseCase(
+                      name: 'In progress - Non-ZEC to ZEC',
+                      builder: buildActivitySwapProgressExternalToZecUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'In progress - ZEC to Non-ZEC',
+                      builder: buildActivitySwapProgressZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Sending - ZEC to Non-ZEC',
+                      builder: buildActivitySwapSendingZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Confirming - ZEC to Non-ZEC',
+                      builder: buildActivitySwapConfirmingZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Success - Non-ZEC to ZEC',
+                      builder: buildActivitySwapSuccessExternalToZecUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Success - ZEC to Non-ZEC',
+                      builder: buildActivitySwapSuccessZecToExternalUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Failed - Non-ZEC to ZEC',
+                      builder: buildActivitySwapFailedExternalToZecUseCase,
+                    ),
+                    WidgetbookUseCase(
+                      name: 'Failed - ZEC to Non-ZEC',
+                      builder: buildActivitySwapFailedZecToExternalUseCase,
                     ),
                   ],
                 ),
@@ -209,6 +498,27 @@ class WidgetbookApp extends StatelessWidget {
               ],
             ),
             WidgetbookComponent(
+              name: 'Context Menu',
+              useCases: [
+                WidgetbookUseCase(
+                  name: 'Gallery',
+                  builder: buildContextMenuGalleryUseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Contact actions',
+                  builder: buildContextMenuContactUseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Account actions',
+                  builder: buildContextMenuAccountUseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Narrow width',
+                  builder: buildContextMenuNarrowUseCase,
+                ),
+              ],
+            ),
+            WidgetbookComponent(
               name: 'Loading Icon',
               useCases: [
                 WidgetbookUseCase(
@@ -238,6 +548,35 @@ class WidgetbookApp extends StatelessWidget {
               name: 'Toast',
               useCases: [
                 WidgetbookUseCase(name: 'All', builder: buildToastUseCase),
+              ],
+            ),
+            WidgetbookComponent(
+              name: 'Swap Widget',
+              useCases: [
+                WidgetbookUseCase(
+                  name: 'Input active - Pay amount',
+                  builder: buildSwapWidgetFigmaNode1UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Input active - Receive amount',
+                  builder: buildSwapWidgetFigmaNode2UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Amount entered',
+                  builder: buildSwapWidgetFigmaNode3UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Direction switched',
+                  builder: buildSwapWidgetFigmaNode5UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Fiat value input',
+                  builder: buildSwapWidgetFigmaNode6UseCase,
+                ),
+                WidgetbookUseCase(
+                  name: 'Unsupported fiat price',
+                  builder: buildSwapWidgetUnsupportedFiatUseCase,
+                ),
               ],
             ),
           ],

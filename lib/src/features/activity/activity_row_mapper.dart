@@ -50,7 +50,7 @@ ActivityRowData buildTransactionActivityRow({
       : null;
 
   return ActivityRowData(
-    title: _txTitle(kind),
+    title: isFailed && isSent ? 'Send failed' : _txTitle(kind),
     leadingIconName: _txIcon(kind),
     leadingBackgroundColor: colors.background.neutralSubtleOpacity,
     leadingIconColor: colors.icon.regular,
@@ -75,6 +75,7 @@ ActivityRowData buildTransactionActivityRow({
         : isInbound
         ? colors.text.brandCrimson
         : colors.text.accent,
+    amountSubtitle: isFailed && amount != BigInt.zero ? 'Refunded' : null,
     statusText: isFailed
         ? 'Failed'
         : isPending
@@ -87,6 +88,7 @@ ActivityRowData buildTransactionActivityRow({
         : null,
     statusColor: isFailed ? colors.text.destructive : colors.text.secondary,
     timestampText: formatActivityTimestamp(_txTimestamp(transaction)),
+    backgroundColor: isFailed ? colors.state.selected : null,
     onTap: onTap,
   );
 }

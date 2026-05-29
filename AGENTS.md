@@ -22,7 +22,27 @@ flutter_rust_bridge_codegen generate
 # FRB routes Rust logs to os_log (subsystem "frb_user"), not Flutter console.
 # Run in a separate terminal:
 log stream --predicate 'subsystem == "frb_user"' --level info
+
 ```
+
+## UI Copy Conventions
+
+- **Sentence case is the project default for all user-facing strings**: button
+  labels, nav items, tab titles, toasts, dialog titles/bodies, sidebar items,
+  tooltips, error messages, status labels, form labels, picker headers, empty
+  states, page titles. Only capitalize the first word and proper nouns. Keep
+  proper-noun acronyms in their canonical form (`ZEC`, `USDC`, `USDT`, `NEAR`,
+  `Vizor`, `Keystone`, `Zcash`, `Ethereum`).
+- This applies to interpolated labels too: `'$symbol deposit tx'`, not
+  `'$symbol Deposit tx'`. The asset symbol carries its own casing; the rest of
+  the label is sentence case.
+- Existing rationale and full audit are in `qa-copy-review.csv` and
+  `copy-review-20260528-1554.csv` at the repo root. Reference these before
+  introducing new copy in this project.
+- When editing existing copy, also update widgetbook fixtures
+  (`lib/widgetbook/*.dart`) and tests (`test/`) that assert on the literal
+  string — `find.text(...)` matchers, `expectedNextAction` fields, and
+  `_tooltipWithMessage(...)` helpers will break otherwise.
 
 ## Release Notes
 

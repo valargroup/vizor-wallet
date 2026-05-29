@@ -6,6 +6,7 @@ import '../../providers/account_provider.dart';
 import '../../providers/app_security_provider.dart';
 import '../../providers/sync_failure.dart';
 import '../../providers/sync_provider.dart';
+import '../config/swap_feature_config.dart';
 import '../profile_pictures.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icon.dart';
@@ -79,6 +80,7 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
     }
     final accountName = activeAccount?.name ?? 'Username';
     final sync = ref.watch(syncProvider).value ?? SyncState();
+    final swapFeatureEnabled = ref.watch(swapFeatureEnabledProvider);
 
     return AppDesktopSidebarSurface(
       clipBehavior: Clip.none,
@@ -109,29 +111,33 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
-                    key: const ValueKey('sidebar_wallet_button'),
-                    label: 'Wallet',
-                    iconName: AppIcons.wallet,
+                    key: const ValueKey('sidebar_home_button'),
+                    label: 'Home',
+                    iconName: AppIcons.home,
                     active: _matches('/home'),
                     onTap: _matches('/home') ? null : () => context.go('/home'),
                   ),
+                  if (swapFeatureEnabled) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    AppSidebarItem(
+                      key: const ValueKey('sidebar_swap_button'),
+                      label: 'Swap',
+                      iconName: AppIcons.swapArrows,
+                      active: _matches('/swap'),
+                      onTap: _matches('/swap')
+                          ? null
+                          : () => context.go('/swap'),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
-                    key: const ValueKey('sidebar_send_button'),
-                    label: 'Send',
-                    iconName: AppIcons.plane,
-                    active: _matches('/send'),
-                    onTap: _matches('/send') ? null : () => context.go('/send'),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppSidebarItem(
-                    key: const ValueKey('sidebar_receive_button'),
-                    label: 'Receive',
-                    iconName: AppIcons.arrowDownCircle,
-                    active: _matches('/receive'),
-                    onTap: _matches('/receive')
+                    key: const ValueKey('sidebar_address_book_button'),
+                    label: 'Address book',
+                    iconName: AppIcons.users,
+                    active: _matches('/address-book'),
+                    onTap: _matches('/address-book')
                         ? null
-                        : () => context.go('/receive'),
+                        : () => context.go('/address-book'),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
@@ -171,7 +177,7 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
-                    label: 'Sign Out',
+                    label: 'Sign out',
                     iconName: AppIcons.logOut,
                     onTap: _isSigningOut ? null : _handleSignOut,
                   ),
@@ -292,8 +298,8 @@ class _SidebarSyncStatusData {
       final reason = _syncFailureReason(failure.kind);
       return _SidebarSyncStatusData(
         kind: _SidebarSyncStatusKind.failed,
-        label: 'Syncing failed. $reason...',
-        semanticsLabel: 'Syncing failed. $reason',
+        label: 'Syncing failed: $reason',
+        semanticsLabel: 'Syncing failed: $reason',
       );
     }
 

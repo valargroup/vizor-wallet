@@ -230,7 +230,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     final address = _selectedAddress;
     if (address.isEmpty) return;
     Clipboard.setData(ClipboardData(text: address));
-    showAppToast(context, 'Address Copied');
+    showAppToast(context, 'Address copied');
   }
 
   void _selectAddressType(_ReceiveAddressType type) {
@@ -804,6 +804,9 @@ class _ReceiveQrBlock extends StatelessWidget {
                   Positioned(
                     top: metrics.renewTop,
                     child: _RenewButton(
+                      key: const ValueKey(
+                        'receive_renew_shielded_address_button',
+                      ),
                       renewing: renewing,
                       size: metrics.renewSize,
                       onTap: onRenew,
@@ -1057,6 +1060,7 @@ class _RenewButton extends StatelessWidget {
     required this.renewing,
     required this.size,
     required this.onTap,
+    super.key,
   });
 
   final bool renewing;

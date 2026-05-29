@@ -11,7 +11,7 @@ void main() {
     await tester.pumpWidget(
       const _ThemedHarness(
         theme: AppThemeData.light,
-        child: Center(child: AppToast(message: 'Address Copied')),
+        child: Center(child: AppToast(message: 'Address copied')),
       ),
     );
 
@@ -40,7 +40,7 @@ void main() {
       ),
     );
 
-    final text = tester.widget<Text>(find.text('Address Copied'));
+    final text = tester.widget<Text>(find.text('Address copied'));
     expect(text.style?.color, AppThemeData.light.colors.text.inverse);
     expect(text.style?.fontFamily, AppTypography.labelLarge.fontFamily);
     expect(text.style?.fontSize, AppTypography.labelLarge.fontSize);
@@ -62,17 +62,17 @@ void main() {
         child: SizedBox(
           width: 400,
           height: 300,
-          child: AppToastHost(child: _ToastTrigger(message: 'Address Copied')),
+          child: AppToastHost(child: _ToastTrigger(message: 'Address copied')),
         ),
       ),
     );
 
-    expect(find.text('Address Copied'), findsNothing);
+    expect(find.text('Address copied'), findsNothing);
 
     await tester.tap(find.text('Show toast'));
     await tester.pump();
 
-    expect(find.text('Address Copied'), findsOneWidget);
+    expect(find.text('Address copied'), findsOneWidget);
     final hostTopLeft = tester.getTopLeft(find.byType(AppToastHost));
     final hostSize = tester.getSize(find.byType(AppToastHost));
     final toastTopLeft = tester.getTopLeft(find.byType(AppToast));
@@ -86,7 +86,7 @@ void main() {
     await tester.pump(AppToast.defaultDuration);
     await tester.pump();
 
-    expect(find.text('Address Copied'), findsNothing);
+    expect(find.text('Address copied'), findsNothing);
   });
 
   testWidgets('showAppToast can use the active host from an ancestor context', (

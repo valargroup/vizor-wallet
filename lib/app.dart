@@ -12,6 +12,7 @@ import 'package:desktop_window_bootstrap/desktop_window_bootstrap.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'src/app_bootstrap.dart';
+import 'src/core/config/swap_feature_config.dart';
 import 'src/core/layout/app_layout.dart';
 import 'src/core/motion/onboarding_motion.dart';
 import 'src/core/theme/app_theme.dart';
@@ -22,7 +23,9 @@ import 'src/core/widgets/app_icon.dart';
 import 'src/core/widgets/network_fallback_toast.dart';
 import 'src/features/activity/screens/activity_screen.dart';
 import 'src/features/activity/screens/activity_transaction_status_screen.dart';
+import 'src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'src/features/accounts/screens/accounts_screen.dart';
+import 'src/features/address_book/screens/address_book_screen.dart';
 import 'src/features/home/screens/home_screen.dart';
 import 'src/features/about/screens/about_screen.dart';
 import 'src/features/onboarding/create/address_types_screen.dart';
@@ -45,6 +48,7 @@ import 'src/features/onboarding/storage_unavailable_screen.dart';
 import 'src/features/onboarding/unlock_screen.dart';
 import 'src/features/onboarding/welcome.dart';
 import 'src/features/receive/screens/receive_screen.dart';
+import 'src/features/send/models/send_prefill_args.dart';
 import 'src/features/send/screens/keystone_send_scan_screen.dart';
 import 'src/features/send/screens/send_review_screen.dart';
 import 'src/features/send/screens/send_screen.dart';
@@ -53,6 +57,9 @@ import 'src/features/settings/screens/settings_screen.dart';
 import 'src/features/settings/screens/settings_change_password_screen.dart';
 import 'src/features/settings/screens/settings_endpoint_screen.dart';
 import 'src/features/settings/screens/settings_seed_phrase_screen.dart';
+import 'src/features/swap/models/swap_activity_navigation.dart';
+import 'src/features/swap/screens/swap_review_screen.dart';
+import 'src/features/swap/screens/swap_screen.dart';
 import 'src/providers/theme_mode_provider.dart';
 import 'src/providers/app_security_provider.dart';
 import 'src/providers/linux_update_provider.dart';
@@ -167,6 +174,7 @@ Future<void> runZcashWalletApp() async {
 final _routerProvider = Provider<GoRouter>((ref) {
   final bootstrap = ref.watch(appBootstrapProvider);
   final refresh = ref.watch(routerRefreshProvider);
+  final swapFeatureEnabled = ref.watch(swapFeatureEnabledProvider);
   ref.listen(walletProvider, (_, _) {
     refresh.requestRefresh();
   });
@@ -206,6 +214,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
       final isUnlock = state.matchedLocation == '/unlock';
       final isLostPassword = state.matchedLocation == '/lost-password';
       final isUnlockFlow = isUnlock || isLostPassword;
+      final isSwap =
+          state.matchedLocation.startsWith('/swap') ||
+          state.matchedLocation.startsWith('/activity/swap');
 
       log(
         'router redirect: location=${state.matchedLocation}, hasWallet=$hasWallet, '
@@ -230,6 +241,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
       if (hasWallet && state.matchedLocation == '/welcome') {
         return requiresUnlock ? '/unlock' : '/home';
       }
+      if (!swapFeatureEnabled && isSwap) return '/home';
       return null;
     },
     routes: [
@@ -535,7 +547,29 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/privacy', builder: (_, _) => const PrivacyPolicyScreen()),
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
       GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
+      GoRoute(
+        path: '/address-book',
+        builder: (_, _) => const AddressBookScreen(),
+      ),
       GoRoute(path: '/activity', builder: (_, _) => const ActivityScreen()),
+      GoRoute(
+        path: '/activity/swap/:swapId',
+        builder: (_, state) {
+          final swapId = state.pathParameters['swapId'];
+          if (swapId == null || swapId.isEmpty) {
+            return const ActivityScreen();
+          }
+          return SwapActivityDetailScreen(
+            swapIntentId: swapId,
+            returnTarget: SwapActivityReturnTarget.fromQueryValue(
+              state.uri.queryParameters[swapActivityReturnQueryKey],
+            ),
+            autoSignZecDeposit:
+                state.uri.queryParameters[swapActivitySignQueryKey] ==
+                swapActivitySignZecDepositValue,
+          );
+        },
+      ),
       GoRoute(
         path: '/activity/tx/:txid',
         builder: (_, state) {
@@ -561,7 +595,23 @@ final _routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(path: '/send', builder: (_, _) => const SendScreen()),
+      GoRoute(
+        path: '/send',
+        builder: (_, state) {
+          final extra = state.extra;
+          return SendScreen(prefill: extra is SendPrefillArgs ? extra : null);
+        },
+      ),
+      GoRoute(
+        path: '/swap',
+        redirect: (_, _) => swapFeatureEnabled ? null : '/home',
+        builder: (_, _) => const SwapScreen(),
+      ),
+      GoRoute(
+        path: '/swap/review',
+        redirect: (_, _) => swapFeatureEnabled ? null : '/home',
+        builder: (_, _) => const SwapReviewScreen(),
+      ),
       GoRoute(
         path: '/send/review',
         builder: (_, state) {
