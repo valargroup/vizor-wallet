@@ -1111,6 +1111,46 @@ void main() {
     },
   );
 
+  test(
+    'does not surface stale action errors while reloading switched account',
+    () async {
+      final setupGate = Completer<void>();
+      final rust = FakeVotingRustApi(setupGate: setupGate);
+      final activeAccountProvider =
+          NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+            _ActiveVotingAccountNotifier.new,
+          );
+      final container = _sessionContainer(
+        rust: rust,
+        activeAccountUuidListenable: activeAccountProvider,
+      );
+      final subscription = container.listen(
+        votingSessionProvider(kRoundId),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      final prepare = container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .prepareDelegation();
+      await rust.setupStarted.future;
+
+      container.read(activeAccountProvider.notifier).set('account-2');
+      await Future<void>.delayed(Duration.zero);
+
+      final reloaded = await container.read(
+        votingSessionProvider(kRoundId).future,
+      );
+      expect(reloaded.accountUuid, 'account-2');
+      expect(container.read(votingSessionProvider(kRoundId)).hasError, isFalse);
+
+      setupGate.complete();
+      await prepare;
+    },
+  );
+
   test('draft choices are isolated by pinned voting account', () async {
     final activeAccount = _MutableActiveAccount('account-1');
     final container = _sessionContainer(activeAccountUuid: activeAccount.call);

@@ -46,7 +46,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     _registerDisposeHandler();
     _registerActiveAccountListener();
     await _refreshSessionAccountFromActiveAccount();
-    final context = await _loadContext(_roundId);
+    final context = await _loadContext(_roundId, checkStaleAction: false);
     _currentContext = context;
     final initialState = VotingSessionState(
       roundId: _roundId,
@@ -2351,19 +2351,26 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     );
   }
 
-  Future<_VotingSessionContext> _loadContext(String roundId) async {
-    _throwIfActionStale();
+  Future<_VotingSessionContext> _loadContext(
+    String roundId, {
+    bool checkStaleAction = true,
+  }) async {
+    void checkAction() {
+      if (checkStaleAction) _throwIfActionStale();
+    }
+
+    checkAction();
     final config = await ref.read(votingConfigProvider.future);
     final api = ref.read(votingApiClientProvider(config.apiBaseUrl));
     final round = VotingRoundDetails.fromStatus(
       await api.getRoundStatus(roundId),
     );
-    _throwIfActionStale();
+    checkAction();
     final accountUuid = await _accountUuidForSession();
     final isHardwareAccount = await _isHardwareAccountForSession();
     final endpoint = ref.read(votingRpcEndpointConfigProvider);
     final dbPath = await ref.read(votingWalletDbPathProvider).call();
-    _throwIfActionStale();
+    checkAction();
     final resumePlan = await ref
         .read(votingRecoveryServiceProvider)
         .loadResumePlan(
@@ -2382,7 +2389,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           roundId: round.roundId,
           proposalIds: proposalIds,
         );
-    _throwIfActionStale();
+    checkAction();
     final context = _VotingSessionContext(
       sessionGeneration: _sessionGeneration,
       dbPath: dbPath,
