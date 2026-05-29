@@ -578,36 +578,38 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         draftVotes,
         context.round,
       );
-      // Write durable ballot intent before the cast loop so recovery can
-      // resume from the correct choice if the user quits mid-vote.
-      try {
-        final draftVotesByProposal = {
-          for (final draftVote in effectiveDraftVotes)
-            draftVote.proposalId: draftVote,
-        };
-        final intentProposalIds = {
-          ...?allProposalIds,
-          ...draftVotesByProposal.keys,
-        }.toList()..sort();
-        for (final proposalId in intentProposalIds) {
-          final draftVote = draftVotesByProposal[proposalId];
-          await ref
-              .read(votingRecoveryServiceProvider)
-              .setBallotIntent(
-                dbPath: context.dbPath,
-                walletId: context.accountUuid,
-                roundId: context.round.roundId,
-                proposalId: proposalId,
-                skipped: draftVote == null,
-                choice: draftVote?.choice,
-              );
+      if (effectiveDraftVotes.isNotEmpty) {
+        // Write durable ballot intent before the cast loop so recovery can
+        // resume from the correct choice if the user quits mid-vote.
+        try {
+          final draftVotesByProposal = {
+            for (final draftVote in effectiveDraftVotes)
+              draftVote.proposalId: draftVote,
+          };
+          final intentProposalIds = {
+            ...?allProposalIds,
+            ...draftVotesByProposal.keys,
+          }.toList()..sort();
+          for (final proposalId in intentProposalIds) {
+            final draftVote = draftVotesByProposal[proposalId];
+            await ref
+                .read(votingRecoveryServiceProvider)
+                .setBallotIntent(
+                  dbPath: context.dbPath,
+                  walletId: context.accountUuid,
+                  roundId: context.round.roundId,
+                  proposalId: proposalId,
+                  skipped: draftVote == null,
+                  choice: draftVote?.choice,
+                );
+          }
+        } catch (e) {
+          // Intent writes are advisory; a failure here must not abort casting.
+          debugPrint(
+            '[zcash] Voting: ballot intent write failed (non-fatal) '
+            'round=${context.round.roundId} error=$e',
+          );
         }
-      } catch (e) {
-        // Intent writes are advisory; a failure here must not abort casting.
-        debugPrint(
-          '[zcash] Voting: ballot intent write failed (non-fatal) '
-          'round=${context.round.roundId} error=$e',
-        );
       }
       for (final key in plan.submittedVoteConfirmationKeys) {
         final txHash = plan.voteTxHashFor(key);
@@ -1887,6 +1889,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         config: context.config,
         round: context.round,
         resumePlan: context.resumePlan,
+        roundPlan: context.roundPlan,
         isHardwareAccount: context.isHardwareAccount,
         clearError: true,
       ),
@@ -1919,6 +1922,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         config: context.config,
         round: context.round,
         resumePlan: context.resumePlan,
+        roundPlan: context.roundPlan,
         isHardwareAccount: context.isHardwareAccount,
       ),
     );

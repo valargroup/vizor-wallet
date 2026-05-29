@@ -1407,6 +1407,74 @@ void main() {
     expect(rust.voteCommitBundleCalls, isEmpty);
   });
 
+  test(
+    'recovery-only vote confirmation does not rewrite ballot intents',
+    () async {
+      final httpResponses = votingHttpResponses()
+        ..['/shielded-vote/v1/tx/submitted-vote-tx'] = {
+          'height': 11,
+          'code': 0,
+          'log': '',
+          'events': [
+            {
+              'type': 'cast_vote',
+              'attributes': [
+                {'key': 'leaf_index', 'value': '1,2'},
+              ],
+            },
+          ],
+        };
+      final rust = FakeVotingRustApi();
+      final recoveryApi = FakeVotingRecoveryApi(
+        state: recoveryState(
+          bundleCount: 1,
+          votes: [vote(bundleIndex: 0, proposalId: 7)],
+          voteWorkflows: [
+            rust_voting.ApiVoteWorkflowRecovery(
+              bundleIndex: 0,
+              proposalId: 7,
+              phase: VotingWorkflowPhase.submittedVote,
+              txHash: 'submitted-vote-tx',
+              vcTreePosition: null,
+              hasCommitmentBundle: true,
+            ),
+          ],
+          voteTxHashes: [
+            rust_voting.ApiVoteTxRecovery(
+              bundleIndex: 0,
+              proposalId: 7,
+              txHash: 'submitted-vote-tx',
+            ),
+          ],
+          commitmentBundles: [
+            rust_voting.ApiCommitmentBundleRecovery(
+              bundleIndex: 0,
+              proposalId: 7,
+              commitmentBundleJson: '{"proposal_id":7}',
+              vcTreePosition: BigInt.zero,
+            ),
+          ],
+        ),
+      );
+      final container = _sessionContainer(
+        http: FakeVotingHttpClient(responses: httpResponses),
+        rust: rust,
+        recoveryApi: recoveryApi,
+        txConfirmationPolling: _fastTxConfirmationPolling,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      await container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .castVotes(draftVotes: const [], allProposalIds: const [7, 8]);
+
+      expect(recoveryApi.ballotIntents, isEmpty);
+      expect(rust.voteCommitBundleCalls, isEmpty);
+      expect(rust.storedCommitmentBundles, ['0:7:2:{"proposal_id":7}']);
+    },
+  );
+
   test('vote tree pre-sync dedupes warmup for the same round', () async {
     final rust = FakeVotingRustApi();
     final container = _sessionContainer(rust: rust);
