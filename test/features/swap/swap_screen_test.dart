@@ -1930,7 +1930,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Max: 1 ZEC'), findsOneWidget);
-      expect(find.text('Insufficient ZEC'), findsOneWidget);
+      expect(find.text('Not enough ZEC'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('swap_review_button')));
       await tester.pumpAndSettle();
@@ -3996,8 +3996,8 @@ void main() {
     expect(find.text('Price protection'), findsNothing);
     expect(
       _tooltipWithMessage(
-        'Fee for us and the route providers to process this swap. '
-        'Already included in the rate shown above.',
+        "Covers our fee and the route providers' costs to process this swap. "
+        'Already included in the rate above.',
       ),
       findsOneWidget,
     );
@@ -4153,7 +4153,7 @@ void main() {
     expect(find.text('Slippage tolerance'), findsOneWidget);
     expect(find.text('Guaranteed minimum'), findsOneWidget);
     expect(find.text('Swap fee'), findsOneWidget);
-    expect(find.text('Review & swap'), findsOneWidget);
+    expect(find.text('Confirm swap'), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(const ValueKey('swap_start_button')));
     await tester.pumpAndSettle();
@@ -4480,11 +4480,11 @@ void main() {
       );
       expect(
         find.text(
-          'Required pay exceeds available ZEC. Review a smaller target amount.',
+          "You don't have enough ZEC for this swap. Try a smaller amount.",
         ),
         findsOneWidget,
       );
-      expect(find.text('Insufficient ZEC'), findsOneWidget);
+      expect(find.text('Not enough ZEC'), findsOneWidget);
       expect(swapProvider.startedQuotes, isEmpty);
     },
   );
@@ -4680,7 +4680,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Quote expired. Review again for a fresh route.'),
+      find.text('Quote expired. Review again for an updated rate.'),
       findsOneWidget,
     );
     expect(find.text('Review again required'), findsNothing);
@@ -4693,10 +4693,10 @@ void main() {
 
     expect(swapProvider.requests, hasLength(2));
     expect(
-      find.text('Quote expired. Review again for a fresh route.'),
+      find.text('Quote expired. Review again for an updated rate.'),
       findsNothing,
     );
-    expect(find.text('Review & swap'), findsOneWidget);
+    expect(find.text('Confirm swap'), findsOneWidget);
   });
 
   testWidgets('quote failure shows an inline error and preserves the draft', (
@@ -5233,9 +5233,9 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('swap_review_button')));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Review & swap'));
+      await tester.ensureVisible(find.text('Confirm swap'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Review & swap'));
+      await tester.tap(find.text('Confirm swap'));
       await tester.pumpAndSettle();
 
       expect(find.text('Deposit tokens'), findsOneWidget);
