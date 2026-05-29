@@ -219,9 +219,9 @@ class NearIntentsOneClickSwapAdapter
   @override
   Future<SwapIntentSnapshot> startSwap(SwapQuote quote) async {
     final depositAddress = quote.depositInstruction.address;
-    if (depositAddress == _dryRunDepositAddress) {
+    if (depositAddress == _placeholderDepositAddress) {
       throw const OneClickApiException(
-        'Cannot start a swap from a dry-run quote',
+        'Cannot start a swap without a provider deposit address',
       );
     }
     return SwapIntentSnapshot.fromQuote(quote, id: depositAddress);
@@ -446,7 +446,7 @@ class NearIntentsOneClickSwapAdapter
       quoteExpiresAt: quoteExpiresAt,
       depositInstruction: SwapDepositInstruction(
         asset: sellAsset,
-        address: quote.depositAddress ?? _dryRunDepositAddress,
+        address: quote.depositAddress ?? _placeholderDepositAddress,
         expiresInLabel: depositExpiryLabel,
         reuseWarning: 'Do not reuse this address',
         memo: quote.depositMemo,
@@ -1072,7 +1072,7 @@ class _OneClickSwapDetails {
   final String? destinationChainTxHash;
 }
 
-const _dryRunDepositAddress = 'dry-run-preview';
+const _placeholderDepositAddress = 'quote-placeholder-deposit';
 
 void _expectSuccess(OneClickHttpResponse response, String operation) {
   if (response.statusCode >= 200 && response.statusCode < 300) {

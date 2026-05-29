@@ -177,7 +177,8 @@ class SwapQuote {
       quoteExpiresAt: quoteExpiresAt,
       depositInstruction: SwapDepositInstruction(
         asset: sellAsset,
-        address: 'one-time-${sellAsset.symbol.toLowerCase()}-deposit-preview',
+        address:
+            'one-time-${sellAsset.symbol.toLowerCase()}-deposit-placeholder',
         expiresInLabel: expiryLabel,
         reuseWarning: 'Do not reuse this address',
         deadline: depositDeadline,

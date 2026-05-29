@@ -88,7 +88,7 @@ void main() {
             minAmountIn: '148500000',
             minAmountOut: '104750000',
             refundFee: '10000',
-            depositAddress: 'dry-run-preview',
+            depositAddress: 'quote-placeholder-deposit',
             status: null,
           ),
         ),

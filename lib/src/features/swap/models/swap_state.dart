@@ -121,9 +121,9 @@ class SwapState {
     return intents.where((intent) => !intent.status.isTerminal).length;
   }
 
-  String get walletZecPreviewAddress => direction.sendsZec
-      ? 'u1wallet-refund-preview'
-      : 'u1wallet-shielded-preview';
+  String get walletZecPlaceholderAddress => direction.sendsZec
+      ? 'u1wallet-refund-placeholder'
+      : 'u1wallet-shielded-placeholder';
 
   double? get sellAmount {
     final amount = double.tryParse(amountText);
@@ -159,7 +159,7 @@ class SwapState {
       direction: direction,
       externalAsset: externalAsset,
       userExternalAddress: destinationText,
-      walletZecAddress: walletZecPreviewAddress,
+      walletZecAddress: walletZecPlaceholderAddress,
     );
   }
 

@@ -1,6 +1,6 @@
 import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 
-const previewSwapIntents = <SwapIntent>[
+const swapActivityFixtureIntents = <SwapIntent>[
   SwapIntent(
     id: 'swap-8f29',
     title: 'ZEC to USDC',
