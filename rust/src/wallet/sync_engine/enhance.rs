@@ -251,7 +251,7 @@ async fn fill_missing_transparent_fee(
     let Some(bundle) = tx.transparent_bundle() else {
         return Ok(());
     };
-    if bundle.vin.is_empty() || !stored_fee_is_missing(db_path, tx)? {
+    if bundle.vin.is_empty() || !should_fill_missing_transparent_fee(db_path, tx)? {
         return Ok(());
     }
 
@@ -331,24 +331,30 @@ async fn fetch_transparent_prevout_values(
     Ok(prevout_values)
 }
 
-fn stored_fee_is_missing(db_path: &str, tx: &Transaction) -> Result<bool, SyncError> {
+fn should_fill_missing_transparent_fee(db_path: &str, tx: &Transaction) -> Result<bool, SyncError> {
     let conn = rusqlite::Connection::open(db_path)
         .map_err(|e| SyncError::db(format!("open wallet DB for fee lookup: {e}")))?;
     conn.busy_timeout(SYNC_DB_BUSY_TIMEOUT)
         .map_err(|e| SyncError::db(format!("configure fee lookup busy timeout: {e}")))?;
 
-    let missing_rows: i64 = conn
+    let fillable_rows: i64 = conn
         .query_row(
             "SELECT COUNT(*)
-             FROM transactions
-             WHERE txid = ?1
-             AND fee IS NULL",
+             FROM transactions t
+             WHERE t.txid = ?1
+             AND t.fee IS NULL
+             AND EXISTS (
+                 SELECT 1
+                 FROM v_transactions vt
+                 WHERE vt.txid = t.txid
+                 AND COALESCE(vt.account_balance_delta, 0) < 0
+             )",
             rusqlite::params![tx.txid().as_ref()],
             |row| row.get(0),
         )
         .map_err(|e| SyncError::db(format!("query transparent fee: {e}")))?;
 
-    Ok(missing_rows > 0)
+    Ok(fillable_rows > 0)
 }
 
 fn is_null_outpoint(outpoint: &OutPoint) -> bool {
@@ -420,6 +426,45 @@ fn transaction_status_from_raw_height(raw_height: u64) -> Result<TransactionStat
 mod tests {
     use super::*;
 
+    fn transparent_fee_test_tx() -> Transaction {
+        let tx_bytes = hex::decode(
+            "0400008085202f8901aee37187e843da597683c26c01457f5fd3b1a038996ef74dc8d60d483aaf395a000000006b483045022100874c70db77ea9e93f75cc83a9e141e17c8eb97588e29fe4e307631fdde4f162a02203493df62d648cd86a1189eaf9bcafc652bc14c5df02519d9e45e25b32aaffb5b012102106a2dcaaac2ae3b24358a03f4264e05db420c5b090399bc23885fa02fef7716ffffffff02764e1900000000001976a914fb451987556f7a19b726966ee6cff917e0bb3bfb88ac560ca400000000001976a9141634f5ff0b8f6603a17570436d6c12a91f4b1fed88ac00000000000000000000000000000000000000",
+        )
+        .unwrap();
+        Transaction::read(&tx_bytes[..], BranchId::Sapling).unwrap()
+    }
+
+    fn transparent_fee_test_db(
+        tx: &Transaction,
+        account_balance_delta: i64,
+    ) -> tempfile::NamedTempFile {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let conn = rusqlite::Connection::open(file.path()).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE transactions (
+                 txid BLOB NOT NULL UNIQUE,
+                 fee INTEGER
+             );
+             CREATE TABLE v_transactions (
+                 txid BLOB NOT NULL,
+                 account_balance_delta INTEGER NOT NULL
+             );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO transactions (txid, fee) VALUES (?1, NULL)",
+            rusqlite::params![tx.txid().as_ref()],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO v_transactions (txid, account_balance_delta)
+             VALUES (?1, ?2)",
+            rusqlite::params![tx.txid().as_ref(), account_balance_delta],
+        )
+        .unwrap();
+        file
+    }
+
     #[test]
     fn get_transaction_not_found_marks_txid_not_recognized() {
         let status = Status::new(Code::NotFound, "txid not recognized");
@@ -449,11 +494,7 @@ mod tests {
 
     #[test]
     fn transparent_fee_uses_exact_prevout_output_index() {
-        let tx_bytes = hex::decode(
-            "0400008085202f8901aee37187e843da597683c26c01457f5fd3b1a038996ef74dc8d60d483aaf395a000000006b483045022100874c70db77ea9e93f75cc83a9e141e17c8eb97588e29fe4e307631fdde4f162a02203493df62d648cd86a1189eaf9bcafc652bc14c5df02519d9e45e25b32aaffb5b012102106a2dcaaac2ae3b24358a03f4264e05db420c5b090399bc23885fa02fef7716ffffffff02764e1900000000001976a914fb451987556f7a19b726966ee6cff917e0bb3bfb88ac560ca400000000001976a9141634f5ff0b8f6603a17570436d6c12a91f4b1fed88ac00000000000000000000000000000000000000",
-        )
-        .unwrap();
-        let tx = Transaction::read(&tx_bytes[..], BranchId::Sapling).unwrap();
+        let tx = transparent_fee_test_tx();
         let prevout = tx.transparent_bundle().unwrap().vin[0].prevout().clone();
         let input_value = Zatoshis::from_nonnegative_i64(12_449_548).unwrap();
 
@@ -472,6 +513,22 @@ mod tests {
                 .map(u64::from),
             Some(40_000),
         );
+    }
+
+    #[test]
+    fn transparent_fee_backfill_requires_wallet_spend_evidence() {
+        let tx = transparent_fee_test_tx();
+        let db = transparent_fee_test_db(&tx, 1_000_000);
+
+        assert!(!should_fill_missing_transparent_fee(db.path().to_str().unwrap(), &tx).unwrap());
+    }
+
+    #[test]
+    fn transparent_fee_backfill_allows_negative_wallet_delta() {
+        let tx = transparent_fee_test_tx();
+        let db = transparent_fee_test_db(&tx, -40_000);
+
+        assert!(should_fill_missing_transparent_fee(db.path().to_str().unwrap(), &tx).unwrap());
     }
 
     #[test]
