@@ -95,11 +95,6 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
       if (!mounted) return;
       final draftVotes = draft.toDraftVotes(proposals);
       final proposalIds = proposals.map((proposal) => proposal.id).toList();
-      final canRecoverWithoutDraft = _canRecoverWithoutDraft(session.roundPlan);
-      if (draftVotes.isEmpty && !canRecoverWithoutDraft) {
-        _setRunError('Choose at least one vote before submitting.');
-        return;
-      }
       await sessionNotifier.ensureWalletReadyForVoting();
       if (!mounted) return;
       final afterWalletSync = ref.read(votingSessionProvider(roundId)).value;
@@ -107,8 +102,14 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
           afterWalletSync?.phase == VotingSessionPhase.waitingForWalletSync) {
         return;
       }
+      final activeSession = afterWalletSync ?? session;
+      final canRecoverWithoutDraft = _canRecoverWithoutDraft(activeSession);
+      if (draftVotes.isEmpty && !canRecoverWithoutDraft) {
+        _setRunError('Choose at least one vote before submitting.');
+        return;
+      }
 
-      if (session.isHardwareAccount) {
+      if (activeSession.isHardwareAccount) {
         _pendingDraftVotes = draftVotes;
         _pendingProposalIds = proposalIds;
         _pendingRecoveryWithoutDraft = canRecoverWithoutDraft;
@@ -116,7 +117,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         return;
       }
 
-      if (draftVotes.isNotEmpty || _planNeedsDelegation(session.roundPlan)) {
+      if (draftVotes.isNotEmpty || _sessionNeedsDelegation(activeSession)) {
         final mnemonic = await ref
             .read(accountProvider.notifier)
             .getMnemonicForAccount(accountUuid);
@@ -138,7 +139,10 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         final afterDelegation = ref.read(votingSessionProvider(roundId)).value;
         if (afterDelegation?.phase == VotingSessionPhase.error) return;
       }
-      if (draftVotes.isNotEmpty || _planNeedsVotePolling(session.roundPlan)) {
+      final afterDelegation = ref.read(votingSessionProvider(roundId)).value;
+      final votePollingSession = afterDelegation ?? activeSession;
+      if (draftVotes.isNotEmpty ||
+          _sessionNeedsVotePolling(votePollingSession)) {
         await sessionNotifier.castVotes(
           draftVotes: draftVotes,
           allProposalIds: proposalIds,
@@ -283,8 +287,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         .read(votingSessionProvider(widget.roundId))
         .value;
     if (afterDelegation?.phase == VotingSessionPhase.error) return;
-    if (draftVotes.isNotEmpty ||
-        _planNeedsVotePolling(afterDelegation?.roundPlan)) {
+    if (draftVotes.isNotEmpty || _sessionNeedsVotePolling(afterDelegation)) {
       await sessionNotifier.castVotes(
         draftVotes: draftVotes,
         allProposalIds: _pendingProposalIds,
@@ -325,9 +328,32 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     return text.isEmpty ? 'Voting session action failed.' : text;
   }
 
-  bool _canRecoverWithoutDraft(rust_voting.ApiRoundPlan? roundPlan) {
-    if (roundPlan?.pendingRecovery != true) return false;
-    return !roundPlan!.nextSteps.any((step) => step.kind == 'cast_vote');
+  bool _canRecoverWithoutDraft(VotingSessionState session) {
+    final roundPlan = session.roundPlan;
+    if (roundPlan != null) {
+      if (!roundPlan.pendingRecovery) return false;
+      return !roundPlan.nextSteps.any((step) => step.kind == 'cast_vote');
+    }
+    final resumePlan = session.resumePlan;
+    return resumePlan != null &&
+        (resumePlan.submittedDelegationBundleIndexes.isNotEmpty ||
+            resumePlan.submittedVoteConfirmationKeys.isNotEmpty ||
+            resumePlan.unconfirmedShareDelegations.isNotEmpty);
+  }
+
+  bool _sessionNeedsDelegation(VotingSessionState session) {
+    if (_planNeedsDelegation(session.roundPlan)) return true;
+    if (session.roundPlan != null) return false;
+    return session.resumePlan?.submittedDelegationBundleIndexes.isNotEmpty ??
+        false;
+  }
+
+  bool _sessionNeedsVotePolling(VotingSessionState? session) {
+    if (session == null) return false;
+    if (_planNeedsVotePolling(session.roundPlan)) return true;
+    if (session.roundPlan != null) return false;
+    return session.resumePlan?.submittedVoteConfirmationKeys.isNotEmpty ??
+        false;
   }
 
   bool _planNeedsDelegation(rust_voting.ApiRoundPlan? roundPlan) {
