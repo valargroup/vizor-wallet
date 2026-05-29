@@ -48,8 +48,12 @@ class _StorageUnavailableScreenState
     } catch (error, stackTrace) {
       log('storage unavailable retry failed: $error\n$stackTrace');
       if (mounted) {
+        final failureKind = ref.read(appBootstrapProvider).failureKind;
         setState(() {
-          _retryError = 'Secure storage is still unavailable.';
+          _retryError =
+              failureKind == AppBootstrapFailureKind.walletDbMigrationFailed
+              ? 'The wallet database update still failed.'
+              : 'Secure storage is still unavailable.';
         });
       }
     } finally {
@@ -227,6 +231,9 @@ class _StorageUnavailableContent extends ConsumerWidget {
   }
 
   String _title(AppBootstrapFailureKind? failureKind) {
+    if (failureKind == AppBootstrapFailureKind.walletDbMigrationFailed) {
+      return 'Unable to update wallet database';
+    }
     if (failureKind == AppBootstrapFailureKind.startupFailure) {
       return 'Unable to open Vizor';
     }
@@ -234,6 +241,9 @@ class _StorageUnavailableContent extends ConsumerWidget {
   }
 
   String _body(AppBootstrapFailureKind? failureKind) {
+    if (failureKind == AppBootstrapFailureKind.walletDbMigrationFailed) {
+      return 'Vizor needs to update the local wallet database before opening this version. Try again, or quit and restart Vizor.';
+    }
     if (failureKind == AppBootstrapFailureKind.startupFailure) {
       return 'Vizor could not load the local startup state. Try again, or quit and restart Vizor.';
     }

@@ -35,7 +35,11 @@ final appBootstrapRetryProvider = Provider<AppBootstrapRetry>((_) {
   return () async {};
 });
 
-enum AppBootstrapFailureKind { secureStorageUnavailable, startupFailure }
+enum AppBootstrapFailureKind {
+  secureStorageUnavailable,
+  startupFailure,
+  walletDbMigrationFailed,
+}
 
 class AppBootstrapState {
   const AppBootstrapState({
@@ -209,6 +213,21 @@ Future<AppBootstrapState> loadAppBootstrap() async {
     final isPasswordConfigured = await storage.isPasswordConfigured();
     final isUnlocked = storage.hasSessionPassword;
     final dbPath = await _getDbPath();
+    if (rust_wallet.walletExists(dbPath: dbPath)) {
+      try {
+        log('bootstrap: ensuring wallet DB migrations before startup snapshot');
+        await rust_wallet.ensureWalletDbMigrated(
+          dbPath: dbPath,
+          network: network,
+        );
+      } catch (e) {
+        log('bootstrap: wallet DB migration preflight failed: $e');
+        return AppBootstrapState.blocked(
+          failureKind: AppBootstrapFailureKind.walletDbMigrationFailed,
+          failureMessage: _walletDbMigrationFailureMessage(e),
+        );
+      }
+    }
     final storedAccounts = await _readStoredAccounts(storage);
     final storedAccountsByUuid = {
       for (final account in storedAccounts) account.uuid: account,
@@ -304,6 +323,26 @@ Future<AppBootstrapState> loadAppBootstrap() async {
       failureMessage: 'Vizor could not load its startup state.',
     );
   }
+}
+
+String _walletDbMigrationFailureMessage(Object error) {
+  final message = error.toString().toLowerCase();
+  if (message.contains('seedrequired') ||
+      message.contains('seed is required') ||
+      message.contains('wallet seed is required')) {
+    return 'This wallet requires a database update that cannot be completed automatically.';
+  }
+  if (message.contains('seednotrelevant') ||
+      message.contains('seed is not relevant') ||
+      message.contains('not relevant to any derived accounts')) {
+    return 'The available wallet seed does not match the database update requirement.';
+  }
+  if (message.contains('sqlite') &&
+      (message.contains('not supported') ||
+          message.contains('database not supported'))) {
+    return 'The local SQLite version cannot open this wallet database.';
+  }
+  return 'The wallet database update did not complete.';
 }
 
 Future<void> _applyE2eBootstrapOverrides(AppSecureStore storage) async {
