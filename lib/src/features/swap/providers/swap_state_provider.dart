@@ -362,6 +362,7 @@ class SwapNotifier extends Notifier<SwapState> {
         supportedExternalAssets: supported,
         indicativeExternalPerZec:
             pricing?.externalPerZec ?? state.indicativeExternalPerZec,
+        indicativeUsdPrices: pricing?.usdPrices ?? state.indicativeUsdPrices,
         externalAsset: selected,
         reviewVisible: selectedChanged ? false : state.reviewVisible,
         clearReview: selectedChanged,

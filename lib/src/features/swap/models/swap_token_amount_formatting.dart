@@ -1,19 +1,17 @@
-import '../../domain/swap_contract.dart';
+import '../domain/swap_contract.dart';
 
-String? nearIntentsBaseUnitAmountText({
+String? swapBaseUnitAmountText({
   required String? value,
   required SwapAsset asset,
   required int decimals,
 }) {
   final raw = _cleanOptionalText(value);
   if (raw == null || !_isIntegerAmount(raw)) return null;
-  final amount = nearIntentsTrimDecimal(
-    nearIntentsBaseUnitsToDecimal(raw, decimals),
-  );
+  final amount = swapTrimDecimal(swapBaseUnitsToDecimal(raw, decimals));
   return '$amount ${asset.symbol}';
 }
 
-String? nearIntentsStatusAmountText({
+String? swapStatusAmountText({
   required String? formatted,
   required String? baseUnits,
   required SwapAsset asset,
@@ -21,16 +19,16 @@ String? nearIntentsStatusAmountText({
 }) {
   final formattedValue = _cleanOptionalText(formatted);
   if (formattedValue != null && double.tryParse(formattedValue) != null) {
-    return '${nearIntentsTrimDecimal(formattedValue)} ${asset.symbol}';
+    return '${swapTrimDecimal(formattedValue)} ${asset.symbol}';
   }
-  return nearIntentsBaseUnitAmountText(
+  return swapBaseUnitAmountText(
     value: baseUnits,
     asset: asset,
     decimals: decimals,
   );
 }
 
-double? nearIntentsStatusDecimalAmount({
+double? swapStatusDecimalAmount({
   required String? formatted,
   required String? baseUnits,
   required int decimals,
@@ -51,33 +49,33 @@ double? nearIntentsStatusDecimalAmount({
   return _baseUnitDecimalAmount(baseUnits, decimals: decimals);
 }
 
-String nearIntentsFeeAmountText(SwapAsset asset, double amount) {
+String swapFeeAmountText(SwapAsset asset, double amount) {
   if (!amount.isFinite || amount <= 0) return '0 ${asset.symbol}';
-  return '${nearIntentsPreciseAmountText(asset, amount)} ${asset.symbol}';
+  return '${swapPreciseAmountText(asset, amount)} ${asset.symbol}';
 }
 
-String nearIntentsPreciseAmountText(SwapAsset asset, double amount) {
+String swapPreciseAmountText(SwapAsset asset, double amount) {
   final fractionDigits = asset.decimals.clamp(0, 8).toInt();
   if (fractionDigits == 0) return amount.toStringAsFixed(0);
   final visibleMinimum = _minimumDecimalAmount(fractionDigits);
   if (amount < visibleMinimum) {
     return '<${visibleMinimum.toStringAsFixed(fractionDigits)}';
   }
-  return nearIntentsTrimDecimal(amount.toStringAsFixed(fractionDigits));
+  return swapTrimDecimal(amount.toStringAsFixed(fractionDigits));
 }
 
-String nearIntentsBaseUnitsToDecimal(String amount, int decimals) {
+String swapBaseUnitsToDecimal(String amount, int decimals) {
   final negative = amount.startsWith('-');
   final digits = negative ? amount.substring(1) : amount;
   if (decimals <= 0) return negative ? '-$digits' : digits;
   final padded = digits.padLeft(decimals + 1, '0');
   final whole = padded.substring(0, padded.length - decimals);
   final fraction = padded.substring(padded.length - decimals);
-  final decimal = nearIntentsTrimDecimal('$whole.$fraction');
+  final decimal = swapTrimDecimal('$whole.$fraction');
   return negative ? '-$decimal' : decimal;
 }
 
-String nearIntentsTrimDecimal(String value) {
+String swapTrimDecimal(String value) {
   var text = value.trim();
   if (!text.contains('.')) return text;
   while (text.endsWith('0')) {
@@ -90,7 +88,7 @@ String nearIntentsTrimDecimal(String value) {
 double? _baseUnitDecimalAmount(String? baseUnits, {required int decimals}) {
   final raw = _cleanOptionalText(baseUnits);
   if (raw == null || !_isIntegerAmount(raw)) return null;
-  return double.tryParse(nearIntentsBaseUnitsToDecimal(raw, decimals));
+  return double.tryParse(swapBaseUnitsToDecimal(raw, decimals));
 }
 
 String? _cleanOptionalText(String? value) {

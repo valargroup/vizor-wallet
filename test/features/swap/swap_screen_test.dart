@@ -4358,7 +4358,7 @@ void main() {
     tester,
   ) async {
     await _setDesktopViewport(tester);
-    final swapProvider = _FakeSwapProvider();
+    final swapProvider = _PricingSwapProvider(const [70.1733333333]);
 
     await tester.pumpWidget(
       _routerHarness(

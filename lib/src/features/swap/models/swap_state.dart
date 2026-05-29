@@ -53,6 +53,7 @@ class SwapState {
     this.slippageBps = defaultSwapSlippageBps,
     this.supportedExternalAssets = swapExternalAssets,
     this.indicativeExternalPerZec = const {},
+    this.indicativeUsdPrices = const {},
     this.reviewQuote,
     this.reviewAddressPlan,
     this.reviewAccountUuid,
@@ -84,6 +85,7 @@ class SwapState {
   final int slippageBps;
   final List<SwapAsset> supportedExternalAssets;
   final Map<SwapAsset, double> indicativeExternalPerZec;
+  final Map<SwapAsset, double> indicativeUsdPrices;
   final SwapQuote? reviewQuote;
   final SwapAddressPlan? reviewAddressPlan;
   final String? reviewAccountUuid;
@@ -295,6 +297,7 @@ class SwapState {
     int? slippageBps,
     List<SwapAsset>? supportedExternalAssets,
     Map<SwapAsset, double>? indicativeExternalPerZec,
+    Map<SwapAsset, double>? indicativeUsdPrices,
     SwapQuote? reviewQuote,
     SwapAddressPlan? reviewAddressPlan,
     String? reviewAccountUuid,
@@ -334,6 +337,7 @@ class SwapState {
           supportedExternalAssets ?? this.supportedExternalAssets,
       indicativeExternalPerZec:
           indicativeExternalPerZec ?? this.indicativeExternalPerZec,
+      indicativeUsdPrices: indicativeUsdPrices ?? this.indicativeUsdPrices,
       reviewQuote: clearReview ? null : reviewQuote ?? this.reviewQuote,
       reviewAddressPlan: clearReview
           ? null

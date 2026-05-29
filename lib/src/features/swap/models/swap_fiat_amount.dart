@@ -1,12 +1,33 @@
 import 'swap_models.dart';
+import 'swap_fiat_value_formatting.dart';
 
 double? swapUsdUnitPriceForAsset(SwapState state, {required SwapAsset asset}) {
-  if (_isUsdStable(asset)) return 1;
-  if (asset != SwapAsset.zec || !_isUsdStable(state.externalAsset)) {
-    return null;
+  return swapUsdUnitPriceFromPrices(state.indicativeUsdPrices, asset);
+}
+
+double? swapUsdValueForAsset(
+  SwapState state, {
+  required SwapAsset asset,
+  required double amount,
+}) {
+  if (!amount.isFinite || amount <= 0) return null;
+  final usdUnitPrice = swapUsdUnitPriceForAsset(state, asset: asset);
+  return usdUnitPrice == null ? null : amount * usdUnitPrice;
+}
+
+double? swapUsdUnitPriceFromPrices(
+  Map<SwapAsset, double> usdPrices,
+  SwapAsset asset,
+) {
+  final direct = _usableUnitPrice(usdPrices[asset]);
+  if (direct != null) return direct;
+  for (final entry in usdPrices.entries) {
+    if (entry.key.hasSameMarketAs(asset)) {
+      final price = _usableUnitPrice(entry.value);
+      if (price != null) return price;
+    }
   }
-  return state.indicativeExternalPerZec[state.externalAsset] ??
-      state.externalAsset.fallbackExternalPerZec;
+  return null;
 }
 
 String swapFiatDisplayText(
@@ -16,9 +37,9 @@ String swapFiatDisplayText(
 }) {
   final amount = double.tryParse(tokenAmountText.trim());
   if (amount == null || amount <= 0) return r'$0';
-  final usdUnitPrice = swapUsdUnitPriceForAsset(state, asset: asset);
-  if (usdUnitPrice == null) return r'$--';
-  return '\$${swapFormatFiatValue(amount * usdUnitPrice)}';
+  final usdValue = swapUsdValueForAsset(state, asset: asset, amount: amount);
+  if (usdValue == null) return r'$--';
+  return '\$${swapFormatFiatValue(usdValue)}';
 }
 
 String swapFiatInputTextFromTokenText(
@@ -28,9 +49,9 @@ String swapFiatInputTextFromTokenText(
 }) {
   final amount = double.tryParse(tokenAmountText.trim());
   if (amount == null || amount <= 0) return '';
-  final usdUnitPrice = swapUsdUnitPriceForAsset(state, asset: asset);
-  if (usdUnitPrice == null) return '';
-  return swapFormatFiatValue(amount * usdUnitPrice);
+  final usdValue = swapUsdValueForAsset(state, asset: asset, amount: amount);
+  if (usdValue == null) return '';
+  return swapFormatFiatValue(usdValue);
 }
 
 String? swapTokenAmountTextFromFiatText(
@@ -42,7 +63,7 @@ String? swapTokenAmountTextFromFiatText(
   if (fiatAmount == null || fiatAmount <= 0) return '';
   final usdUnitPrice = swapUsdUnitPriceForAsset(state, asset: asset);
   if (usdUnitPrice == null || usdUnitPrice <= 0) return null;
-  return swapFormatTokenAmountDown(asset, fiatAmount / usdUnitPrice);
+  return asset.formatAmountDown(fiatAmount / usdUnitPrice);
 }
 
 String swapTokenAmountDisplayText({
@@ -54,53 +75,6 @@ String swapTokenAmountDisplayText({
   return '$amount ${asset.symbol}';
 }
 
-String swapFormatFiatValue(double value) {
-  if (value <= 0) return '0';
-  final digits = value >= 100
-      ? 0
-      : value >= 1
-      ? 2
-      : 4;
-  var text = _truncateToFractionDigits(value, digits).toStringAsFixed(digits);
-  while (text.contains('.') && text.endsWith('0')) {
-    text = text.substring(0, text.length - 1);
-  }
-  if (text.endsWith('.')) {
-    text = text.substring(0, text.length - 1);
-  }
-  return text;
-}
-
-String swapFormatTokenAmountDown(SwapAsset asset, double value) {
-  if (value <= 0) return asset.formatAmount(0);
-  final digits = _displayFractionDigitsForAsset(asset);
-  return _truncateToFractionDigits(value, digits).toStringAsFixed(digits);
-}
-
-double _truncateToFractionDigits(double value, int fractionDigits) {
-  if (!value.isFinite || value <= 0) return 0;
-  var factor = 1.0;
-  for (var i = 0; i < fractionDigits; i++) {
-    factor *= 10;
-  }
-  return (value * factor).truncateToDouble() / factor;
-}
-
-int _displayFractionDigitsForAsset(SwapAsset asset) {
-  final normalized = asset.symbol.toUpperCase();
-  if (normalized == 'ZEC') return 4;
-  if (normalized == 'BTC' || normalized == 'WBTC' || asset.decimals == 8) {
-    return 8;
-  }
-  if (normalized == 'ETH' || normalized == 'SOL' || normalized == 'NEAR') {
-    return 4;
-  }
-  return 2;
-}
-
-bool _isUsdStable(SwapAsset asset) {
-  return switch (asset.symbol.toUpperCase()) {
-    'USDC' || 'USDT' || 'DAI' => true,
-    _ => false,
-  };
+double? _usableUnitPrice(double? value) {
+  return value != null && value.isFinite && value > 0 ? value : null;
 }

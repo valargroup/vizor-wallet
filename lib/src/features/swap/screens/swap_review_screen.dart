@@ -13,8 +13,10 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
-import '../models/swap_models.dart';
 import '../models/swap_activity_navigation.dart';
+import '../models/swap_fiat_amount.dart';
+import '../models/swap_fiat_value_formatting.dart';
+import '../models/swap_models.dart';
 import '../providers/swap_state_provider.dart';
 import '../widgets/swap_near_intents_attribution.dart';
 import '../widgets/swap_review_page_content.dart';
@@ -189,12 +191,14 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
                                     payFiatTextOverride:
                                         _reviewFiatTextForAsset(
                                           swapState,
+                                          quote: quote,
                                           asset: quote.sellAsset,
                                           amount: quote.sellAmount,
                                         ),
                                     receiveFiatTextOverride:
                                         _reviewFiatTextForAsset(
                                           swapState,
+                                          quote: quote,
                                           asset: quote.receiveAsset,
                                           amount: quote.receiveAmount,
                                         ),
@@ -235,52 +239,31 @@ class _SwapReviewScreenState extends ConsumerState<SwapReviewScreen> {
 
 String? _reviewFiatTextForAsset(
   SwapState state, {
+  required SwapQuote quote,
   required SwapAsset asset,
   required double amount,
 }) {
-  final usdValue = _reviewUsdValueForAsset(state, asset: asset, amount: amount);
-  return usdValue == null ? null : _formatReviewUsd(usdValue);
+  final usdValue =
+      _reviewQuoteUsdValueForAsset(quote, asset: asset, amount: amount) ??
+      swapUsdValueForAsset(state, asset: asset, amount: amount);
+  return usdValue == null ? null : swapFormatCompactFiatValue(usdValue);
 }
 
-double? _reviewUsdValueForAsset(
-  SwapState state, {
+double? _reviewQuoteUsdValueForAsset(
+  SwapQuote quote, {
   required SwapAsset asset,
   required double amount,
 }) {
-  if (!amount.isFinite || amount <= 0) return 0;
-  if (_isUsdLike(asset)) return amount;
-  if (asset.isNativeZec && _isUsdLike(state.externalAsset)) {
-    final zecUsd =
-        state.indicativeExternalPerZec[state.externalAsset] ??
-        state.externalAsset.fallbackExternalPerZec;
-    return amount * zecUsd;
+  final basis = quote.fiatValueBasis;
+  if (basis == null) return null;
+  if (asset == quote.sellAsset || asset.hasSameMarketAs(quote.sellAsset)) {
+    return basis.sellUsdValue(amount);
+  }
+  if (asset == quote.receiveAsset ||
+      asset.hasSameMarketAs(quote.receiveAsset)) {
+    return basis.receiveUsdValue(amount);
   }
   return null;
-}
-
-bool _isUsdLike(SwapAsset asset) {
-  final symbol = asset.symbol.toUpperCase();
-  return symbol == 'USDC' || symbol == 'USDT' || symbol == 'DAI';
-}
-
-String _formatReviewUsd(double value) {
-  if (!value.isFinite || value <= 0) return r'$0.00';
-  if (value >= 1000000) {
-    return '\$${_trimFixed(value / 1000000, 3)}M';
-  }
-  if (value >= 1000) {
-    return '\$${_trimFixed(value / 1000, 2)}K';
-  }
-  return '\$${value.toStringAsFixed(2)}';
-}
-
-String _trimFixed(double value, int fractionDigits) {
-  var text = value.toStringAsFixed(fractionDigits);
-  while (text.contains('.') && text.endsWith('0')) {
-    text = text.substring(0, text.length - 1);
-  }
-  if (text.endsWith('.')) text = text.substring(0, text.length - 1);
-  return text;
 }
 
 bool _reviewQuoteExceedsAvailableZec(SwapQuote quote, BigInt availableZatoshi) {

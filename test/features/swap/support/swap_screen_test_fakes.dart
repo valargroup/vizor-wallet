@@ -115,6 +115,7 @@ class _FakeSwapProvider implements SwapProvider {
               refundFeeText: '0.0001 ZEC',
             )
           : null,
+      fiatValueBasis: _fakeFiatValueBasis(estimate),
       depositInstruction: SwapDepositInstruction(
         asset: estimate.sellAsset,
         address: request.direction == SwapDirection.zecToExternal
@@ -217,6 +218,22 @@ class _FakeSwapProvider implements SwapProvider {
   }
 }
 
+SwapFiatValueBasis _fakeFiatValueBasis(SwapQuote quote) {
+  return SwapFiatValueBasis(
+    capturedAt: DateTime.utc(2026, 5, 7, 10),
+    sellUsdUnitPrice: _fakeUsdUnitPrice(quote.sellAsset),
+    receiveUsdUnitPrice: _fakeUsdUnitPrice(quote.receiveAsset),
+  );
+}
+
+double? _fakeUsdUnitPrice(SwapAsset asset) {
+  if (asset.isNativeZec) return 70.1733333333;
+  return switch (asset.symbol.toUpperCase()) {
+    'USDC' || 'USDT' || 'DAI' => 1,
+    _ => null,
+  };
+}
+
 BigInt _fakeBaseUnits(SwapAsset asset, double amount) {
   final fixed = amount.toStringAsFixed(asset.decimals);
   final parts = fixed.split('.');
@@ -299,6 +316,7 @@ class _DriftingExactOutputSwapProvider extends _FakeSwapProvider {
       minimumReceiveTextOverride: quote.minimumReceiveText,
       rateTextOverride: quote.rateText,
       providerRefundInfo: quote.providerRefundInfo,
+      fiatValueBasis: quote.fiatValueBasis,
     );
   }
 }
@@ -333,6 +351,7 @@ class _DriftingExactInputSwapProvider extends _FakeSwapProvider {
       minimumReceiveTextOverride: '122.83 USDC',
       rateTextOverride: '1 ZEC = 82.30 USDC',
       providerRefundInfo: quote.providerRefundInfo,
+      fiatValueBasis: quote.fiatValueBasis,
     );
   }
 }
@@ -511,6 +530,7 @@ class _LongQuoteSwapProvider extends _FakeSwapProvider {
       sellAmountTextOverride: '12345.678901 ${estimate.sellAsset.symbol}',
       receiveEstimateTextOverride: '175.942100 ${estimate.receiveAsset.symbol}',
       minimumReceiveTextOverride: '174.812300 ${estimate.receiveAsset.symbol}',
+      fiatValueBasis: estimate.fiatValueBasis,
       depositInstruction: SwapDepositInstruction(
         asset: estimate.sellAsset,
         address:

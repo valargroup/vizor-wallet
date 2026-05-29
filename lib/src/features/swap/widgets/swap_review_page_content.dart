@@ -10,6 +10,7 @@ import '../domain/swap_address_plan.dart';
 import '../domain/swap_contract.dart';
 import '../models/swap_address_formatting.dart';
 import '../models/swap_detail_tooltips.dart';
+import '../models/swap_fiat_value_formatting.dart';
 import 'swap_amount_text.dart';
 import 'swap_asset_icon.dart';
 
@@ -637,40 +638,17 @@ String _refundOrRecipientValue(SwapAddressPlan addressPlan) {
 }
 
 String _payFiatText(SwapQuote quote) {
-  if (_isUsdLike(quote.sellAsset)) return _formatUsd(quote.sellAmount);
-  if (_isUsdLike(quote.receiveAsset)) return _formatUsd(quote.receiveAmount);
-  return r'$--';
+  return _quoteFiatText(quote.fiatValueBasis?.sellUsdValue(quote.sellAmount));
 }
 
 String _receiveFiatText(SwapQuote quote) {
-  if (_isUsdLike(quote.receiveAsset)) return _formatUsd(quote.receiveAmount);
-  if (_isUsdLike(quote.sellAsset)) return _formatUsd(quote.sellAmount);
-  return r'$--';
+  return _quoteFiatText(
+    quote.fiatValueBasis?.receiveUsdValue(quote.receiveAmount),
+  );
 }
 
-bool _isUsdLike(SwapAsset asset) {
-  final symbol = asset.symbol.toUpperCase();
-  return symbol == 'USDC' || symbol == 'USDT' || symbol == 'DAI';
-}
-
-String _formatUsd(double value) {
-  if (!value.isFinite || value <= 0) return r'$0.00';
-  if (value >= 1000000) {
-    return '\$${_trimFixed(value / 1000000, 3)}M';
-  }
-  if (value >= 1000) {
-    return '\$${_trimFixed(value / 1000, 2)}K';
-  }
-  return '\$${value.toStringAsFixed(2)}';
-}
-
-String _trimFixed(double value, int fractionDigits) {
-  var text = value.toStringAsFixed(fractionDigits);
-  while (text.contains('.') && text.endsWith('0')) {
-    text = text.substring(0, text.length - 1);
-  }
-  if (text.endsWith('.')) text = text.substring(0, text.length - 1);
-  return text;
+String _quoteFiatText(double? value) {
+  return value == null ? r'$--' : swapFormatCompactFiatValue(value);
 }
 
 String _slippageToleranceText(SwapQuote quote) {

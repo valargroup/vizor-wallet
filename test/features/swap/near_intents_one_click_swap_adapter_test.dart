@@ -72,6 +72,45 @@ void main() {
     expect(quote.depositInstruction.deadline, DateTime.utc(2026, 5, 7, 12));
   });
 
+  test('quote captures USDC token price from token response', () async {
+    final transport = _FakeOneClickTransport([
+      _FakeResponse.get(
+        '/v0/tokens',
+        _tokensWithPrices('72.5', usdcPrice: '0.98'),
+      ),
+      _FakeResponse.post(
+        '/v0/quote',
+        _quoteResponse(
+          originAsset: 'nep141:zec.omft.near',
+          destinationAsset: 'nep141:usdc.example',
+          amountIn: '100000000',
+          amountInFormatted: '1',
+          amountOutFormatted: '72',
+          minAmountOut: '71640000',
+          depositAddress: 't1deposit',
+          status: null,
+        ),
+      ),
+    ]);
+    final provider = NearIntentsOneClickSwapAdapter(
+      transport: transport,
+      now: () => DateTime.utc(2026, 5, 7, 10),
+    );
+
+    final quote = await provider.quote(
+      const SwapQuoteRequest(
+        direction: SwapDirection.zecToExternal,
+        externalAsset: SwapAsset.usdc,
+        sellAmount: 1,
+        destination: '0xrecipient',
+        refundAddress: 'u1refund',
+      ),
+    );
+
+    expect(quote.fiatValueBasis?.sellUsdUnitPrice, 72.5);
+    expect(quote.fiatValueBasis?.receiveUsdUnitPrice, 0.98);
+  });
+
   test(
     'quote posts exact-output payload using receive asset decimals',
     () async {
@@ -1454,7 +1493,10 @@ const _tokensWithDuplicateEthUsdc = [
   },
 ];
 
-List<Map<String, Object?>> _tokensWithPrices(String zecPrice) {
+List<Map<String, Object?>> _tokensWithPrices(
+  String zecPrice, {
+  String usdcPrice = '1',
+}) {
   return [
     {
       'assetId': 'nep141:zec.omft.near',
@@ -1468,7 +1510,7 @@ List<Map<String, Object?>> _tokensWithPrices(String zecPrice) {
       'decimals': 6,
       'blockchain': 'eth',
       'symbol': 'USDC',
-      'price': '1',
+      'price': usdcPrice,
     },
   ];
 }

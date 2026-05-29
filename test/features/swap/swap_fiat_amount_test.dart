@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_fiat_amount.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_fiat_value_formatting.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 
 void main() {
@@ -49,6 +50,36 @@ void main() {
     );
   });
 
+  test('uses token price instead of assuming stablecoins are one dollar', () {
+    final state = _stateWithUsdRate(70, usdcUsdPrice: 0.98);
+
+    expect(
+      swapFiatDisplayText(state, asset: SwapAsset.usdc, tokenAmountText: '10'),
+      r'$9.8',
+    );
+    expect(
+      swapTokenAmountTextFromFiatText(
+        state,
+        asset: SwapAsset.usdc,
+        fiatAmountText: '98',
+      ),
+      '100.00',
+    );
+  });
+
+  test('does not derive fiat values from route rates without unit prices', () {
+    final state = _stateWithUsdRate(70, zecUsdPrice: null, usdcUsdPrice: null);
+
+    expect(
+      swapFiatDisplayText(state, asset: SwapAsset.zec, tokenAmountText: '1'),
+      r'$--',
+    );
+    expect(
+      swapFiatDisplayText(state, asset: SwapAsset.usdc, tokenAmountText: '70'),
+      r'$--',
+    );
+  });
+
   test('fiat conversion never rounds executable token amount up', () {
     final state = _stateWithUsdRate(70);
 
@@ -86,9 +117,26 @@ void main() {
       isNull,
     );
   });
+
+  test('formats compact fiat display values', () {
+    expect(swapFormatCompactFiatValue(0), r'$0.00');
+    expect(swapFormatCompactFiatValue(1234.5), r'$1.23K');
+    expect(swapFormatCompactFiatValue(1234567), r'$1.235M');
+  });
 }
 
-SwapState _stateWithUsdRate(double usdcPerZec) {
+SwapState _stateWithUsdRate(
+  double usdcPerZec, {
+  double? zecUsdPrice = 70,
+  double? usdcUsdPrice = 1,
+}) {
+  final usdPrices = <SwapAsset, double>{};
+  if (zecUsdPrice != null) {
+    usdPrices[SwapAsset.zec] = zecUsdPrice;
+  }
+  if (usdcUsdPrice != null) {
+    usdPrices[SwapAsset.usdc] = usdcUsdPrice;
+  }
   return SwapState(
     direction: SwapDirection.zecToExternal,
     amountText: '',
@@ -98,5 +146,6 @@ SwapState _stateWithUsdRate(double usdcPerZec) {
     reviewVisible: false,
     intents: const [],
     indicativeExternalPerZec: {SwapAsset.usdc: usdcPerZec},
+    indicativeUsdPrices: usdPrices,
   );
 }

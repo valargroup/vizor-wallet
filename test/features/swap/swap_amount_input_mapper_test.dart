@@ -64,6 +64,7 @@ SwapState _swapState({
   String amountText = '',
   String receiveAmountText = '',
   Map<SwapAsset, double> indicativeExternalPerZec = const {},
+  Map<SwapAsset, double>? indicativeUsdPrices,
 }) {
   return SwapState(
     direction: direction,
@@ -73,6 +74,8 @@ SwapState _swapState({
     destinationText: '0xrecipient',
     externalAsset: SwapAsset.usdc,
     indicativeExternalPerZec: indicativeExternalPerZec,
+    indicativeUsdPrices:
+        indicativeUsdPrices ?? {SwapAsset.zec: 70, SwapAsset.usdc: 1},
     reviewVisible: false,
     intents: const [],
   );

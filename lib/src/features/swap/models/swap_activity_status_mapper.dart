@@ -1,6 +1,7 @@
 import '../../../core/profile_pictures.dart';
 import 'swap_address_formatting.dart';
 import 'swap_detail_tooltips.dart';
+import 'swap_fiat_value_formatting.dart';
 import 'swap_models.dart';
 import 'swap_status_presentation.dart';
 
@@ -339,7 +340,9 @@ String _swapActivityFiatTextForAsset({
     _SwapActivityAmountSide.sell => fiatValueBasis.sellUsdValue(amount),
     _SwapActivityAmountSide.receive => fiatValueBasis.receiveUsdValue(amount),
   };
-  return capturedValue == null ? r'$--' : _formatActivityUsd(capturedValue);
+  return capturedValue == null
+      ? r'$--'
+      : swapFormatCompactFiatValue(capturedValue);
 }
 
 enum _SwapActivityAmountSide { sell, receive }
@@ -512,13 +515,6 @@ double? _numericAmount(String amountText) {
   final raw = amountText.split(RegExp(r'\s+')).first.replaceAll(',', '').trim();
   final amount = double.tryParse(raw);
   return amount == null || !amount.isFinite ? null : amount;
-}
-
-String _formatActivityUsd(double value) {
-  if (!value.isFinite || value <= 0) return r'$0.00';
-  if (value >= 1000000) return '\$${(value / 1000000).toStringAsFixed(2)}M';
-  if (value >= 1000) return '\$${(value / 1000).toStringAsFixed(2)}K';
-  return '\$${value.toStringAsFixed(2)}';
 }
 
 const _monthNames = <String>[
