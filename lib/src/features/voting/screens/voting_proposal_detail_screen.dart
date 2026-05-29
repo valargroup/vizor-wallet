@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/formatting/number_format.dart';
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_main_sidebar.dart';
 import '../../../core/navigation/app_back_resolver.dart';
@@ -520,7 +521,7 @@ class _PollSummary extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                '#${_formatHeight(snapshotHeight)}',
+                '#${formatGroupedInteger(snapshotHeight)}',
                 style: AppTypography.headlineMedium.copyWith(
                   color: colors.text.accent,
                   fontFamily: 'Geist',
@@ -781,7 +782,7 @@ class _PendingVoteContent extends StatelessWidget {
                       ),
                       const SizedBox(width: AppSpacing.sm),
                       Text(
-                        '#${_formatHeight(snapshotHeight)}',
+                        '#${formatGroupedInteger(snapshotHeight)}',
                         style: AppTypography.headlineSmall.copyWith(
                           color: colors.text.accent,
                         ),
@@ -866,7 +867,7 @@ class _VotedPollHeader extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.sm),
             Text(
-              '#${_formatHeight(snapshotHeight)}',
+              '#${formatGroupedInteger(snapshotHeight)}',
               style: AppTypography.headlineSmall.copyWith(
                 color: colors.text.accent,
               ),
@@ -1297,17 +1298,6 @@ DateTime? _parseDate(Object? value) {
   final numeric = num.tryParse(text);
   if (numeric != null) return _parseDate(numeric);
   return DateTime.tryParse(text);
-}
-
-String _formatHeight(int height) {
-  final text = height.toString();
-  final buffer = StringBuffer();
-  for (var i = 0; i < text.length; i++) {
-    final remaining = text.length - i;
-    buffer.write(text[i]);
-    if (remaining > 1 && remaining % 3 == 1) buffer.write(',');
-  }
-  return buffer.toString();
 }
 
 String _daysLeftLabel(DateTime endDate) {
