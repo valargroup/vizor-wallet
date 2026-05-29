@@ -112,6 +112,45 @@ void main() {
   });
 
   test(
+    'quote derives minimum receive from response slippage if min amount is missing',
+    () async {
+      final transport = _FakeOneClickTransport([
+        _FakeResponse.get('/v0/tokens', _tokensWithPrices('70')),
+        _FakeResponse.post(
+          '/v0/quote',
+          _quoteResponse(
+            originAsset: 'nep141:zec.omft.near',
+            destinationAsset: 'nep141:usdc.example',
+            amountInFormatted: '1',
+            amountOutFormatted: '100',
+            slippageTolerance: 125,
+            depositAddress: 't1deposit',
+            status: null,
+          ),
+        ),
+      ]);
+      final provider = NearIntentsOneClickSwapAdapter(
+        transport: transport,
+        now: () => DateTime.utc(2026, 5, 7, 10),
+      );
+
+      final quote = await provider.quote(
+        const SwapQuoteRequest(
+          direction: SwapDirection.zecToExternal,
+          externalAsset: SwapAsset.usdc,
+          sellAmount: 1,
+          destination: '0xrecipient',
+          refundAddress: 'u1refund',
+          slippageBps: 200,
+        ),
+      );
+
+      expect(quote.minimumReceiveText, '98.75 USDC');
+      expect(quote.slippageToleranceText, '0.0125 ZEC (1.3%)');
+    },
+  );
+
+  test(
     'quote posts exact-output payload using receive asset decimals',
     () async {
       final transport = _FakeOneClickTransport([
@@ -980,6 +1019,61 @@ void main() {
     );
   });
 
+  test(
+    'status derives minimum receive from swap details slippage when min amount is missing',
+    () async {
+      final transport = _FakeOneClickTransport([
+        _FakeResponse.get('/v0/tokens', _tokens),
+        _FakeResponse.get(
+          '/v0/status',
+          _quoteResponse(
+            originAsset: 'nep141:zec.omft.near',
+            destinationAsset: 'nep141:usdc.example',
+            amountInFormatted: '1',
+            amountOutFormatted: '100',
+            slippageTolerance: 100,
+            depositAddress: 'status-deposit',
+            status: 'PROCESSING',
+            swapDetails: {'slippage': 200},
+          ),
+        ),
+      ]);
+      final provider = NearIntentsOneClickSwapAdapter(transport: transport);
+
+      final status = await provider.getStatus('status-deposit');
+
+      expect(status.minimumReceiveText, '98 USDC');
+      expect(status.slippageToleranceText, '0.02 ZEC (2.0%)');
+    },
+  );
+
+  test(
+    'status reports unavailable minimum receive when min amount and slippage are missing',
+    () async {
+      final transport = _FakeOneClickTransport([
+        _FakeResponse.get('/v0/tokens', _tokens),
+        _FakeResponse.get(
+          '/v0/status',
+          _quoteResponse(
+            originAsset: 'nep141:zec.omft.near',
+            destinationAsset: 'nep141:usdc.example',
+            amountInFormatted: '1',
+            amountOutFormatted: '100',
+            slippageTolerance: null,
+            depositAddress: 'status-deposit',
+            status: 'PROCESSING',
+          ),
+        ),
+      ]);
+      final provider = NearIntentsOneClickSwapAdapter(transport: transport);
+
+      final status = await provider.getStatus('status-deposit');
+
+      expect(status.minimumReceiveText, 'Not reported');
+      expect(status.slippageToleranceText, 'Not reported');
+    },
+  );
+
   group('status mapping', () {
     for (final scenario in _statusScenarios) {
       test('${scenario.oneClickStatus} maps to ${scenario.expectedStatus.name} '
@@ -1526,7 +1620,7 @@ Map<String, Object?> _quoteResponse({
   required String amountInFormatted,
   String amountOut = '105250000',
   required String amountOutFormatted,
-  required String minAmountOut,
+  String? minAmountOut,
   required String depositAddress,
   required String? status,
   String? depositMemo,
@@ -1537,6 +1631,7 @@ Map<String, Object?> _quoteResponse({
   String quoteRequestDeadline = '2026-05-07T12:00:00Z',
   String quoteDeadline = '2026-05-07T12:00:00Z',
   String timeWhenInactive = '2026-05-07T10:08:00Z',
+  int? slippageTolerance = 100,
   Map<String, Object?>? swapDetails,
 }) {
   final quote = {
@@ -1546,7 +1641,7 @@ Map<String, Object?> _quoteResponse({
     'quoteRequest': {
       'dry': false,
       'swapType': swapType,
-      'slippageTolerance': 100,
+      'slippageTolerance': ?slippageTolerance,
       'originAsset': originAsset,
       'depositType': 'ORIGIN_CHAIN',
       'destinationAsset': destinationAsset,
@@ -1564,7 +1659,7 @@ Map<String, Object?> _quoteResponse({
       'minAmountIn': ?minAmountIn,
       'amountOut': amountOut,
       'amountOutFormatted': amountOutFormatted,
-      'minAmountOut': minAmountOut,
+      'minAmountOut': ?minAmountOut,
       'timeEstimate': 120,
       'depositAddress': depositAddress,
       'depositMemo': depositMemo,

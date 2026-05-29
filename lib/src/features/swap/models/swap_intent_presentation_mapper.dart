@@ -24,7 +24,6 @@ SwapIntent _swapIntentFromRecord(SwapIntentRecord record) {
     totalFeesText: record.totalFeesText,
     realisedSlippageText: record.realisedSlippageText,
     slippageToleranceText: record.slippageToleranceText,
-    priceProtectionText: record.priceProtectionText,
     minimumReceiveText: record.minimumReceiveText,
     providerStatusRaw: record.providerStatusRaw,
     nearIntentHash: record.nearIntentHash,
@@ -92,8 +91,6 @@ SwapIntent swapIntentFromSnapshot({
     realisedSlippageText: snapshot.realisedSlippageText,
     slippageToleranceText:
         snapshot.slippageToleranceText ?? quote.slippageToleranceText,
-    priceProtectionText:
-        snapshot.priceProtectionText ?? quote.priceProtectionText,
     minimumReceiveText: snapshot.minimumReceiveText ?? quote.minimumReceiveText,
     providerStatusRaw: snapshot.providerStatusRaw,
     nearIntentHash: snapshot.nearIntentHash,
@@ -207,7 +204,6 @@ SwapIntent updateSwapIntentFromSnapshot(
     totalFeesText: snapshot.totalFeesText,
     realisedSlippageText: snapshot.realisedSlippageText,
     slippageToleranceText: snapshot.slippageToleranceText,
-    priceProtectionText: snapshot.priceProtectionText,
     minimumReceiveText: snapshot.minimumReceiveText,
     providerStatusRaw: snapshot.providerStatusRaw,
     nearIntentHash: snapshot.nearIntentHash,

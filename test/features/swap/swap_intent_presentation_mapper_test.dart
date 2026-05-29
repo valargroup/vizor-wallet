@@ -22,7 +22,6 @@ void main() {
         totalFeesText: '0.00002 ZEC',
         realisedSlippageText: '0.000758 USDC (0.07%)',
         slippageToleranceText: '0.00003 ZEC (1.0%)',
-        priceProtectionText: '0.0021 USDC (1.0%)',
         minimumReceiveText: '0.2079 USDC',
         providerStatusRaw: 'PROCESSING',
         providerRefundInfo: const SwapProviderRefundInfo(
@@ -41,7 +40,6 @@ void main() {
     expect(intent.totalFeesText, '0.00002 ZEC');
     expect(intent.realisedSlippageText, '0.000758 USDC (0.07%)');
     expect(intent.slippageToleranceText, '0.00003 ZEC (1.0%)');
-    expect(intent.priceProtectionText, '0.0021 USDC (1.0%)');
     expect(intent.minimumReceiveText, '0.2079 USDC');
     expect(_receiptValue(intent, 'Deposit tx'), 'deposit-txid');
     expect(_receiptValue(intent, 'Provider status'), 'PROCESSING');
@@ -96,7 +94,6 @@ void main() {
         totalFeesText: '0.00002 ZEC',
         realisedSlippageText: '0.000758 USDC (0.07%)',
         slippageToleranceText: '0.00003 ZEC (1.0%)',
-        priceProtectionText: '0.0021 USDC (1.0%)',
         minimumReceiveText: '0.2079 USDC',
       ),
       updatedAt: checkedAt,
@@ -111,7 +108,6 @@ void main() {
     expect(updated.totalFeesText, '0.00002 ZEC');
     expect(updated.realisedSlippageText, '0.000758 USDC (0.07%)');
     expect(updated.slippageToleranceText, '0.00003 ZEC (1.0%)');
-    expect(updated.priceProtectionText, '0.0021 USDC (1.0%)');
     expect(updated.minimumReceiveText, '0.2079 USDC');
     expect(updated.createdAt, createdAt);
     expect(updated.updatedAt, checkedAt);

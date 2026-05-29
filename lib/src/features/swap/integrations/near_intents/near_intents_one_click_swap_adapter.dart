@@ -9,6 +9,8 @@ part 'near_intents_one_click_json.dart';
 part 'near_intents_one_click_models.dart';
 part 'near_intents_one_click_transport.dart';
 
+const _notReportedText = 'Not reported';
+
 class NearIntentsOneClickSwapAdapter
     implements SwapProvider, SwapPricingProvider {
   NearIntentsOneClickSwapAdapter({
@@ -117,6 +119,10 @@ class NearIntentsOneClickSwapAdapter
       mode: request.mode,
       sellToken: sellToken,
       receiveToken: receiveToken,
+      fallbackSlippageBps:
+          quoteResponse.quoteRequest.slippageToleranceBps ??
+          request.slippageBps ??
+          slippageBps,
     );
   }
 
@@ -236,6 +242,8 @@ class NearIntentsOneClickSwapAdapter
       mode: request.mode,
       sellToken: sellToken,
       receiveToken: receiveToken,
+      fallbackSlippageBps:
+          response.swapDetails?.slippageBps ?? request.slippageToleranceBps,
     );
     final status = _statusFromOneClick(response.status, quote);
     final statusRefundInfo = _statusRefundInfo(
@@ -289,7 +297,6 @@ class NearIntentsOneClickSwapAdapter
         receiveToken: receiveToken,
       ),
       slippageToleranceText: quote.slippageToleranceText,
-      priceProtectionText: quote.priceProtectionText,
       minimumReceiveText: quote.minimumReceiveText,
       providerStatusRaw: response.status,
       nearIntentHash: response.swapDetails?.intentHash,
@@ -307,17 +314,20 @@ class NearIntentsOneClickSwapAdapter
     required SwapQuoteMode mode,
     required _OneClickToken sellToken,
     required _OneClickToken receiveToken,
+    required int? fallbackSlippageBps,
   }) {
     final quote = response.quote;
     final sellAsset = direction.fromAsset(externalAsset);
     final receiveAsset = direction.toAsset(externalAsset);
     final sellAmount = _parseAmount(quote.amountInFormatted, 'amountIn');
     final receiveAmount = _parseAmount(quote.amountOutFormatted, 'amountOut');
-    final minReceiveText = quote.minAmountOut == null
-        ? receiveAsset.formatAmount(receiveAmount * 0.995)
-        : swapBaseUnitsToDecimal(quote.minAmountOut!, receiveToken.decimals);
-    final minimumReceiveAmount =
-        double.tryParse(minReceiveText) ?? receiveAmount * 0.995;
+    final minimumReceive = _minimumReceiveDisplay(
+      quote,
+      receiveAsset: receiveAsset,
+      receiveToken: receiveToken,
+      receiveAmount: receiveAmount,
+      fallbackSlippageBps: fallbackSlippageBps,
+    );
     final userDeadline = response.quoteRequest.deadline;
     final quoteExpiresAt = _parseIsoDateTime(
       userDeadline ?? quote.timeWhenInactive,
@@ -336,7 +346,7 @@ class NearIntentsOneClickSwapAdapter
       mode: mode,
       sellAmount: sellAmount,
       receiveAmount: receiveAmount,
-      minimumReceiveAmount: minimumReceiveAmount,
+      minimumReceiveAmount: minimumReceive.amount,
       providerLabel: providerLabel,
       feeLabel: 'Included in shown rate',
       totalFeesText: _appFeesText(
@@ -362,8 +372,9 @@ class NearIntentsOneClickSwapAdapter
           '${swapTrimDecimal(quote.amountInFormatted)} ${sellAsset.symbol}',
       receiveEstimateTextOverride:
           '${swapTrimDecimal(quote.amountOutFormatted)} ${receiveAsset.symbol}',
-      minimumReceiveTextOverride:
-          '${swapTrimDecimal(minReceiveText)} ${receiveAsset.symbol}',
+      minimumReceiveTextOverride: minimumReceive.text,
+      slippageToleranceTextOverride:
+          minimumReceive.slippageToleranceTextOverride,
       rateTextOverride: _rateText(
         sellAsset: sellAsset,
         sellAmount: sellAmount,
@@ -382,6 +393,41 @@ class NearIntentsOneClickSwapAdapter
         receiveAsset: receiveAsset,
         receiveToken: receiveToken,
       ),
+    );
+  }
+
+  _MinimumReceiveDisplay _minimumReceiveDisplay(
+    _OneClickQuote quote, {
+    required SwapAsset receiveAsset,
+    required _OneClickToken receiveToken,
+    required double receiveAmount,
+    required int? fallbackSlippageBps,
+  }) {
+    final minAmountOut = quote.minAmountOut;
+    if (minAmountOut != null) {
+      final text = swapBaseUnitsToDecimal(minAmountOut, receiveToken.decimals);
+      return _MinimumReceiveDisplay(
+        amount: double.tryParse(text) ?? receiveAmount,
+        text: '${swapTrimDecimal(text)} ${receiveAsset.symbol}',
+      );
+    }
+
+    final slippageBps = fallbackSlippageBps;
+    if (slippageBps == null || slippageBps < 0) {
+      return _MinimumReceiveDisplay(
+        amount: receiveAmount,
+        text: _notReportedText,
+        slippageToleranceTextOverride: _notReportedText,
+      );
+    }
+
+    final minimumReceiveAmount = receiveAmount * (1 - slippageBps / 10000);
+    final minimumReceiveText = swapTrimDecimal(
+      receiveAsset.formatAmountDown(minimumReceiveAmount),
+    );
+    return _MinimumReceiveDisplay(
+      amount: minimumReceiveAmount,
+      text: '$minimumReceiveText ${receiveAsset.symbol}',
     );
   }
 
@@ -752,4 +798,16 @@ class NearIntentsOneClickSwapAdapter
     final deadline = _now().toUtc().add(offset);
     return deadline.toIso8601String().replaceFirst(RegExp(r'\.\d+Z$'), 'Z');
   }
+}
+
+class _MinimumReceiveDisplay {
+  const _MinimumReceiveDisplay({
+    required this.amount,
+    required this.text,
+    this.slippageToleranceTextOverride,
+  });
+
+  final double amount;
+  final String text;
+  final String? slippageToleranceTextOverride;
 }

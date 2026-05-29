@@ -242,6 +242,7 @@ class SwapActivityTracker {
 
     var updatedIntents = currentIntents;
     var didRefresh = false;
+    final refreshedIds = <String>{};
     String? refreshError;
 
     for (final intent in currentIntents) {
@@ -271,6 +272,7 @@ class SwapActivityTracker {
           intent.copyWith(lastStatusCheckedAt: checkedAt, statusError: message),
         );
       }
+      refreshedIds.add(intent.id);
       didRefresh = true;
     }
 
@@ -278,7 +280,11 @@ class SwapActivityTracker {
         updatedIntents.any(
           (intent) => _isPersistableIntent(intent, accountUuid: accountUuid),
         )) {
-      await saveIntents(accountUuid: accountUuid, intents: updatedIntents);
+      await _saveRefreshedIntents(
+        accountUuid: accountUuid,
+        refreshedIntents: updatedIntents,
+        refreshedIds: refreshedIds,
+      );
     }
     return SwapActivityRefreshResult(
       intents: updatedIntents,
@@ -286,6 +292,21 @@ class SwapActivityTracker {
       refreshError: refreshError,
       didRefresh: didRefresh,
     );
+  }
+
+  Future<void> _saveRefreshedIntents({
+    required String accountUuid,
+    required List<SwapIntent> refreshedIntents,
+    required Set<String> refreshedIds,
+  }) async {
+    final latestIntents = await loadIntents(accountUuid: accountUuid);
+    var mergedIntents = latestIntents;
+    for (final id in refreshedIds) {
+      final refreshed = refreshedIntents.swapIntentById(id);
+      if (refreshed == null) continue;
+      mergedIntents = mergedIntents.replaceSwapIntent(id, refreshed);
+    }
+    await saveIntents(accountUuid: accountUuid, intents: mergedIntents);
   }
 
   Future<SwapIntent> _refreshProviderBackedIntent(

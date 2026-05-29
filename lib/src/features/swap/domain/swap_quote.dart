@@ -123,6 +123,7 @@ class SwapQuote {
     this.sellAmountTextOverride,
     this.receiveEstimateTextOverride,
     this.minimumReceiveTextOverride,
+    this.slippageToleranceTextOverride,
     this.rateTextOverride,
     this.providerRefundInfo,
     this.fiatValueBasis,
@@ -206,6 +207,7 @@ class SwapQuote {
   final String? sellAmountTextOverride;
   final String? receiveEstimateTextOverride;
   final String? minimumReceiveTextOverride;
+  final String? slippageToleranceTextOverride;
   final String? rateTextOverride;
   final SwapProviderRefundInfo? providerRefundInfo;
   final SwapFiatValueBasis? fiatValueBasis;
@@ -222,18 +224,14 @@ class SwapQuote {
       '${receiveAsset.formatAmountDown(minimumReceiveAmount)} ${receiveAsset.symbol}';
 
   String get slippageToleranceText {
+    final override = slippageToleranceTextOverride;
+    if (override != null) {
+      return override;
+    }
     final percent = receiveProtectionPercent;
     final sellBuffer = sellAmount * percent / 100;
     return '${formatSwapProtectionAmount(sellAsset, sellBuffer)} '
         '${sellAsset.symbol} (${formatSwapProtectionPercent(percent)})';
-  }
-
-  String get priceProtectionText {
-    final buffer = receiveAmount - minimumReceiveAmount;
-    final bounded = buffer.isFinite && buffer > 0 ? buffer : 0.0;
-    final percent = receiveProtectionPercent;
-    return '${formatSwapProtectionAmount(receiveAsset, bounded)} '
-        '${receiveAsset.symbol} (${formatSwapProtectionPercent(percent)})';
   }
 
   double get receiveProtectionPercent {

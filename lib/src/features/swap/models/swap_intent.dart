@@ -21,7 +21,6 @@ class SwapIntentRecord {
     this.totalFeesText,
     this.realisedSlippageText,
     this.slippageToleranceText,
-    this.priceProtectionText,
     this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
@@ -61,7 +60,6 @@ class SwapIntentRecord {
       totalFeesText: intent.totalFeesText,
       realisedSlippageText: intent.realisedSlippageText,
       slippageToleranceText: intent.slippageToleranceText,
-      priceProtectionText: intent.priceProtectionText,
       minimumReceiveText: intent.minimumReceiveText,
       providerStatusRaw: intent.providerStatusRaw,
       nearIntentHash: intent.nearIntentHash,
@@ -100,7 +98,6 @@ class SwapIntentRecord {
   final String? totalFeesText;
   final String? realisedSlippageText;
   final String? slippageToleranceText;
-  final String? priceProtectionText;
   final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
@@ -141,7 +138,6 @@ class SwapIntentRecord {
     String? totalFeesText,
     String? realisedSlippageText,
     String? slippageToleranceText,
-    String? priceProtectionText,
     String? minimumReceiveText,
     String? providerStatusRaw,
     String? nearIntentHash,
@@ -182,7 +178,6 @@ class SwapIntentRecord {
       realisedSlippageText: realisedSlippageText ?? this.realisedSlippageText,
       slippageToleranceText:
           slippageToleranceText ?? this.slippageToleranceText,
-      priceProtectionText: priceProtectionText ?? this.priceProtectionText,
       minimumReceiveText: minimumReceiveText ?? this.minimumReceiveText,
       providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
       nearIntentHash: nearIntentHash ?? this.nearIntentHash,
@@ -231,7 +226,6 @@ class SwapIntent {
     this.totalFeesText,
     this.realisedSlippageText,
     this.slippageToleranceText,
-    this.priceProtectionText,
     this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
@@ -273,7 +267,6 @@ class SwapIntent {
   final String? totalFeesText;
   final String? realisedSlippageText;
   final String? slippageToleranceText;
-  final String? priceProtectionText;
   final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
@@ -317,7 +310,6 @@ class SwapIntent {
     String? totalFeesText,
     String? realisedSlippageText,
     String? slippageToleranceText,
-    String? priceProtectionText,
     String? minimumReceiveText,
     String? providerStatusRaw,
     String? nearIntentHash,
@@ -362,7 +354,6 @@ class SwapIntent {
       realisedSlippageText: realisedSlippageText ?? this.realisedSlippageText,
       slippageToleranceText:
           slippageToleranceText ?? this.slippageToleranceText,
-      priceProtectionText: priceProtectionText ?? this.priceProtectionText,
       minimumReceiveText: minimumReceiveText ?? this.minimumReceiveText,
       providerStatusRaw: providerStatusRaw ?? this.providerStatusRaw,
       nearIntentHash: nearIntentHash ?? this.nearIntentHash,

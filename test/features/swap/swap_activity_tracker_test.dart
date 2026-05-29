@@ -89,6 +89,76 @@ void main() {
     expect(store.saveCount, 0);
   });
 
+  test(
+    'refresh does not resurrect an intent removed while status is loading',
+    () async {
+      final store = _MemorySwapActivityStore();
+      final provider = _StatusSwapProvider({
+        'deposit-a': _snapshot(
+          id: 'swap-a',
+          depositAddress: 'deposit-a',
+          status: SwapIntentStatus.processing,
+        ),
+      });
+      final tracker = SwapActivityTracker(
+        activityStore: store,
+        swapProvider: provider,
+      );
+      final persistedIntent = _intent(
+        id: 'swap-a',
+        depositAddress: 'deposit-a',
+      );
+      store.savedRecords = [SwapIntentRecord.fromIntent(persistedIntent)];
+      provider.onGetStatus = (_) async {
+        store.savedRecords = const [];
+      };
+
+      await tracker.refreshOpenIntents(
+        accountUuid: 'account-1',
+        currentIntents: [persistedIntent],
+      );
+
+      expect(provider.statusRequests, ['deposit-a']);
+      expect(store.savedRecords, isEmpty);
+    },
+  );
+
+  test('refresh keeps intents added while status is loading', () async {
+    final store = _MemorySwapActivityStore();
+    final provider = _StatusSwapProvider({
+      'deposit-a': _snapshot(
+        id: 'swap-a',
+        depositAddress: 'deposit-a',
+        status: SwapIntentStatus.processing,
+      ),
+    });
+    final tracker = SwapActivityTracker(
+      activityStore: store,
+      swapProvider: provider,
+    );
+    final persistedIntent = _intent(id: 'swap-a', depositAddress: 'deposit-a');
+    final addedIntent = _intent(id: 'swap-b', depositAddress: 'deposit-b');
+    store.savedRecords = [SwapIntentRecord.fromIntent(persistedIntent)];
+    provider.onGetStatus = (_) async {
+      store.savedRecords = [
+        ...store.savedRecords,
+        SwapIntentRecord.fromIntent(addedIntent),
+      ];
+    };
+
+    await tracker.refreshOpenIntents(
+      accountUuid: 'account-1',
+      currentIntents: [persistedIntent],
+    );
+
+    expect(provider.statusRequests, ['deposit-a']);
+    expect(store.savedRecords.map((record) => record.id), ['swap-a', 'swap-b']);
+    expect(store.savedRecords.map((record) => record.status), [
+      SwapIntentStatus.processing,
+      SwapIntentStatus.awaitingDeposit,
+    ]);
+  });
+
   test('status refresher throttles repeated activity refreshes', () async {
     final store = _MemorySwapActivityStore();
     final provider = _StatusSwapProvider({});
@@ -221,6 +291,7 @@ class _StatusSwapProvider implements SwapProvider {
 
   final Map<String, SwapIntentSnapshot> statuses;
   final statusRequests = <String>[];
+  Future<void> Function(String intentId)? onGetStatus;
 
   @override
   String get providerLabel => 'NEAR Intents';
@@ -244,6 +315,7 @@ class _StatusSwapProvider implements SwapProvider {
     String? depositMemo,
   }) async {
     statusRequests.add(intentId);
+    await onGetStatus?.call(intentId);
     return statuses[intentId] ??
         _snapshot(
           id: intentId,

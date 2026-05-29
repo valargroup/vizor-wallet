@@ -18,7 +18,6 @@ class SwapIntentSnapshot {
     this.totalFeesText,
     this.realisedSlippageText,
     this.slippageToleranceText,
-    this.priceProtectionText,
     this.minimumReceiveText,
     this.providerStatusRaw,
     this.nearIntentHash,
@@ -50,7 +49,6 @@ class SwapIntentSnapshot {
       swapFeeText: quote.feeLabel,
       totalFeesText: quote.totalFeesText,
       slippageToleranceText: quote.slippageToleranceText,
-      priceProtectionText: quote.priceProtectionText,
       minimumReceiveText: quote.minimumReceiveText,
       providerRefundInfo: quote.providerRefundInfo,
       fiatValueBasis: quote.fiatValueBasis,
@@ -69,7 +67,6 @@ class SwapIntentSnapshot {
   final String? totalFeesText;
   final String? realisedSlippageText;
   final String? slippageToleranceText;
-  final String? priceProtectionText;
   final String? minimumReceiveText;
   final String? providerStatusRaw;
   final String? nearIntentHash;
