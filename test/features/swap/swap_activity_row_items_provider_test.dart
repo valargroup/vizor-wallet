@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/activity/swap_activity_row_items_provider.dart';
+import 'package:zcash_wallet/src/features/swap/models/swap_deposit_broadcast_result.dart';
 import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 import 'package:zcash_wallet/src/features/swap/providers/swap_activity_store.dart';
 
@@ -48,29 +49,65 @@ void main() {
   });
 
   test(
-    'pending count uses resolved status so an expired-on-reload swap does not block',
+    'pending-swap gate counts only non-terminal swaps with confirmed deposit evidence',
     () async {
-      // Deadline safely in the past relative to the wall clock the provider
-      // resolves against.
       final past = DateTime.utc(2020, 1, 1);
+      final future = DateTime.utc(2100, 1, 1);
       final store = _FakeSwapActivityStore({
         'account-1': [
-          // Past deadline, no on-chain evidence -> resolves to expired
-          // (terminal) -> must NOT count as a pending swap.
+          // Nothing sent, deadline passed -> resolves to expired -> not counted.
           _pendingCountRecord(id: 'no-evidence', depositDeadline: past),
-          // Past deadline but a deposit tx exists -> carve-out keeps it
-          // non-terminal -> still counts (funds may be in flight).
+          // Nothing sent yet, still within deadline -> non-terminal but no
+          // confirmed evidence -> not counted (don't over-block before a
+          // deposit exists).
+          _pendingCountRecord(id: 'awaiting-not-sent', depositDeadline: future),
+          // Local ZEC deposit created but never broadcast (pendingBroadcast):
+          // not confirmed evidence, so it expires past the deadline -> not
+          // counted (this was the permanent-deadlock case).
           _pendingCountRecord(
-            id: 'with-evidence',
+            id: 'pending-broadcast',
             depositDeadline: past,
+            depositTxHash: 'local-only-txid',
+            broadcastStatus: SwapDepositBroadcastStatus.pendingBroadcast,
+          ),
+          // Same pending_broadcast but still within deadline: still not
+          // confirmed evidence -> not counted.
+          _pendingCountRecord(
+            id: 'pending-broadcast-future',
+            depositDeadline: future,
+            depositTxHash: 'local-only-txid',
+            broadcastStatus: SwapDepositBroadcastStatus.pendingBroadcast,
+          ),
+          // Clean ZEC deposit broadcast (no notice) -> confirmed -> counted.
+          _pendingCountRecord(
+            id: 'clean-broadcast',
+            depositDeadline: future,
             depositTxHash: 'zec-deposit-txid',
           ),
-          // Genuinely terminal -> must NOT count.
+          // ZEC deposit broadcast but local storage failed: tx DID reach the
+          // network -> confirmed evidence -> counted, even though a
+          // broadcastNotice UI message was set.
           _pendingCountRecord(
-            id: 'done',
-            status: SwapIntentStatus.complete,
-            depositDeadline: past,
+            id: 'storage-failed-broadcast',
+            depositDeadline: future,
+            depositTxHash: 'storage-failed-txid',
+            broadcastStatus: SwapDepositBroadcastStatus.broadcastedStorageFailed,
           ),
+          // Provider observed the source-chain deposit -> confirmed -> counted.
+          _pendingCountRecord(
+            id: 'deposit-observed',
+            status: SwapIntentStatus.depositObserved,
+            originChainTxHash: 'origin-txid',
+          ),
+          // User claimed the deposit (pressed "I've deposited"), still within
+          // deadline -> ZEC may be incoming -> counted.
+          _pendingCountRecord(
+            id: 'claimed',
+            depositDeadline: future,
+            depositClaimedAt: DateTime.utc(2026, 5, 29),
+          ),
+          // Terminal -> not counted.
+          _pendingCountRecord(id: 'done', status: SwapIntentStatus.complete),
         ],
       });
       final container = ProviderContainer(
@@ -82,9 +119,10 @@ void main() {
         swapPendingIntentCountProvider('account-1').future,
       );
 
-      // Counting raw persisted status would yield 2 (both awaiting); resolving
-      // the deadline drops the no-evidence one, so the gate sees only 1.
-      expect(count, 1);
+      // clean-broadcast, deposit-observed, the claimed deposit, and
+      // storage-failed-broadcast (tx reached network) all have funds that
+      // could strand at the account address.
+      expect(count, 4);
     },
   );
 
@@ -123,6 +161,9 @@ SwapIntentRecord _pendingCountRecord({
   SwapIntentStatus status = SwapIntentStatus.awaitingDeposit,
   DateTime? depositDeadline,
   String? depositTxHash,
+  String? originChainTxHash,
+  String? broadcastStatus,
+  DateTime? depositClaimedAt,
 }) {
   final createdAt = DateTime.utc(2020, 1, 1);
   return SwapIntentRecord(
@@ -137,6 +178,9 @@ SwapIntentRecord _pendingCountRecord({
     externalAsset: SwapAsset.usdc,
     depositDeadline: depositDeadline,
     depositTxHash: depositTxHash,
+    originChainTxHash: originChainTxHash,
+    broadcastStatus: broadcastStatus,
+    depositClaimedAt: depositClaimedAt,
     createdAt: createdAt,
     updatedAt: createdAt,
   );

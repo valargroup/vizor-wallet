@@ -620,6 +620,18 @@ class SwapNotifier extends Notifier<SwapState> {
     state = state.copyWith(depositTxHashText: value, clearStatusError: true);
   }
 
+  Future<void> markSelectedDepositClaimed() async {
+    final selected = state.selectedIntentOrNull;
+    if (selected == null) return;
+    if (selected.depositClaimedAt != null) return;
+    if (selected.status != SwapIntentStatus.awaitingExternalDeposit) return;
+    final updated = selected.copyWith(depositClaimedAt: DateTime.now().toUtc());
+    state = state.copyWith(
+      intents: state.intents.replaceSwapIntent(selected.id, updated),
+    );
+    await _persistCurrentIntents();
+  }
+
   void selectIntent(String intentId) {
     final intent = state.intents.swapIntentById(intentId);
     if (intent == null) return;
@@ -770,6 +782,7 @@ class SwapNotifier extends Notifier<SwapState> {
     final patched = swapIntentWithBroadcastNotice(
       current,
       notice: broadcastNotice,
+      broadcastStatus: broadcastStatus,
     );
     state = state.copyWith(
       intents: state.intents.replaceSwapIntent(selected.id, patched),
@@ -812,6 +825,7 @@ class SwapNotifier extends Notifier<SwapState> {
       selected,
       txHash: txHash,
       broadcastNotice: broadcastNotice,
+      broadcastStatus: broadcastStatus,
       clearStatusError: broadcastNotice == null,
       clearBroadcastNotice: broadcastNotice == null,
     );
@@ -912,6 +926,7 @@ class SwapNotifier extends Notifier<SwapState> {
       txHash: txHash,
       statusError: statusError,
       broadcastNotice: broadcastNotice,
+      broadcastStatus: broadcastStatus,
       clearStatusError: statusError == null && broadcastNotice == null,
       clearBroadcastNotice: broadcastNotice == null,
     );
@@ -1041,6 +1056,7 @@ class SwapNotifier extends Notifier<SwapState> {
       intent,
       txHash: broadcast.txHash,
       broadcastNotice: broadcastNotice,
+      broadcastStatus: broadcast.status,
       clearStatusError: broadcastNotice == null,
       clearBroadcastNotice: broadcastNotice == null,
     );

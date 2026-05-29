@@ -5252,64 +5252,11 @@ void main() {
     );
   });
 
-  testWidgets('started swap can submit a deposit transaction hash', (
-    tester,
-  ) async {
-    await _setDesktopViewport(tester);
-    final swapProvider = _FakeSwapProvider();
-
-    await tester.pumpWidget(
-      _routerHarness(
-        GoRouter(
-          initialLocation: '/swap',
-          routes: [_swapRoute(), _swapActivityRoute()],
-        ),
-        swapProvider: swapProvider,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(
-      find.byKey(const ValueKey('swap_direction_externalToZec')),
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('swap_amount_field')),
-      '140.35',
-    );
-    await _enterDestinationText(tester, '0xexternal-refund');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('swap_review_button')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('swap_start_button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('swap_start_button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Deposit tokens'), findsOneWidget);
-    expect(find.text('0xlive-deposit'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('swap_deposit_check_warning')),
-      findsNothing,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('swap_deposit_confirm_button')));
-    await tester.pumpAndSettle();
-
-    expect(swapProvider.submittedDeposits, isEmpty);
-    expect(swapProvider.statusRequests, isNotEmpty);
-    expect(swapProvider.statusRequests.last.depositAddress, '0xlive-deposit');
-    expect(swapProvider.statusRequests.last.depositMemo, 'memo-live');
-  });
-
   testWidgets(
-    'external deposit confirmation warns when provider has not confirmed yet',
+    'started swap routes to status page when deposit is claimed',
     (tester) async {
       await _setDesktopViewport(tester);
-      final statusGate = Completer<void>();
-      final swapProvider = _PendingExternalDepositSwapProvider(
-        statusGate: statusGate,
-      );
+      final swapProvider = _FakeSwapProvider();
 
       await tester.pumpWidget(
         _routerHarness(
@@ -5341,65 +5288,100 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('swap_start_button')));
       await tester.pumpAndSettle();
 
+      expect(find.text('Deposit tokens'), findsOneWidget);
+      expect(find.text('0xlive-deposit'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('swap_deposit_check_warning')),
         findsNothing,
       );
-      final buttonFinder = find.byKey(
-        const ValueKey('swap_deposit_confirm_button'),
+
+      await tester.tap(
+        find.byKey(const ValueKey('swap_deposit_confirm_button')),
       );
-      final initialButtonRect = tester.getRect(buttonFinder);
-
-      await tester.tap(buttonFinder);
-      await tester.pump();
-
-      expect(swapProvider.statusRequests, isNotEmpty);
-      expect(tester.widget<AppButton>(buttonFinder).onPressed, isNull);
-      expect(
-        find.byKey(const ValueKey('swap_deposit_confirm_loader')),
-        findsOneWidget,
-      );
-      expect(find.text('Checking'), findsOneWidget);
-
-      statusGate.complete();
       await tester.pumpAndSettle();
 
-      final warningFinder = find.byKey(
-        const ValueKey('swap_deposit_check_warning'),
-      );
-      expect(warningFinder, findsOneWidget);
+      // Tapping "I've deposited" immediately routes to the status page;
+      // no provider status request is triggered by this tap.
+      expect(swapProvider.submittedDeposits, isEmpty);
       expect(
-        find.text(
-          'Deposit confirmation not found yet.\nCheck again in a few minutes.',
-        ),
-        findsOneWidget,
-      );
-      expect(tester.getRect(buttonFinder), initialButtonRect);
-      expect(tester.widget<AppButton>(buttonFinder).onPressed, isNotNull);
-      expect(
-        find.byKey(const ValueKey('swap_deposit_confirm_loader')),
+        find.byKey(const ValueKey('swap_deposit_confirm_button')),
         findsNothing,
       );
-      final warningIcon = tester.widget<AppIcon>(
-        find.descendant(
-          of: warningFinder,
-          matching: find.byWidgetPredicate(
-            (widget) => widget is AppIcon && widget.name == AppIcons.warning,
-          ),
-        ),
-      );
-      expect(warningIcon.size, AppIconSize.medium);
-      final warningText = tester.widget<Text>(
-        find.descendant(
-          of: warningFinder,
-          matching: find.text(
-            'Deposit confirmation not found yet.\nCheck again in a few minutes.',
-          ),
-        ),
+      expect(
+        find.byKey(const ValueKey('swap_status_page_content')),
+        findsOneWidget,
       );
       expect(
-        warningText.style?.color,
-        tester.element(warningFinder).colors.text.destructive,
+        find.byKey(const ValueKey('swap_deposit_check_warning')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'external deposit claim immediately routes to status page without warning',
+    (tester) async {
+      await _setDesktopViewport(tester);
+      final swapProvider = _PendingExternalDepositSwapProvider();
+
+      await tester.pumpWidget(
+        _routerHarness(
+          GoRouter(
+            initialLocation: '/swap',
+            routes: [_swapRoute(), _swapActivityRoute()],
+          ),
+          swapProvider: swapProvider,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('swap_direction_externalToZec')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('swap_amount_field')),
+        '140.35',
+      );
+      await _enterDestinationText(tester, '0xexternal-refund');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('swap_review_button')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('swap_start_button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('swap_start_button')));
+      await tester.pumpAndSettle();
+
+      // Deposit page is shown before pressing.
+      expect(find.text('Deposit tokens'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('swap_deposit_confirm_button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('swap_deposit_check_warning')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('swap_deposit_confirm_button')),
+      );
+      await tester.pumpAndSettle();
+
+      // After tapping, deposit page is gone and status page is shown.
+      expect(
+        find.byKey(const ValueKey('swap_deposit_confirm_button')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('swap_status_page_content')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('swap_deposit_check_warning')),
+        findsNothing,
       );
     },
   );
