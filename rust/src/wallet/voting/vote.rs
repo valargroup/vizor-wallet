@@ -445,7 +445,6 @@ fn share_payload_from_upstream(payload: &zcash_voting::SharePayload) -> VoteShar
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wallet::voting::workflow;
 
     fn commitment_bundle_recovery_json(
         bundle: &zcash_voting::VoteCommitmentBundle,
@@ -684,11 +683,26 @@ mod tests {
         .unwrap();
         let json = commitment_bundle_recovery_json(&commitment, &payloads, &[0x99; 64]).unwrap();
 
-        workflow::store_signed_vote_commitment(&db, "round-1", 0, 1, &json).unwrap();
+        let conn = db.conn();
+        conn.execute(
+            "UPDATE votes SET commitment_bundle_json = :json, vc_tree_position = :pos
+             WHERE round_id = :round_id AND wallet_id = :wallet_id
+               AND bundle_index = :bundle_index AND proposal_id = :proposal_id",
+            rusqlite::named_params! {
+                ":json": json,
+                ":pos": 42i64,
+                ":round_id": "round-1",
+                ":wallet_id": "wallet-1",
+                ":bundle_index": 0i64,
+                ":proposal_id": 1i64,
+            },
+        )
+        .unwrap();
+        drop(conn);
         let (commitment_bundle_json, vc_tree_position) =
             db.get_commitment_bundle("round-1", 0, 1).unwrap().unwrap();
         assert_eq!(commitment_bundle_json, json);
-        assert_eq!(vc_tree_position, 0);
+        assert_eq!(vc_tree_position, 42);
 
         let conn = db.conn();
         let stored_json: String = conn
