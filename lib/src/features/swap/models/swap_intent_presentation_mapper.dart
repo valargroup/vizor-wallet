@@ -453,7 +453,7 @@ List<SwapDetailField> _swapProviderRefundFields(SwapProviderRefundInfo? info) {
       SwapDetailField(label: 'Refund fee', value: info.refundFeeText!),
     if (info.depositedAmountText != null)
       SwapDetailField(
-        label: 'Provider deposited',
+        label: 'Detected deposit',
         value: info.depositedAmountText!,
       ),
     if (info.refundedAmountText != null)

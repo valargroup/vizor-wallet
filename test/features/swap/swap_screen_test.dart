@@ -3275,7 +3275,23 @@ void main() {
       find.byKey(const ValueKey('swap_status_page_content')),
       findsOneWidget,
     );
-    expect(find.text('Swap failed'), findsWidgets);
+    expect(find.text('Incomplete deposit'), findsWidgets);
+    expect(
+      find.byKey(const ValueKey('swap_status_badge_warning')),
+      findsOneWidget,
+    );
+
+    await _openSwapStatusDetails(tester, expand: true);
+
+    expect(find.text('Incomplete'), findsWidgets);
+    expect(find.text('Required deposit'), findsOneWidget);
+    expect(find.text('Detected deposit'), findsOneWidget);
+    expect(find.text('Missing deposit'), findsOneWidget);
+    expect(find.text('Deposit USDC to'), findsOneWidget);
+    expect(find.text('Memo'), findsOneWidget);
+    expect(find.text('memo-underpaid'), findsOneWidget);
+    expect(find.text('Refund fee'), findsOneWidget);
+    expect(find.text('Guaranteed minimum'), findsNothing);
     expect(find.text('Resolve incomplete deposit'), findsNothing);
     expect(find.text('Copy top-up details'), findsNothing);
     expect(
@@ -5983,6 +5999,111 @@ void main() {
         isTrue,
       );
       expect(find.text('Sign ZEC deposit on Keystone'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'hardware ZEC unknown broadcast is checkpointed without provider submit',
+    (tester) async {
+      await _setDesktopViewport(tester);
+      final swapProvider = _FakeSwapProvider();
+      final depositSender = _FakeSwapDepositSender();
+      final hardwareSigningService = _FakeSwapHardwareSigningService(
+        broadcastStatus: SwapDepositBroadcastStatus.broadcastUnknown,
+        broadcastMessage: 'broadcast timed out before confirmation',
+      );
+      final sessionStore = _FakeSwapPersistenceStore();
+
+      await tester.pumpWidget(
+        _routerHarness(
+          GoRouter(
+            initialLocation: '/swap',
+            routes: [
+              _swapRoute(),
+              _swapActivityRoute(),
+              GoRoute(
+                path: '/send/keystone/scan',
+                builder: (_, _) => const _FakeKeystoneScanScreen(),
+              ),
+            ],
+          ),
+          bootstrap: _hardwareBootstrap,
+          swapProvider: swapProvider,
+          depositSender: depositSender,
+          hardwareSigningService: hardwareSigningService,
+          sessionStore: sessionStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('swap_amount_field')),
+        '0.003',
+      );
+      await _enterDestinationText(tester, '0xrecipient');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('swap_review_button')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('swap_start_button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('swap_start_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('swap_deposit_confirm_button')),
+      );
+      await tester.pump();
+      for (
+        var i = 0;
+        i < 20 && hardwareSigningService.proofDrafts.isEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(hardwareSigningService.proofDrafts, hasLength(1));
+      await tester.pump();
+
+      await tester.tap(find.text('Get signature'));
+      for (
+        var i = 0;
+        i < 20 &&
+            find
+                .byKey(const ValueKey('fake_keystone_signature_done'))
+                .evaluate()
+                .isEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        find.byKey(const ValueKey('fake_keystone_signature_done')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('fake_keystone_signature_done')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump();
+
+      expect(hardwareSigningService.broadcasts, hasLength(1));
+      expect(swapProvider.submittedDeposits, isEmpty);
+      expect(
+        sessionStore.savedIntents.single.depositTxHash,
+        'hardware-broadcast-txid',
+      );
+      expect(
+        sessionStore.savedIntents.single.broadcastNotice,
+        'broadcast timed out before confirmation',
+      );
+      await _openSwapStatusDetails(tester, expand: true);
+      expect(find.text('hardware- ... st-txid'), findsWidgets);
+      expect(
+        find.text('broadcast timed out before confirmation'),
+        findsWidgets,
+      );
     },
   );
 

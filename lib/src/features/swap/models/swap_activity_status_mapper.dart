@@ -4,6 +4,7 @@ import 'swap_detail_tooltips.dart';
 import 'swap_fiat_value_formatting.dart';
 import 'swap_models.dart';
 import 'swap_status_presentation.dart';
+import 'swap_token_amount_formatting.dart';
 
 class SwapActivityAccountDetail {
   const SwapActivityAccountDetail({required this.name, this.profilePictureId});
@@ -76,9 +77,8 @@ SwapActivityStatusPresentation swapActivityStatusPresentationForIntent(
 String _swapActivityStatusTitle(SwapIntent intent) {
   return switch (intent.status) {
     SwapIntentStatus.complete => 'Swap completed',
-    SwapIntentStatus.failed ||
-    SwapIntentStatus.refunded ||
-    SwapIntentStatus.incompleteDeposit => 'Swap failed',
+    SwapIntentStatus.incompleteDeposit => 'Incomplete deposit',
+    SwapIntentStatus.failed || SwapIntentStatus.refunded => 'Swap failed',
     _ => 'Swapping ...',
   };
 }
@@ -86,10 +86,10 @@ String _swapActivityStatusTitle(SwapIntent intent) {
 SwapStatusBadgeKind _swapActivityStatusBadgeKind(SwapIntentStatus status) {
   return switch (status) {
     SwapIntentStatus.complete => SwapStatusBadgeKind.completed,
+    SwapIntentStatus.incompleteDeposit => SwapStatusBadgeKind.warning,
     SwapIntentStatus.failed ||
     SwapIntentStatus.refunded ||
-    SwapIntentStatus.expired ||
-    SwapIntentStatus.incompleteDeposit => SwapStatusBadgeKind.failed,
+    SwapIntentStatus.expired => SwapStatusBadgeKind.failed,
     _ => SwapStatusBadgeKind.liveQuote,
   };
 }
@@ -222,6 +222,21 @@ List<SwapStatusDetailRowData> _swapActivityStatusDetails(
     ];
   }
 
+  if (intent.status == SwapIntentStatus.incompleteDeposit) {
+    return _swapActivityIncompleteDepositDetails(
+      intent,
+      accountDetail: accountDetail,
+      sourceSymbol: sourceSymbol,
+      receiveSymbol: receiveSymbol,
+      depositAddress: depositAddress,
+      depositMemo: intent.depositMemo?.trim(),
+      refundAddress: refundAddress,
+      recipientAddress: recipientAddress,
+      depositTxHash: depositTxHash,
+      sendsZec: sendsZec,
+    );
+  }
+
   return [
     _accountDetailRow(accountDetail),
     if (sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
@@ -288,6 +303,86 @@ List<SwapStatusDetailRowData> _swapActivityStatusDetails(
         value: compactSwapAddress(destinationChainTxHash),
         copyable: true,
         copyText: destinationChainTxHash,
+      ),
+  ];
+}
+
+List<SwapStatusDetailRowData> _swapActivityIncompleteDepositDetails(
+  SwapIntent intent, {
+  required SwapActivityAccountDetail? accountDetail,
+  required String sourceSymbol,
+  required String receiveSymbol,
+  required String? depositAddress,
+  required String? depositMemo,
+  required String? refundAddress,
+  required String? recipientAddress,
+  required String? depositTxHash,
+  required bool sendsZec,
+}) {
+  final sourceAsset = swapActivitySellAsset(intent);
+  final providerInfo = intent.providerRefundInfo;
+  final missingDepositText = sourceAsset == null
+      ? null
+      : _swapActivityMissingDepositText(intent, sourceAsset);
+  final deadlineText = _swapActivityTimestampLabel(intent.depositDeadline);
+
+  return [
+    _accountDetailRow(accountDetail),
+    if (missingDepositText != null)
+      SwapStatusDetailRowData(
+        label: 'Missing deposit',
+        value: missingDepositText,
+      ),
+    if (depositMemo != null && depositMemo.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: 'Memo',
+        value: depositMemo,
+        copyable: true,
+        copyText: depositMemo,
+      ),
+    if (depositAddress != null && depositAddress.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: 'Deposit $sourceSymbol to',
+        value: compactSwapAddress(depositAddress),
+        copyable: true,
+        copyText: depositAddress,
+      ),
+    SwapStatusDetailRowData(
+      label: 'Required deposit',
+      value: intent.sellAmount,
+    ),
+    if (providerInfo?.depositedAmountText != null)
+      SwapStatusDetailRowData(
+        label: 'Detected deposit',
+        value: providerInfo!.depositedAmountText!,
+      ),
+    if (deadlineText != null)
+      SwapStatusDetailRowData(label: 'Deposit deadline', value: deadlineText),
+    if (providerInfo?.refundFeeText != null)
+      SwapStatusDetailRowData(
+        label: 'Refund fee',
+        value: providerInfo!.refundFeeText!,
+      ),
+    if (refundAddress != null && refundAddress.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$sourceSymbol refund address',
+        value: compactSwapAddress(refundAddress),
+        copyable: true,
+        copyText: refundAddress,
+      ),
+    if (!sendsZec && recipientAddress != null && recipientAddress.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$receiveSymbol recipient',
+        value: compactSwapAddress(recipientAddress),
+        copyable: true,
+        copyText: recipientAddress,
+      ),
+    if (depositTxHash != null && depositTxHash.isNotEmpty)
+      SwapStatusDetailRowData(
+        label: '$sourceSymbol deposit tx',
+        value: compactSwapAddress(depositTxHash),
+        copyable: true,
+        copyText: depositTxHash,
       ),
   ];
 }
@@ -490,6 +585,21 @@ bool swapActivityShowsDepositPage(
         intent,
         intentIsHardware: intentIsHardware,
       );
+}
+
+String? _swapActivityMissingDepositText(
+  SwapIntent intent,
+  SwapAsset sourceAsset,
+) {
+  final requiredAmount = _numericAmount(intent.sellAmount);
+  final depositedAmount = _numericAmount(
+    intent.providerRefundInfo?.depositedAmountText ?? '',
+  );
+  if (requiredAmount == null || depositedAmount == null) return null;
+  final missingAmount = requiredAmount - depositedAmount;
+  if (!missingAmount.isFinite || missingAmount <= 0) return null;
+  return '${swapPreciseAmountText(sourceAsset, missingAmount)} '
+      '${sourceAsset.symbol}';
 }
 
 SwapStatusDetailRowData _accountDetailRow(

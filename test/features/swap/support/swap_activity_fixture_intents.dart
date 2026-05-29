@@ -1,6 +1,6 @@
 import 'package:zcash_wallet/src/features/swap/models/swap_models.dart';
 
-const swapActivityFixtureIntents = <SwapIntent>[
+final swapActivityFixtureIntents = <SwapIntent>[
   SwapIntent(
     id: 'swap-8f29',
     title: 'ZEC to USDC',
@@ -121,7 +121,7 @@ const swapActivityFixtureIntents = <SwapIntent>[
     receiveEstimate: '1.4250 ZEC',
     provider: 'NEAR Intents',
     status: SwapIntentStatus.incompleteDeposit,
-    nextAction: 'Top up the missing deposit or wait for refund',
+    nextAction: 'Deposit is below the quoted amount',
     steps: [
       SwapStep(
         label: 'Quote locked',
@@ -165,6 +165,11 @@ const swapActivityFixtureIntents = <SwapIntent>[
     depositAddress: '0xunderpaid-usdc-deposit',
     depositMemo: 'memo-underpaid',
     oneClickRefundTo: '0xusdc-refund-underpaid',
+    providerRefundInfo: SwapProviderRefundInfo(
+      depositedAmountText: '60.00 USDC',
+      refundFeeText: '0.25 USDC',
+    ),
+    depositDeadline: DateTime(2026, 5, 20, 13, 20),
   ),
   SwapIntent(
     id: 'swap-refund',

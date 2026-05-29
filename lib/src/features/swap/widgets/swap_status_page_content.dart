@@ -491,16 +491,19 @@ class _StatusBadge extends StatelessWidget {
     final label = switch (kind) {
       SwapStatusBadgeKind.liveQuote => 'In progress',
       SwapStatusBadgeKind.completed => 'Completed',
+      SwapStatusBadgeKind.warning => 'Incomplete',
       SwapStatusBadgeKind.failed => 'Failed',
     };
     final icon = switch (kind) {
       SwapStatusBadgeKind.liveQuote => null,
       SwapStatusBadgeKind.completed => AppIcons.checkCircle,
+      SwapStatusBadgeKind.warning => AppIcons.warning,
       SwapStatusBadgeKind.failed => AppIcons.skull,
     };
     final signalColor = switch (kind) {
       SwapStatusBadgeKind.liveQuote => colors.sync.lightSuccess,
       SwapStatusBadgeKind.completed => colors.sync.lightSuccess,
+      SwapStatusBadgeKind.warning => colors.icon.warning,
       SwapStatusBadgeKind.failed => colors.text.destructive,
     };
 
@@ -514,21 +517,24 @@ class _StatusBadge extends StatelessWidget {
           alignment: Alignment.topCenter,
           child: SizedBox(
             height: 16,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon == null)
-                  _LiveQuoteLed(color: signalColor)
-                else
-                  AppIcon(icon, size: 16, color: signalColor),
-                const SizedBox(width: AppSpacing.xxs),
-                Text(
-                  label,
-                  style: AppTypography.labelMedium.copyWith(
-                    color: colors.text.homeCard,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon == null)
+                    _LiveQuoteLed(color: signalColor)
+                  else
+                    AppIcon(icon, size: 16, color: signalColor),
+                  const SizedBox(width: AppSpacing.xxs),
+                  Text(
+                    label,
+                    style: AppTypography.labelMedium.copyWith(
+                      color: colors.text.homeCard,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -964,21 +970,21 @@ class _SwapTransactionDetailsState extends State<_SwapTransactionDetails> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final feeIndex = widget.rows.indexWhere((row) => row.label == 'Swap fee');
-    final feeRow = feeIndex == -1 ? null : widget.rows[feeIndex];
-    final leadingRows = feeIndex == -1
+    final anchorIndex = _transactionDetailsAnchorIndex(widget.rows);
+    final anchorRow = anchorIndex == -1 ? null : widget.rows[anchorIndex];
+    final leadingRows = anchorIndex == -1
         ? widget.rows
-        : widget.rows.take(feeIndex).toList();
-    final extraRows = feeIndex == -1
+        : widget.rows.take(anchorIndex).toList();
+    final extraRows = anchorIndex == -1
         ? const <SwapStatusDetailRowData>[]
-        : widget.rows.skip(feeIndex + 1).toList();
+        : widget.rows.skip(anchorIndex + 1).toList();
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: widget.expanded
           ? [
               for (final row in leadingRows) _InsetDetailRow(row: row),
               if (leadingRows.isNotEmpty) const SizedBox(height: AppSpacing.sm),
-              if (feeRow != null) _InsetDetailRow(row: feeRow),
+              if (anchorRow != null) _InsetDetailRow(row: anchorRow),
               const SizedBox(height: AppSpacing.sm),
               _InsetDetailRow(
                 row: const SwapStatusDetailRowData(
@@ -993,9 +999,9 @@ class _SwapTransactionDetailsState extends State<_SwapTransactionDetails> {
             ]
           : [
               for (final row in leadingRows) _InsetDetailRow(row: row),
-              if (feeRow != null) ...[
+              if (anchorRow != null) ...[
                 const SizedBox(height: AppSpacing.sm),
-                _InsetDetailRow(row: feeRow),
+                _InsetDetailRow(row: anchorRow),
               ],
               if (extraRows.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.sm),
@@ -1037,6 +1043,18 @@ class _SwapTransactionDetailsState extends State<_SwapTransactionDetails> {
       ),
     );
   }
+}
+
+int _transactionDetailsAnchorIndex(List<SwapStatusDetailRowData> rows) {
+  final swapFeeIndex = rows.indexWhere((row) => row.label == 'Swap fee');
+  if (swapFeeIndex != -1) return swapFeeIndex;
+
+  final depositAddressIndex = rows.indexWhere((row) {
+    return row.label.startsWith('Deposit ') && row.label.endsWith(' to');
+  });
+  if (depositAddressIndex != -1) return depositAddressIndex;
+
+  return rows.indexWhere((row) => row.label == 'Required deposit');
 }
 
 class _InsetDetailRow extends StatelessWidget {

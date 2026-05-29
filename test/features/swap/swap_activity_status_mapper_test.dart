@@ -177,6 +177,62 @@ void main() {
     expect(row.copyText, '0xrefund-address');
   });
 
+  test('separates incomplete deposits from terminal failures', () {
+    final deadline = DateTime(2026, 5, 7, 12);
+    final presentation = swapActivityStatusPresentationForIntent(
+      _state(),
+      _intent(
+        status: SwapIntentStatus.incompleteDeposit,
+        direction: SwapDirection.externalToZec,
+        externalAsset: SwapAsset.usdc,
+        pair: 'USDC -> ZEC',
+        sellAmount: '100.00 USDC',
+        receiveEstimate: '1.4250 ZEC',
+        depositAddress: '0xdeposit-address',
+        depositMemo: 'memo-7',
+        oneClickRecipient: 'u1recipient-address',
+        oneClickRefundTo: '0xrefund-address',
+        providerRefundInfo: const SwapProviderRefundInfo(
+          depositedAmountText: '60.00 USDC',
+          refundFeeText: '0.25 USDC',
+        ),
+        depositDeadline: deadline,
+        nextAction: 'Deposit is below the quoted amount',
+      ),
+    );
+
+    expect(presentation.title, 'Incomplete deposit');
+    expect(presentation.badgeKind, SwapStatusBadgeKind.warning);
+    expect(presentation.showTabs, isTrue);
+    expect(
+      _detailValue(presentation.details, 'Required deposit'),
+      '100.00 USDC',
+    );
+    expect(
+      _detailValue(presentation.details, 'Detected deposit'),
+      '60.00 USDC',
+    );
+    expect(_detailValue(presentation.details, 'Missing deposit'), '40 USDC');
+    expect(_detailValue(presentation.details, 'Memo'), 'memo-7');
+    expect(
+      _detailValue(presentation.details, 'Deposit USDC to'),
+      '0xdeposit-address',
+    );
+    expect(_detailValue(presentation.details, 'Refund fee'), '0.25 USDC');
+    expect(
+      _detailValue(presentation.details, 'Deposit deadline'),
+      'May 7, 2026 12:00',
+    );
+    expect(
+      presentation.details.map((detail) => detail.label),
+      isNot(contains('Guaranteed minimum')),
+    );
+    expect(
+      presentation.details.map((detail) => detail.label),
+      isNot(contains('Swap fee')),
+    );
+  });
+
   test('maps deposit instructions by swap direction', () {
     final zecInstruction = SwapActivityDepositInstruction.fromIntent(
       _intent(
@@ -310,7 +366,10 @@ SwapIntent _intent({
   String? oneClickRecipient,
   String? oneClickRefundTo,
   String? providerStatusRaw,
+  String? nextAction,
+  SwapProviderRefundInfo? providerRefundInfo,
   SwapFiatValueBasis? fiatValueBasis,
+  DateTime? depositDeadline,
   DateTime? completedAt,
 }) {
   return SwapIntent(
@@ -321,7 +380,7 @@ SwapIntent _intent({
     receiveEstimate: receiveEstimate,
     provider: 'NEAR Intents',
     status: status,
-    nextAction: 'Next action',
+    nextAction: nextAction ?? 'Next action',
     steps: const [],
     exposure: const [],
     receipt: const [],
@@ -336,7 +395,9 @@ SwapIntent _intent({
     oneClickRecipient: oneClickRecipient,
     oneClickRefundTo: oneClickRefundTo,
     providerStatusRaw: providerStatusRaw,
+    providerRefundInfo: providerRefundInfo,
     fiatValueBasis: fiatValueBasis,
+    depositDeadline: depositDeadline,
     completedAt: completedAt,
   );
 }

@@ -740,6 +740,9 @@ class SwapNotifier extends Notifier<SwapState> {
       status: broadcastStatus,
       message: broadcastMessage,
     );
+    final submitProviderStatus = _shouldSubmitProviderDepositStatus(
+      broadcastStatus,
+    );
     if (selected == null) {
       await _submitDepositTransactionForStoredIntent(
         accountUuid: accountUuid,
@@ -747,6 +750,7 @@ class SwapNotifier extends Notifier<SwapState> {
         txHash: normalizedTxHash,
         broadcastStatus: broadcastStatus,
         broadcastMessage: broadcastMessage,
+        submitProviderStatus: submitProviderStatus,
       );
       return;
     }
@@ -755,6 +759,7 @@ class SwapNotifier extends Notifier<SwapState> {
       normalizedTxHash,
       broadcastStatus: broadcastStatus,
       broadcastMessage: broadcastMessage,
+      submitProviderStatus: submitProviderStatus,
     );
     if (broadcastNotice == null) return;
     final current = state.intents.swapIntentById(selected.id);
@@ -778,6 +783,7 @@ class SwapNotifier extends Notifier<SwapState> {
     String txHash, {
     String? broadcastStatus,
     String? broadcastMessage,
+    bool submitProviderStatus = true,
   }) async {
     if (!_isAccountActive(selected.accountUuid)) {
       await _submitDepositTransactionForStoredIntent(
@@ -786,14 +792,17 @@ class SwapNotifier extends Notifier<SwapState> {
         txHash: txHash,
         broadcastStatus: broadcastStatus,
         broadcastMessage: broadcastMessage,
+        submitProviderStatus: submitProviderStatus,
       );
       return;
     }
 
     log(
-      'Swap: submit deposit begin intent=${_shortSwapValue(selected.id)} '
+      'Swap: deposit tx checkpoint begin '
+      'intent=${_shortSwapValue(selected.id)} '
       'deposit=${_shortSwapValue(_providerDepositAddress(selected))} '
-      'tx=${_shortSwapValue(txHash)}',
+      'tx=${_shortSwapValue(txHash)} '
+      'submitProviderStatus=$submitProviderStatus',
     );
     state = state.copyWith(depositSubmitting: true, clearStatusError: true);
     final broadcastNotice = _depositBroadcastNotice(
@@ -815,6 +824,13 @@ class SwapNotifier extends Notifier<SwapState> {
       clearStatusError: true,
     );
     await _persistCurrentIntents();
+    if (!submitProviderStatus) {
+      state = state.copyWith(
+        depositSubmitting: false,
+        statusError: broadcastNotice,
+      );
+      return;
+    }
     try {
       final snapshot = await _submitProviderDepositTransaction(
         checkpointed,
@@ -1404,6 +1420,13 @@ class SwapNotifier extends Notifier<SwapState> {
       return 'The transaction reached the network, but Vizor could not store it locally. Do not try again until sync or an explorer confirms the latest status.';
     }
     return 'The deposit status is uncertain. Check activity before trying again.';
+  }
+
+  bool _shouldSubmitProviderDepositStatus(String? status) {
+    final normalizedStatus = status?.trim();
+    if (normalizedStatus == null || normalizedStatus.isEmpty) return true;
+    return normalizedStatus == SwapDepositBroadcastStatus.broadcasted ||
+        normalizedStatus == SwapDepositBroadcastStatus.broadcastedStorageFailed;
   }
 }
 

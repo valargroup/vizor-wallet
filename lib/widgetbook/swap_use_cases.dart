@@ -428,6 +428,26 @@ Widget buildSwapStatusFailedUseCase(BuildContext context) {
   );
 }
 
+Widget buildSwapStatusIncompleteDepositUseCase(BuildContext context) {
+  return _SwapStatusPageFrame(
+    backLabel: 'Activity',
+    child: _SwapStatusPreview(
+      title: 'Incomplete deposit',
+      badgeKind: SwapStatusBadgeKind.warning,
+      activeTab: SwapStatusTab.details,
+      progressIndex: 2,
+      steps: _designProgressSteps,
+      details: _designIncompleteDepositDetails,
+      payAsset: SwapAsset.usdc,
+      receiveAsset: SwapAsset.zec,
+      payFiatText: r'$100.00',
+      receiveFiatText: r'$71.25',
+      payAmountText: '100 USDC',
+      receiveAmountText: '1.425 ZEC',
+    ),
+  );
+}
+
 Widget buildSwapWidgetFigmaNode1UseCase(BuildContext context) {
   return _SwapWidgetFrame(
     child: _SwapComposerPreview(
@@ -708,6 +728,37 @@ const _designFailedDetails = <SwapStatusDetailRowData>[
   SwapStatusDetailRowData(label: 'Timestamp', value: 'May 20, 2026 13:20'),
 ];
 
+const _designIncompleteDepositDetails = <SwapStatusDetailRowData>[
+  SwapStatusDetailRowData(
+    label: 'Account',
+    value: 'John',
+    accountProfilePictureId: _designAccountProfilePictureId,
+  ),
+  SwapStatusDetailRowData(label: 'Missing deposit', value: '40 USDC'),
+  SwapStatusDetailRowData(
+    label: 'Memo',
+    value: 'memo-underpaid',
+    copyable: true,
+  ),
+  SwapStatusDetailRowData(
+    label: 'Deposit USDC to',
+    value: '0x123kjhc ... 4x98g20',
+    copyable: true,
+  ),
+  SwapStatusDetailRowData(label: 'Required deposit', value: '100 USDC'),
+  SwapStatusDetailRowData(label: 'Detected deposit', value: '60 USDC'),
+  SwapStatusDetailRowData(
+    label: 'Deposit deadline',
+    value: 'May 20, 2026 13:20',
+  ),
+  SwapStatusDetailRowData(label: 'Refund fee', value: '0.25 USDC'),
+  SwapStatusDetailRowData(
+    label: 'USDC refund address',
+    value: '0x123kjhc ... 4x98g20',
+    copyable: true,
+  ),
+];
+
 final _figmaNode1State = SwapState(
   direction: SwapDirection.externalToZec,
   amountText: '0',
@@ -927,7 +978,7 @@ class _SwapReviewPreview extends StatelessWidget {
   }
 }
 
-class _SwapStatusPreview extends StatelessWidget {
+class _SwapStatusPreview extends StatefulWidget {
   const _SwapStatusPreview({
     required this.title,
     required this.badgeKind,
@@ -963,23 +1014,55 @@ class _SwapStatusPreview extends StatelessWidget {
   final VoidCallback? onToggleDetails;
 
   @override
+  State<_SwapStatusPreview> createState() => _SwapStatusPreviewState();
+}
+
+class _SwapStatusPreviewState extends State<_SwapStatusPreview> {
+  late var _activeTab = widget.activeTab;
+  late var _detailsExpanded = widget.detailsExpanded;
+
+  @override
+  void didUpdateWidget(covariant _SwapStatusPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeTab != widget.activeTab) {
+      _activeTab = widget.activeTab;
+    }
+    if (oldWidget.detailsExpanded != widget.detailsExpanded) {
+      _detailsExpanded = widget.detailsExpanded;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SwapStatusPageContent(
-      title: title,
-      payAsset: payAsset,
-      receiveAsset: receiveAsset,
-      payFiatText: payFiatText,
-      receiveFiatText: receiveFiatText,
-      payAmountText: payAmountText,
-      receiveAmountText: receiveAmountText,
-      badgeKind: badgeKind,
-      progressIndex: progressIndex,
-      activeTab: activeTab,
-      steps: steps,
-      details: details,
-      detailsExpanded: detailsExpanded,
-      showTabs: showTabs,
-      onToggleDetails: onToggleDetails,
+      title: widget.title,
+      payAsset: widget.payAsset,
+      receiveAsset: widget.receiveAsset,
+      payFiatText: widget.payFiatText,
+      receiveFiatText: widget.receiveFiatText,
+      payAmountText: widget.payAmountText,
+      receiveAmountText: widget.receiveAmountText,
+      badgeKind: widget.badgeKind,
+      progressIndex: widget.progressIndex,
+      activeTab: _activeTab,
+      steps: widget.steps,
+      details: widget.details,
+      detailsExpanded: _detailsExpanded,
+      showTabs: widget.showTabs,
+      onTabChanged: widget.showTabs
+          ? (tab) {
+              setState(() {
+                _activeTab = tab;
+              });
+            }
+          : null,
+      onToggleDetails:
+          widget.onToggleDetails ??
+          () {
+            setState(() {
+              _detailsExpanded = !_detailsExpanded;
+            });
+          },
       onOpenExplorer: () {},
     );
   }

@@ -1,4 +1,4 @@
-enum SwapStatusBadgeKind { liveQuote, completed, failed }
+enum SwapStatusBadgeKind { liveQuote, completed, warning, failed }
 
 enum SwapStatusTab { progress, details }
 

@@ -270,6 +270,10 @@ class WidgetbookApp extends StatelessWidget {
                       name: 'Failed',
                       builder: buildSwapStatusFailedUseCase,
                     ),
+                    WidgetbookUseCase(
+                      name: 'Incomplete deposit',
+                      builder: buildSwapStatusIncompleteDepositUseCase,
+                    ),
                   ],
                 ),
               ],
