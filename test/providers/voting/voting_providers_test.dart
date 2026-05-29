@@ -416,6 +416,9 @@ void main() {
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
     expect(state.phase, VotingSessionPhase.error);
+    expect(state.error?.message, contains('Voting PIR data is not ready'));
+    expect(state.error?.message, contains('123'));
+    expect(state.error?.message, contains('122'));
     expect(state.error?.pirDiagnostics, hasLength(1));
     expect(rust.setupCalls, 0);
     expect(rust.delegationBundleCalls, isEmpty);

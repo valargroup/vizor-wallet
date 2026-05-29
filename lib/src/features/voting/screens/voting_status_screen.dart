@@ -16,6 +16,7 @@ import '../../../providers/voting/voting_state.dart';
 import '../../../rust/api/keystone.dart' as rust_keystone;
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import '../../../rust/api/voting.dart' as rust_voting;
+import '../../../services/voting/pir_snapshot_resolver.dart';
 import '../../keystone/widgets/keystone_pczt_qr_stage.dart';
 import '../voting_flow_models.dart';
 import '../voting_resume_plan.dart';
@@ -715,7 +716,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
                   walletScannedHeight: state.walletScannedHeight,
                   walletSnapshotHeight: state.walletSnapshotHeight,
                   walletChainTipHeight: state.walletChainTipHeight,
-                  errorMessage: localError ?? state.error?.message,
+                  errorMessage: _sessionErrorMessage(state, localError),
                   onRetry: _retry,
                   onScanKeystone: _scanKeystoneSignature,
                   onSkipKeystoneBundles: _skipRemainingKeystoneBundles,
@@ -730,6 +731,53 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
 
   VotingSessionPhase _displayPhase(VotingSessionPhase phase) {
     return phase;
+  }
+
+  String? _sessionErrorMessage(VotingSessionState state, String? localError) {
+    if (localError != null) return localError;
+    final error = state.error;
+    if (error != null) return error.message;
+    final round = state.round;
+    if (round == null || state.pirDiagnostics.isEmpty) return null;
+    return _pirDiagnosticsErrorMessage(
+      expectedSnapshotHeight: round.snapshotHeight,
+      diagnostics: state.pirDiagnostics,
+    );
+  }
+
+  String _pirDiagnosticsErrorMessage({
+    required int expectedSnapshotHeight,
+    required List<PirSnapshotEndpointDiagnostic> diagnostics,
+  }) {
+    final expected = _formatBlockHeight(expectedSnapshotHeight);
+    final reportedHeights = diagnostics
+        .map((diagnostic) => diagnostic.reportedHeight)
+        .nonNulls
+        .toSet();
+    if (diagnostics.every(
+          (diagnostic) => diagnostic.status == PirSnapshotEndpointStatus.behind,
+        ) &&
+        reportedHeights.isNotEmpty) {
+      final highest = _formatBlockHeight(
+        reportedHeights.reduce((left, right) => left > right ? left : right),
+      );
+      return 'Voting PIR data is not ready for this poll yet. Expected '
+          'snapshot block $expected; PIR endpoints report $highest.';
+    }
+    return 'No PIR endpoint matched this poll snapshot. Expected snapshot '
+        'block $expected.';
+  }
+
+  String _formatBlockHeight(int height) {
+    final text = height.toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < text.length; i++) {
+      if (i > 0 && (text.length - i) % 3 == 0) {
+        buffer.write(',');
+      }
+      buffer.write(text[i]);
+    }
+    return buffer.toString();
   }
 
   String? _shareSubmissionDetail(VotingSessionState state) {
