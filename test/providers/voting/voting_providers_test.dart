@@ -1443,14 +1443,129 @@ void main() {
 
       expect(rust.recoveredVoteCommitmentKeys, ['1:7']);
       expect(rust.voteCommitmentKeys, ['0:8', '1:8']);
-      expect(rust.operationLog.take(4).toList(), [
+      expect(rust.operationLog.take(5).toList(), [
         'recover_vote:1:7',
         'mark_vote_submitted:1:7',
         'mark_vote_confirmed:1:7',
+        'record_share:1:7:0',
         'build_vote:0:8',
       ]);
     },
   );
+
+  test('resume submits missing shares before later proposal casts', () async {
+    final rust = FakeVotingRustApi(
+      emitCommitments: true,
+      bundleCount: 2,
+      commitmentShareCount: 2,
+    );
+    final existingShare = rust_voting.ApiShareDelegationRecord(
+      roundId: kRoundId,
+      bundleIndex: 1,
+      proposalId: 7,
+      shareIndex: 0,
+      sentToUrls: const ['https://voting.example'],
+      nullifier: Uint8List.fromList(List.filled(32, 1)),
+      phase: VotingWorkflowPhase.confirmed,
+      confirmed: true,
+      submitAt: BigInt.zero,
+      createdAt: BigInt.zero,
+    );
+    final recoveryApi = FakeVotingRecoveryApi(
+      roundPlan: rust_voting.ApiRoundPlan(
+        roundId: kRoundId,
+        pendingRecovery: true,
+        nextSteps: const [
+          rust_voting.ApiNextStep(
+            kind: 'submit_shares',
+            bundleIndex: 1,
+            proposalId: 7,
+            shareIndex: 0,
+            choice: 0,
+          ),
+          rust_voting.ApiNextStep(
+            kind: 'cast_vote',
+            bundleIndex: 0,
+            proposalId: 8,
+            shareIndex: 0,
+            choice: 1,
+          ),
+          rust_voting.ApiNextStep(
+            kind: 'cast_vote',
+            bundleIndex: 1,
+            proposalId: 8,
+            shareIndex: 0,
+            choice: 1,
+          ),
+        ],
+        openProposals: Uint32List.fromList(const [9]),
+        allDecided: false,
+      ),
+      state: recoveryState(
+        bundleCount: 2,
+        delegationTxHashes: [
+          rust_voting.ApiDelegationTxRecovery(
+            bundleIndex: 0,
+            txHash: 'delegation-0',
+          ),
+          rust_voting.ApiDelegationTxRecovery(
+            bundleIndex: 1,
+            txHash: 'delegation-1',
+          ),
+        ],
+        votes: [vote(bundleIndex: 1, proposalId: 7)],
+        voteTxHashes: [
+          rust_voting.ApiVoteTxRecovery(
+            bundleIndex: 1,
+            proposalId: 7,
+            txHash: 'vote-tx-1-7',
+          ),
+        ],
+        commitmentBundles: [
+          rust_voting.ApiCommitmentBundleRecovery(
+            bundleIndex: 1,
+            proposalId: 7,
+            commitmentBundleJson: commitmentBundleRecoveryJson(proposalId: 7),
+            vcTreePosition: BigInt.from(55),
+          ),
+        ],
+        shareDelegations: [existingShare],
+      ),
+    );
+    final container = _sessionContainer(rust: rust, recoveryApi: recoveryApi);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .castVotes(
+          draftVotes: [
+            rust_voting.ApiDraftVote(
+              proposalId: 8,
+              choice: 1,
+              numOptions: 2,
+              vcTreePosition: BigInt.zero,
+              singleShare: false,
+            ),
+          ],
+        );
+
+    expect(rust.recoveredVoteCommitmentKeys, ['1:7']);
+    expect(
+      rust.recordedShares
+          .where((share) => share.bundleIndex == 1 && share.proposalId == 7)
+          .map((share) => share.shareIndex)
+          .toList(),
+      [1],
+    );
+    expect(rust.storedVoteTxHashes, isNot(contains('1:7:vote-tx')));
+    expect(rust.voteCommitmentKeys, ['0:8', '1:8']);
+    expect(rust.operationLog.take(3).toList(), [
+      'recover_vote:1:7',
+      'record_share:1:7:1',
+      'build_vote:0:8',
+    ]);
+  });
 
   test('submitted vote timeout surfaces resumable tx context', () async {
     final httpResponses = votingHttpResponses()
@@ -2901,6 +3016,7 @@ class FakeVotingRustApi implements VotingRustApi {
     this.precomputeGate,
     this.failPrecompute = false,
     this.bundleCount = 1,
+    this.commitmentShareCount = 1,
     this.mismatchKeystoneSubmission = false,
     this.delegationStreamError,
     this.onDeleteSkippedBundles,
@@ -2911,6 +3027,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final Completer<void>? precomputeGate;
   final bool failPrecompute;
   final int bundleCount;
+  final int commitmentShareCount;
   final bool mismatchKeystoneSubmission;
   final Object? delegationStreamError;
   final void Function(int keepCount)? onDeleteSkippedBundles;
@@ -3322,6 +3439,7 @@ class FakeVotingRustApi implements VotingRustApi {
                 bundleIndex: bundleIndex,
                 proposalId: draft.proposalId,
                 choice: draft.choice,
+                shareCount: commitmentShareCount,
               )
             : null,
       );
@@ -3343,6 +3461,7 @@ class FakeVotingRustApi implements VotingRustApi {
       bundleIndex: bundleIndex,
       proposalId: proposalId,
       choice: 1,
+      shareCount: commitmentShareCount,
     );
   }
 
@@ -3505,6 +3624,7 @@ class FakeVotingRustApi implements VotingRustApi {
     required List<int> nullifier,
     required BigInt submitAt,
   }) async {
+    operationLog.add('record_share:$bundleIndex:$proposalId:$shareIndex');
     recordedShares.add(
       _RecordedShare(
         bundleIndex: bundleIndex,
@@ -3577,12 +3697,20 @@ rust_voting.ApiSignedVoteCommitments _commitments({
   required int bundleIndex,
   required int proposalId,
   required int choice,
+  int shareCount = 1,
 }) {
-  final wireShare = rust_voting.ApiWireEncryptedShare(
-    ciphertext1: Uint8List.fromList([8]),
-    ciphertext2: Uint8List.fromList([9]),
-    shareIndex: 0,
-  );
+  final wireShares = [
+    for (var shareIndex = 0; shareIndex < shareCount; shareIndex++)
+      rust_voting.ApiWireEncryptedShare(
+        ciphertext1: Uint8List.fromList(
+          shareCount == 1 ? [8] : [8, shareIndex],
+        ),
+        ciphertext2: Uint8List.fromList(
+          shareCount == 1 ? [9] : [9, shareIndex],
+        ),
+        shareIndex: shareIndex,
+      ),
+  ];
   return rust_voting.ApiSignedVoteCommitments(
     bundleIndex: bundleIndex,
     commitments: [
@@ -3594,22 +3722,31 @@ rust_voting.ApiSignedVoteCommitments _commitments({
         voteAuthorityNoteNew: Uint8List.fromList(List.filled(32, 2)),
         voteCommitment: Uint8List.fromList(List.filled(32, 3)),
         proof: Uint8List.fromList([4]),
-        encryptedShares: [wireShare],
+        encryptedShares: wireShares,
         sharePayloads: [
-          rust_voting.ApiVoteSharePayload(
-            sharesHash: Uint8List.fromList(List.filled(32, 7)),
-            proposalId: proposalId,
-            voteDecision: choice,
-            encryptedShare: wireShare,
-            treePosition: BigInt.from(9),
-            allEncryptedShares: [wireShare],
-            shareComms: [Uint8List.fromList(List.filled(32, 10))],
-            primaryBlind: Uint8List.fromList(List.filled(32, 11)),
-          ),
+          for (final wireShare in wireShares)
+            rust_voting.ApiVoteSharePayload(
+              sharesHash: Uint8List.fromList(List.filled(32, 7)),
+              proposalId: proposalId,
+              voteDecision: choice,
+              encryptedShare: wireShare,
+              treePosition: BigInt.from(9),
+              allEncryptedShares: wireShares,
+              shareComms: [
+                for (var i = 0; i < shareCount; i++)
+                  Uint8List.fromList(List.filled(32, 10 + i)),
+              ],
+              primaryBlind: Uint8List.fromList(
+                List.filled(32, 11 + wireShare.shareIndex),
+              ),
+            ),
         ],
         anchorHeight: 10,
         sharesHash: Uint8List.fromList(List.filled(32, 7)),
-        shareComms: [Uint8List.fromList(List.filled(32, 10))],
+        shareComms: [
+          for (var i = 0; i < shareCount; i++)
+            Uint8List.fromList(List.filled(32, 10 + i)),
+        ],
         rVpkBytes: Uint8List.fromList(List.filled(32, 13)),
         voteAuthSig: Uint8List.fromList(List.filled(64, 12)),
         commitmentBundleJson: '{"proposal_id":$proposalId}',

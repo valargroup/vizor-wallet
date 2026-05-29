@@ -1599,7 +1599,7 @@ pub fn clear_recovery_state(
 
 /// One unit of remaining work for a round, flattened for the FRB boundary.
 pub struct ApiNextStep {
-    /// "delegate" | "poll_delegation" | "cast_vote" | "submit_vote" | "poll_vote" | "confirm_share".
+    /// "delegate" | "poll_delegation" | "cast_vote" | "submit_vote" | "poll_vote" | "submit_shares" | "confirm_share".
     pub kind: String,
     pub bundle_index: u32,
     /// 0 for delegation steps.
@@ -1678,6 +1678,16 @@ pub fn get_round_plan(
                         proposal_id,
                     } => ApiNextStep {
                         kind: "poll_vote".to_string(),
+                        bundle_index,
+                        proposal_id,
+                        choice: 0,
+                        share_index: 0,
+                    },
+                    zcash_voting::session::NextStep::SubmitShares {
+                        bundle_index,
+                        proposal_id,
+                    } => ApiNextStep {
+                        kind: "submit_shares".to_string(),
                         bundle_index,
                         proposal_id,
                         choice: 0,
