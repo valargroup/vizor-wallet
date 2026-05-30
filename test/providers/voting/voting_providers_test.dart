@@ -2827,18 +2827,25 @@ Map<String, dynamic> roundStatusJson({
   required String roundId,
   int? ceremonyStart,
   int? voteEnd,
-}) => {
-  'vote_round_id': roundId,
-  'round_id': roundId,
-  'title': 'Poll',
-  'status': 'active',
-  'snapshot_height': 123,
-  'ea_pk': _hex32,
-  'nc_root': _hex32,
-  'nullifier_imt_root': _hex32,
-  if (ceremonyStart != null) 'ceremony_phase_start': ceremonyStart,
-  if (voteEnd != null) 'vote_end_time': voteEnd,
-};
+}) {
+  final json = <String, dynamic>{
+    'vote_round_id': roundId,
+    'round_id': roundId,
+    'title': 'Poll',
+    'status': 'active',
+    'snapshot_height': 123,
+    'ea_pk': _hex32,
+    'nc_root': _hex32,
+    'nullifier_imt_root': _hex32,
+  };
+  if (ceremonyStart != null) {
+    json['ceremony_phase_start'] = ceremonyStart;
+  }
+  if (voteEnd != null) {
+    json['vote_end_time'] = voteEnd;
+  }
+  return json;
+}
 
 rust_voting.ApiRoundRecoveryState recoveryState({
   int bundleCount = 1,

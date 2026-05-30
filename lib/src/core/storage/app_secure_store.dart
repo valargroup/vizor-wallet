@@ -275,10 +275,16 @@ class AppSecureStore {
   Future<void> deleteVotingHotkeysForAccount(String accountUuid) {
     return _secretMutationLock.run(() async {
       final prefix = _votingHotkeyAccountPrefix(accountUuid);
-      final storedValues = await _storage.readAll();
+      final storedValues = await _runStorageOperation(
+        'read voting hotkeys for account "$accountUuid"',
+        _storage.readAll,
+      );
       for (final key in storedValues.keys.toList(growable: false)) {
         if (key.startsWith(prefix)) {
-          await _storage.delete(key: key);
+          await _runStorageOperation(
+            'delete voting hotkey "$key"',
+            () => _storage.delete(key: key),
+          );
         }
       }
     });
@@ -447,7 +453,10 @@ class AppSecureStore {
           ),
         );
       }
-      final votingHotkeyValues = await _storage.readAll();
+      final votingHotkeyValues = await _runStorageOperation(
+        'read all voting hotkeys',
+        _storage.readAll,
+      );
       for (final entry in votingHotkeyValues.entries) {
         if (!entry.key.startsWith(_votingHotkeyKeyPrefix)) continue;
 
@@ -521,11 +530,6 @@ class AppSecureStore {
 
   static String _votingHotkeyAccountPrefix(String accountUuid) {
     return '$_votingHotkeyKeyPrefix${accountUuid}_';
-  }
-
-  static bool _isAppManagedEncryptedSecretKey(String key) {
-    return key.startsWith(_accountMnemonicKeyPrefix) ||
-        key.startsWith(_votingHotkeyKeyPrefix);
   }
 
   Future<void> recoverInterruptedPasswordRotation() async {
