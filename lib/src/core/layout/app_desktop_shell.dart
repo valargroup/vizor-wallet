@@ -11,12 +11,14 @@ class AppDesktopShell extends StatelessWidget {
     required this.sidebar,
     required this.pane,
     this.sidebarWidth = 256,
+    this.showVotingSubmissionProgress = true,
     super.key,
   });
 
   final Widget sidebar;
   final Widget pane;
   final double sidebarWidth;
+  final bool showVotingSubmissionProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +36,8 @@ class AppDesktopShell extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const VotingSubmissionProgressBanner(),
+                    if (showVotingSubmissionProgress)
+                      const VotingSubmissionProgressBanner(),
                     Expanded(child: pane),
                   ],
                 ),
