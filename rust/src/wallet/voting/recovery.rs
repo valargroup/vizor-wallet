@@ -344,15 +344,10 @@ pub fn add_sent_servers(
     new_urls: &[String],
 ) -> Result<(), String> {
     let voting_db = open_voting_db(db_path, wallet_id)?;
-    zcash_voting::share::add_sent_servers(
-        &voting_db,
-        round_id,
-        bundle_index,
-        proposal_id,
-        share_index,
-        new_urls,
-    )
-    .map_err(|e| format!("add_sent_servers failed: {e}"))
+    zcash_voting::vote::CommittedVote::recover(&voting_db, round_id, bundle_index, proposal_id)
+        .map_err(|e| format!("recover committed vote failed: {e}"))?
+        .add_sent_servers(&voting_db, share_index, new_urls)
+        .map_err(|e| format!("add_sent_servers failed: {e}"))
 }
 
 /// Clears retry/recovery artifacts for a voting round.

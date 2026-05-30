@@ -116,7 +116,7 @@ where
             "voting vote: starting proof generation (bundle_index={bundle_index}, proposal_id={})",
             draft.proposal_id
         );
-        let commit = zcash_voting::vote::commit(
+        let committed = zcash_voting::vote::CommittedVote::commit(
             &voting_db,
             round_id,
             bundle_index,
@@ -130,15 +130,8 @@ where
             &reporter,
         )
         .map_err(|e| format!("vote commit failed: {e}"))?;
-        let recovery = zcash_voting::vote::recovery_bundle(
-            &voting_db,
-            round_id,
-            bundle_index,
-            draft.proposal_id,
-        )
-        .map_err(|e| format!("load vote recovery bundle failed: {e}"))?
-        .ok_or_else(|| "vote recovery bundle missing after commit".to_string())?;
-        let commitment_json = zcash_voting::vote::serialize_recovery(&recovery)
+        let commitment_json = committed
+            .recovery_json(&voting_db)
             .map_err(|e| format!("serialize vote recovery failed: {e}"))?;
         cancellation.check()?;
         log::info!(
@@ -149,7 +142,6 @@ where
         );
 
         let payload_start = std::time::Instant::now();
-        let share_payloads = commit.share_payloads;
         log::info!(
             "voting vote: share payloads built \
              (bundle_index={bundle_index}, proposal_id={}, elapsed={:.2}s)",
@@ -165,34 +157,11 @@ where
             signing_start.elapsed().as_secs_f64(),
         );
 
-        commitments.push(SignedVoteCommitment {
-            proposal_id: draft.proposal_id,
-            choice: draft.choice,
-            vote_round_id: recovery.vote_round_id,
-            van_nullifier: commit.van_nullifier.to_vec(),
-            vote_authority_note_new: commit.vote_authority_note_new.to_vec(),
-            vote_commitment: commit.vote_commitment.to_vec(),
-            proof: commit.proof,
-            encrypted_shares: commit
-                .encrypted_shares
-                .iter()
-                .map(wire_share_from_upstream)
-                .collect(),
-            share_payloads: share_payloads
-                .iter()
-                .map(share_payload_from_upstream)
-                .collect(),
-            anchor_height: commit.anchor_height,
-            shares_hash: recovery.shares_hash.to_vec(),
-            share_comms: recovery
-                .share_comms
-                .iter()
-                .map(|comm| comm.to_vec())
-                .collect(),
-            r_vpk_bytes: commit.r_vpk.to_vec(),
-            vote_auth_sig: commit.vote_auth_sig.to_vec(),
-            commitment_bundle_json: commitment_json,
-        });
+        commitments.push(signed_vote_commitment_from_committed_vote(
+            &committed,
+            draft.choice,
+            commitment_json,
+        )?);
         log::info!(
             "voting vote: commitment completed \
              (bundle_index={bundle_index}, proposal_id={}, elapsed={:.2}s)",
@@ -216,51 +185,22 @@ pub fn recover_vote_commitment(
     proposal_id: u32,
 ) -> Result<SignedVoteCommitments, String> {
     let voting_db = open_voting_db(db_path, wallet_id)?;
-    let recovery =
-        zcash_voting::vote::recovery_bundle(&voting_db, round_id, bundle_index, proposal_id)
-            .map_err(|e| format!("load vote recovery bundle failed: {e}"))?
-            .ok_or_else(|| {
-                format!(
-                    "vote recovery bundle not found for round={round_id}, bundle={bundle_index}, proposal={proposal_id}"
-                )
-            })?;
-    let commit =
-        zcash_voting::vote::recover_commit(&voting_db, round_id, bundle_index, proposal_id)
+    let committed =
+        zcash_voting::vote::CommittedVote::recover(&voting_db, round_id, bundle_index, proposal_id)
             .map_err(|e| format!("vote commitment recovery failed: {e}"))?;
-    let commitment_json = zcash_voting::vote::serialize_recovery(&recovery)
+    let commitment_json = committed
+        .recovery_json(&voting_db)
         .map_err(|e| format!("serialize vote recovery failed: {e}"))?;
 
     Ok(SignedVoteCommitments {
         bundle_index,
-        commitments: vec![SignedVoteCommitment {
-            proposal_id,
-            choice: recovery.vote_decision,
-            vote_round_id: recovery.vote_round_id,
-            van_nullifier: commit.van_nullifier.to_vec(),
-            vote_authority_note_new: commit.vote_authority_note_new.to_vec(),
-            vote_commitment: commit.vote_commitment.to_vec(),
-            proof: commit.proof,
-            encrypted_shares: commit
-                .encrypted_shares
-                .iter()
-                .map(wire_share_from_upstream)
-                .collect(),
-            share_payloads: commit
-                .share_payloads
-                .iter()
-                .map(share_payload_from_upstream)
-                .collect(),
-            anchor_height: commit.anchor_height,
-            shares_hash: recovery.shares_hash.to_vec(),
-            share_comms: recovery
-                .share_comms
-                .iter()
-                .map(|comm| comm.to_vec())
-                .collect(),
-            r_vpk_bytes: commit.r_vpk.to_vec(),
-            vote_auth_sig: commit.vote_auth_sig.to_vec(),
-            commitment_bundle_json: commitment_json,
-        }],
+        commitments: vec![signed_vote_commitment_from_committed_vote(
+            &committed,
+            zcash_voting::vote::parse_recovery(&commitment_json)
+                .map_err(|e| format!("parse vote recovery failed: {e}"))?
+                .vote_decision,
+            commitment_json,
+        )?],
     })
 }
 
@@ -303,6 +243,45 @@ fn van_auth_path_array(witness: &VanWitness) -> Result<[[u8; 32]; VAN_AUTH_PATH_
         auth_path[idx] = hash;
     }
     Ok(auth_path)
+}
+
+fn signed_vote_commitment_from_committed_vote(
+    committed: &zcash_voting::vote::CommittedVote,
+    choice: u32,
+    commitment_bundle_json: String,
+) -> Result<SignedVoteCommitment, String> {
+    let recovery = zcash_voting::vote::parse_recovery(&commitment_bundle_json)
+        .map_err(|e| format!("parse vote recovery failed: {e}"))?;
+    let commit = committed.data();
+    Ok(SignedVoteCommitment {
+        proposal_id: commit.proposal_id,
+        choice,
+        vote_round_id: recovery.vote_round_id,
+        van_nullifier: commit.van_nullifier.to_vec(),
+        vote_authority_note_new: commit.vote_authority_note_new.to_vec(),
+        vote_commitment: commit.vote_commitment.to_vec(),
+        proof: commit.proof.clone(),
+        encrypted_shares: commit
+            .encrypted_shares
+            .iter()
+            .map(wire_share_from_upstream)
+            .collect(),
+        share_payloads: commit
+            .share_payloads
+            .iter()
+            .map(share_payload_from_upstream)
+            .collect(),
+        anchor_height: commit.anchor_height,
+        shares_hash: recovery.shares_hash.to_vec(),
+        share_comms: recovery
+            .share_comms
+            .iter()
+            .map(|comm| comm.to_vec())
+            .collect(),
+        r_vpk_bytes: commit.r_vpk.to_vec(),
+        vote_auth_sig: commit.vote_auth_sig.to_vec(),
+        commitment_bundle_json,
+    })
 }
 
 fn wire_share_from_upstream(share: &zcash_voting::WireEncryptedShare) -> WireEncryptedShare {
