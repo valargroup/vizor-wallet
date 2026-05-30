@@ -166,6 +166,39 @@ void main() {
     expect(find.text('Retry'), findsOneWidget);
   });
 
+  testWidgets('status screen retry keeps setup errors specific', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      rust: _IneligibleVotingRustApi(),
+    );
+    addTearDown(container.dispose);
+    container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    const message =
+        'This account is not eligible for this poll. It had no eligible '
+        'shielded funds at snapshot block 3,359,740. Switch to an eligible '
+        'account to vote.';
+    await _pumpUntilFound(tester, find.text(message));
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(tester, find.text(message));
+
+    expect(find.text(message), findsOneWidget);
+    expect(find.textContaining('Voting could not continue'), findsNothing);
+  });
+
   testWidgets('submitted route does not confirm incomplete current account', (
     tester,
   ) async {

@@ -243,7 +243,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   Future<void> delegatePendingBundles({required List<int> seedBytes}) {
     return _enqueue(() async {
       var current = await future;
-      if (current.pirEndpoint == null) {
+      if (_needsDelegationPreparation(current)) {
         await _prepareDelegationUnlocked();
         current = await future;
         if (current.phase == VotingSessionPhase.error ||
@@ -549,7 +549,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   Future<void> delegatePendingBundlesWithKeystoneSignatures() {
     return _enqueue(() async {
       var current = await future;
-      if (current.pirEndpoint == null) {
+      if (_needsDelegationPreparation(current)) {
         await _prepareDelegationUnlocked();
         current = await future;
         if (current.phase == VotingSessionPhase.error ||
@@ -2182,6 +2182,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return friendlyVotingErrorMessage(error);
   }
 
+  static bool _needsDelegationPreparation(VotingSessionState state) {
+    return state.pirEndpoint == null || state.eligibleWeightZatoshi == null;
+  }
+
   Future<void> _prepareKeystoneSigningUnlocked() async {
     var current = await future;
     var context = await _loadContext(_roundId);
@@ -2194,7 +2198,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     }
     await _waitUntilWalletReadyForVoting(context);
 
-    if (current.pirEndpoint == null) {
+    if (_needsDelegationPreparation(current)) {
       await _prepareDelegationUnlocked();
       current = await future;
       if (current.phase == VotingSessionPhase.error) return;
@@ -2522,7 +2526,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     final current = state.value ?? VotingSessionState(roundId: _roundId);
     final phase = waiting
         ? VotingSessionPhase.waitingForWalletSync
-        : current.phase == VotingSessionPhase.waitingForWalletSync
+        : current.phase == VotingSessionPhase.waitingForWalletSync ||
+              current.phase == VotingSessionPhase.error
         ? VotingSessionPhase.idle
         : current.phase;
     _setStateForContext(
