@@ -6,7 +6,7 @@
 import '../../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 class BundleSetupResultView {
   final int bundleCount;
@@ -58,6 +58,42 @@ class CommitmentBundleRecoveryView {
           proposalId == other.proposalId &&
           commitmentBundleJson == other.commitmentBundleJson &&
           vcTreePosition == other.vcTreePosition;
+}
+
+class CompletedVoteChoiceView {
+  final int proposalId;
+  final int? choice;
+
+  const CompletedVoteChoiceView({required this.proposalId, this.choice});
+
+  @override
+  int get hashCode => proposalId.hashCode ^ choice.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CompletedVoteChoiceView &&
+          runtimeType == other.runtimeType &&
+          proposalId == other.proposalId &&
+          choice == other.choice;
+}
+
+class CompletedVoteDisplayView {
+  final List<CompletedVoteChoiceView> choices;
+  final BigInt? votedAt;
+
+  const CompletedVoteDisplayView({required this.choices, this.votedAt});
+
+  @override
+  int get hashCode => choices.hashCode ^ votedAt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CompletedVoteDisplayView &&
+          runtimeType == other.runtimeType &&
+          choices == other.choices &&
+          votedAt == other.votedAt;
 }
 
 class DelegationPirPrecomputeResultView {
@@ -120,6 +156,58 @@ class DelegationRecoveryView {
           phase == other.phase &&
           txHash == other.txHash &&
           vanLeafPosition == other.vanLeafPosition;
+}
+
+class DelegationRecoveryWorkView {
+  final String kind;
+  final int bundleIndex;
+  final String phase;
+  final String? txHash;
+
+  const DelegationRecoveryWorkView({
+    required this.kind,
+    required this.bundleIndex,
+    required this.phase,
+    this.txHash,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^ bundleIndex.hashCode ^ phase.hashCode ^ txHash.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DelegationRecoveryWorkView &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          bundleIndex == other.bundleIndex &&
+          phase == other.phase &&
+          txHash == other.txHash;
+}
+
+class DelegationStatusView {
+  final int bundleIndex;
+  final String phase;
+  final String? txHash;
+
+  const DelegationStatusView({
+    required this.bundleIndex,
+    required this.phase,
+    this.txHash,
+  });
+
+  @override
+  int get hashCode => bundleIndex.hashCode ^ phase.hashCode ^ txHash.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DelegationStatusView &&
+          runtimeType == other.runtimeType &&
+          bundleIndex == other.bundleIndex &&
+          phase == other.phase &&
+          txHash == other.txHash;
 }
 
 class DelegationSubmissionWire {
@@ -329,14 +417,36 @@ class NextStepView {
 class RoundPlanView {
   final String roundId;
   final bool pendingRecovery;
+  final bool blockingRecovery;
+  final bool blockingShareWork;
+  final bool hotkeyBound;
+  final bool completedVoteArtifact;
+  final bool completedForDisplay;
+  final CompletedVoteDisplayView? completedVoteDisplay;
+  final bool needsDraftSetup;
+  final String primaryAction;
   final List<NextStepView> nextSteps;
+  final List<DelegationStatusView> delegationStatuses;
+  final List<DelegationRecoveryWorkView> recoveredDelegationWork;
+  final List<VoteRecoveryWorkView> recoveredVoteWork;
   final Uint32List openProposals;
   final bool allDecided;
 
   const RoundPlanView({
     required this.roundId,
     required this.pendingRecovery,
+    required this.blockingRecovery,
+    required this.blockingShareWork,
+    required this.hotkeyBound,
+    required this.completedVoteArtifact,
+    required this.completedForDisplay,
+    this.completedVoteDisplay,
+    required this.needsDraftSetup,
+    required this.primaryAction,
     required this.nextSteps,
+    required this.delegationStatuses,
+    required this.recoveredDelegationWork,
+    required this.recoveredVoteWork,
     required this.openProposals,
     required this.allDecided,
   });
@@ -345,7 +455,18 @@ class RoundPlanView {
   int get hashCode =>
       roundId.hashCode ^
       pendingRecovery.hashCode ^
+      blockingRecovery.hashCode ^
+      blockingShareWork.hashCode ^
+      hotkeyBound.hashCode ^
+      completedVoteArtifact.hashCode ^
+      completedForDisplay.hashCode ^
+      completedVoteDisplay.hashCode ^
+      needsDraftSetup.hashCode ^
+      primaryAction.hashCode ^
       nextSteps.hashCode ^
+      delegationStatuses.hashCode ^
+      recoveredDelegationWork.hashCode ^
+      recoveredVoteWork.hashCode ^
       openProposals.hashCode ^
       allDecided.hashCode;
 
@@ -356,7 +477,18 @@ class RoundPlanView {
           runtimeType == other.runtimeType &&
           roundId == other.roundId &&
           pendingRecovery == other.pendingRecovery &&
+          blockingRecovery == other.blockingRecovery &&
+          blockingShareWork == other.blockingShareWork &&
+          hotkeyBound == other.hotkeyBound &&
+          completedVoteArtifact == other.completedVoteArtifact &&
+          completedForDisplay == other.completedForDisplay &&
+          completedVoteDisplay == other.completedVoteDisplay &&
+          needsDraftSetup == other.needsDraftSetup &&
+          primaryAction == other.primaryAction &&
           nextSteps == other.nextSteps &&
+          delegationStatuses == other.delegationStatuses &&
+          recoveredDelegationWork == other.recoveredDelegationWork &&
+          recoveredVoteWork == other.recoveredVoteWork &&
           openProposals == other.openProposals &&
           allDecided == other.allDecided;
 }
@@ -753,6 +885,45 @@ class VoteRecoveryView {
           txHash == other.txHash &&
           vcTreePosition == other.vcTreePosition &&
           hasCommitmentBundle == other.hasCommitmentBundle;
+}
+
+class VoteRecoveryWorkView {
+  final String kind;
+  final int bundleIndex;
+  final int proposalId;
+  final String? txHash;
+  final BigInt? vcTreePosition;
+  final Uint32List shareIndexes;
+
+  const VoteRecoveryWorkView({
+    required this.kind,
+    required this.bundleIndex,
+    required this.proposalId,
+    this.txHash,
+    this.vcTreePosition,
+    required this.shareIndexes,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      bundleIndex.hashCode ^
+      proposalId.hashCode ^
+      txHash.hashCode ^
+      vcTreePosition.hashCode ^
+      shareIndexes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VoteRecoveryWorkView &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          bundleIndex == other.bundleIndex &&
+          proposalId == other.proposalId &&
+          txHash == other.txHash &&
+          vcTreePosition == other.vcTreePosition &&
+          shareIndexes == other.shareIndexes;
 }
 
 class VoteShareWire {
