@@ -96,7 +96,13 @@ final votingWalletDbPathProvider = Provider<Future<String> Function()>((ref) {
 final votingActiveAccountUuidProvider = Provider<Future<String?> Function()>((
   ref,
 ) {
-  return () async => (await ref.read(accountProvider.future)).activeAccountUuid;
+  final activeAccountUuid = ref.watch(
+    accountProvider.select((value) => value.value?.activeAccountUuid),
+  );
+  return () async {
+    if (activeAccountUuid != null) return activeAccountUuid;
+    return (await ref.read(accountProvider.future)).activeAccountUuid;
+  };
 });
 
 /// Test seam for account hardware classification.

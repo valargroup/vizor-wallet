@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
@@ -391,6 +392,26 @@ void main() {
     );
   });
 
+  test('empty all-decided plan is not a completed submission', () async {
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(bundleCount: 0),
+      roundPlan: rust_voting.ApiRoundPlan(
+        roundId: kRoundId,
+        pendingRecovery: false,
+        nextSteps: const [],
+        openProposals: Uint32List(0),
+        allDecided: true,
+      ),
+    );
+    final container = _sessionContainer(recoveryApi: recoveryApi);
+    addTearDown(container.dispose);
+
+    final state = await container.read(votingSessionProvider(kRoundId).future);
+
+    expect(state.phase, VotingSessionPhase.idle);
+    expect(state.resumePlan?.hasCompletedVoteArtifact, isFalse);
+  });
+
   test('PIR mismatch fails before Rust delegation work is called', () async {
     final rust = FakeVotingRustApi();
     final pir = FakePirResolver(
@@ -415,6 +436,9 @@ void main() {
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
     expect(state.phase, VotingSessionPhase.error);
+    expect(state.error?.message, contains('Voting PIR data is not ready'));
+    expect(state.error?.message, contains('123'));
+    expect(state.error?.message, contains('122'));
     expect(state.error?.pirDiagnostics, hasLength(1));
     expect(rust.setupCalls, 0);
     expect(rust.delegationBundleCalls, isEmpty);
@@ -456,6 +480,75 @@ void main() {
     expect(readiness.calls, 2);
     expect(syncStartCalls, 1);
     expect(rust.setupCalls, 1);
+    expect(state.phase, VotingSessionPhase.readyToDelegate);
+  });
+
+  test('wallet sync wait aborts stale account before queued action', () async {
+    final rust = FakeVotingRustApi();
+    final readiness = FakeVotingWalletSyncReadinessChecker(
+      responses: const [
+        VotingWalletSyncReadiness(
+          scannedHeight: 122,
+          snapshotHeight: 123,
+          chainTipHeight: 130,
+        ),
+        VotingWalletSyncReadiness(
+          scannedHeight: 123,
+          snapshotHeight: 123,
+          chainTipHeight: 130,
+        ),
+      ],
+    );
+    var syncStartCalls = 0;
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final container = _sessionContainer(
+      rust: rust,
+      activeAccountUuidListenable: activeAccountProvider,
+      walletSyncReadinessChecker: readiness,
+      walletSyncStarter: () {
+        syncStartCalls++;
+      },
+      walletSyncPollInterval: const Duration(milliseconds: 100),
+    );
+    final subscription = container.listen(
+      votingSessionProvider(kRoundId),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    final notifier = container.read(votingSessionProvider(kRoundId).notifier);
+    final stalePrepare = notifier.prepareDelegation();
+    while (readiness.calls < 1) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    await Future<void>.delayed(Duration.zero);
+    final reloaded = await container.read(
+      votingSessionProvider(kRoundId).future,
+    );
+    expect(reloaded.accountUuid, 'account-2');
+
+    final currentPrepare = container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .prepareDelegation();
+    await Future.wait([
+      stalePrepare,
+      currentPrepare,
+    ]).timeout(const Duration(milliseconds: 50));
+    await Future<void>.delayed(const Duration(milliseconds: 110));
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(readiness.calls, 2);
+    expect(syncStartCalls, 1);
+    expect(rust.setupCalls, 1);
+    expect(rust.accountUuids, ['account-2']);
+    expect(state.accountUuid, 'account-2');
     expect(state.phase, VotingSessionPhase.readyToDelegate);
   });
 
@@ -1030,6 +1123,164 @@ void main() {
     expect(rust.accountUuids.toSet(), {'account-1'});
     expect(recoveryApi.walletIds.toSet(), {'account-1'});
   });
+
+  test('session reloads same round when active account changes', () async {
+    final rust = FakeVotingRustApi();
+    final recoveryApi = FakeVotingRecoveryApi(state: recoveryState());
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final container = _sessionContainer(
+      rust: rust,
+      recoveryApi: recoveryApi,
+      activeAccountUuidListenable: activeAccountProvider,
+      hardwareAccountUuids: {'account-2'},
+    );
+    final subscription = container.listen(
+      votingSessionProvider(kRoundId),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    final first = await container.read(votingSessionProvider(kRoundId).future);
+    expect(first.accountUuid, 'account-1');
+    expect(first.isHardwareAccount, isFalse);
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    await Future<void>.delayed(Duration.zero);
+    expect(
+      container.read(votingSessionProvider(kRoundId)).value?.accountUuid,
+      isNot('account-1'),
+    );
+    final second = await container.read(votingSessionProvider(kRoundId).future);
+
+    expect(second.accountUuid, 'account-2');
+    expect(second.isHardwareAccount, isTrue);
+    expect(
+      recoveryApi.walletIds,
+      containsAllInOrder(['account-1', 'account-2']),
+    );
+    expect(rust.resetVotingSessionStateCalls, contains('account-1:$kRoundId'));
+  });
+
+  test('Keystone signing starts after active account reload', () async {
+    final rust = FakeVotingRustApi();
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final container = _sessionContainer(
+      rust: rust,
+      activeAccountUuidListenable: activeAccountProvider,
+      hardwareAccountUuids: {'account-2'},
+    );
+    final subscription = container.listen(
+      votingSessionProvider(kRoundId),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    final first = await container.read(votingSessionProvider(kRoundId).future);
+    expect(first.accountUuid, 'account-1');
+    expect(first.isHardwareAccount, isFalse);
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    final second = await container.read(votingSessionProvider(kRoundId).future);
+    expect(second.accountUuid, 'account-2');
+    expect(second.isHardwareAccount, isTrue);
+
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .prepareKeystoneSigning();
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(state.phase, VotingSessionPhase.keystoneSigning);
+    expect(state.keystoneSigningRequest?.bundleIndex, 0);
+    expect(rust.keystoneDelegationRequestCalls, [0]);
+    expect(rust.accountUuids, contains('account-2'));
+  });
+
+  test(
+    'ignores stale session UI updates after active account changes',
+    () async {
+      final setupGate = Completer<void>();
+      final rust = FakeVotingRustApi(setupGate: setupGate);
+      final activeAccountProvider =
+          NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+            _ActiveVotingAccountNotifier.new,
+          );
+      final container = _sessionContainer(
+        rust: rust,
+        activeAccountUuidListenable: activeAccountProvider,
+      );
+      final subscription = container.listen(
+        votingSessionProvider(kRoundId),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      final prepare = container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .prepareDelegation();
+      await rust.setupStarted.future;
+
+      container.read(activeAccountProvider.notifier).set('account-2');
+      await Future<void>.delayed(Duration.zero);
+      setupGate.complete();
+      await prepare;
+      await Future<void>.delayed(Duration.zero);
+      await container.read(votingSessionProvider(kRoundId).future);
+
+      final state = container.read(votingSessionProvider(kRoundId)).value!;
+      expect(state.accountUuid, 'account-2');
+      expect(state.eligibleWeightZatoshi, isNull);
+    },
+  );
+
+  test(
+    'does not surface stale action errors while reloading switched account',
+    () async {
+      final setupGate = Completer<void>();
+      final rust = FakeVotingRustApi(setupGate: setupGate);
+      final activeAccountProvider =
+          NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+            _ActiveVotingAccountNotifier.new,
+          );
+      final container = _sessionContainer(
+        rust: rust,
+        activeAccountUuidListenable: activeAccountProvider,
+      );
+      final subscription = container.listen(
+        votingSessionProvider(kRoundId),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      final prepare = container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .prepareDelegation();
+      await rust.setupStarted.future;
+
+      container.read(activeAccountProvider.notifier).set('account-2');
+      await Future<void>.delayed(Duration.zero);
+
+      final reloaded = await container.read(
+        votingSessionProvider(kRoundId).future,
+      );
+      expect(reloaded.accountUuid, 'account-2');
+      expect(container.read(votingSessionProvider(kRoundId)).hasError, isFalse);
+
+      setupGate.complete();
+      await prepare;
+    },
+  );
 
   test('draft choices are isolated by pinned voting account', () async {
     final activeAccount = _MutableActiveAccount('account-1');
@@ -2472,7 +2723,10 @@ void main() {
     await container.read(votingSessionProvider(kRoundId).future);
     await container
         .read(votingSessionProvider(kRoundId).notifier)
-        .precomputeDelegationPir(seedBytes: seedBytes);
+        .precomputeDelegationPir(
+          accountUuid: 'account-1',
+          seedBytes: seedBytes,
+        );
     await rust.precomputeStarted.future;
 
     seedBytes.fillRange(0, seedBytes.length, 0);
@@ -2486,6 +2740,40 @@ void main() {
     expect(rust.precomputeSeedRefs.single, [0, 0, 0]);
   });
 
+  test('delegation PIR warmup skips after account switch', () async {
+    final rust = FakeVotingRustApi();
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final container = _sessionContainer(
+      rust: rust,
+      activeAccountUuidListenable: activeAccountProvider,
+    );
+    final subscription = container.listen(
+      votingSessionProvider(kRoundId),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    final first = await container.read(votingSessionProvider(kRoundId).future);
+    expect(first.accountUuid, 'account-1');
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    final second = await container.read(votingSessionProvider(kRoundId).future);
+    expect(second.accountUuid, 'account-2');
+
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .precomputeDelegationPir(
+          accountUuid: 'account-1',
+          seedBytes: [1, 2, 3],
+        );
+
+    expect(rust.precomputedDelegationPir, isEmpty);
+  });
+
   test('delegation phase activates while waiting for PIR warmup', () async {
     final precomputeGate = Completer<void>();
     final rust = FakeVotingRustApi(precomputeGate: precomputeGate);
@@ -2494,7 +2782,10 @@ void main() {
 
     await container.read(votingSessionProvider(kRoundId).future);
     final notifier = container.read(votingSessionProvider(kRoundId).notifier);
-    await notifier.precomputeDelegationPir(seedBytes: [1, 2, 3]);
+    await notifier.precomputeDelegationPir(
+      accountUuid: 'account-1',
+      seedBytes: [1, 2, 3],
+    );
     await rust.precomputeStarted.future;
 
     final delegationFuture = notifier.delegatePendingBundles(
@@ -2529,7 +2820,10 @@ void main() {
 
     await container.read(votingSessionProvider(kRoundId).future);
     final notifier = container.read(votingSessionProvider(kRoundId).notifier);
-    await notifier.precomputeDelegationPir(seedBytes: [1, 2, 3]);
+    await notifier.precomputeDelegationPir(
+      accountUuid: 'account-1',
+      seedBytes: [1, 2, 3],
+    );
     await notifier.delegatePendingBundles(seedBytes: [1, 2, 3]);
 
     expect(rust.precomputedDelegationPir, [0]);
@@ -2621,6 +2915,7 @@ ProviderContainer _sessionContainer({
   PirSnapshotResolver? pirResolver,
   VotingHotkeyStore? hotkeyStore,
   Future<String?> Function()? activeAccountUuid,
+  ProviderListenable<String?>? activeAccountUuidListenable,
   bool accountIsHardware = false,
   Set<String>? hardwareAccountUuids,
   VotingTxConfirmationPolling? txConfirmationPolling,
@@ -2647,9 +2942,16 @@ ProviderContainer _sessionContainer({
         ),
       ),
       votingWalletDbPathProvider.overrideWithValue(() async => 'wallet.db'),
-      votingActiveAccountUuidProvider.overrideWithValue(
-        activeAccountUuid ?? () async => 'account-1',
-      ),
+      votingActiveAccountUuidProvider.overrideWith((ref) {
+        final activeAccountUuidFromProvider =
+            activeAccountUuidListenable == null
+            ? null
+            : ref.watch(activeAccountUuidListenable);
+        if (activeAccountUuidListenable != null) {
+          return () async => activeAccountUuidFromProvider;
+        }
+        return activeAccountUuid ?? () async => 'account-1';
+      }),
       votingAccountIsHardwareProvider.overrideWithValue(
         (uuid) async => effectiveHardwareAccountUuids.contains(uuid),
       ),
@@ -3127,6 +3429,15 @@ class _MutableActiveAccount {
   Future<String?> call() async => value;
 }
 
+class _ActiveVotingAccountNotifier extends Notifier<String?> {
+  @override
+  String? build() => 'account-1';
+
+  void set(String? accountUuid) {
+    state = accountUuid;
+  }
+}
+
 class FakePirResolver implements PirSnapshotResolver {
   final PirSnapshotResolution? resolution;
   final Object? error;
@@ -3255,6 +3566,7 @@ class FakeVotingWalletSyncReadinessChecker
 class FakeVotingRustApi implements VotingRustApi {
   FakeVotingRustApi({
     this.setupDelay = Duration.zero,
+    this.setupGate,
     this.emitCommitments = false,
     this.precomputeGate,
     this.failPrecompute = false,
@@ -3266,6 +3578,7 @@ class FakeVotingRustApi implements VotingRustApi {
   });
 
   final Duration setupDelay;
+  final Completer<void>? setupGate;
   final bool emitCommitments;
   final Completer<void>? precomputeGate;
   final bool failPrecompute;
@@ -3290,6 +3603,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final syncedVoteTrees = <String>[];
   final precomputedDelegationPir = <int>[];
   final precomputeSeedRefs = <List<int>>[];
+  final setupStarted = Completer<void>();
   final precomputeStarted = Completer<void>();
   final precomputeFinished = Completer<void>();
   final resetVotingSessionStateCalls = <String>[];
@@ -3320,6 +3634,10 @@ class FakeVotingRustApi implements VotingRustApi {
     if (_activeSetups > maxConcurrentSetups) {
       maxConcurrentSetups = _activeSetups;
     }
+    if (!setupStarted.isCompleted) {
+      setupStarted.complete();
+    }
+    await setupGate?.future;
     if (setupDelay > Duration.zero) {
       await Future<void>.delayed(setupDelay);
     }

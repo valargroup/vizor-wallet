@@ -13,6 +13,7 @@ import 'package:zcash_wallet/src/features/voting/screens/voting_proposal_detail_
 import 'package:zcash_wallet/src/features/voting/screens/voting_review_screen.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_results_screen.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_status_screen.dart';
+import 'package:zcash_wallet/src/features/voting/screens/voting_submission_confirmation_screen.dart';
 import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
@@ -127,6 +128,104 @@ void main() {
 
     expect(find.text('Choose at least one vote before submitting.'), findsOne);
     expect(find.text('Retry'), findsOne);
+  });
+
+  testWidgets('status screen explains ineligible account voting failure', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      rust: _IneligibleVotingRustApi(),
+    );
+    addTearDown(container.dispose);
+    container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    const message =
+        'This account is not eligible for this poll. It had no eligible '
+        'shielded funds at snapshot block 3,359,740. Switch to an eligible '
+        'account to vote.';
+    await _pumpUntilFound(tester, find.text(message));
+
+    expect(find.text(message), findsOneWidget);
+    expect(find.text('Voting failed.'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('submitted route does not confirm incomplete current account', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _submissionHarness(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(tester, find.text('Submission Not Complete'));
+
+    expect(find.text('Submission Confirmed!'), findsNothing);
+    expect(
+      find.text('This account has not completed submission for this poll.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('status screen does not complete all-decided empty account', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final recoveryApi = _MutableVotingRecoveryApi()
+      ..state = _recoveryState(bundleCount: 0)
+      ..roundPlan = rust_voting.ApiRoundPlan(
+        roundId: _roundId,
+        pendingRecovery: false,
+        nextSteps: const [],
+        openProposals: Uint32List(0),
+        allDecided: true,
+      );
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(
+      tester,
+      find.text('Choose at least one vote before submitting.'),
+    );
+
+    expect(find.text('submission confirmed route'), findsNothing);
+    expect(find.byIcon(Icons.check_circle), findsNothing);
+    expect(find.text('Choose at least one vote before submitting.'), findsOne);
   });
 
   testWidgets(
@@ -1504,6 +1603,37 @@ Widget _proposalHarness() {
   );
 }
 
+Widget _submissionHarness() {
+  final router = GoRouter(
+    initialLocation: '/voting/poll/$_roundId/submitted',
+    routes: [
+      GoRoute(
+        path: '/voting/poll/:roundId/submitted',
+        builder: (_, state) => VotingSubmissionConfirmationScreen(
+          roundId: state.pathParameters['roundId']!,
+        ),
+      ),
+      GoRoute(path: '/voting', builder: (_, _) => const Text('voting route')),
+      GoRoute(path: '/home', builder: (_, _) => const Text('home route')),
+      GoRoute(path: '/send', builder: (_, _) => const Text('send route')),
+      GoRoute(path: '/receive', builder: (_, _) => const Text('receive route')),
+      GoRoute(
+        path: '/activity',
+        builder: (_, _) => const Text('activity route'),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (_, _) => const Text('settings route'),
+      ),
+    ],
+  );
+
+  return MaterialApp.router(
+    routerConfig: router,
+    builder: (_, child) => AppTheme(data: AppThemeData.light, child: child!),
+  );
+}
+
 Widget _resultsHarness() {
   final router = GoRouter(
     initialLocation: '/voting/poll/$_roundId/results',
@@ -1883,6 +2013,24 @@ class _FailingVotingPowerRustApi extends _NoopVotingRustApi {
   }
 }
 
+class _IneligibleVotingRustApi extends _NoopVotingRustApi {
+  @override
+  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required rust_voting.ApiVotingRoundParams roundParams,
+    required String roundName,
+    String? sessionJson,
+    required String accountUuid,
+    int? maxRealNotesPerBundle,
+  }) async {
+    throw Exception(
+      'Invalid input: no spendable voting notes at snapshot height 3359740',
+    );
+  }
+}
+
 class _NoopSyncNotifier extends SyncNotifier {
   @override
   Future<SyncState> build() async {
@@ -2019,6 +2167,28 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     return rust_voting.ApiVotingBundleSetupResult(
       bundleCount: bundleCount,
       eligibleWeightZatoshi: BigInt.from(100),
+    );
+  }
+
+  @override
+  Future<rust_voting.ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String pirServerUrl,
+    required String network,
+    required rust_voting.ApiVotingRoundParams roundParams,
+    required String roundName,
+    String? sessionJson,
+    required String accountUuid,
+    required List<int> seedBytes,
+    required int bundleIndex,
+    int? maxRealNotesPerBundle,
+  }) async {
+    return rust_voting.ApiDelegationPirPrecomputeResult(
+      cachedCount: 0,
+      fetchedCount: 1,
+      bundleCount: bundleCount,
+      bundleIndex: bundleIndex,
     );
   }
 
