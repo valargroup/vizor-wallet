@@ -130,6 +130,37 @@ void main() {
     expect(find.text('Retry'), findsOne);
   });
 
+  testWidgets('status screen explains ineligible account voting failure', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      rust: _IneligibleVotingRustApi(),
+    );
+    addTearDown(container.dispose);
+    container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    const message =
+        'This account is not eligible for this poll. It had no eligible '
+        'shielded funds at snapshot block 3,359,740. Switch to an eligible '
+        'account to vote.';
+    await _pumpUntilFound(tester, find.text(message));
+
+    expect(find.text(message), findsOneWidget);
+    expect(find.text('Voting failed.'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
   testWidgets('submitted route does not confirm incomplete current account', (
     tester,
   ) async {
@@ -1979,6 +2010,24 @@ class _FailingVotingPowerRustApi extends _NoopVotingRustApi {
     int? maxRealNotesPerBundle,
   }) async {
     throw StateError('snapshot setup unavailable');
+  }
+}
+
+class _IneligibleVotingRustApi extends _NoopVotingRustApi {
+  @override
+  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required rust_voting.ApiVotingRoundParams roundParams,
+    required String roundName,
+    String? sessionJson,
+    required String accountUuid,
+    int? maxRealNotesPerBundle,
+  }) async {
+    throw Exception(
+      'Invalid input: no spendable voting notes at snapshot height 3359740',
+    );
   }
 }
 

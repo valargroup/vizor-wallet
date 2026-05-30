@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/formatting/duration_format.dart';
 import '../../core/formatting/hex_codec.dart';
+import '../../features/voting/voting_error_messages.dart';
 import '../../features/voting/voting_flow_models.dart';
 import '../../features/voting/voting_resume_plan.dart';
 import '../../features/voting/voting_share_timing.dart';
@@ -2202,18 +2203,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   static String _actionErrorMessage(Object error) {
-    final text = error.toString().trim();
-    for (final prefix in const [
-      'Exception: ',
-      'StateError: ',
-      'Bad state: ',
-      'VotingHotkeyUnavailable: ',
-    ]) {
-      if (text.startsWith(prefix)) {
-        return text.substring(prefix.length);
-      }
-    }
-    return text.isEmpty ? 'Voting session action failed.' : text;
+    return friendlyVotingErrorMessage(error);
   }
 
   Future<void> _prepareKeystoneSigningUnlocked() async {

@@ -19,6 +19,7 @@ import '../../../rust/api/voting.dart' as rust_voting;
 import '../../../services/voting/pir_snapshot_resolver.dart';
 import '../../keystone/widgets/keystone_pczt_qr_stage.dart';
 import '../voting_flow_models.dart';
+import '../voting_error_messages.dart';
 import '../voting_resume_plan.dart';
 import '../voting_routes.dart';
 
@@ -129,6 +130,10 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
       if (afterWalletSync?.phase == VotingSessionPhase.error ||
           afterWalletSync?.phase == VotingSessionPhase.waitingForWalletSync) {
         if (afterWalletSync?.phase == VotingSessionPhase.error) {
+          _setRunError(
+            _statusErrorMessage(afterWalletSync!) ??
+                _genericVotingStatusErrorMessage,
+          );
           _releaseSubmissionGuard();
         }
         return;
@@ -539,13 +544,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   }
 
   String _messageFromError(Object error) {
-    final text = error.toString().trim();
-    for (final prefix in const ['Exception: ', 'StateError: ', 'Bad state: ']) {
-      if (text.startsWith(prefix)) {
-        return text.substring(prefix.length);
-      }
-    }
-    return text.isEmpty ? 'Voting session action failed.' : text;
+    return friendlyVotingErrorMessage(error);
   }
 
   bool _canRecoverWithoutDraft(VotingSessionState session) {
@@ -761,15 +760,31 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
 
   String? _sessionErrorMessage(VotingSessionState state, String? localError) {
     if (localError != null) return localError;
-    final error = state.error;
-    if (error != null) return error.message;
-    final round = state.round;
-    if (round == null || state.pirDiagnostics.isEmpty) return null;
-    return _pirDiagnosticsErrorMessage(
-      expectedSnapshotHeight: round.snapshotHeight,
-      diagnostics: state.pirDiagnostics,
-    );
+    return _statusErrorMessage(state, fallbackForErrorPhase: false);
   }
+
+  String? _statusErrorMessage(
+    VotingSessionState state, {
+    bool fallbackForErrorPhase = true,
+  }) {
+    final error = state.error;
+    if (error != null) return friendlyVotingErrorText(error.message);
+    final round = state.round;
+    if (round != null && state.pirDiagnostics.isNotEmpty) {
+      return _pirDiagnosticsErrorMessage(
+        expectedSnapshotHeight: round.snapshotHeight,
+        diagnostics: state.pirDiagnostics,
+      );
+    }
+    if (!fallbackForErrorPhase || state.phase != VotingSessionPhase.error) {
+      return null;
+    }
+    return _genericVotingStatusErrorMessage;
+  }
+
+  static const _genericVotingStatusErrorMessage =
+      'Voting could not continue for this account. Retry, or switch to an '
+      'eligible account if this account cannot vote in this poll.';
 
   String _pirDiagnosticsErrorMessage({
     required int expectedSnapshotHeight,
