@@ -7,15 +7,15 @@ import '../frb_generated.dart';
 import '../third_party/zcash_voting/wire.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bundle_policy`, `catch`, `require_len`, `selection_result`, `share_tracking_record`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`, `try_from`
+// These functions are ignored because they are not marked as `pub`: `bundle_policy`, `catch`, `require_len`, `share_tracking_record`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `from`, `from`
 
 /// Returns the vote-chain delegation submission body as validated wire JSON.
 ///
 /// Binary fields are base64-encoded here so Dart does not duplicate protocol
 /// field names or byte encoding rules.
 Future<String> delegationSubmissionWireJson({
-  required ApiSignedDelegationPayload submission,
+  required SignedDelegationPayloadView submission,
 }) => RustLib.instance.api.crateApiVotingDelegationSubmissionWireJson(
   submission: submission,
 );
@@ -158,7 +158,7 @@ Future<int> getBundleCount({
 /// The returned notes are raw snapshot-unspent notes and include the cached
 /// tree anchor used by later delegation setup. `eligible_weight_zatoshi` is
 /// computed from `zcash_voting` smart bundles.
-Future<ApiVotingNoteSelectionResult> selectVotingNotes({
+Future<VotingNoteSelectionResultView> selectVotingNotes({
   required String dbPath,
   required String lightwalletdUrl,
   required String network,
@@ -178,7 +178,7 @@ Future<ApiVotingNoteSelectionResult> selectVotingNotes({
 ///
 /// Reuses existing bundle rows for the same round/wallet, so callers can safely
 /// retry setup before proving a specific bundle.
-Future<ApiVotingBundleSetupResult> setupDelegationBundles({
+Future<BundleSetupResultView> setupDelegationBundles({
   required String dbPath,
   required String lightwalletdUrl,
   required String network,
@@ -202,7 +202,7 @@ Future<ApiVotingBundleSetupResult> setupDelegationBundles({
 ///
 /// This is a background warm-up path. The normal proof path still fetches any
 /// missing PIR proofs if this was not run or did not complete in time.
-Future<ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
+Future<DelegationPirPrecomputeResultView> precomputeDelegationPir({
   required String dbPath,
   required String lightwalletdUrl,
   required String pirServerUrl,
@@ -232,7 +232,7 @@ Future<ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
 ///
 /// This non-streaming variant drops intermediate proof progress and returns the
 /// final signed payload directly. Submission and tx-hash storage happen in Dart.
-Future<ApiSignedDelegationPayload> buildProveAndSignDelegationPayload({
+Future<SignedDelegationPayloadView> buildProveAndSignDelegationPayload({
   required String dbPath,
   required String lightwalletdUrl,
   required String pirServerUrl,
@@ -261,7 +261,7 @@ Future<ApiSignedDelegationPayload> buildProveAndSignDelegationPayload({
 /// Streaming variant of `build_prove_and_sign_delegation_payload`.
 ///
 /// Emits local preparation phase events while work progresses, then emits a
-/// final `"result"` event containing `ApiSignedDelegationPayload`. The function
+/// final `"result"` event containing `SignedDelegationPayloadView`. The function
 /// returns `Ok(())` after the terminal event is queued.
 Stream<ApiDelegationProofEvent> buildProveAndSignDelegationPayloadWithProgress({
   required String dbPath,
@@ -291,7 +291,7 @@ Stream<ApiDelegationProofEvent> buildProveAndSignDelegationPayloadWithProgress({
     );
 
 /// Build and redact a voting PCZT that Keystone must sign for one bundle.
-Future<ApiKeystoneDelegationRequest> buildKeystoneDelegationRequest({
+Future<KeystoneDelegationRequestView> buildKeystoneDelegationRequest({
   required String dbPath,
   required String lightwalletdUrl,
   required String network,
@@ -349,7 +349,7 @@ Future<void> storeKeystoneSignature({
 );
 
 /// Load persisted Keystone signatures for one voting round.
-Future<List<ApiKeystoneSignatureRecord>> getKeystoneSignatures({
+Future<List<KeystoneSignatureRecordView>> getKeystoneSignatures({
   required String dbPath,
   required String walletId,
   required String roundId,
@@ -504,7 +504,7 @@ Future<int> syncVoteTree({
 ///
 /// `anchor_height` is the vote-tree height where the witness should be anchored;
 /// callers must sync the same round before requesting the witness.
-Future<ApiVanWitness> generateVanWitness({
+Future<VanWitnessView> generateVanWitness({
   required String dbPath,
   required String walletId,
   required String roundId,
@@ -552,15 +552,15 @@ Future<void> resetVotingSessionState({
 /// Callers must pass a VAN witness generated for the same round and anchor
 /// height. Returned encrypted shares are wire-safe and exclude plaintext values
 /// and randomness.
-Future<ApiSignedVoteCommitments> buildVoteCommitments({
+Future<SignedVoteCommitmentsView> buildVoteCommitments({
   required String dbPath,
   required String walletId,
   required String network,
   required String roundId,
   required int bundleIndex,
   required List<int> hotkeySeed,
-  required ApiVanWitness vanWitness,
-  required List<ApiDraftVote> draftVotes,
+  required VanWitnessView vanWitness,
+  required List<DraftVoteView> draftVotes,
 }) => RustLib.instance.api.crateApiVotingBuildVoteCommitments(
   dbPath: dbPath,
   walletId: walletId,
@@ -573,7 +573,7 @@ Future<ApiSignedVoteCommitments> buildVoteCommitments({
 );
 
 /// Recover a committed but unsubmitted vote from persisted local recovery data.
-Future<ApiSignedVoteCommitments> recoverVoteCommitment({
+Future<SignedVoteCommitmentsView> recoverVoteCommitment({
   required String dbPath,
   required String walletId,
   required String roundId,
@@ -590,7 +590,7 @@ Future<ApiSignedVoteCommitments> recoverVoteCommitment({
 /// Streaming variant of `build_vote_commitments`.
 ///
 /// Emits per-proposal progress events, then a terminal `"result"` event carrying
-/// `ApiSignedVoteCommitments`.
+/// `SignedVoteCommitmentsView`.
 Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
   required String dbPath,
   required String walletId,
@@ -598,8 +598,8 @@ Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
   required String roundId,
   required int bundleIndex,
   required List<int> hotkeySeed,
-  required ApiVanWitness vanWitness,
-  required List<ApiDraftVote> draftVotes,
+  required VanWitnessView vanWitness,
+  required List<DraftVoteView> draftVotes,
 }) => RustLib.instance.api.crateApiVotingBuildVoteCommitmentsWithProgress(
   dbPath: dbPath,
   walletId: walletId,
@@ -612,7 +612,7 @@ Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
 );
 
 /// Load stored votes for a round across all bundles for this wallet.
-Future<List<ApiVoteRecord>> getVotes({
+Future<List<VoteRecordView>> getVotes({
   required String dbPath,
   required String walletId,
   required String roundId,
@@ -775,38 +775,6 @@ Future<void> setBallotIntent({
   choice: choice,
 );
 
-/// Summary of delegation PIR proof precomputation for one bundle.
-class ApiDelegationPirPrecomputeResult {
-  final int cachedCount;
-  final int fetchedCount;
-  final int bundleCount;
-  final int bundleIndex;
-
-  const ApiDelegationPirPrecomputeResult({
-    required this.cachedCount,
-    required this.fetchedCount,
-    required this.bundleCount,
-    required this.bundleIndex,
-  });
-
-  @override
-  int get hashCode =>
-      cachedCount.hashCode ^
-      fetchedCount.hashCode ^
-      bundleCount.hashCode ^
-      bundleIndex.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiDelegationPirPrecomputeResult &&
-          runtimeType == other.runtimeType &&
-          cachedCount == other.cachedCount &&
-          fetchedCount == other.fetchedCount &&
-          bundleCount == other.bundleCount &&
-          bundleIndex == other.bundleIndex;
-}
-
 /// Progress event emitted while building, proving, and signing a delegation payload.
 ///
 /// A terminal `"result"` event carries `signed_delegation_payload`; earlier
@@ -814,7 +782,7 @@ class ApiDelegationPirPrecomputeResult {
 class ApiDelegationProofEvent {
   final String phase;
   final double? proofProgress;
-  final ApiSignedDelegationPayload? signedDelegationPayload;
+  final SignedDelegationPayloadView? signedDelegationPayload;
 
   const ApiDelegationProofEvent({
     required this.phase,
@@ -838,256 +806,6 @@ class ApiDelegationProofEvent {
           signedDelegationPayload == other.signedDelegationPayload;
 }
 
-/// One requested vote for a proposal in a bundle.
-///
-/// `choice` is zero-indexed and must be less than `num_options`. `single_share`
-/// enables the last-moment vote mode where only share 0 is submitted.
-class ApiDraftVote {
-  final int proposalId;
-  final int choice;
-  final int numOptions;
-  final BigInt vcTreePosition;
-  final bool singleShare;
-
-  const ApiDraftVote({
-    required this.proposalId,
-    required this.choice,
-    required this.numOptions,
-    required this.vcTreePosition,
-    required this.singleShare,
-  });
-
-  @override
-  int get hashCode =>
-      proposalId.hashCode ^
-      choice.hashCode ^
-      numOptions.hashCode ^
-      vcTreePosition.hashCode ^
-      singleShare.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiDraftVote &&
-          runtimeType == other.runtimeType &&
-          proposalId == other.proposalId &&
-          choice == other.choice &&
-          numOptions == other.numOptions &&
-          vcTreePosition == other.vcTreePosition &&
-          singleShare == other.singleShare;
-}
-
-/// Voting PCZT request that should be signed by Keystone.
-class ApiKeystoneDelegationRequest {
-  final Uint8List pcztBytes;
-  final Uint8List redactedPcztBytes;
-  final Uint8List pcztSighash;
-  final Uint8List rk;
-  final int actionIndex;
-  final String displayMemo;
-  final BigInt eligibleWeightZatoshi;
-  final BigInt delegatedWeightZatoshi;
-  final int bundleCount;
-  final int bundleIndex;
-
-  const ApiKeystoneDelegationRequest({
-    required this.pcztBytes,
-    required this.redactedPcztBytes,
-    required this.pcztSighash,
-    required this.rk,
-    required this.actionIndex,
-    required this.displayMemo,
-    required this.eligibleWeightZatoshi,
-    required this.delegatedWeightZatoshi,
-    required this.bundleCount,
-    required this.bundleIndex,
-  });
-
-  @override
-  int get hashCode =>
-      pcztBytes.hashCode ^
-      redactedPcztBytes.hashCode ^
-      pcztSighash.hashCode ^
-      rk.hashCode ^
-      actionIndex.hashCode ^
-      displayMemo.hashCode ^
-      eligibleWeightZatoshi.hashCode ^
-      delegatedWeightZatoshi.hashCode ^
-      bundleCount.hashCode ^
-      bundleIndex.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiKeystoneDelegationRequest &&
-          runtimeType == other.runtimeType &&
-          pcztBytes == other.pcztBytes &&
-          redactedPcztBytes == other.redactedPcztBytes &&
-          pcztSighash == other.pcztSighash &&
-          rk == other.rk &&
-          actionIndex == other.actionIndex &&
-          displayMemo == other.displayMemo &&
-          eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
-          delegatedWeightZatoshi == other.delegatedWeightZatoshi &&
-          bundleCount == other.bundleCount &&
-          bundleIndex == other.bundleIndex;
-}
-
-/// Persisted Keystone signature for one delegation bundle.
-class ApiKeystoneSignatureRecord {
-  final int bundleIndex;
-  final Uint8List sig;
-  final Uint8List sighash;
-  final Uint8List rk;
-
-  const ApiKeystoneSignatureRecord({
-    required this.bundleIndex,
-    required this.sig,
-    required this.sighash,
-    required this.rk,
-  });
-
-  @override
-  int get hashCode =>
-      bundleIndex.hashCode ^ sig.hashCode ^ sighash.hashCode ^ rk.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiKeystoneSignatureRecord &&
-          runtimeType == other.runtimeType &&
-          bundleIndex == other.bundleIndex &&
-          sig == other.sig &&
-          sighash == other.sighash &&
-          rk == other.rk;
-}
-
-/// Signed delegation payload ready for Dart-side submission.
-class ApiSignedDelegationPayload {
-  final Uint8List pcztBytes;
-  final String status;
-  final String? message;
-  final DelegationSubmissionWire submission;
-  final BigInt eligibleWeightZatoshi;
-  final BigInt delegatedWeightZatoshi;
-  final int bundleCount;
-  final int bundleIndex;
-
-  const ApiSignedDelegationPayload({
-    required this.pcztBytes,
-    required this.status,
-    this.message,
-    required this.submission,
-    required this.eligibleWeightZatoshi,
-    required this.delegatedWeightZatoshi,
-    required this.bundleCount,
-    required this.bundleIndex,
-  });
-
-  @override
-  int get hashCode =>
-      pcztBytes.hashCode ^
-      status.hashCode ^
-      message.hashCode ^
-      submission.hashCode ^
-      eligibleWeightZatoshi.hashCode ^
-      delegatedWeightZatoshi.hashCode ^
-      bundleCount.hashCode ^
-      bundleIndex.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiSignedDelegationPayload &&
-          runtimeType == other.runtimeType &&
-          pcztBytes == other.pcztBytes &&
-          status == other.status &&
-          message == other.message &&
-          submission == other.submission &&
-          eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
-          delegatedWeightZatoshi == other.delegatedWeightZatoshi &&
-          bundleCount == other.bundleCount &&
-          bundleIndex == other.bundleIndex;
-}
-
-/// Signed ZKP2 vote commitment and wire-safe share data for one proposal.
-class ApiSignedVoteCommitment {
-  final int proposalId;
-  final VoteCommitmentWire wire;
-  final List<VoteShareWire> shares;
-
-  const ApiSignedVoteCommitment({
-    required this.proposalId,
-    required this.wire,
-    required this.shares,
-  });
-
-  @override
-  int get hashCode => proposalId.hashCode ^ wire.hashCode ^ shares.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiSignedVoteCommitment &&
-          runtimeType == other.runtimeType &&
-          proposalId == other.proposalId &&
-          wire == other.wire &&
-          shares == other.shares;
-}
-
-/// Set of signed vote commitments produced for one bundle index.
-class ApiSignedVoteCommitments {
-  final int bundleIndex;
-  final List<ApiSignedVoteCommitment> commitments;
-
-  const ApiSignedVoteCommitments({
-    required this.bundleIndex,
-    required this.commitments,
-  });
-
-  @override
-  int get hashCode => bundleIndex.hashCode ^ commitments.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiSignedVoteCommitments &&
-          runtimeType == other.runtimeType &&
-          bundleIndex == other.bundleIndex &&
-          commitments == other.commitments;
-}
-
-/// FRB-friendly Vote Authority Note Merkle witness.
-class ApiVanWitness {
-  /// 24 sibling hashes from the VAN leaf to the vote-tree root.
-  final List<Uint8List> authPath;
-
-  /// VAN leaf position in the vote commitment tree.
-  final int position;
-
-  /// Vote-tree height at which this witness is valid.
-  final int anchorHeight;
-
-  const ApiVanWitness({
-    required this.authPath,
-    required this.position,
-    required this.anchorHeight,
-  });
-
-  @override
-  int get hashCode =>
-      authPath.hashCode ^ position.hashCode ^ anchorHeight.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiVanWitness &&
-          runtimeType == other.runtimeType &&
-          authPath == other.authPath &&
-          position == other.position &&
-          anchorHeight == other.anchorHeight;
-}
-
 /// Progress event emitted while building ZKP2 vote commitments.
 ///
 /// A terminal `"result"` event carries the completed commitment set; earlier
@@ -1097,7 +815,7 @@ class ApiVoteCommitEvent {
   final int? proposalId;
   final int? bundleIndex;
   final double? proofProgress;
-  final ApiSignedVoteCommitments? commitments;
+  final SignedVoteCommitmentsView? commitments;
 
   const ApiVoteCommitEvent({
     required this.phase,
@@ -1125,139 +843,4 @@ class ApiVoteCommitEvent {
           bundleIndex == other.bundleIndex &&
           proofProgress == other.proofProgress &&
           commitments == other.commitments;
-}
-
-/// Stored vote row keyed by `(round_id, wallet_id, bundle_index, proposal_id)`.
-class ApiVoteRecord {
-  final int proposalId;
-  final int bundleIndex;
-  final int choice;
-
-  const ApiVoteRecord({
-    required this.proposalId,
-    required this.bundleIndex,
-    required this.choice,
-  });
-
-  @override
-  int get hashCode =>
-      proposalId.hashCode ^ bundleIndex.hashCode ^ choice.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiVoteRecord &&
-          runtimeType == other.runtimeType &&
-          proposalId == other.proposalId &&
-          bundleIndex == other.bundleIndex &&
-          choice == other.choice;
-}
-
-/// Summary of bundle setup keyed by `(round_id, wallet_id)`.
-class ApiVotingBundleSetupResult {
-  final int bundleCount;
-  final BigInt eligibleWeightZatoshi;
-
-  const ApiVotingBundleSetupResult({
-    required this.bundleCount,
-    required this.eligibleWeightZatoshi,
-  });
-
-  @override
-  int get hashCode => bundleCount.hashCode ^ eligibleWeightZatoshi.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiVotingBundleSetupResult &&
-          runtimeType == other.runtimeType &&
-          bundleCount == other.bundleCount &&
-          eligibleWeightZatoshi == other.eligibleWeightZatoshi;
-}
-
-/// FRB-safe reference to one Orchard note selected at the snapshot height.
-class ApiVotingNoteRef {
-  final String pool;
-  final String txidHex;
-  final int outputIndex;
-  final BigInt valueZatoshi;
-
-  /// Legacy per-note display field. Voting weight is computed from smart
-  /// bundles, so this carries the raw note value.
-  final BigInt votingWeightZatoshi;
-  final BigInt commitmentTreePosition;
-  final BigInt minedHeight;
-  final BigInt anchorHeight;
-
-  const ApiVotingNoteRef({
-    required this.pool,
-    required this.txidHex,
-    required this.outputIndex,
-    required this.valueZatoshi,
-    required this.votingWeightZatoshi,
-    required this.commitmentTreePosition,
-    required this.minedHeight,
-    required this.anchorHeight,
-  });
-
-  @override
-  int get hashCode =>
-      pool.hashCode ^
-      txidHex.hashCode ^
-      outputIndex.hashCode ^
-      valueZatoshi.hashCode ^
-      votingWeightZatoshi.hashCode ^
-      commitmentTreePosition.hashCode ^
-      minedHeight.hashCode ^
-      anchorHeight.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiVotingNoteRef &&
-          runtimeType == other.runtimeType &&
-          pool == other.pool &&
-          txidHex == other.txidHex &&
-          outputIndex == other.outputIndex &&
-          valueZatoshi == other.valueZatoshi &&
-          votingWeightZatoshi == other.votingWeightZatoshi &&
-          commitmentTreePosition == other.commitmentTreePosition &&
-          minedHeight == other.minedHeight &&
-          anchorHeight == other.anchorHeight;
-}
-
-/// Result of selecting voting notes for a snapshot height.
-class ApiVotingNoteSelectionResult {
-  final int noteCount;
-  final BigInt eligibleWeightZatoshi;
-  final BigInt snapshotHeight;
-  final BigInt anchorHeight;
-  final List<ApiVotingNoteRef> notes;
-
-  const ApiVotingNoteSelectionResult({
-    required this.noteCount,
-    required this.eligibleWeightZatoshi,
-    required this.snapshotHeight,
-    required this.anchorHeight,
-    required this.notes,
-  });
-
-  @override
-  int get hashCode =>
-      noteCount.hashCode ^
-      eligibleWeightZatoshi.hashCode ^
-      snapshotHeight.hashCode ^
-      anchorHeight.hashCode ^
-      notes.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiVotingNoteSelectionResult &&
-          runtimeType == other.runtimeType &&
-          noteCount == other.noteCount &&
-          eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
-          snapshotHeight == other.snapshotHeight &&
-          anchorHeight == other.anchorHeight &&
-          notes == other.notes;
 }

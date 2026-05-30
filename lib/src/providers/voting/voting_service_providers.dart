@@ -259,7 +259,7 @@ class AppSecureStoreVotingHotkeyStore implements VotingHotkeyStore {
 /// Keeping this boundary explicit lets tests verify sequencing, recovery skips,
 /// and progress forwarding without invoking FRB or cryptographic proof work.
 abstract interface class VotingRustApi {
-  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+  Future<rust_wire.BundleSetupResultView> setupDelegationBundles({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -270,7 +270,7 @@ abstract interface class VotingRustApi {
     int? maxRealNotesPerBundle,
   });
 
-  Future<rust_voting.ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
+  Future<rust_wire.DelegationPirPrecomputeResultView> precomputeDelegationPir({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -301,7 +301,7 @@ abstract interface class VotingRustApi {
 
   Future<List<int>> generateVotingHotkey({required String network});
 
-  Future<rust_voting.ApiKeystoneDelegationRequest>
+  Future<rust_wire.KeystoneDelegationRequestView>
   buildKeystoneDelegationRequest({
     required String dbPath,
     required String lightwalletdUrl,
@@ -332,7 +332,7 @@ abstract interface class VotingRustApi {
     required List<int> rk,
   });
 
-  Future<List<rust_voting.ApiKeystoneSignatureRecord>> getKeystoneSignatures({
+  Future<List<rust_wire.KeystoneSignatureRecordView>> getKeystoneSignatures({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -363,7 +363,7 @@ abstract interface class VotingRustApi {
   });
 
   Future<String> delegationSubmissionWireJson({
-    required rust_voting.ApiSignedDelegationPayload submission,
+    required rust_wire.SignedDelegationPayloadView submission,
   });
 
   Future<void> storeDelegationTxHash({
@@ -406,7 +406,7 @@ abstract interface class VotingRustApi {
     required String nodeUrl,
   });
 
-  Future<rust_voting.ApiVanWitness> generateVanWitness({
+  Future<rust_wire.VanWitnessView> generateVanWitness({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -432,11 +432,11 @@ abstract interface class VotingRustApi {
     required String roundId,
     required int bundleIndex,
     required List<int> hotkeySeed,
-    required rust_voting.ApiVanWitness vanWitness,
-    required List<rust_voting.ApiDraftVote> draftVotes,
+    required rust_wire.VanWitnessView vanWitness,
+    required List<rust_wire.DraftVoteView> draftVotes,
   });
 
-  Future<rust_voting.ApiSignedVoteCommitments> recoverVoteCommitment({
+  Future<rust_wire.SignedVoteCommitmentsView> recoverVoteCommitment({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -535,7 +535,7 @@ class FrbVotingRustApi implements VotingRustApi {
   const FrbVotingRustApi();
 
   @override
-  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+  Future<rust_wire.BundleSetupResultView> setupDelegationBundles({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -558,7 +558,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
+  Future<rust_wire.DelegationPirPrecomputeResultView> precomputeDelegationPir({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -622,7 +622,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiKeystoneDelegationRequest>
+  Future<rust_wire.KeystoneDelegationRequestView>
   buildKeystoneDelegationRequest({
     required String dbPath,
     required String lightwalletdUrl,
@@ -687,7 +687,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<List<rust_voting.ApiKeystoneSignatureRecord>> getKeystoneSignatures({
+  Future<List<rust_wire.KeystoneSignatureRecordView>> getKeystoneSignatures({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -751,7 +751,7 @@ class FrbVotingRustApi implements VotingRustApi {
 
   @override
   Future<String> delegationSubmissionWireJson({
-    required rust_voting.ApiSignedDelegationPayload submission,
+    required rust_wire.SignedDelegationPayloadView submission,
   }) {
     return rust_voting.delegationSubmissionWireJson(submission: submission);
   }
@@ -842,7 +842,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiVanWitness> generateVanWitness({
+  Future<rust_wire.VanWitnessView> generateVanWitness({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -879,8 +879,8 @@ class FrbVotingRustApi implements VotingRustApi {
     required String roundId,
     required int bundleIndex,
     required List<int> hotkeySeed,
-    required rust_voting.ApiVanWitness vanWitness,
-    required List<rust_voting.ApiDraftVote> draftVotes,
+    required rust_wire.VanWitnessView vanWitness,
+    required List<rust_wire.DraftVoteView> draftVotes,
   }) {
     return rust_voting.buildVoteCommitmentsWithProgress(
       dbPath: dbPath,
@@ -895,7 +895,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiSignedVoteCommitments> recoverVoteCommitment({
+  Future<rust_wire.SignedVoteCommitmentsView> recoverVoteCommitment({
     required String dbPath,
     required String walletId,
     required String roundId,

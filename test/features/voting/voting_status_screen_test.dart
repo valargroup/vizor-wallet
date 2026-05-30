@@ -2014,7 +2014,7 @@ class _NoopVotingRustApi implements VotingRustApi {
 
 class _FailingVotingPowerRustApi extends _NoopVotingRustApi {
   @override
-  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+  Future<rust_wire.BundleSetupResultView> setupDelegationBundles({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -2030,7 +2030,7 @@ class _FailingVotingPowerRustApi extends _NoopVotingRustApi {
 
 class _IneligibleVotingRustApi extends _NoopVotingRustApi {
   @override
-  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+  Future<rust_wire.BundleSetupResultView> setupDelegationBundles({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -2163,12 +2163,12 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   final _MutableVotingRecoveryApi recoveryApi;
   final int bundleCount;
   final storedKeystoneSignatures =
-      <int, rust_voting.ApiKeystoneSignatureRecord>{};
+      <int, rust_wire.KeystoneSignatureRecordView>{};
   int setupDelegationBundleCalls = 0;
   int keystoneDelegationRequestCalls = 0;
 
   @override
-  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+  Future<rust_wire.BundleSetupResultView> setupDelegationBundles({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -2179,14 +2179,14 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     int? maxRealNotesPerBundle,
   }) async {
     setupDelegationBundleCalls++;
-    return rust_voting.ApiVotingBundleSetupResult(
+    return rust_wire.BundleSetupResultView(
       bundleCount: bundleCount,
       eligibleWeightZatoshi: BigInt.from(100),
     );
   }
 
   @override
-  Future<rust_voting.ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
+  Future<rust_wire.DelegationPirPrecomputeResultView> precomputeDelegationPir({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -2199,7 +2199,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   }) async {
-    return rust_voting.ApiDelegationPirPrecomputeResult(
+    return rust_wire.DelegationPirPrecomputeResultView(
       cachedCount: 0,
       fetchedCount: 1,
       bundleCount: bundleCount,
@@ -2225,7 +2225,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     yield rust_voting.ApiDelegationProofEvent(
       phase: 'result',
       proofProgress: null,
-      signedDelegationPayload: rust_voting.ApiSignedDelegationPayload(
+      signedDelegationPayload: rust_wire.SignedDelegationPayloadView(
         pcztBytes: Uint8List.fromList(const []),
         status: 'ready_for_submission',
         message: null,
@@ -2256,7 +2256,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }
 
   @override
-  Future<List<rust_voting.ApiKeystoneSignatureRecord>> getKeystoneSignatures({
+  Future<List<rust_wire.KeystoneSignatureRecordView>> getKeystoneSignatures({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -2284,7 +2284,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiKeystoneDelegationRequest>
+  Future<rust_wire.KeystoneDelegationRequestView>
   buildKeystoneDelegationRequest({
     required String dbPath,
     required String lightwalletdUrl,
@@ -2298,7 +2298,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     int? maxRealNotesPerBundle,
   }) async {
     keystoneDelegationRequestCalls++;
-    return rust_voting.ApiKeystoneDelegationRequest(
+    return rust_wire.KeystoneDelegationRequestView(
       pcztBytes: Uint8List.fromList(const [1]),
       redactedPcztBytes: Uint8List.fromList(const [2]),
       pcztSighash: Uint8List.fromList(const [3]),
@@ -2337,7 +2337,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required List<int> rk,
   }) async {
     storedKeystoneSignatures[bundleIndex] =
-        rust_voting.ApiKeystoneSignatureRecord(
+        rust_wire.KeystoneSignatureRecordView(
           bundleIndex: bundleIndex,
           sig: Uint8List.fromList(sig),
           sighash: Uint8List.fromList(sighash),
@@ -2366,7 +2366,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     yield rust_voting.ApiDelegationProofEvent(
       phase: 'result',
       proofProgress: null,
-      signedDelegationPayload: rust_voting.ApiSignedDelegationPayload(
+      signedDelegationPayload: rust_wire.SignedDelegationPayloadView(
         pcztBytes: Uint8List.fromList(const []),
         status: 'ready_for_submission',
         message: null,
@@ -2393,7 +2393,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
 
   @override
   Future<String> delegationSubmissionWireJson({
-    required rust_voting.ApiSignedDelegationPayload submission,
+    required rust_wire.SignedDelegationPayloadView submission,
   }) async {
     final wire = submission.submission;
     return jsonEncode({
@@ -2450,14 +2450,14 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiVanWitness> generateVanWitness({
+  Future<rust_wire.VanWitnessView> generateVanWitness({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required int anchorHeight,
   }) async {
-    return rust_voting.ApiVanWitness(
+    return rust_wire.VanWitnessView(
       authPath: const [],
       position: bundleIndex,
       anchorHeight: anchorHeight,
@@ -2472,8 +2472,8 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required String roundId,
     required int bundleIndex,
     required List<int> hotkeySeed,
-    required rust_voting.ApiVanWitness vanWitness,
-    required List<rust_voting.ApiDraftVote> draftVotes,
+    required rust_wire.VanWitnessView vanWitness,
+    required List<rust_wire.DraftVoteView> draftVotes,
   }) async* {
     for (final draft in draftVotes) {
       yield rust_voting.ApiVoteCommitEvent(
@@ -2762,7 +2762,7 @@ List<int> _bytesFromHex(String hex) {
   ];
 }
 
-rust_voting.ApiSignedVoteCommitments _commitments({
+rust_wire.SignedVoteCommitmentsView _commitments({
   required String roundId,
   required int bundleIndex,
   required int proposalId,
@@ -2773,10 +2773,10 @@ rust_voting.ApiSignedVoteCommitments _commitments({
     c2: base64Encode(Uint8List.fromList(const [9])),
     shareIndex: 0,
   );
-  return rust_voting.ApiSignedVoteCommitments(
+  return rust_wire.SignedVoteCommitmentsView(
     bundleIndex: bundleIndex,
     commitments: [
-      rust_voting.ApiSignedVoteCommitment(
+      rust_wire.SignedVoteCommitmentView(
         proposalId: proposalId,
         wire: rust_wire.VoteCommitmentWire(
           vanNullifier: base64Encode(Uint8List.fromList(List.filled(32, 1))),

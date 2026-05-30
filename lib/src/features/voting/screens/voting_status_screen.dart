@@ -15,7 +15,6 @@ import '../../../providers/voting/voting_submission_guard_provider.dart';
 import '../../../providers/voting/voting_state.dart';
 import '../../../rust/api/keystone.dart' as rust_keystone;
 import '../../../rust/api/wallet.dart' as rust_wallet;
-import '../../../rust/api/voting.dart' as rust_voting;
 import '../../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import '../../../services/voting/pir_snapshot_resolver.dart';
 import '../../keystone/widgets/keystone_pczt_qr_stage.dart';
@@ -40,7 +39,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   String? _runErrorMessage;
   List<String> _keystoneUrParts = const [];
   String? _keystoneQrError;
-  List<rust_voting.ApiDraftVote>? _pendingDraftVotes;
+  List<rust_wire.DraftVoteView>? _pendingDraftVotes;
   List<int> _pendingProposalIds = const [];
   Map<int, int> _pendingProposalOptionCounts = const {};
   bool _pendingRecoveryWithoutDraft = false;
@@ -144,7 +143,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
       final recoveredDraftVotes =
           userDraftVotes.isEmpty && _roundPlanHasNoOpenProposals(activeSession)
           ? _draftVotesFromRoundPlan(activeSession.roundPlan, proposals)
-          : const <rust_voting.ApiDraftVote>[];
+          : const <rust_wire.DraftVoteView>[];
       final draftVotes = userDraftVotes.isNotEmpty
           ? userDraftVotes
           : recoveredDraftVotes;
@@ -275,7 +274,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   }
 
   Future<void> _updateKeystoneQr(
-    rust_voting.ApiKeystoneDelegationRequest request, {
+    rust_wire.KeystoneDelegationRequestView request, {
     required int runGeneration,
     required String accountUuid,
   }) async {
@@ -449,7 +448,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     VotingSessionNotifier sessionNotifier, {
     required int runGeneration,
     required String accountUuid,
-    required List<rust_voting.ApiDraftVote> draftVotes,
+    required List<rust_wire.DraftVoteView> draftVotes,
     required List<int> intentProposalIds,
     required Map<int, int> proposalOptionCounts,
     VotingSessionState? initialSession,
@@ -648,7 +647,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         false;
   }
 
-  List<rust_voting.ApiDraftVote> _draftVotesFromRoundPlan(
+  List<rust_wire.DraftVoteView> _draftVotesFromRoundPlan(
     rust_wire.RoundPlanView? roundPlan,
     List<VotingProposalView> proposals,
   ) {
@@ -662,7 +661,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     return [
       for (final proposal in proposals)
         if (choicesByProposal[proposal.id] != null)
-          rust_voting.ApiDraftVote(
+          rust_wire.DraftVoteView(
             proposalId: proposal.id,
             choice: choicesByProposal[proposal.id]!,
             numOptions: proposal.options.length,
@@ -968,7 +967,7 @@ class _StatusContent extends StatelessWidget {
   final bool completedSubmission;
   final bool softwareAccountRequired;
   final bool isHardwareAccount;
-  final rust_voting.ApiKeystoneDelegationRequest? keystoneSigningRequest;
+  final rust_wire.KeystoneDelegationRequestView? keystoneSigningRequest;
   final bool canSkipRemainingKeystoneBundles;
   final List<String> keystoneUrParts;
   final String? keystoneQrError;
@@ -1203,7 +1202,7 @@ class _KeystoneSigningPanel extends StatelessWidget {
     this.onSkipRemainingBundles,
   });
 
-  final rust_voting.ApiKeystoneDelegationRequest request;
+  final rust_wire.KeystoneDelegationRequestView request;
   final List<String> urParts;
   final String? qrError;
   final String? scanError;

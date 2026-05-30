@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/storage/app_secure_store.dart';
-import '../../rust/api/voting.dart' as rust_voting;
+import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import '../../services/voting/voting_models.dart';
 import '../../providers/voting/voting_state.dart';
 
@@ -69,14 +69,14 @@ class VotingDraftState {
     return VotingDraftState(choices: nextChoices);
   }
 
-  List<rust_voting.ApiDraftVote> toDraftVotes(
+  List<rust_wire.DraftVoteView> toDraftVotes(
     List<VotingProposalView> proposals, {
     bool singleShare = false,
   }) {
     return [
       for (final proposal in proposals)
         if (choices[proposal.id] != null)
-          rust_voting.ApiDraftVote(
+          rust_wire.DraftVoteView(
             proposalId: proposal.id,
             choice: choices[proposal.id]!,
             numOptions: proposal.options.length,

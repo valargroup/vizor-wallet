@@ -13,85 +13,7 @@ use crate::wallet::{
 };
 use rand::{rngs::OsRng, RngCore};
 use secrecy::ExposeSecret;
-use zcash_voting::{voting_power_with_policy, BundlePolicy, NoteRef, SelectedNotes};
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// FRB-safe reference to one Orchard note selected at the snapshot height.
-pub struct ApiVotingNoteRef {
-    pub pool: String,
-    pub txid_hex: String,
-    pub output_index: u32,
-    pub value_zatoshi: u64,
-    /// Legacy per-note display field. Voting weight is computed from smart
-    /// bundles, so this carries the raw note value.
-    pub voting_weight_zatoshi: u64,
-    pub commitment_tree_position: u64,
-    pub mined_height: u64,
-    pub anchor_height: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Result of selecting voting notes for a snapshot height.
-pub struct ApiVotingNoteSelectionResult {
-    pub note_count: u32,
-    pub eligible_weight_zatoshi: u64,
-    pub snapshot_height: u64,
-    pub anchor_height: u64,
-    pub notes: Vec<ApiVotingNoteRef>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Summary of bundle setup keyed by `(round_id, wallet_id)`.
-pub struct ApiVotingBundleSetupResult {
-    pub bundle_count: u32,
-    pub eligible_weight_zatoshi: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Summary of delegation PIR proof precomputation for one bundle.
-pub struct ApiDelegationPirPrecomputeResult {
-    pub cached_count: u32,
-    pub fetched_count: u32,
-    pub bundle_count: u32,
-    pub bundle_index: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Signed delegation payload ready for Dart-side submission.
-pub struct ApiSignedDelegationPayload {
-    pub pczt_bytes: Vec<u8>,
-    pub status: String,
-    pub message: Option<String>,
-    pub submission: zcash_voting::wire::DelegationSubmissionWire,
-    pub eligible_weight_zatoshi: u64,
-    pub delegated_weight_zatoshi: u64,
-    pub bundle_count: u32,
-    pub bundle_index: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Voting PCZT request that should be signed by Keystone.
-pub struct ApiKeystoneDelegationRequest {
-    pub pczt_bytes: Vec<u8>,
-    pub redacted_pczt_bytes: Vec<u8>,
-    pub pczt_sighash: Vec<u8>,
-    pub rk: Vec<u8>,
-    pub action_index: u32,
-    pub display_memo: String,
-    pub eligible_weight_zatoshi: u64,
-    pub delegated_weight_zatoshi: u64,
-    pub bundle_count: u32,
-    pub bundle_index: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Persisted Keystone signature for one delegation bundle.
-pub struct ApiKeystoneSignatureRecord {
-    pub bundle_index: u32,
-    pub sig: Vec<u8>,
-    pub sighash: Vec<u8>,
-    pub rk: Vec<u8>,
-}
+use zcash_voting::BundlePolicy;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Progress event emitted while building, proving, and signing a delegation payload.
@@ -101,18 +23,7 @@ pub struct ApiKeystoneSignatureRecord {
 pub struct ApiDelegationProofEvent {
     pub phase: String,
     pub proof_progress: Option<f64>,
-    pub signed_delegation_payload: Option<ApiSignedDelegationPayload>,
-}
-
-/// FRB-friendly Vote Authority Note Merkle witness.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ApiVanWitness {
-    /// 24 sibling hashes from the VAN leaf to the vote-tree root.
-    pub auth_path: Vec<Vec<u8>>,
-    /// VAN leaf position in the vote commitment tree.
-    pub position: u32,
-    /// Vote-tree height at which this witness is valid.
-    pub anchor_height: u32,
+    pub signed_delegation_payload: Option<zcash_voting::wire::SignedDelegationPayloadView>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -125,43 +36,7 @@ pub struct ApiVoteCommitEvent {
     pub proposal_id: Option<u32>,
     pub bundle_index: Option<u32>,
     pub proof_progress: Option<f64>,
-    pub commitments: Option<ApiSignedVoteCommitments>,
-}
-
-/// One requested vote for a proposal in a bundle.
-///
-/// `choice` is zero-indexed and must be less than `num_options`. `single_share`
-/// enables the last-moment vote mode where only share 0 is submitted.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ApiDraftVote {
-    pub proposal_id: u32,
-    pub choice: u32,
-    pub num_options: u32,
-    pub vc_tree_position: u64,
-    pub single_share: bool,
-}
-
-/// Signed ZKP2 vote commitment and wire-safe share data for one proposal.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ApiSignedVoteCommitment {
-    pub proposal_id: u32,
-    pub wire: zcash_voting::wire::VoteCommitmentWire,
-    pub shares: Vec<zcash_voting::wire::VoteShareWire>,
-}
-
-/// Set of signed vote commitments produced for one bundle index.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ApiSignedVoteCommitments {
-    pub bundle_index: u32,
-    pub commitments: Vec<ApiSignedVoteCommitment>,
-}
-
-/// Stored vote row keyed by `(round_id, wallet_id, bundle_index, proposal_id)`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ApiVoteRecord {
-    pub proposal_id: u32,
-    pub bundle_index: u32,
-    pub choice: u32,
+    pub commitments: Option<zcash_voting::wire::SignedVoteCommitmentsView>,
 }
 
 fn bundle_policy(max_real_notes_per_bundle: Option<u32>) -> Result<BundlePolicy, String> {
@@ -169,83 +44,12 @@ fn bundle_policy(max_real_notes_per_bundle: Option<u32>) -> Result<BundlePolicy,
         .map_err(|e| e.to_string())
 }
 
-impl From<zcash_voting::vote::VanWitness> for ApiVanWitness {
-    fn from(witness: zcash_voting::vote::VanWitness) -> Self {
-        Self {
-            auth_path: witness.auth_path.iter().map(|hash| hash.to_vec()).collect(),
-            position: witness.position,
-            anchor_height: witness.anchor_height,
-        }
-    }
-}
-
-impl From<ApiDraftVote> for vote::DraftVote {
-    fn from(draft: ApiDraftVote) -> Self {
-        Self {
-            proposal_id: draft.proposal_id,
-            choice: draft.choice,
-            num_options: draft.num_options,
-            vc_tree_position: draft.vc_tree_position,
-            single_share: draft.single_share,
-        }
-    }
-}
-
-impl TryFrom<zcash_voting::vote::SignedVoteCommitment> for ApiSignedVoteCommitment {
-    type Error = String;
-
-    fn try_from(commitment: zcash_voting::vote::SignedVoteCommitment) -> Result<Self, Self::Error> {
-        let wire = zcash_voting::wire::VoteCommitmentWire::try_from(&commitment)
-            .map_err(|e| e.to_string())?;
-        let shares = commitment
-            .share_payloads
-            .iter()
-            .map(|payload| {
-                zcash_voting::wire::VoteShareWire::from_payload(payload, None, 0)
-                    .map_err(|e| e.to_string())
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self {
-            proposal_id: commitment.proposal_id,
-            wire,
-            shares,
-        })
-    }
-}
-
-impl TryFrom<zcash_voting::vote::SignedVoteCommitments> for ApiSignedVoteCommitments {
-    type Error = String;
-
-    fn try_from(
-        commitments: zcash_voting::vote::SignedVoteCommitments,
-    ) -> Result<Self, Self::Error> {
-        Ok(Self {
-            bundle_index: commitments.bundle_index,
-            commitments: commitments
-                .commitments
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<Vec<_>, _>>()?,
-        })
-    }
-}
-
-impl From<zcash_voting::storage::VoteRecord> for ApiVoteRecord {
-    fn from(record: zcash_voting::storage::VoteRecord) -> Self {
-        Self {
-            proposal_id: record.proposal_id,
-            bundle_index: record.bundle_index,
-            choice: record.choice,
-        }
-    }
-}
-
 /// Returns the vote-chain delegation submission body as validated wire JSON.
 ///
 /// Binary fields are base64-encoded here so Dart does not duplicate protocol
 /// field names or byte encoding rules.
 pub fn delegation_submission_wire_json(
-    submission: ApiSignedDelegationPayload,
+    submission: zcash_voting::wire::SignedDelegationPayloadView,
 ) -> Result<String, String> {
     catch(|| {
         submission.submission.to_json().map_err(|e| e.to_string())
@@ -441,93 +245,6 @@ pub fn generate_voting_hotkey(network: String) -> Result<Vec<u8>, String> {
     })
 }
 
-impl From<NoteRef> for ApiVotingNoteRef {
-    fn from(note: NoteRef) -> Self {
-        Self {
-            pool: note.pool,
-            txid_hex: note.txid_hex,
-            output_index: note.output_index,
-            value_zatoshi: note.value_zatoshi,
-            voting_weight_zatoshi: note.voting_weight_zatoshi,
-            commitment_tree_position: note.commitment_tree_position,
-            mined_height: note.mined_height,
-            anchor_height: note.anchor_height,
-        }
-    }
-}
-
-impl From<zcash_voting::round::BundleLayout> for ApiVotingBundleSetupResult {
-    fn from(result: zcash_voting::round::BundleLayout) -> Self {
-        Self {
-            bundle_count: result.bundle_count,
-            eligible_weight_zatoshi: result.eligible_weight,
-        }
-    }
-}
-
-impl From<zcash_voting::delegate::PreparedDelegationReport> for ApiDelegationPirPrecomputeResult {
-    fn from(result: zcash_voting::delegate::PreparedDelegationReport) -> Self {
-        Self {
-            cached_count: result.report.cached,
-            fetched_count: result.report.fetched,
-            bundle_count: result.layout.bundle_count,
-            bundle_index: result.bundle_index,
-        }
-    }
-}
-
-impl TryFrom<zcash_voting::delegate::SignedDelegationBundle> for ApiSignedDelegationPayload {
-    type Error = String;
-
-    fn try_from(
-        result: zcash_voting::delegate::SignedDelegationBundle,
-    ) -> Result<Self, Self::Error> {
-        let submission = zcash_voting::wire::DelegationSubmissionWire::try_from(
-            &result.submission,
-        )
-            .map_err(|e| e.to_string())?;
-        Ok(Self {
-            pczt_bytes: result.pczt_bytes,
-            status: "ready_for_submission".to_string(),
-            message: None,
-            submission,
-            eligible_weight_zatoshi: result.eligible_weight_zatoshi,
-            delegated_weight_zatoshi: result.delegated_weight_zatoshi,
-            bundle_count: result.bundle_count,
-            bundle_index: result.bundle_index,
-        })
-    }
-}
-
-impl From<zcash_voting::delegate::KeystoneSigningRequest> for ApiKeystoneDelegationRequest {
-    fn from(result: zcash_voting::delegate::KeystoneSigningRequest) -> Self {
-        let action_index = u32::try_from(result.setup.action_index).unwrap_or(u32::MAX);
-        Self {
-            pczt_bytes: result.setup.pczt_bytes,
-            redacted_pczt_bytes: result.redacted_pczt_bytes,
-            pczt_sighash: result.setup.pczt_sighash.to_vec(),
-            rk: result.setup.rk.to_vec(),
-            action_index,
-            display_memo: result.display_memo,
-            eligible_weight_zatoshi: result.eligible_weight_zatoshi,
-            delegated_weight_zatoshi: result.delegated_weight_zatoshi,
-            bundle_count: result.bundle_count,
-            bundle_index: result.bundle_index,
-        }
-    }
-}
-
-impl From<zcash_voting::storage::KeystoneSignatureRecord> for ApiKeystoneSignatureRecord {
-    fn from(record: zcash_voting::storage::KeystoneSignatureRecord) -> Self {
-        Self {
-            bundle_index: record.bundle_index,
-            sig: record.sig,
-            sighash: record.sighash,
-            rk: record.rk,
-        }
-    }
-}
-
 impl From<DelegationProgress> for ApiDelegationProofEvent {
     fn from(progress: DelegationProgress) -> Self {
         match progress {
@@ -716,7 +433,7 @@ pub async fn select_voting_notes(
     account_uuid: String,
     snapshot_height: u64,
     max_real_notes_per_bundle: Option<u32>,
-) -> Result<ApiVotingNoteSelectionResult, String> {
+) -> Result<zcash_voting::wire::VotingNoteSelectionResultView, String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
     let voting_db = state::open_voting_db(&db_path, &account_uuid)?;
@@ -729,31 +446,8 @@ pub async fn select_voting_notes(
     )
     .await
     .map_err(|e| e.to_string())?;
-    selection_result(selected, bundle_policy)
-}
-
-fn selection_result(
-    selected: SelectedNotes,
-    bundle_policy: BundlePolicy,
-) -> Result<ApiVotingNoteSelectionResult, String> {
-    let note_count = u32::try_from(selected.notes.len()).map_err(|_| {
-        format!(
-            "Selected note count {} does not fit in u32",
-            selected.notes.len()
-        )
-    })?;
-    let eligible_weight_zatoshi = voting_power_with_policy(&selected, bundle_policy);
-    let snapshot_height = selected.snapshot_height;
-    let anchor_height = selected.anchor_tree_state.height;
-    let notes = selected.notes.into_iter().map(Into::into).collect();
-
-    Ok(ApiVotingNoteSelectionResult {
-        note_count,
-        eligible_weight_zatoshi,
-        snapshot_height,
-        anchor_height,
-        notes,
-    })
+    zcash_voting::wire::VotingNoteSelectionResultView::from_selected(selected, bundle_policy)
+        .map_err(|e| e.to_string())
 }
 
 /// Select notes and persist bundle rows for the delegation pipeline.
@@ -769,7 +463,7 @@ pub async fn setup_delegation_bundles(
     session_json: Option<String>,
     account_uuid: String,
     max_real_notes_per_bundle: Option<u32>,
-) -> Result<ApiVotingBundleSetupResult, String> {
+) -> Result<zcash_voting::wire::BundleSetupResultView, String> {
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
     let voting_db = state::open_voting_db(&db_path, &account_uuid)?;
     delegation::setup_delegation_bundles(
@@ -783,7 +477,7 @@ pub async fn setup_delegation_bundles(
         bundle_policy,
     )
     .await
-    .map(Into::into)
+    .map(zcash_voting::wire::BundleSetupResultView::from)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -803,7 +497,7 @@ pub async fn precompute_delegation_pir(
     seed_bytes: Vec<u8>,
     bundle_index: u32,
     max_real_notes_per_bundle: Option<u32>,
-) -> Result<ApiDelegationPirPrecomputeResult, String> {
+) -> Result<zcash_voting::wire::DelegationPirPrecomputeResultView, String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
     let round_id = round_params.vote_round_id.clone();
@@ -824,7 +518,7 @@ pub async fn precompute_delegation_pir(
         cancellation,
     )
     .await
-    .map(Into::into)
+    .map(zcash_voting::wire::DelegationPirPrecomputeResultView::from)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -844,7 +538,7 @@ pub async fn build_prove_and_sign_delegation_payload(
     seed_bytes: Vec<u8>,
     bundle_index: u32,
     max_real_notes_per_bundle: Option<u32>,
-) -> Result<ApiSignedDelegationPayload, String> {
+) -> Result<zcash_voting::wire::SignedDelegationPayloadView, String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
     let round_id = round_params.vote_round_id.clone();
@@ -866,14 +560,16 @@ pub async fn build_prove_and_sign_delegation_payload(
         cancellation,
     )
     .await
-    .and_then(ApiSignedDelegationPayload::try_from)
+    .and_then(|bundle| {
+        zcash_voting::wire::SignedDelegationPayloadView::try_from(bundle).map_err(|e| e.to_string())
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
 /// Streaming variant of `build_prove_and_sign_delegation_payload`.
 ///
 /// Emits local preparation phase events while work progresses, then emits a
-/// final `"result"` event containing `ApiSignedDelegationPayload`. The function
+/// final `"result"` event containing `SignedDelegationPayloadView`. The function
 /// returns `Ok(())` after the terminal event is queued.
 pub async fn build_prove_and_sign_delegation_payload_with_progress(
     db_path: String,
@@ -918,7 +614,9 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
         cancellation,
     )
     .await
-    .and_then(ApiSignedDelegationPayload::try_from);
+    .and_then(|bundle| {
+        zcash_voting::wire::SignedDelegationPayloadView::try_from(bundle).map_err(|e| e.to_string())
+    });
     let signed = match signed_result {
         Ok(signed) => signed,
         Err(error) => {
@@ -955,7 +653,7 @@ pub async fn build_keystone_delegation_request(
     hotkey_seed: Vec<u8>,
     bundle_index: u32,
     max_real_notes_per_bundle: Option<u32>,
-) -> Result<ApiKeystoneDelegationRequest, String> {
+) -> Result<zcash_voting::wire::KeystoneDelegationRequestView, String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
     let round_id = round_params.vote_round_id.clone();
@@ -975,7 +673,7 @@ pub async fn build_keystone_delegation_request(
         cancellation,
     )
     .await
-    .map(Into::into)
+    .map(zcash_voting::wire::KeystoneDelegationRequestView::from)
 }
 
 /// Extract the ZIP-244 sighash from PCZT bytes.
@@ -1024,12 +722,17 @@ pub fn get_keystone_signatures(
     db_path: String,
     wallet_id: String,
     round_id: String,
-) -> Result<Vec<ApiKeystoneSignatureRecord>, String> {
+) -> Result<Vec<zcash_voting::wire::KeystoneSignatureRecordView>, String> {
     catch(|| {
         let db = state::open_voting_db(&db_path, &wallet_id)?;
         db.get_keystone_signatures(&round_id)
             .map_err(|e| format!("get_keystone_signatures failed: {e}"))
-            .map(|records| records.into_iter().map(Into::into).collect())
+            .map(|records| {
+                records
+                    .into_iter()
+                    .map(zcash_voting::wire::KeystoneSignatureRecordView::from)
+                    .collect()
+            })
     })
 }
 
@@ -1082,7 +785,9 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
         cancellation,
     )
     .await
-    .and_then(ApiSignedDelegationPayload::try_from);
+    .and_then(|bundle| {
+        zcash_voting::wire::SignedDelegationPayloadView::try_from(bundle).map_err(|e| e.to_string())
+    });
     let signed = match signed_result {
         Ok(signed) => signed,
         Err(error) => {
@@ -1226,7 +931,7 @@ pub fn generate_van_witness(
     round_id: String,
     bundle_index: u32,
     anchor_height: u32,
-) -> Result<ApiVanWitness, String> {
+) -> Result<zcash_voting::wire::VanWitnessView, String> {
     catch(|| {
         tree_sync::generate_van_witness(
             &db_path,
@@ -1235,7 +940,7 @@ pub fn generate_van_witness(
             bundle_index,
             anchor_height,
         )
-        .map(ApiVanWitness::from)
+        .map(zcash_voting::wire::VanWitnessView::from)
     })
 }
 
@@ -1293,9 +998,9 @@ pub fn build_vote_commitments(
     round_id: String,
     bundle_index: u32,
     hotkey_seed: Vec<u8>,
-    van_witness: ApiVanWitness,
-    draft_votes: Vec<ApiDraftVote>,
-) -> Result<ApiSignedVoteCommitments, String> {
+    van_witness: zcash_voting::wire::VanWitnessView,
+    draft_votes: Vec<zcash_voting::wire::DraftVoteView>,
+) -> Result<zcash_voting::wire::SignedVoteCommitmentsView, String> {
     let network = keys::parse_network(&network)?;
     let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
     let cancellation = VotingWorkCancellation::start(&db_path, &wallet_id, Some(&round_id))?;
@@ -1318,7 +1023,9 @@ pub fn build_vote_commitments(
         |_| {},
         cancellation,
     )
-    .and_then(|commitments| ApiSignedVoteCommitments::try_from(commitments))
+    .and_then(|commitments| {
+        zcash_voting::wire::SignedVoteCommitmentsView::try_from(commitments).map_err(|e| e.to_string())
+    })
 }
 
 /// Recover a committed but unsubmitted vote from persisted local recovery data.
@@ -1328,10 +1035,13 @@ pub fn recover_vote_commitment(
     round_id: String,
     bundle_index: u32,
     proposal_id: u32,
-) -> Result<ApiSignedVoteCommitments, String> {
+) -> Result<zcash_voting::wire::SignedVoteCommitmentsView, String> {
     catch(|| {
         vote::recover_vote_commitment(&db_path, &wallet_id, &round_id, bundle_index, proposal_id)
-            .and_then(|commitments| ApiSignedVoteCommitments::try_from(commitments))
+            .and_then(|commitments| {
+                zcash_voting::wire::SignedVoteCommitmentsView::try_from(commitments)
+                    .map_err(|e| e.to_string())
+            })
     })
 }
 
@@ -1339,7 +1049,7 @@ pub fn recover_vote_commitment(
 /// Streaming variant of `build_vote_commitments`.
 ///
 /// Emits per-proposal progress events, then a terminal `"result"` event carrying
-/// `ApiSignedVoteCommitments`.
+/// `SignedVoteCommitmentsView`.
 pub async fn build_vote_commitments_with_progress(
     db_path: String,
     wallet_id: String,
@@ -1347,8 +1057,8 @@ pub async fn build_vote_commitments_with_progress(
     round_id: String,
     bundle_index: u32,
     hotkey_seed: Vec<u8>,
-    van_witness: ApiVanWitness,
-    draft_votes: Vec<ApiDraftVote>,
+    van_witness: zcash_voting::wire::VanWitnessView,
+    draft_votes: Vec<zcash_voting::wire::DraftVoteView>,
     sink: StreamSink<ApiVoteCommitEvent>,
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
@@ -1387,7 +1097,9 @@ pub async fn build_vote_commitments_with_progress(
     .map_err(|e| format!("vote commitment task failed: {e}"))
     .and_then(|result| result);
     let commitments = match commitment_result {
-        Ok(commitments) => match ApiSignedVoteCommitments::try_from(commitments) {
+        Ok(commitments) => match zcash_voting::wire::SignedVoteCommitmentsView::try_from(commitments)
+            .map_err(|e| e.to_string())
+        {
             Ok(commitments) => commitments,
             Err(error) => {
                 if sink.add_error(error.clone()).is_err() {
@@ -1437,10 +1149,15 @@ pub fn get_votes(
     db_path: String,
     wallet_id: String,
     round_id: String,
-) -> Result<Vec<ApiVoteRecord>, String> {
+) -> Result<Vec<zcash_voting::wire::VoteRecordView>, String> {
     catch(|| {
         vote::get_votes(&db_path, &wallet_id, &round_id)
-            .map(|records| records.into_iter().map(Into::into).collect())
+            .map(|records| {
+                records
+                    .into_iter()
+                    .map(zcash_voting::wire::VoteRecordView::from)
+                    .collect()
+            })
     })
 }
 
@@ -1653,7 +1370,7 @@ mod tests {
 
     #[test]
     fn api_bundle_setup_result_preserves_core_fields() {
-        let api = ApiVotingBundleSetupResult::from(zcash_voting::round::BundleLayout {
+        let api = zcash_voting::wire::BundleSetupResultView::from(zcash_voting::round::BundleLayout {
             bundle_count: 2,
             eligible_weight: 50,
             dropped_count: 0,
@@ -1666,7 +1383,8 @@ mod tests {
     #[test]
     fn api_signed_delegation_payload_preserves_core_fields() {
         let api =
-            ApiSignedDelegationPayload::try_from(zcash_voting::delegate::SignedDelegationBundle {
+            zcash_voting::wire::SignedDelegationPayloadView::try_from(
+                zcash_voting::delegate::SignedDelegationBundle {
                 submission: zcash_voting::delegate::DelegationSubmission {
                     proof: vec![4],
                     rk: [5; 32],
@@ -1707,7 +1425,8 @@ mod tests {
     #[test]
     fn api_keystone_delegation_request_preserves_display_memo() {
         let api =
-            ApiKeystoneDelegationRequest::from(zcash_voting::delegate::KeystoneSigningRequest {
+            zcash_voting::wire::KeystoneDelegationRequestView::from(
+                zcash_voting::delegate::KeystoneSigningRequest {
                 setup: zcash_voting::delegate::DelegationSetup {
                     pczt_bytes: vec![1],
                     pczt_sighash: [3; 32],
@@ -1730,7 +1449,7 @@ mod tests {
 
     #[test]
     fn delegation_wire_json_matches_vote_chain_shape() {
-        let wire = delegation_submission_wire_json(ApiSignedDelegationPayload {
+        let wire = delegation_submission_wire_json(zcash_voting::wire::SignedDelegationPayloadView {
             pczt_bytes: vec![],
             status: "ready".to_string(),
             message: None,
@@ -2001,7 +1720,7 @@ mod tests {
         let mut witness = [[0u8; 32]; zcash_voting::vote::VAN_AUTH_PATH_LEN];
         witness[0] = [1; 32];
         witness[1] = [2; 32];
-        let api = ApiVanWitness::from(zcash_voting::vote::VanWitness {
+        let api = zcash_voting::wire::VanWitnessView::from(zcash_voting::vote::VanWitness {
             auth_path: witness,
             position: 7,
             anchor_height: 123,
@@ -2035,7 +1754,7 @@ mod tests {
         let result = ApiDelegationProofEvent {
             phase: "result".to_string(),
             proof_progress: None,
-            signed_delegation_payload: Some(ApiSignedDelegationPayload {
+            signed_delegation_payload: Some(zcash_voting::wire::SignedDelegationPayloadView {
                 pczt_bytes: vec![1],
                 status: "ready_for_submission".to_string(),
                 message: None,
@@ -2087,7 +1806,7 @@ mod tests {
             proposal_id: None,
             bundle_index: Some(2),
             proof_progress: None,
-            commitments: Some(ApiSignedVoteCommitments {
+            commitments: Some(zcash_voting::wire::SignedVoteCommitmentsView {
                 bundle_index: 2,
                 commitments: vec![],
             }),
@@ -2098,7 +1817,7 @@ mod tests {
 
     #[test]
     fn api_signed_vote_commitments_preserve_public_wire_fields() {
-        let api = ApiSignedVoteCommitments::try_from(vote::SignedVoteCommitments {
+        let api = zcash_voting::wire::SignedVoteCommitmentsView::try_from(vote::SignedVoteCommitments {
             bundle_index: 1,
             commitments: vec![zcash_voting::vote::SignedVoteCommitment {
                 proposal_id: 2,
@@ -2157,7 +1876,7 @@ mod tests {
     #[test]
     fn api_note_selection_result_preserves_core_fields() {
         let divisor = zcash_voting::governance::BALLOT_DIVISOR;
-        let selected = SelectedNotes {
+        let selected = zcash_voting::SelectedNotes {
             notes: vec![
                 test_note_ref(divisor / 2, divisor / 2, 3),
                 test_note_ref(divisor / 2, divisor / 2, 7),
@@ -2166,7 +1885,9 @@ mod tests {
             anchor_tree_state: test_tree_state(100),
         };
 
-        let api = selection_result(selected, BundlePolicy::default()).unwrap();
+        let api =
+            zcash_voting::wire::VotingNoteSelectionResultView::from_selected(selected, BundlePolicy::default())
+                .unwrap();
 
         assert_eq!(api.note_count, 2);
         assert_eq!(api.eligible_weight_zatoshi, divisor);
@@ -2427,12 +2148,12 @@ mod tests {
             ROUND_ID.to_string(),
             0,
             vec![7; 32],
-            ApiVanWitness {
+            zcash_voting::wire::VanWitnessView {
                 auth_path: vec![vec![1; 32]; 24],
                 position: 0,
                 anchor_height: 1,
             },
-            vec![ApiDraftVote {
+            vec![zcash_voting::wire::DraftVoteView {
                 proposal_id: 1,
                 choice: 0,
                 num_options: 2,
@@ -2460,12 +2181,12 @@ mod tests {
             ROUND_ID.to_string(),
             0,
             vec![7; 32],
-            ApiVanWitness {
+            zcash_voting::wire::VanWitnessView {
                 auth_path: vec![vec![1; 32]; 23],
                 position: 0,
                 anchor_height: 1,
             },
-            vec![ApiDraftVote {
+            vec![zcash_voting::wire::DraftVoteView {
                 proposal_id: 1,
                 choice: 0,
                 num_options: 2,
@@ -2753,8 +2474,8 @@ mod tests {
         value_zatoshi: u64,
         voting_weight_zatoshi: u64,
         commitment_tree_position: u64,
-    ) -> NoteRef {
-        NoteRef {
+    ) -> zcash_voting::NoteRef {
+        zcash_voting::NoteRef {
             pool: "orchard".to_string(),
             txid_hex: hex::encode([commitment_tree_position as u8; 32]),
             output_index: commitment_tree_position as u32,
