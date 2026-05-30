@@ -74,12 +74,6 @@ const kZcashDefaultNetworkRaw = String.fromEnvironment(
   kZcashDefaultNetworkEnvKey,
   defaultValue: 'main',
 );
-const kVizorStorageNamespaceEnvKey = 'VIZOR_STORAGE_NAMESPACE';
-const kVizorDefaultStorageNamespace = 'com.keplr.vizor';
-const kVizorStorageNamespace = String.fromEnvironment(
-  kVizorStorageNamespaceEnvKey,
-  defaultValue: kVizorDefaultStorageNamespace,
-);
 
 final String kZcashDefaultNetworkName = normalizeZcashNetworkName(
   kZcashDefaultNetworkRaw,
@@ -114,6 +108,6 @@ ZcashNetwork zcashNetworkFromName(String networkName) {
 String secureStoreServiceForNetwork(String networkName) {
   final network = normalizeZcashNetworkName(networkName);
   return network == 'main'
-      ? '$kVizorStorageNamespace.secure_store'
-      : '$kVizorStorageNamespace.$network.secure_store';
+      ? 'com.keplr.vizor.secure_store'
+      : 'com.keplr.vizor.$network.secure_store';
 }
