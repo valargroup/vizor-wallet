@@ -60,6 +60,7 @@ class _VotingProposalDetailScreenState
       pane: AppDesktopPane(
         padding: EdgeInsets.zero,
         child: session.when(
+          skipLoadingOnRefresh: false,
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) =>
               _Message(title: "Couldn't load poll", message: '$error'),
@@ -231,7 +232,10 @@ class _VotingProposalDetailScreenState
       try {
         await ref
             .read(votingSessionProvider(widget.roundId).notifier)
-            .precomputeDelegationPir(seedBytes: seedBytes);
+            .precomputeDelegationPir(
+              accountUuid: accountUuid,
+              seedBytes: seedBytes,
+            );
       } finally {
         seedBytes.fillRange(0, seedBytes.length, 0);
       }

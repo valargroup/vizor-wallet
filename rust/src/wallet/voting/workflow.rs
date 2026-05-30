@@ -1,5 +1,3 @@
-use zcash_voting::confirmation::{DelegationConfirmation, TxEvent, VoteConfirmation};
-
 /// Marks a delegation bundle as submitted by storing its transaction hash.
 ///
 /// The write is atomic and idempotent for the same `tx_hash`. A different
@@ -17,35 +15,30 @@ pub fn mark_delegation_submitted(
     tx_hash: &str,
 ) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
-    db.store_delegation_tx_hash(round_id, bundle_index, tx_hash)
-        .map_err(|e| format!("store_delegation_tx_hash failed: {e}"))?;
-    Ok(())
+    db.mark_delegation_submitted(round_id, bundle_index, tx_hash)
+        .map_err(|e| e.to_string())
 }
 
-/// Marks a delegation bundle as confirmed from chain transaction events.
+/// Marks a delegation bundle as confirmed by storing its tx hash and VAN leaf.
+///
+/// The write is atomic and idempotent for the same `tx_hash` and
+/// `van_leaf_position`. Conflicting existing values are rejected.
 ///
 /// # Errors
 ///
-/// Returns an error if the voting DB cannot be opened, the confirmation event is
-/// malformed or for a different round, the bundle row is missing, or stored data
-/// conflicts.
+/// Returns an error if the voting DB cannot be opened, the bundle row is
+/// missing, the transaction cannot be committed, or stored data conflicts.
 pub fn mark_delegation_confirmed(
     db_path: &str,
     wallet_id: &str,
     round_id: &str,
     bundle_index: u32,
     tx_hash: &str,
-    events: &[TxEvent],
-) -> Result<DelegationConfirmation, String> {
+    van_leaf_position: u32,
+) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
-    zcash_voting::confirmation::confirm_delegation_submission(
-        &db,
-        round_id,
-        bundle_index,
-        tx_hash,
-        events,
-    )
-    .map_err(|e| format!("confirm_delegation_submission failed: {e}"))
+    db.mark_delegation_confirmed(round_id, bundle_index, tx_hash, van_leaf_position)
+        .map_err(|e| e.to_string())
 }
 
 /// Marks a vote as submitted by storing its tx hash.
@@ -66,18 +59,21 @@ pub fn mark_vote_submitted(
     tx_hash: &str,
 ) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
-    db.record_vote_submission(round_id, bundle_index, proposal_id, tx_hash)
-        .map_err(|e| format!("record_vote_submission failed: {e}"))?;
-    Ok(())
+    db.mark_vote_submitted(round_id, bundle_index, proposal_id, tx_hash)
+        .map_err(|e| e.to_string())
 }
 
-/// Marks a vote as confirmed from chain transaction events.
+/// Marks a vote as confirmed and persists the confirmation fields.
+///
+/// Stores the vote tx hash, VAN position, and vote commitment tree position.
+/// Repeated calls with identical data are accepted; any
+/// conflicting existing value is rejected.
 ///
 /// # Errors
 ///
-/// Returns an error if the voting DB cannot be opened, the confirmation event is
-/// malformed or for a different round, the vote row is missing, or stored data
-/// conflicts.
+/// Returns an error if the voting DB cannot be opened, the vote row is missing,
+/// the transaction cannot be committed, `vc_tree_position` does not fit SQLite's
+/// signed integer representation, or stored data conflicts.
 pub fn mark_vote_confirmed(
     db_path: &str,
     wallet_id: &str,
@@ -85,18 +81,19 @@ pub fn mark_vote_confirmed(
     bundle_index: u32,
     proposal_id: u32,
     tx_hash: &str,
-    events: &[TxEvent],
-) -> Result<VoteConfirmation, String> {
+    van_position: u32,
+    vc_tree_position: u64,
+) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
-    zcash_voting::confirmation::confirm_vote_submission(
-        &db,
+    db.mark_vote_confirmed(
         round_id,
         bundle_index,
         proposal_id,
         tx_hash,
-        events,
+        van_position,
+        vc_tree_position,
     )
-    .map_err(|e| format!("confirm_vote_submission failed: {e}"))
+    .map_err(|e| e.to_string())
 }
 
 /// Records helper-server share submission state for retry/recovery.
@@ -120,16 +117,10 @@ pub fn record_share_delegation(
     submit_at: u64,
 ) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
-    zcash_voting::share::record(
-        &db,
-        round_id,
-        bundle_index,
-        proposal_id,
-        share_index,
-        sent_to_urls,
-        submit_at,
-    )
-    .map_err(|e| format!("record_share_delegation failed: {e}"))?;
+    zcash_voting::vote::CommittedVote::recover(&db, round_id, bundle_index, proposal_id)
+        .map_err(|e| format!("recover committed vote failed: {e}"))?
+        .record_share(&db, share_index, sent_to_urls, submit_at)
+        .map_err(|e| format!("record_share_delegation failed: {e}"))?;
     Ok(())
 }
 
@@ -151,7 +142,10 @@ pub fn mark_share_confirmed(
     share_index: u32,
 ) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
-    zcash_voting::share::confirm(&db, round_id, bundle_index, proposal_id, share_index)
+    zcash_voting::vote::CommittedVote::recover(&db, round_id, bundle_index, proposal_id)
+        .map_err(|e| format!("recover committed vote failed: {e}"))?
+        .confirm_share(&db, share_index)
         .map_err(|e| format!("mark_share_confirmed failed: {e}"))?;
     Ok(())
 }
+

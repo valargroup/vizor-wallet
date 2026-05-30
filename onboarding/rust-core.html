@@ -145,15 +145,15 @@
 
 <h3 id="rust-deps">3.4 Zcash Crate 의존성 그래프</h3>
 <div class="diagram">
-  zcash_client_sqlite (0.19.5)  &lt;-- 우리의 주요 진입점
-    |-- zcash_client_backend (0.21.2)
-    |     |-- zcash_keys (0.12.0)
-    |     |-- zcash_protocol (0.7.2)
-    |     |-- zcash_address (0.10.1)
-    |     |-- zcash_primitives (0.26.4)
+  zcash_client_sqlite (0.20.2)  &lt;-- 우리의 주요 진입점
+    |-- zcash_client_backend (0.22.0)
+    |     |-- zcash_keys (0.13.0)
+    |     |-- zcash_protocol (0.8.0)
+    |     |-- zcash_address (0.11.0)
+    |     |-- zcash_primitives (0.27.1)
     |     +-- lightwalletd proto (내부 tonic gRPC)
-    |-- sapling-crypto (0.5.x)   &lt;-- zcash_client_sqlite의 버전과 반드시 일치해야 함
-    +-- orchard (0.11.x)         &lt;-- zcash_client_sqlite의 버전과 반드시 일치해야 함
+    |-- sapling-crypto (0.7.0)   &lt;-- zcash_client_sqlite의 버전과 반드시 일치해야 함
+    +-- orchard (0.13.1)         &lt;-- zcash_client_sqlite의 버전과 반드시 일치해야 함
 
   tonic (0.14)                   &lt;-- gRPC 클라이언트 (tls-ring + tls-webpki-roots)
 </div>

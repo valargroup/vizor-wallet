@@ -22,7 +22,27 @@ flutter_rust_bridge_codegen generate
 # FRB routes Rust logs to os_log (subsystem "frb_user"), not Flutter console.
 # Run in a separate terminal:
 log stream --predicate 'subsystem == "frb_user"' --level info
+
 ```
+
+## UI Copy Conventions
+
+- **Sentence case is the project default for all user-facing strings**: button
+  labels, nav items, tab titles, toasts, dialog titles/bodies, sidebar items,
+  tooltips, error messages, status labels, form labels, picker headers, empty
+  states, page titles. Only capitalize the first word and proper nouns. Keep
+  proper-noun acronyms in their canonical form (`ZEC`, `USDC`, `USDT`, `NEAR`,
+  `Vizor`, `Keystone`, `Zcash`, `Ethereum`).
+- This applies to interpolated labels too: `'$symbol deposit tx'`, not
+  `'$symbol Deposit tx'`. The asset symbol carries its own casing; the rest of
+  the label is sentence case.
+- Existing rationale and full audit are in `qa-copy-review.csv` and
+  `copy-review-20260528-1554.csv` at the repo root. Reference these before
+  introducing new copy in this project.
+- When editing existing copy, also update widgetbook fixtures
+  (`lib/widgetbook/*.dart`) and tests (`test/`) that assert on the literal
+  string — `find.text(...)` matchers, `expectedNextAction` fields, and
+  `_tooltipWithMessage(...)` helpers will break otherwise.
 
 ## Release Notes
 
@@ -682,7 +702,7 @@ Important desktop design rule:
 
 ## Crate Versions
 
-Pinned in `rust/Cargo.toml`. Key crates: `zcash_client_backend` 0.22, `zcash_client_sqlite` 0.20, `zcash_keys` 0.13, `pczt` 0.6, `zcash_primitives` 0.27, `orchard` 0.13.1, and `sapling-crypto` 0.7. These must stay compatible — check librustzcash releases before bumping. This April 2026 line is required so voting integration can use `zcash_voting` without local `[patch.crates-io]` overrides.
+Constrained in `rust/Cargo.toml` and resolved in `rust/Cargo.lock`. Key crates: `zcash_client_backend` 0.22.0, `zcash_client_sqlite` 0.20.2, `zcash_keys` 0.13, `pczt` 0.6, `zcash_primitives` 0.27, `orchard` 0.13.1, and `sapling-crypto` 0.7.0. These must stay compatible — check librustzcash releases before bumping. Voting integration requires the `orchard` `unstable-voting-circuits` feature so it can use `zcash_voting` without local `[patch.crates-io]` overrides.
 
 `tonic` 0.14 with `tls-ring` + `tls-webpki-roots` features for gRPC TLS. `rustls` 0.23+ requires explicit crypto provider — `tls-ring` provides this.
 

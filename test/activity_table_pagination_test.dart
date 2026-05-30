@@ -129,13 +129,15 @@ void main() {
         (widget) => widget is AppIcon && widget.name == AppIcons.arrowDown,
       );
 
-      expect(arrowFinder, findsNothing);
+      expect(arrowFinder, findsOneWidget);
 
       final mutedColor = AppThemeData.light.colors.text.muted;
-      for (final label in ['Type', 'Amount', 'Status', 'Date & time']) {
+      for (final label in ['Tx Type', 'Amount', 'Status']) {
         final text = tester.widget<Text>(find.text(label));
         expect(text.style?.color, mutedColor);
       }
+      final timestampText = tester.widget<Text>(find.text('Time Stamp'));
+      expect(timestampText.style?.color, AppThemeData.light.colors.text.accent);
     },
   );
 }

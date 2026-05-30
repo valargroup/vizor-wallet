@@ -1,9 +1,8 @@
 use std::panic;
 
+use crate::wallet::{keys, network::WalletNetwork};
 use secrecy::ExposeSecret;
 use zeroize::Zeroizing;
-
-use crate::wallet::keys;
 
 /// Result of wallet creation, containing the mnemonic, unified address, and account UUID.
 pub struct WalletCreationResult {
@@ -47,6 +46,12 @@ fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result
             Err(format!("Rust panic: {msg}"))
         }
     }
+}
+
+fn parse_network_and_migrate(db_path: &str, network: &str) -> Result<WalletNetwork, String> {
+    let network = keys::parse_network(network)?;
+    keys::ensure_db_migrated_once(db_path, network)?;
+    Ok(network)
 }
 
 /// Get the latest block height from lightwalletd.
@@ -147,7 +152,7 @@ pub fn add_account(
     birthday_height: Option<u64>,
 ) -> Result<AccountCreationResult, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let seed = keys::mnemonic_to_seed(&mnemonic)?;
 
         // DB is already initialized by the first account — do not call ensure_db_initialized
@@ -173,7 +178,7 @@ pub fn import_hardware_account(
     birthday_height: Option<u64>,
 ) -> Result<AccountCreationResult, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let (account_uuid, unified_address) = keys::import_hardware_account(
             &db_path,
             network,
@@ -193,7 +198,7 @@ pub fn import_hardware_account(
 /// List all accounts in the wallet database.
 pub fn list_accounts(db_path: String, network: String) -> Result<Vec<AccountInfo>, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         let accounts = keys::list_accounts(&db_path, network)?;
         Ok(accounts
             .into_iter()
@@ -214,7 +219,7 @@ pub fn delete_account(
     account_uuid: String,
 ) -> Result<(), String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         keys::delete_account(&db_path, network, &account_uuid)
     })
 }
@@ -226,7 +231,7 @@ pub fn get_unified_address(
     account_uuid: Option<String>,
 ) -> Result<String, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         keys::get_address_from_db(&db_path, network, account_uuid.as_deref())
     })
 }
@@ -247,6 +252,14 @@ pub fn mnemonic_word_list() -> Vec<String> {
 #[flutter_rust_bridge::frb(sync)]
 pub fn wallet_exists(db_path: String) -> bool {
     keys::wallet_exists(&db_path)
+}
+
+/// Ensure an existing wallet database has the schema required by this build.
+pub fn ensure_wallet_db_migrated(db_path: String, network: String) -> Result<(), String> {
+    catch(|| {
+        let network = keys::parse_network(&network)?;
+        keys::ensure_db_migrated_once(&db_path, network)
+    })
 }
 
 /// Validate a mnemonic phrase (checks word count and validity).
@@ -273,7 +286,7 @@ pub fn get_transparent_address(
     account_uuid: Option<String>,
 ) -> Result<String, String> {
     catch(|| {
-        let network = keys::parse_network(&network)?;
+        let network = parse_network_and_migrate(&db_path, &network)?;
         keys::get_transparent_address_from_db(&db_path, network, account_uuid.as_deref())
     })
 }

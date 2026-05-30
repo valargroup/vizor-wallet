@@ -13,6 +13,7 @@ import 'package:zcash_wallet/src/features/voting/screens/voting_proposal_detail_
 import 'package:zcash_wallet/src/features/voting/screens/voting_review_screen.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_results_screen.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_status_screen.dart';
+import 'package:zcash_wallet/src/features/voting/screens/voting_submission_confirmation_screen.dart';
 import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
@@ -129,6 +130,104 @@ void main() {
     expect(find.text('Retry'), findsOne);
   });
 
+  testWidgets('status screen explains ineligible account voting failure', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      rust: _IneligibleVotingRustApi(),
+    );
+    addTearDown(container.dispose);
+    container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    const message =
+        'This account is not eligible for this poll. It had no eligible '
+        'shielded funds at snapshot block 3,359,740. Switch to an eligible '
+        'account to vote.';
+    await _pumpUntilFound(tester, find.text(message));
+
+    expect(find.text(message), findsOneWidget);
+    expect(find.text('Voting failed.'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('submitted route does not confirm incomplete current account', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _submissionHarness(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(tester, find.text('Submission Not Complete'));
+
+    expect(find.text('Submission Confirmed!'), findsNothing);
+    expect(
+      find.text('This account has not completed submission for this poll.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('status screen does not complete all-decided empty account', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final recoveryApi = _MutableVotingRecoveryApi()
+      ..state = _recoveryState(bundleCount: 0)
+      ..roundPlan = rust_voting.ApiRoundPlan(
+        roundId: _roundId,
+        pendingRecovery: false,
+        nextSteps: const [],
+        openProposals: Uint32List(0),
+        allDecided: true,
+      );
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(
+      tester,
+      find.text('Choose at least one vote before submitting.'),
+    );
+
+    expect(find.text('submission confirmed route'), findsNothing);
+    expect(find.byIcon(Icons.check_circle), findsNothing);
+    expect(find.text('Choose at least one vote before submitting.'), findsOne);
+  });
+
   testWidgets(
     'status screen polls delegation-only recovery before draft error',
     (tester) async {
@@ -148,7 +247,6 @@ void main() {
                 'type': 'delegate_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '0'},
-                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -238,7 +336,6 @@ void main() {
               'type': 'delegate_vote',
               'attributes': [
                 {'key': 'leaf_index', 'value': '0'},
-                {'key': 'vote_round_id', 'value': _roundId},
               ],
             },
           ],
@@ -546,7 +643,6 @@ void main() {
                 'type': 'cast_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '1,2'},
-                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -967,7 +1063,6 @@ void main() {
                 'type': 'delegate_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '0'},
-                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -986,7 +1081,6 @@ void main() {
                 'type': 'cast_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '1,2'},
-                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1059,7 +1153,6 @@ void main() {
                 'type': 'delegate_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '0'},
-                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1078,7 +1171,6 @@ void main() {
                 'type': 'cast_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '1,2'},
-                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1183,7 +1275,6 @@ void main() {
                 'type': 'delegate_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '0'},
-                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1202,7 +1293,6 @@ void main() {
                 'type': 'cast_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '1,2'},
-                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1513,6 +1603,37 @@ Widget _proposalHarness() {
   );
 }
 
+Widget _submissionHarness() {
+  final router = GoRouter(
+    initialLocation: '/voting/poll/$_roundId/submitted',
+    routes: [
+      GoRoute(
+        path: '/voting/poll/:roundId/submitted',
+        builder: (_, state) => VotingSubmissionConfirmationScreen(
+          roundId: state.pathParameters['roundId']!,
+        ),
+      ),
+      GoRoute(path: '/voting', builder: (_, _) => const Text('voting route')),
+      GoRoute(path: '/home', builder: (_, _) => const Text('home route')),
+      GoRoute(path: '/send', builder: (_, _) => const Text('send route')),
+      GoRoute(path: '/receive', builder: (_, _) => const Text('receive route')),
+      GoRoute(
+        path: '/activity',
+        builder: (_, _) => const Text('activity route'),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (_, _) => const Text('settings route'),
+      ),
+    ],
+  );
+
+  return MaterialApp.router(
+    routerConfig: router,
+    builder: (_, child) => AppTheme(data: AppThemeData.light, child: child!),
+  );
+}
+
 Widget _resultsHarness() {
   final router = GoRouter(
     initialLocation: '/voting/poll/$_roundId/results',
@@ -1656,7 +1777,7 @@ rust_voting.ApiRoundRecoveryState _recoveryState({
   List<rust_voting.ApiDelegationWorkflowRecovery> delegationWorkflows =
       const [],
   List<rust_voting.ApiDelegationTxRecovery> delegationTxHashes = const [],
-  List<rust_voting.ApiVoteRecord> votes = const [],
+  List<rust_voting.ApiVoteRecovery> votes = const [],
   List<rust_voting.ApiVoteWorkflowRecovery> voteWorkflows = const [],
   List<rust_voting.ApiVoteTxRecovery> voteTxHashes = const [],
   List<rust_voting.ApiCommitmentBundleRecovery> commitmentBundles = const [],
@@ -1665,16 +1786,60 @@ rust_voting.ApiRoundRecoveryState _recoveryState({
   List<rust_voting.ApiShareDelegationRecord> unconfirmedShareDelegations =
       const [],
 }) {
+  final delegationByBundle = <int, rust_voting.ApiDelegationRecovery>{
+    for (final record in delegationWorkflows)
+      record.bundleIndex: rust_voting.ApiDelegationRecovery(
+        bundleIndex: record.bundleIndex,
+        phase: record.phase,
+        txHash: record.txHash,
+        vanLeafPosition: record.vanLeafPosition,
+      ),
+  };
+  for (final record in delegationTxHashes) {
+    delegationByBundle[record.bundleIndex] = rust_voting.ApiDelegationRecovery(
+      bundleIndex: record.bundleIndex,
+      phase: VotingWorkflowPhase.submittedDelegation,
+      txHash: record.txHash,
+      vanLeafPosition: null,
+    );
+  }
+
+  final votesByKey = <String, rust_voting.ApiVoteRecovery>{
+    for (final record in votes)
+      '${record.bundleIndex}:${record.proposalId}': record,
+    for (final record in voteWorkflows)
+      '${record.bundleIndex}:${record.proposalId}': rust_voting.ApiVoteRecovery(
+        bundleIndex: record.bundleIndex,
+        proposalId: record.proposalId,
+        choice: 0,
+        phase: record.phase,
+        txHash: record.txHash,
+        vcTreePosition: record.vcTreePosition,
+        hasCommitmentBundle: record.hasCommitmentBundle,
+      ),
+  };
+  for (final record in voteTxHashes) {
+    final key = '${record.bundleIndex}:${record.proposalId}';
+    final current = votesByKey[key];
+    votesByKey[key] = rust_voting.ApiVoteRecovery(
+      bundleIndex: record.bundleIndex,
+      proposalId: record.proposalId,
+      choice: current?.choice ?? 0,
+      phase: current?.phase ?? VotingWorkflowPhase.submittedVote,
+      txHash: record.txHash,
+      vcTreePosition: current?.vcTreePosition,
+      hasCommitmentBundle:
+          current?.hasCommitmentBundle ?? false,
+    );
+  }
+
   return rust_voting.ApiRoundRecoveryState(
     roundId: _roundId,
     bundleCount: bundleCount,
-    delegationWorkflows: delegationWorkflows,
-    delegationTxHashes: delegationTxHashes,
-    votes: votes,
-    voteWorkflows: voteWorkflows,
-    voteTxHashes: voteTxHashes,
+    delegation: delegationByBundle.values.toList(),
+    votes: votesByKey.values.toList(),
     commitmentBundles: commitmentBundles,
-    shareWorkflows: shareWorkflows,
+    shares: shareWorkflows,
     shareDelegations: shareDelegations,
     unconfirmedShareDelegations: unconfirmedShareDelegations,
   );
@@ -1848,6 +2013,24 @@ class _FailingVotingPowerRustApi extends _NoopVotingRustApi {
   }
 }
 
+class _IneligibleVotingRustApi extends _NoopVotingRustApi {
+  @override
+  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required rust_voting.ApiVotingRoundParams roundParams,
+    required String roundName,
+    String? sessionJson,
+    required String accountUuid,
+    int? maxRealNotesPerBundle,
+  }) async {
+    throw Exception(
+      'Invalid input: no spendable voting notes at snapshot height 3359740',
+    );
+  }
+}
+
 class _NoopSyncNotifier extends SyncNotifier {
   @override
   Future<SyncState> build() async {
@@ -1984,6 +2167,28 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     return rust_voting.ApiVotingBundleSetupResult(
       bundleCount: bundleCount,
       eligibleWeightZatoshi: BigInt.from(100),
+    );
+  }
+
+  @override
+  Future<rust_voting.ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String pirServerUrl,
+    required String network,
+    required rust_voting.ApiVotingRoundParams roundParams,
+    required String roundName,
+    String? sessionJson,
+    required String accountUuid,
+    required List<int> seedBytes,
+    required int bundleIndex,
+    int? maxRealNotesPerBundle,
+  }) async {
+    return rust_voting.ApiDelegationPirPrecomputeResult(
+      cachedCount: 0,
+      fetchedCount: 1,
+      bundleCount: bundleCount,
+      bundleIndex: bundleIndex,
     );
   }
 
@@ -2194,18 +2399,14 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }) async {}
 
   @override
-  Future<rust_voting.ApiDelegationConfirmation> markDelegationConfirmed({
+  Future<void> markDelegationConfirmed({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required String txHash,
-    required List<rust_voting.ApiTxEvent> events,
+    required int vanLeafPosition,
   }) async {
-    _expectEventRoundId(events, 'delegate_vote', roundId);
-    final vanLeafPosition = int.parse(
-      _eventAttribute(events, 'delegate_vote', 'leaf_index'),
-    );
     recoveryApi.state = _recoveryState(
       delegationTxHashes: [
         rust_voting.ApiDelegationTxRecovery(
@@ -2213,10 +2414,6 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
           txHash: txHash,
         ),
       ],
-    );
-    return rust_voting.ApiDelegationConfirmation(
-      txHash: txHash,
-      vanLeafPosition: vanLeafPosition,
     );
   }
 
@@ -2401,17 +2598,16 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }) async {}
 
   @override
-  Future<rust_voting.ApiVoteConfirmation> markVoteConfirmed({
+  Future<void> markVoteConfirmed({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
     required String txHash,
-    required List<rust_voting.ApiTxEvent> events,
+    required int vanPosition,
+    required BigInt vcTreePosition,
   }) async {
-    _expectEventRoundId(events, 'cast_vote', roundId);
-    final positions = _voteLeafPositions(events);
     recoveryApi.state = _recoveryState(
       delegationTxHashes: [
         rust_voting.ApiDelegationTxRecovery(
@@ -2426,11 +2622,6 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
           txHash: txHash,
         ),
       ],
-    );
-    return rust_voting.ApiVoteConfirmation(
-      txHash: txHash,
-      vanLeafPosition: positions.vanPosition,
-      vcTreePosition: positions.vcTreePosition,
     );
   }
 
@@ -2497,12 +2688,12 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     ];
     recoveryApi.state = _recoveryState(
       bundleCount: current.bundleCount,
-      delegationTxHashes: current.delegationTxHashes,
+      delegationTxHashes: current.delegation,
       votes: current.votes,
-      voteWorkflows: current.voteWorkflows,
-      voteTxHashes: current.voteTxHashes,
+      voteWorkflows: current.votes,
+      voteTxHashes: current.votes,
       commitmentBundles: current.commitmentBundles,
-      shareWorkflows: current.shareWorkflows,
+      shareWorkflows: current.shares,
       shareDelegations: [
         for (final share in current.shareDelegations)
           if (matches(share)) confirmed(share) else share,
@@ -2522,57 +2713,6 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
       );
     }
   }
-}
-
-String _eventAttribute(
-  List<rust_voting.ApiTxEvent> events,
-  String eventType,
-  String key,
-) {
-  final value = _optionalEventAttribute(events, eventType, key);
-  if (value != null) return value;
-  throw StateError('Missing $eventType $key.');
-}
-
-String? _optionalEventAttribute(
-  List<rust_voting.ApiTxEvent> events,
-  String eventType,
-  String key,
-) {
-  for (final event in events) {
-    if (event.eventType != eventType) continue;
-    for (final attribute in event.attributes) {
-      if (attribute.key == key) return attribute.value;
-    }
-  }
-  return null;
-}
-
-void _expectEventRoundId(
-  List<rust_voting.ApiTxEvent> events,
-  String eventType,
-  String roundId,
-) {
-  final eventRoundId =
-      _optionalEventAttribute(events, eventType, 'vote_round_id') ??
-      _optionalEventAttribute(events, eventType, 'round_id');
-  if (eventRoundId != roundId) {
-    throw StateError('Missing $eventType round id.');
-  }
-}
-
-({int vanPosition, BigInt vcTreePosition}) _voteLeafPositions(
-  List<rust_voting.ApiTxEvent> events,
-) {
-  final rawLeafIndex = _eventAttribute(events, 'cast_vote', 'leaf_index');
-  final parts = rawLeafIndex.split(',');
-  if (parts.length != 2) {
-    throw StateError('Malformed cast_vote leaf_index: $rawLeafIndex');
-  }
-  return (
-    vanPosition: int.parse(parts[0].trim()),
-    vcTreePosition: BigInt.parse(parts[1].trim()),
-  );
 }
 
 Map<String, dynamic> _wireShare(rust_voting.ApiWireEncryptedShare share) {

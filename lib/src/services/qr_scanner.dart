@@ -57,6 +57,100 @@ class ScanResult {
   const ScanResult({required this.urType, required this.data});
 }
 
+/// Inline QR scanner for single-frame QR payloads such as plain addresses or
+/// payment URIs. Animated UR payloads should continue to use
+/// [AnimatedUrScannerView] so fountain-code state stays isolated.
+class PlainQrScannerView extends StatefulWidget {
+  const PlainQrScannerView({
+    required this.onComplete,
+    this.controller,
+    this.facing,
+    this.scanSessionResetToken,
+    super.key,
+  });
+
+  final ValueChanged<String> onComplete;
+  final MobileScannerController? controller;
+  final CameraFacing? facing;
+  final Object? scanSessionResetToken;
+
+  @override
+  State<PlainQrScannerView> createState() => _PlainQrScannerViewState();
+}
+
+class _PlainQrScannerViewState extends State<PlainQrScannerView> {
+  late MobileScannerController _controller;
+  late bool _ownsController;
+  bool _complete = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _setController();
+  }
+
+  void _setController() {
+    final controller = widget.controller;
+    _ownsController = controller == null;
+    _controller =
+        controller ??
+        MobileScannerController(
+          facing: widget.facing ?? _defaultFacing,
+          formats: QrScanner.formats,
+          detectionSpeed: QrScanner.detectionSpeed,
+        );
+  }
+
+  @override
+  void didUpdateWidget(covariant PlainQrScannerView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final controllerChanged = oldWidget.controller != widget.controller;
+    final ownedFacingChanged =
+        widget.controller == null && oldWidget.facing != widget.facing;
+    if (!controllerChanged && !ownedFacingChanged) {
+      if (oldWidget.scanSessionResetToken != widget.scanSessionResetToken) {
+        _complete = false;
+      }
+      return;
+    }
+    if (_ownsController) {
+      _controller.dispose();
+    }
+    _setController();
+    _complete = false;
+  }
+
+  @override
+  void dispose() {
+    if (_ownsController) {
+      _controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_complete) return;
+    final value = capture.barcodes.firstOrNull?.rawValue?.trim();
+    if (value == null || value.isEmpty) return;
+    _complete = true;
+    widget.onComplete(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return MobileScanner(
+          controller: _controller,
+          onDetect: _onDetect,
+          scanWindow: QrScanner.scanWindowFor(constraints.biggest),
+          scanWindowUpdateThreshold: QrScanner.scanWindowUpdateThreshold,
+        );
+      },
+    );
+  }
+}
+
 /// Inline animated UR scanner that can be embedded in product screens.
 class AnimatedUrScannerView extends StatefulWidget {
   const AnimatedUrScannerView({

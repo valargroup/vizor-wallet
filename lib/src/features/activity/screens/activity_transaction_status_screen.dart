@@ -359,7 +359,7 @@ class _ActivityTransactionStatusScreenState
     final trimmedAddress = address.trim();
     return TransactionReceiptBlockData(
       title: title,
-      onCopy: () => unawaited(_copyText(trimmedAddress, 'Address Copied')),
+      onCopy: () => unawaited(_copyText(trimmedAddress, 'Address copied')),
       child: TransactionReceiptAddressText(
         address: trimmedAddress,
         highlightEdges: _shouldHighlightAddressEdges(trimmedAddress),

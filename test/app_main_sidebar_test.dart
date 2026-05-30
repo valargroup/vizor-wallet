@@ -4,22 +4,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
+import 'package:zcash_wallet/src/core/config/swap_feature_config.dart';
 import 'package:zcash_wallet/src/core/layout/app_desktop_shell.dart';
 import 'package:zcash_wallet/src/core/layout/app_main_sidebar.dart';
 import 'package:zcash_wallet/src/core/profile_pictures.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
+import 'package:zcash_wallet/src/core/widgets/app_icon.dart';
 import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/sync_failure.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
 
 void main() {
   const failureLabels = {
-    SyncFailureKind.endpoint: 'Syncing failed. Endpoint error...',
-    SyncFailureKind.databaseBusy: 'Syncing failed. Wallet data busy...',
-    SyncFailureKind.databaseFatal: 'Syncing failed. Wallet data error...',
-    SyncFailureKind.chainRecovery: 'Syncing failed. Chain recovery...',
-    SyncFailureKind.parseFatal: 'Syncing failed. Data error...',
-    SyncFailureKind.unknown: 'Syncing failed. Unknown error...',
+    SyncFailureKind.endpoint: 'Syncing failed: Endpoint error',
+    SyncFailureKind.databaseBusy: 'Syncing failed: Wallet data busy',
+    SyncFailureKind.databaseFatal: 'Syncing failed: Wallet data error',
+    SyncFailureKind.chainRecovery: 'Syncing failed: Chain recovery',
+    SyncFailureKind.parseFatal: 'Syncing failed: Data error',
+    SyncFailureKind.unknown: 'Syncing failed: Unknown error',
   };
 
   testWidgets('sidebar shows in-progress sync percentage', (tester) async {
@@ -32,6 +34,65 @@ void main() {
 
     expect(find.text('99% Syncing...'), findsOneWidget);
     expect(find.text('Vizor is synced'), findsNothing);
+  });
+
+  testWidgets('sidebar hides Swap when swap feature is disabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_sidebarHarness(SyncState(), swapEnabled: false));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('sidebar_swap_button')), findsNothing);
+    expect(find.text('Swap'), findsNothing);
+    expect(find.byKey(const ValueKey('sidebar_home_button')), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
+    final homeIcon = tester.widget<AppIcon>(
+      find.descendant(
+        of: find.byKey(const ValueKey('sidebar_home_button')),
+        matching: find.byType(AppIcon),
+      ),
+    );
+    expect(homeIcon.name, AppIcons.home);
+    expect(find.text('Send'), findsNothing);
+    expect(find.text('Receive'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sidebar_address_book_button')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('sidebar Address Book item opens the address book route', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_sidebarHarness(SyncState()));
+    await tester.pump();
+
+    await tester.tap(find.text('Address book'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('address book'), findsOneWidget);
+  });
+
+  testWidgets('sidebar keeps primary navigation item spacing consistent', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_sidebarHarness(SyncState()));
+    await tester.pump();
+
+    final positions = [
+      tester.getTopLeft(find.text('Home')).dy,
+      tester.getTopLeft(find.text('Swap')).dy,
+      tester.getTopLeft(find.text('Address book')).dy,
+      tester.getTopLeft(find.text('Activity')).dy,
+    ];
+    final gaps = [
+      for (var i = 1; i < positions.length; i++)
+        positions[i] - positions[i - 1],
+    ];
+
+    for (final gap in gaps.skip(1)) {
+      expect(gap, moreOrLessEquals(gaps.first, epsilon: 0.1));
+    }
   });
 
   testWidgets('sidebar sync indicator is pinned to the sidebar edge', (
@@ -106,7 +167,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Syncing failed. Network error...'), findsOneWidget);
+    expect(find.text('Syncing failed: Network error'), findsOneWidget);
     expect(find.text('Vizor is synced'), findsNothing);
     final text = tester.widget<Text>(
       find.byKey(const ValueKey('sidebar_sync_text')),
@@ -182,6 +243,7 @@ Color? _syncIndicatorColor(WidgetTester tester) {
 Widget _sidebarHarness(
   SyncState syncState, {
   AppThemeData themeData = AppThemeData.light,
+  bool swapEnabled = true,
 }) {
   final router = GoRouter(
     initialLocation: '/home',
@@ -195,7 +257,12 @@ Widget _sidebarHarness(
       ),
       GoRoute(path: '/accounts', builder: (_, _) => const Text('accounts')),
       GoRoute(path: '/send', builder: (_, _) => const Text('send')),
+      GoRoute(path: '/swap', builder: (_, _) => const Text('swap')),
       GoRoute(path: '/receive', builder: (_, _) => const Text('receive')),
+      GoRoute(
+        path: '/address-book',
+        builder: (_, _) => const Text('address book'),
+      ),
       GoRoute(path: '/activity', builder: (_, _) => const Text('activity')),
       GoRoute(path: '/settings', builder: (_, _) => const Text('settings')),
       GoRoute(path: '/about', builder: (_, _) => const Text('about')),
@@ -206,6 +273,7 @@ Widget _sidebarHarness(
     overrides: [
       appBootstrapProvider.overrideWithValue(_bootstrap),
       syncProvider.overrideWith(() => _FakeSyncNotifier(syncState)),
+      swapFeatureEnabledProvider.overrideWithValue(swapEnabled),
     ],
     child: MaterialApp.router(
       routerConfig: router,

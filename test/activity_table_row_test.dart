@@ -137,6 +137,75 @@ void main() {
     expect(find.text('In progress'), findsOneWidget);
   });
 
+  testWidgets('failed sent activity rows render refunded state', (
+    tester,
+  ) async {
+    late final List<ActivityRowData> rows;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppTheme(
+          data: AppThemeData.light,
+          child: Builder(
+            builder: (context) {
+              rows = buildActivityRows(
+                context: context,
+                transactions: [
+                  _tx(
+                    txidHex: 'failed-sent',
+                    kind: 'sent',
+                    amount: BigInt.from(111000000),
+                    expiredUnmined: true,
+                  ),
+                ],
+              );
+              return ActivityTable(rows: rows);
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(rows[0].title, 'Send failed');
+    expect(rows[0].amountText, '1.11 $ticker');
+    expect(rows[0].amountIconName, AppIcons.arrowBack);
+    expect(rows[0].amountSubtitle, 'Refunded');
+    expect(rows[0].statusText, 'Failed');
+    expect(rows[0].statusIconName, AppIcons.skull);
+    expect(rows[0].backgroundColor, isNotNull);
+    expect(find.text('Send failed'), findsOneWidget);
+    expect(find.text('Refunded'), findsOneWidget);
+  });
+
+  testWidgets('amount subtitles can render an inline status icon', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppTheme(
+          data: AppThemeData.light,
+          child: ActivityTable(
+            rows: [
+              _row(
+                title: 'Swap failed',
+                amountSubtitle: 'Timeout',
+                amountSubtitleIconName: AppIcons.time,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Timeout'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is AppIcon && widget.name == AppIcons.time,
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('activity rows hide asset amounts with a fixed mask', (
     tester,
   ) async {
@@ -236,6 +305,68 @@ void main() {
       expect(text.style?.letterSpacing, AppTypography.labelLarge.letterSpacing);
     }
   });
+
+  testWidgets('activity table renders grouped child rows under parent rows', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppTheme(
+          data: AppThemeData.light,
+          child: ActivityTable(
+            rows: [
+              _row(
+                title: 'Swapping...',
+                childRows: [_row(title: 'Receiving ZEC...')],
+              ),
+              _row(title: 'Sent'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Swapping...'), findsOneWidget);
+    expect(find.text('Receiving ZEC...'), findsOneWidget);
+    expect(find.text('Sent'), findsOneWidget);
+
+    final parentTop = tester.getTopLeft(find.text('Swapping...')).dy;
+    final childTop = tester.getTopLeft(find.text('Receiving ZEC...')).dy;
+    final nextTop = tester.getTopLeft(find.text('Sent')).dy;
+    expect(childTop, greaterThan(parentTop));
+    expect(nextTop, greaterThan(childTop));
+  });
+
+  testWidgets('swap progress avatar keeps the row icon in the center', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppTheme(
+          data: AppThemeData.light,
+          child: ActivityTable(
+            rows: [
+              _row(
+                title: 'Swapping...',
+                leadingIconName: AppIcons.swapArrows,
+                leadingProgressValue: 0.75,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is AppIcon &&
+            widget.name == AppIcons.swapArrows &&
+            widget.size == 16,
+      ),
+      findsOneWidget,
+    );
+  });
 }
 
 rust_sync.TransactionInfo _tx({
@@ -262,18 +393,27 @@ rust_sync.TransactionInfo _tx({
 
 ActivityRowData _row({
   required String title,
+  String leadingIconName = AppIcons.sync,
   String? subtitle,
+  String? amountSubtitle,
+  String? amountSubtitleIconName,
+  double? leadingProgressValue,
+  List<ActivityRowData> childRows = const [],
   VoidCallback? onTap,
 }) {
   return ActivityRowData(
     title: title,
-    leadingIconName: AppIcons.sync,
+    leadingIconName: leadingIconName,
     leadingBackgroundColor: const Color(0xFFE1E1E1),
     leadingIconColor: const Color(0xFF4D5252),
+    leadingProgressValue: leadingProgressValue,
     subtitle: subtitle,
     amountText: '1.00 $kZcashDefaultCurrencyTicker',
+    amountSubtitle: amountSubtitle,
+    amountSubtitleIconName: amountSubtitleIconName,
     statusText: 'Completed',
     timestampText: 'Today, 13:11',
+    childRows: childRows,
     onTap: onTap,
   );
 }
