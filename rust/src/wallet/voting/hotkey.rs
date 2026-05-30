@@ -34,19 +34,6 @@ pub fn derive_hotkey(
     Ok(hotkey_secret)
 }
 
-/// Derives the typed voting hotkey for a wallet account in a round.
-pub fn derive_voting_hotkey(
-    seed: &SecretVec<u8>,
-    round_id: &str,
-    account_uuid: &str,
-    network: WalletNetwork,
-) -> Result<zcash_voting::VotingHotkey, String> {
-    voting_hotkey_from_secret(
-        &derive_hotkey(seed, round_id, account_uuid, network)?,
-        network,
-    )
-}
-
 /// Generates opaque voting hotkey bytes for hardware-account voting.
 ///
 /// Hardware accounts do not expose wallet seed material to the app, so the
@@ -208,10 +195,16 @@ mod tests {
     #[test]
     fn hotkey_raw_orchard_address_is_deterministic_and_address_sized() {
         let seed = test_seed();
-        let first =
-            derive_voting_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
-        let second =
-            derive_voting_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
+        let first = voting_hotkey_from_secret(
+            &derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap(),
+            WalletNetwork::Regtest,
+        )
+        .unwrap();
+        let second = voting_hotkey_from_secret(
+            &derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap(),
+            WalletNetwork::Regtest,
+        )
+        .unwrap();
 
         assert_eq!(first.raw_orchard_address(), second.raw_orchard_address());
         assert_eq!(first.raw_orchard_address().len(), 43);
@@ -220,15 +213,14 @@ mod tests {
     #[test]
     fn local_hotkey_seed_matches_legacy_vector() {
         let seed = test_seed();
-        let local =
-            derive_voting_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
+        let local = derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
         let expected = hex::decode(
             "20e3dada1183f1ef8c797348fd543c7e8f63d9f776ec84183f66845ee2a0b0ec\
              0a6efc9c803785bb8f07106428e71e1f65066e40052b15844813a1de82f65c7c",
         )
         .unwrap();
 
-        assert_eq!(local.secret_seed(), expected.as_slice());
+        assert_eq!(local.expose_secret(), expected.as_slice());
     }
 
     #[test]
