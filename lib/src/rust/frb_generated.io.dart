@@ -80,12 +80,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ApiMempoolTxEvent dco_decode_api_mempool_tx_event(dynamic raw);
 
   @protected
-  ApiNextStep dco_decode_api_next_step(dynamic raw);
-
-  @protected
-  ApiRoundPlan dco_decode_api_round_plan(dynamic raw);
-
-  @protected
   ApiSignedDelegationPayload dco_decode_api_signed_delegation_payload(
     dynamic raw,
   );
@@ -204,9 +198,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   dco_decode_list_api_keystone_signature_record(dynamic raw);
 
   @protected
-  List<ApiNextStep> dco_decode_list_api_next_step(dynamic raw);
-
-  @protected
   List<ApiSignedVoteCommitment> dco_decode_list_api_signed_vote_commitment(
     dynamic raw,
   );
@@ -234,6 +225,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  List<NextStepView> dco_decode_list_next_step_view(dynamic raw);
 
   @protected
   List<int> dco_decode_list_prim_u_32_loose(dynamic raw);
@@ -291,6 +285,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  NextStepView dco_decode_next_step_view(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
@@ -315,6 +312,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ProposalResult dco_decode_proposal_result(dynamic raw);
+
+  @protected
+  RoundPlanView dco_decode_round_plan_view(dynamic raw);
 
   @protected
   RoundRecoveryStateView dco_decode_round_recovery_state_view(dynamic raw);
@@ -482,12 +482,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  ApiNextStep sse_decode_api_next_step(SseDeserializer deserializer);
-
-  @protected
-  ApiRoundPlan sse_decode_api_round_plan(SseDeserializer deserializer);
-
-  @protected
   ApiSignedDelegationPayload sse_decode_api_signed_delegation_payload(
     SseDeserializer deserializer,
   );
@@ -634,9 +628,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   sse_decode_list_api_keystone_signature_record(SseDeserializer deserializer);
 
   @protected
-  List<ApiNextStep> sse_decode_list_api_next_step(SseDeserializer deserializer);
-
-  @protected
   List<ApiSignedVoteCommitment> sse_decode_list_api_signed_vote_commitment(
     SseDeserializer deserializer,
   );
@@ -672,6 +663,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Uint8List> sse_decode_list_list_prim_u_8_strict(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<NextStepView> sse_decode_list_next_step_view(
     SseDeserializer deserializer,
   );
 
@@ -741,6 +737,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  NextStepView sse_decode_next_step_view(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
@@ -769,6 +768,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ProposalResult sse_decode_proposal_result(SseDeserializer deserializer);
+
+  @protected
+  RoundPlanView sse_decode_round_plan_view(SseDeserializer deserializer);
 
   @protected
   RoundRecoveryStateView sse_decode_round_recovery_state_view(
@@ -976,12 +978,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_api_next_step(ApiNextStep self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_api_round_plan(ApiRoundPlan self, SseSerializer serializer);
-
-  @protected
   void sse_encode_api_signed_delegation_payload(
     ApiSignedDelegationPayload self,
     SseSerializer serializer,
@@ -1156,12 +1152,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_list_api_next_step(
-    List<ApiNextStep> self,
-    SseSerializer serializer,
-  );
-
-  @protected
   void sse_encode_list_api_signed_vote_commitment(
     List<ApiSignedVoteCommitment> self,
     SseSerializer serializer,
@@ -1206,6 +1196,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_list_prim_u_8_strict(
     List<Uint8List> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_next_step_view(
+    List<NextStepView> self,
     SseSerializer serializer,
   );
 
@@ -1297,6 +1293,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_next_step_view(NextStepView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
@@ -1331,6 +1330,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ProposalResult self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_round_plan_view(RoundPlanView self, SseSerializer serializer);
 
   @protected
   void sse_encode_round_recovery_state_view(

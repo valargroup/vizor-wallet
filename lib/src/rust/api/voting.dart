@@ -742,7 +742,7 @@ Future<void> clearRecoveryState({
 
 /// Compute the resumable voting-session plan for a round. The plan reports the
 /// ordered remaining work (`next_steps`) and which proposals are still open.
-Future<ApiRoundPlan> getRoundPlan({
+Future<RoundPlanView> getRoundPlan({
   required String dbPath,
   required String walletId,
   required String roundId,
@@ -960,85 +960,6 @@ class ApiKeystoneSignatureRecord {
           sig == other.sig &&
           sighash == other.sighash &&
           rk == other.rk;
-}
-
-/// One unit of remaining work for a round, flattened for the FRB boundary.
-class ApiNextStep {
-  /// "delegate" | "poll_delegation" | "cast_vote" | "submit_vote" | "poll_vote" | "submit_shares" | "confirm_share".
-  final String kind;
-  final int bundleIndex;
-
-  /// 0 for delegation steps.
-  final int proposalId;
-
-  /// 0 unless `cast_vote`.
-  final int choice;
-
-  /// 0 unless `submit_shares` or `confirm_share`.
-  final int shareIndex;
-
-  const ApiNextStep({
-    required this.kind,
-    required this.bundleIndex,
-    required this.proposalId,
-    required this.choice,
-    required this.shareIndex,
-  });
-
-  @override
-  int get hashCode =>
-      kind.hashCode ^
-      bundleIndex.hashCode ^
-      proposalId.hashCode ^
-      choice.hashCode ^
-      shareIndex.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiNextStep &&
-          runtimeType == other.runtimeType &&
-          kind == other.kind &&
-          bundleIndex == other.bundleIndex &&
-          proposalId == other.proposalId &&
-          choice == other.choice &&
-          shareIndex == other.shareIndex;
-}
-
-/// Derived resume state for one round, produced by the crate's `resume_plan`.
-class ApiRoundPlan {
-  final String roundId;
-  final bool pendingRecovery;
-  final List<ApiNextStep> nextSteps;
-  final Uint32List openProposals;
-  final bool allDecided;
-
-  const ApiRoundPlan({
-    required this.roundId,
-    required this.pendingRecovery,
-    required this.nextSteps,
-    required this.openProposals,
-    required this.allDecided,
-  });
-
-  @override
-  int get hashCode =>
-      roundId.hashCode ^
-      pendingRecovery.hashCode ^
-      nextSteps.hashCode ^
-      openProposals.hashCode ^
-      allDecided.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiRoundPlan &&
-          runtimeType == other.runtimeType &&
-          roundId == other.roundId &&
-          pendingRecovery == other.pendingRecovery &&
-          nextSteps == other.nextSteps &&
-          openProposals == other.openProposals &&
-          allDecided == other.allDecided;
 }
 
 /// Signed delegation payload ready for Dart-side submission.

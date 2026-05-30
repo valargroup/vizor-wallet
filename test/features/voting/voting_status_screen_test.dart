@@ -205,7 +205,7 @@ void main() {
 
     final recoveryApi = _MutableVotingRecoveryApi()
       ..state = _recoveryState(bundleCount: 0)
-      ..roundPlan = rust_voting.ApiRoundPlan(
+      ..roundPlan = rust_wire.RoundPlanView(
         roundId: _roundId,
         pendingRecovery: false,
         nextSteps: const [],
@@ -269,11 +269,11 @@ void main() {
             ),
           ],
         )
-        ..roundPlan = rust_voting.ApiRoundPlan(
+        ..roundPlan = rust_wire.RoundPlanView(
           roundId: _roundId,
           pendingRecovery: true,
           nextSteps: const [
-            rust_voting.ApiNextStep(
+            rust_wire.NextStepView(
               kind: 'poll_delegation',
               bundleIndex: 0,
               proposalId: 0,
@@ -358,18 +358,18 @@ void main() {
           ),
         ],
       )
-      ..roundPlan = rust_voting.ApiRoundPlan(
+      ..roundPlan = rust_wire.RoundPlanView(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
-          rust_voting.ApiNextStep(
+          rust_wire.NextStepView(
             kind: 'poll_delegation',
             bundleIndex: 0,
             proposalId: 0,
             choice: 0,
             shareIndex: 0,
           ),
-          rust_voting.ApiNextStep(
+          rust_wire.NextStepView(
             kind: 'delegate',
             bundleIndex: 1,
             proposalId: 0,
@@ -419,11 +419,11 @@ void main() {
     });
 
     final recoveryApi = _MutableVotingRecoveryApi()
-      ..roundPlan = rust_voting.ApiRoundPlan(
+      ..roundPlan = rust_wire.RoundPlanView(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
-          rust_voting.ApiNextStep(
+          rust_wire.NextStepView(
             kind: 'confirm_share',
             bundleIndex: 0,
             proposalId: 1,
@@ -490,11 +490,11 @@ void main() {
         shareDelegations: [share],
         unconfirmedShareDelegations: [share],
       )
-      ..roundPlan = rust_voting.ApiRoundPlan(
+      ..roundPlan = rust_wire.RoundPlanView(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
-          rust_voting.ApiNextStep(
+          rust_wire.NextStepView(
             kind: 'confirm_share',
             bundleIndex: 0,
             proposalId: 1,
@@ -567,11 +567,11 @@ void main() {
         shareDelegations: [share],
         unconfirmedShareDelegations: [share],
       )
-      ..roundPlan = rust_voting.ApiRoundPlan(
+      ..roundPlan = rust_wire.RoundPlanView(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
-          rust_voting.ApiNextStep(
+          rust_wire.NextStepView(
             kind: 'confirm_share',
             bundleIndex: 0,
             proposalId: 1,
@@ -670,11 +670,11 @@ void main() {
           ),
         ],
       )
-      ..roundPlan = rust_voting.ApiRoundPlan(
+      ..roundPlan = rust_wire.RoundPlanView(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
-          rust_voting.ApiNextStep(
+          rust_wire.NextStepView(
             kind: 'cast_vote',
             bundleIndex: 0,
             proposalId: 1,
@@ -1929,13 +1929,13 @@ class _FakeVotingRecoveryApi implements VotingRecoveryApi {
   }
 
   @override
-  Future<rust_voting.ApiRoundPlan> getRoundPlan({
+  Future<rust_wire.RoundPlanView> getRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
     required List<int> proposalIds,
   }) async {
-    return rust_voting.ApiRoundPlan(
+    return rust_wire.RoundPlanView(
       roundId: roundId,
       pendingRecovery: false,
       nextSteps: const [],
@@ -1958,7 +1958,7 @@ class _FakeVotingRecoveryApi implements VotingRecoveryApi {
 
 class _MutableVotingRecoveryApi extends _FakeVotingRecoveryApi {
   rust_frb_types.RoundRecoveryStateView state = _recoveryState();
-  rust_voting.ApiRoundPlan? roundPlan;
+  rust_wire.RoundPlanView? roundPlan;
   final ballotIntents = <String>[];
 
   @override
@@ -1971,7 +1971,7 @@ class _MutableVotingRecoveryApi extends _FakeVotingRecoveryApi {
   }
 
   @override
-  Future<rust_voting.ApiRoundPlan> getRoundPlan({
+  Future<rust_wire.RoundPlanView> getRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -2678,7 +2678,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }) async {
     final roundPlan = recoveryApi.roundPlan;
     if (roundPlan != null && roundPlan.openProposals.isEmpty) {
-      recoveryApi.roundPlan = rust_voting.ApiRoundPlan(
+      recoveryApi.roundPlan = rust_wire.RoundPlanView(
         roundId: roundId,
         pendingRecovery: false,
         nextSteps: const [],
@@ -2744,7 +2744,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     if (roundPlan != null &&
         nextUnconfirmed.isEmpty &&
         roundPlan.openProposals.isEmpty) {
-      recoveryApi.roundPlan = rust_voting.ApiRoundPlan(
+      recoveryApi.roundPlan = rust_wire.RoundPlanView(
         roundId: roundId,
         pendingRecovery: false,
         nextSteps: const [],

@@ -13,7 +13,7 @@ abstract interface class VotingRecoveryApi {
     required String roundId,
   });
 
-  Future<rust_voting.ApiRoundPlan> getRoundPlan({
+  Future<rust_wire.RoundPlanView> getRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -65,7 +65,7 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   }
 
   @override
-  Future<rust_voting.ApiRoundPlan> getRoundPlan({
+  Future<rust_wire.RoundPlanView> getRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
