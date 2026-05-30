@@ -148,14 +148,10 @@ pub fn mark_vote_confirmed(
         tx.commit()
             .map_err(|e| format!("commit vote confirmed transaction failed: {e}"))?;
     }
-    zcash_voting::vote::record_vc_position(
-        &db,
-        round_id,
-        bundle_index,
-        proposal_id,
-        vc_tree_position,
-    )
-    .map_err(|e| format!("record_vc_position failed: {e}"))
+    zcash_voting::vote::CommittedVote::recover(&db, round_id, bundle_index, proposal_id)
+        .map_err(|e| format!("recover committed vote failed: {e}"))?
+        .record_vc_position(&db, vc_tree_position)
+        .map_err(|e| format!("record_vc_position failed: {e}"))
 }
 
 /// Records helper-server share submission state for retry/recovery.
@@ -179,16 +175,10 @@ pub fn record_share_delegation(
     submit_at: u64,
 ) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
-    zcash_voting::share::record(
-        &db,
-        round_id,
-        bundle_index,
-        proposal_id,
-        share_index,
-        sent_to_urls,
-        submit_at,
-    )
-    .map_err(|e| format!("record_share_delegation failed: {e}"))?;
+    zcash_voting::vote::CommittedVote::recover(&db, round_id, bundle_index, proposal_id)
+        .map_err(|e| format!("recover committed vote failed: {e}"))?
+        .record_share(&db, share_index, sent_to_urls, submit_at)
+        .map_err(|e| format!("record_share_delegation failed: {e}"))?;
     Ok(())
 }
 
@@ -210,7 +200,9 @@ pub fn mark_share_confirmed(
     share_index: u32,
 ) -> Result<(), String> {
     let db = super::state::open_voting_db(db_path, wallet_id)?;
-    zcash_voting::share::confirm(&db, round_id, bundle_index, proposal_id, share_index)
+    zcash_voting::vote::CommittedVote::recover(&db, round_id, bundle_index, proposal_id)
+        .map_err(|e| format!("recover committed vote failed: {e}"))?
+        .confirm_share(&db, share_index)
         .map_err(|e| format!("mark_share_confirmed failed: {e}"))?;
     Ok(())
 }
