@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
+use ff::PrimeField;
 use secrecy::{ExposeSecret, SecretVec};
+use zcash_keys::keys::UnifiedSpendingKey;
+use zip32::{fingerprint::SeedFingerprint, AccountId};
 
 use crate::wallet::{
     keys,
@@ -382,14 +385,19 @@ where
     .await?;
 
     on_progress(DelegationProgress::SigningPayload);
+    let signing_request = zcash_voting::delegate::signing_request(
+        &context.voting_db,
+        &round_id,
+        bundle_index,
+        &context.delegation_keys,
+    )
+    .map_err(|e| format!("delegation signing request failed: {e}"))?;
+    let (sig, sighash) = sign_delegation_request(seed, signing_request)?;
     let submission = zcash_voting::delegate::submission(
         &context.voting_db,
         &round_id,
         bundle_index,
-        zcash_voting::delegate::DelegationSigner::seed(
-            seed.expose_secret(),
-            &context.delegation_keys,
-        ),
+        zcash_voting::delegate::DelegationSigner::signature(sig, sighash),
     )
     .map_err(|e| format!("delegate::submission failed: {e}"))?;
 
@@ -542,7 +550,7 @@ where
         &context.voting_db,
         &round_id,
         bundle_index,
-        zcash_voting::delegate::DelegationSigner::keystone_from_bytes(
+        zcash_voting::delegate::DelegationSigner::signature_from_bytes(
             keystone_sig,
             keystone_sighash,
         )
@@ -559,6 +567,36 @@ where
         context.delegated_weight_zatoshi,
         bundle_index,
     ))
+}
+
+fn sign_delegation_request(
+    seed: &SecretVec<u8>,
+    request: zcash_voting::delegate::DelegationSigningRequest,
+) -> Result<([u8; 64], [u8; 32]), String> {
+    let seed = seed.expose_secret();
+    let seed_fingerprint = SeedFingerprint::from_seed(seed)
+        .ok_or("wallet seed length is not valid for ZIP-32".to_string())?;
+    if seed_fingerprint.to_bytes() != request.seed_fingerprint {
+        return Err(
+            "wallet seed fingerprint does not match delegation signing request".to_string(),
+        );
+    }
+
+    let account = AccountId::try_from(request.account_index)
+        .map_err(|_| format!("invalid account_index {}", request.account_index))?;
+    let usk = UnifiedSpendingKey::from_seed(&request.network, seed, account)
+        .map_err(|e| format!("account USK derivation failed: {e:?}"))?;
+    let sk = *usk.orchard();
+    let ask = orchard::keys::SpendAuthorizingKey::from(&sk);
+    let alpha = Option::<pasta_curves::pallas::Scalar>::from(
+        pasta_curves::pallas::Scalar::from_repr(request.alpha),
+    )
+    .ok_or("delegation alpha is not a valid Pallas scalar".to_string())?;
+    let rsk = ask.randomize(&alpha);
+    let mut rng = rand::rngs::OsRng;
+    let sig = rsk.sign(&mut rng, &request.sighash);
+
+    Ok(((&sig).into(), request.sighash))
 }
 
 /// Ensures the round exists and resolves the display name used in PCZT metadata.
