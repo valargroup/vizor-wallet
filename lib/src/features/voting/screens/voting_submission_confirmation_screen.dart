@@ -76,6 +76,14 @@ class VotingSubmissionConfirmationScreen extends ConsumerWidget {
                   votingPower: state.eligibleWeightZatoshi == null
                       ? 'Not available'
                       : formatVotingPower(state.eligibleWeightZatoshi!),
+                  onDone: () {
+                    if (jobKey != null) {
+                      ref
+                          .read(votingSubmissionJobsProvider.notifier)
+                          .dismiss(jobKey);
+                    }
+                    context.go('/voting');
+                  },
                 );
               },
             ),
@@ -93,6 +101,7 @@ class _ConfirmationScaffold extends StatelessWidget {
     required this.pollTitle,
     required this.message,
     required this.votingPower,
+    this.onDone,
   });
 
   final bool confirmed;
@@ -100,6 +109,7 @@ class _ConfirmationScaffold extends StatelessWidget {
   final String pollTitle;
   final String message;
   final String votingPower;
+  final VoidCallback? onDone;
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +197,7 @@ class _ConfirmationScaffold extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: AppButton(
-                      onPressed: () => context.go('/voting'),
+                      onPressed: onDone ?? () => context.go('/voting'),
                       variant: AppButtonVariant.primary,
                       child: const Text('Done'),
                     ),

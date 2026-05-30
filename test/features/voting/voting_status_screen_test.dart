@@ -846,6 +846,60 @@ void main() {
     expect(find.text('View'), findsOneWidget);
   });
 
+  testWidgets('global progress banner dismisses completed submission', (
+    tester,
+  ) async {
+    const key = VotingSessionKey(roundId: _roundId, accountUuid: 'account-1');
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountProvider.overrideWith(_MnemonicAccountNotifier.new),
+          votingSubmissionJobsProvider.overrideWith(
+            () => _StaticVotingSubmissionJobsNotifier(
+              const VotingSubmissionJobsState(jobKeys: [key]),
+            ),
+          ),
+          votingSubmissionJobProvider(key).overrideWith(
+            () => _StaticVotingSubmissionJobNotifier(
+              key,
+              const VotingSubmissionJobState(
+                key: key,
+                status: VotingSubmissionJobStatus.complete,
+                generation: 1,
+              ),
+            ),
+          ),
+          votingSubmissionJobSessionProvider(key).overrideWithValue(
+            AsyncValue.data(
+              VotingSessionState(
+                roundId: _roundId,
+                accountUuid: 'account-1',
+                phase: VotingSessionPhase.done,
+              ),
+            ),
+          ),
+        ],
+        child: AppTheme(
+          data: AppThemeData.light,
+          child: const Directionality(
+            textDirection: TextDirection.ltr,
+            child: VotingSubmissionProgressBanner(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Vote submission complete'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('View'), findsNothing);
+
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+
+    expect(find.text('Vote submission complete'), findsNothing);
+    expect(find.text('Done'), findsNothing);
+  });
+
   testWidgets('quit guard confirms while submission is active', (tester) async {
     await tester.pumpWidget(
       ProviderScope(

@@ -128,20 +128,25 @@ class _VotingSubmissionProgressBannerItem extends ConsumerWidget {
             const SizedBox(width: AppSpacing.s),
             AppButton(
               onPressed: () {
-                final route = job.status == VotingSubmissionJobStatus.complete
-                    ? votingSubmissionConfirmedRoute(
-                        jobKey.roundId,
-                        accountUuid: jobKey.accountUuid,
-                      )
-                    : votingStatusRoute(
-                        jobKey.roundId,
-                        accountUuid: jobKey.accountUuid,
-                      );
+                if (job.status == VotingSubmissionJobStatus.complete) {
+                  ref
+                      .read(votingSubmissionJobsProvider.notifier)
+                      .dismiss(jobKey);
+                  return;
+                }
+                final route = votingStatusRoute(
+                  jobKey.roundId,
+                  accountUuid: jobKey.accountUuid,
+                );
                 context.go(route);
               },
               variant: AppButtonVariant.secondary,
               size: AppButtonSize.small,
-              child: const Text('View'),
+              child: Text(
+                job.status == VotingSubmissionJobStatus.complete
+                    ? 'Done'
+                    : 'View',
+              ),
             ),
           ],
         ),

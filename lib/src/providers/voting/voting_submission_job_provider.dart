@@ -146,6 +146,16 @@ class VotingSubmissionJobsState {
     return copyWith(startErrorsByRoundId: _withoutStartError(roundId));
   }
 
+  VotingSubmissionJobsState removeJobKey(VotingSessionKey key) {
+    if (!jobKeys.contains(key)) return this;
+    return copyWith(
+      jobKeys: [
+        for (final jobKey in jobKeys)
+          if (jobKey != key) jobKey,
+      ],
+    );
+  }
+
   Map<String, String> _withoutStartError(String roundId) {
     return {
       for (final entry in startErrorsByRoundId.entries)
@@ -186,6 +196,11 @@ class VotingSubmissionJobsNotifier extends Notifier<VotingSubmissionJobsState> {
   Future<void> retry(VotingSessionKey key) async {
     state = state.addJobKey(key);
     await ref.read(votingSubmissionJobProvider(key).notifier).retry();
+  }
+
+  void dismiss(VotingSessionKey key) {
+    ref.read(votingSubmissionJobProvider(key).notifier).dismiss();
+    state = state.removeJobKey(key);
   }
 
   Future<void> handleKeystoneSignedPczt(
@@ -244,6 +259,14 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
     _releaseGuard();
     state = VotingSubmissionJobState(key: _key);
     _startJob(_key);
+  }
+
+  void dismiss() {
+    if (state.isInFlight) return;
+    _cancelCompletionPoll();
+    _releaseGuard();
+    _releaseSessionSubscription();
+    state = VotingSubmissionJobState(key: _key, generation: ++_nextGeneration);
   }
 
   void _startJob(VotingSessionKey key) {
