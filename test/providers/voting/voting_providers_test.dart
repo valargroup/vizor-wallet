@@ -806,7 +806,7 @@ void main() {
     'hardware voting rejects duplicate Keystone signature before extraction',
     () async {
       final rust = FakeVotingRustApi();
-      rust.storedKeystoneSignatures[1] = rust_voting.ApiKeystoneSignatureRecord(
+      rust.storedKeystoneSignatures[1] = rust_wire.KeystoneSignatureRecordView(
         bundleIndex: 1,
         sig: Uint8List.fromList(const [7]),
         sighash: Uint8List.fromList(const [99, 0]),
@@ -958,7 +958,7 @@ void main() {
     'hardware voting cannot skip across missing Keystone bundle prefix',
     () async {
       final rust = FakeVotingRustApi(bundleCount: 2);
-      rust.storedKeystoneSignatures[1] = rust_voting.ApiKeystoneSignatureRecord(
+      rust.storedKeystoneSignatures[1] = rust_wire.KeystoneSignatureRecordView(
         bundleIndex: 1,
         sig: Uint8List.fromList(const [3, 1]),
         sighash: Uint8List.fromList(const [10, 1]),
@@ -998,7 +998,7 @@ void main() {
     'hardware voting does not regenerate hotkey after stored signature',
     () async {
       final rust = FakeVotingRustApi(bundleCount: 2);
-      rust.storedKeystoneSignatures[0] = rust_voting.ApiKeystoneSignatureRecord(
+      rust.storedKeystoneSignatures[0] = rust_wire.KeystoneSignatureRecordView(
         bundleIndex: 0,
         sig: Uint8List.fromList(const [3, 0]),
         sighash: Uint8List.fromList(const [10, 0]),
@@ -1032,7 +1032,7 @@ void main() {
     'hardware voting submits delegation with stored Keystone signature',
     () async {
       final rust = FakeVotingRustApi();
-      rust.storedKeystoneSignatures[0] = rust_voting.ApiKeystoneSignatureRecord(
+      rust.storedKeystoneSignatures[0] = rust_wire.KeystoneSignatureRecordView(
         bundleIndex: 0,
         sig: Uint8List.fromList(const [3, 0]),
         sighash: Uint8List.fromList(const [10, 0]),
@@ -1058,7 +1058,7 @@ void main() {
     'hardware voting does not regenerate hotkey while submitting signatures',
     () async {
       final rust = FakeVotingRustApi();
-      rust.storedKeystoneSignatures[0] = rust_voting.ApiKeystoneSignatureRecord(
+      rust.storedKeystoneSignatures[0] = rust_wire.KeystoneSignatureRecordView(
         bundleIndex: 0,
         sig: Uint8List.fromList(const [3, 0]),
         sighash: Uint8List.fromList(const [10, 0]),
@@ -1089,7 +1089,7 @@ void main() {
     'hardware voting rejects mismatched Keystone submission payload',
     () async {
       final rust = FakeVotingRustApi(mismatchKeystoneSubmission: true);
-      rust.storedKeystoneSignatures[0] = rust_voting.ApiKeystoneSignatureRecord(
+      rust.storedKeystoneSignatures[0] = rust_wire.KeystoneSignatureRecordView(
         bundleIndex: 0,
         sig: Uint8List.fromList(const [3, 0]),
         sighash: Uint8List.fromList(const [10, 0]),
@@ -1371,7 +1371,7 @@ void main() {
         .read(votingSessionProvider(kRoundId).notifier)
         .castVotes(
           draftVotes: [
-            rust_voting.ApiDraftVote(
+            rust_wire.DraftVoteView(
               proposalId: 7,
               choice: 1,
               numOptions: 2,
@@ -1430,14 +1430,14 @@ void main() {
           .read(votingSessionProvider(kRoundId).notifier)
           .castVotes(
             draftVotes: [
-              rust_voting.ApiDraftVote(
+              rust_wire.DraftVoteView(
                 proposalId: 7,
                 choice: 1,
                 numOptions: 2,
                 vcTreePosition: BigInt.zero,
                 singleShare: false,
               ),
-              rust_voting.ApiDraftVote(
+              rust_wire.DraftVoteView(
                 proposalId: 8,
                 choice: 0,
                 numOptions: 2,
@@ -1712,14 +1712,14 @@ void main() {
           .read(votingSessionProvider(kRoundId).notifier)
           .castVotes(
             draftVotes: [
-              rust_voting.ApiDraftVote(
+              rust_wire.DraftVoteView(
                 proposalId: 7,
                 choice: 1,
                 numOptions: 2,
                 vcTreePosition: BigInt.zero,
                 singleShare: false,
               ),
-              rust_voting.ApiDraftVote(
+              rust_wire.DraftVoteView(
                 proposalId: 8,
                 choice: 1,
                 numOptions: 2,
@@ -1836,7 +1836,7 @@ void main() {
         .read(votingSessionProvider(kRoundId).notifier)
         .castVotes(
           draftVotes: [
-            rust_voting.ApiDraftVote(
+            rust_wire.DraftVoteView(
               proposalId: 8,
               choice: 1,
               numOptions: 2,
@@ -2019,7 +2019,7 @@ void main() {
           .read(votingSessionProvider(kRoundId).notifier)
           .castVotes(
             draftVotes: [
-              rust_voting.ApiDraftVote(
+              rust_wire.DraftVoteView(
                 proposalId: 8,
                 choice: 1,
                 numOptions: 2,
@@ -2210,14 +2210,14 @@ void main() {
         .read(votingSessionProvider(kRoundId).notifier)
         .castVotes(
           draftVotes: [
-            rust_voting.ApiDraftVote(
+            rust_wire.DraftVoteView(
               proposalId: 7,
               choice: 1,
               numOptions: 2,
               vcTreePosition: BigInt.zero,
               singleShare: false,
             ),
-            rust_voting.ApiDraftVote(
+            rust_wire.DraftVoteView(
               proposalId: 8,
               choice: 0,
               numOptions: 2,
@@ -2255,7 +2255,7 @@ void main() {
         .read(votingSessionProvider(kRoundId).notifier)
         .castVotes(
           draftVotes: [
-            rust_voting.ApiDraftVote(
+            rust_wire.DraftVoteView(
               proposalId: 7,
               choice: 1,
               numOptions: 2,
@@ -2301,7 +2301,7 @@ void main() {
         .read(votingSessionProvider(kRoundId).notifier)
         .castVotes(
           draftVotes: [
-            rust_voting.ApiDraftVote(
+            rust_wire.DraftVoteView(
               proposalId: 7,
               choice: 1,
               numOptions: 2,
@@ -2359,7 +2359,7 @@ void main() {
         .read(votingSessionProvider(kRoundId).notifier)
         .castVotes(
           draftVotes: [
-            rust_voting.ApiDraftVote(
+            rust_wire.DraftVoteView(
               proposalId: 7,
               choice: 1,
               numOptions: 2,
@@ -2429,7 +2429,7 @@ void main() {
           .read(votingSessionProvider(kRoundId).notifier)
           .castVotes(
             draftVotes: [
-              rust_voting.ApiDraftVote(
+              rust_wire.DraftVoteView(
                 proposalId: 7,
                 choice: 1,
                 numOptions: 2,
@@ -2487,7 +2487,7 @@ void main() {
           .read(votingSessionProvider(kRoundId).notifier)
           .castVotes(
             draftVotes: [
-              rust_voting.ApiDraftVote(
+              rust_wire.DraftVoteView(
                 proposalId: 7,
                 choice: 1,
                 numOptions: 2,
@@ -2534,7 +2534,7 @@ void main() {
           .read(votingSessionProvider(kRoundId).notifier)
           .castVotes(
             draftVotes: [
-              rust_voting.ApiDraftVote(
+              rust_wire.DraftVoteView(
                 proposalId: 7,
                 choice: 1,
                 numOptions: 2,
@@ -2950,7 +2950,7 @@ void main() {
         .read(votingSessionProvider(kRoundId).notifier)
         .castVotes(
           draftVotes: [
-            rust_voting.ApiDraftVote(
+            rust_wire.DraftVoteView(
               proposalId: 7,
               choice: 1,
               numOptions: 2,
@@ -3241,7 +3241,8 @@ rust_frb_types.RoundRecoveryStateView recoveryState({
   List<rust_frb_types.VoteRecoveryView> votes = const [],
   List<rust_frb_types.VoteRecoveryView> voteWorkflows = const [],
   List<rust_frb_types.VoteRecoveryView> voteTxHashes = const [],
-  List<rust_frb_types.CommitmentBundleRecoveryView> commitmentBundles = const [],
+  List<rust_frb_types.CommitmentBundleRecoveryView> commitmentBundles =
+      const [],
   List<rust_frb_types.ShareWorkflowRecoveryView> shareWorkflows = const [],
   List<rust_frb_types.ShareDelegationRecordView> shareDelegations = const [],
   List<rust_frb_types.ShareDelegationRecordView> unconfirmedShareDelegations =
@@ -3257,27 +3258,29 @@ rust_frb_types.RoundRecoveryStateView recoveryState({
       ),
   };
   for (final record in delegationTxHashes) {
-    delegationByBundle[record.bundleIndex] = rust_frb_types.DelegationRecoveryView(
-      bundleIndex: record.bundleIndex,
-      phase: VotingWorkflowPhase.submittedDelegation,
-      txHash: record.txHash,
-      vanLeafPosition: null,
-    );
+    delegationByBundle[record.bundleIndex] =
+        rust_frb_types.DelegationRecoveryView(
+          bundleIndex: record.bundleIndex,
+          phase: VotingWorkflowPhase.submittedDelegation,
+          txHash: record.txHash,
+          vanLeafPosition: null,
+        );
   }
 
   final votesByKey = <String, rust_frb_types.VoteRecoveryView>{
     for (final record in votes)
       '${record.bundleIndex}:${record.proposalId}': record,
     for (final record in voteWorkflows)
-      '${record.bundleIndex}:${record.proposalId}': rust_frb_types.VoteRecoveryView(
-        bundleIndex: record.bundleIndex,
-        proposalId: record.proposalId,
-        choice: 0,
-        phase: record.phase,
-        txHash: record.txHash,
-        vcTreePosition: record.vcTreePosition,
-        hasCommitmentBundle: record.hasCommitmentBundle,
-      ),
+      '${record.bundleIndex}:${record.proposalId}':
+          rust_frb_types.VoteRecoveryView(
+            bundleIndex: record.bundleIndex,
+            proposalId: record.proposalId,
+            choice: 0,
+            phase: record.phase,
+            txHash: record.txHash,
+            vcTreePosition: record.vcTreePosition,
+            hasCommitmentBundle: record.hasCommitmentBundle,
+          ),
   };
   for (final record in voteTxHashes) {
     final key = '${record.bundleIndex}:${record.proposalId}';
@@ -3698,12 +3701,12 @@ class FakeVotingRustApi implements VotingRustApi {
   final keystoneProofBundleCalls = <int>[];
   final deleteSkippedBundleKeepCounts = <int>[];
   final storedKeystoneSignatures =
-      <int, rust_voting.ApiKeystoneSignatureRecord>{};
+      <int, rust_wire.KeystoneSignatureRecordView>{};
   int generateVotingHotkeyCalls = 0;
   int extractSpendAuthSignatureCalls = 0;
 
   @override
-  Future<rust_voting.ApiVotingBundleSetupResult> setupDelegationBundles({
+  Future<rust_wire.BundleSetupResultView> setupDelegationBundles({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -3727,7 +3730,7 @@ class FakeVotingRustApi implements VotingRustApi {
     }
     setupCalls++;
     _activeSetups--;
-    return rust_voting.ApiVotingBundleSetupResult(
+    return rust_wire.BundleSetupResultView(
       bundleCount: bundleCount,
       eligibleWeightZatoshi: BigInt.from(100),
     );
@@ -3755,7 +3758,7 @@ class FakeVotingRustApi implements VotingRustApi {
     yield rust_voting.ApiDelegationProofEvent(
       phase: 'result',
       proofProgress: null,
-      signedDelegationPayload: rust_voting.ApiSignedDelegationPayload(
+      signedDelegationPayload: rust_wire.SignedDelegationPayloadView(
         pcztBytes: Uint8List.fromList(const []),
         status: 'ready_for_submission',
         message: null,
@@ -3787,7 +3790,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiKeystoneDelegationRequest>
+  Future<rust_wire.KeystoneDelegationRequestView>
   buildKeystoneDelegationRequest({
     required String dbPath,
     required String lightwalletdUrl,
@@ -3802,7 +3805,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }) async {
     accountUuids.add(accountUuid);
     keystoneDelegationRequestCalls.add(bundleIndex);
-    return rust_voting.ApiKeystoneDelegationRequest(
+    return rust_wire.KeystoneDelegationRequestView(
       pcztBytes: Uint8List.fromList([20, bundleIndex]),
       redactedPcztBytes: Uint8List.fromList([21, bundleIndex]),
       pcztSighash: Uint8List.fromList([10, bundleIndex]),
@@ -3842,7 +3845,7 @@ class FakeVotingRustApi implements VotingRustApi {
     required List<int> rk,
   }) async {
     storedKeystoneSignatures[bundleIndex] =
-        rust_voting.ApiKeystoneSignatureRecord(
+        rust_wire.KeystoneSignatureRecordView(
           bundleIndex: bundleIndex,
           sig: Uint8List.fromList(sig),
           sighash: Uint8List.fromList(sighash),
@@ -3851,7 +3854,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<List<rust_voting.ApiKeystoneSignatureRecord>> getKeystoneSignatures({
+  Future<List<rust_wire.KeystoneSignatureRecordView>> getKeystoneSignatures({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -3905,7 +3908,7 @@ class FakeVotingRustApi implements VotingRustApi {
     yield rust_voting.ApiDelegationProofEvent(
       phase: 'result',
       proofProgress: null,
-      signedDelegationPayload: rust_voting.ApiSignedDelegationPayload(
+      signedDelegationPayload: rust_wire.SignedDelegationPayloadView(
         pcztBytes: Uint8List.fromList(const []),
         status: 'ready_for_submission',
         message: null,
@@ -3932,7 +3935,7 @@ class FakeVotingRustApi implements VotingRustApi {
 
   @override
   Future<String> delegationSubmissionWireJson({
-    required rust_voting.ApiSignedDelegationPayload submission,
+    required rust_wire.SignedDelegationPayloadView submission,
   }) async {
     final wire = submission.submission;
     return jsonEncode({
@@ -3949,7 +3952,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
+  Future<rust_wire.DelegationPirPrecomputeResultView> precomputeDelegationPir({
     required String dbPath,
     required String lightwalletdUrl,
     required String pirServerUrl,
@@ -3978,7 +3981,7 @@ class FakeVotingRustApi implements VotingRustApi {
         precomputeFinished.complete();
       }
     }
-    return rust_voting.ApiDelegationPirPrecomputeResult(
+    return rust_wire.DelegationPirPrecomputeResultView(
       cachedCount: 0,
       fetchedCount: 1,
       bundleCount: bundleCount,
@@ -4073,14 +4076,14 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiVanWitness> generateVanWitness({
+  Future<rust_wire.VanWitnessView> generateVanWitness({
     required String dbPath,
     required String walletId,
     required String roundId,
     required int bundleIndex,
     required int anchorHeight,
   }) async {
-    return rust_voting.ApiVanWitness(
+    return rust_wire.VanWitnessView(
       authPath: const [],
       position: bundleIndex,
       anchorHeight: anchorHeight,
@@ -4104,8 +4107,8 @@ class FakeVotingRustApi implements VotingRustApi {
     required String roundId,
     required int bundleIndex,
     required List<int> hotkeySeed,
-    required rust_voting.ApiVanWitness vanWitness,
-    required List<rust_voting.ApiDraftVote> draftVotes,
+    required rust_wire.VanWitnessView vanWitness,
+    required List<rust_wire.DraftVoteView> draftVotes,
   }) async* {
     voteCommitBundleCalls.add(bundleIndex);
     for (final draft in draftVotes) {
@@ -4131,7 +4134,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<rust_voting.ApiSignedVoteCommitments> recoverVoteCommitment({
+  Future<rust_wire.SignedVoteCommitmentsView> recoverVoteCommitment({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -4518,7 +4521,7 @@ class _RecordedShare {
   final List<String> sentToUrls;
 }
 
-rust_voting.ApiSignedVoteCommitments _commitments({
+rust_wire.SignedVoteCommitmentsView _commitments({
   required String roundId,
   required int bundleIndex,
   required int proposalId,
@@ -4557,10 +4560,10 @@ rust_voting.ApiSignedVoteCommitments _commitments({
         submitAt: BigInt.zero,
       ),
   ];
-  return rust_voting.ApiSignedVoteCommitments(
+  return rust_wire.SignedVoteCommitmentsView(
     bundleIndex: bundleIndex,
     commitments: [
-      rust_voting.ApiSignedVoteCommitment(
+      rust_wire.SignedVoteCommitmentView(
         proposalId: proposalId,
         wire: rust_wire.VoteCommitmentWire(
           vanNullifier: base64Encode(Uint8List.fromList(List.filled(32, 1))),

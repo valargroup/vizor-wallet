@@ -108,7 +108,7 @@ abstract class RustLibApi extends BaseApi {
     required List<String> newUrls,
   });
 
-  Future<ApiKeystoneDelegationRequest>
+  Future<KeystoneDelegationRequestView>
   crateApiVotingBuildKeystoneDelegationRequest({
     required String dbPath,
     required String lightwalletdUrl,
@@ -122,7 +122,7 @@ abstract class RustLibApi extends BaseApi {
     int? maxRealNotesPerBundle,
   });
 
-  Future<ApiSignedDelegationPayload>
+  Future<SignedDelegationPayloadView>
   crateApiVotingBuildProveAndSignDelegationPayload({
     required String dbPath,
     required String lightwalletdUrl,
@@ -169,15 +169,15 @@ abstract class RustLibApi extends BaseApi {
     int? maxRealNotesPerBundle,
   });
 
-  Future<ApiSignedVoteCommitments> crateApiVotingBuildVoteCommitments({
+  Future<SignedVoteCommitmentsView> crateApiVotingBuildVoteCommitments({
     required String dbPath,
     required String walletId,
     required String network,
     required String roundId,
     required int bundleIndex,
     required List<int> hotkeySeed,
-    required ApiVanWitness vanWitness,
-    required List<ApiDraftVote> draftVotes,
+    required VanWitnessView vanWitness,
+    required List<DraftVoteView> draftVotes,
   });
 
   Stream<ApiVoteCommitEvent> crateApiVotingBuildVoteCommitmentsWithProgress({
@@ -187,8 +187,8 @@ abstract class RustLibApi extends BaseApi {
     required String roundId,
     required int bundleIndex,
     required List<int> hotkeySeed,
-    required ApiVanWitness vanWitness,
-    required List<ApiDraftVote> draftVotes,
+    required VanWitnessView vanWitness,
+    required List<DraftVoteView> draftVotes,
   });
 
   void crateApiSyncCancelFullSync();
@@ -271,7 +271,7 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<String> crateApiVotingDelegationSubmissionWireJson({
-    required ApiSignedDelegationPayload submission,
+    required SignedDelegationPayloadView submission,
   });
 
   Future<void> crateApiWalletDeleteAccount({
@@ -383,7 +383,7 @@ abstract class RustLibApi extends BaseApi {
 
   String crateApiWalletGenerateMnemonic();
 
-  Future<ApiVanWitness> crateApiVotingGenerateVanWitness({
+  Future<VanWitnessView> crateApiVotingGenerateVanWitness({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -427,7 +427,8 @@ abstract class RustLibApi extends BaseApi {
     required String accountUuid,
   });
 
-  Future<List<ApiKeystoneSignatureRecord>> crateApiVotingGetKeystoneSignatures({
+  Future<List<KeystoneSignatureRecordView>>
+  crateApiVotingGetKeystoneSignatures({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -511,7 +512,7 @@ abstract class RustLibApi extends BaseApi {
     String? accountUuid,
   });
 
-  Future<List<ApiVoteRecord>> crateApiVotingGetVotes({
+  Future<List<VoteRecordView>> crateApiVotingGetVotes({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -612,7 +613,7 @@ abstract class RustLibApi extends BaseApi {
     required bool singleShare,
   });
 
-  Future<ApiDelegationPirPrecomputeResult>
+  Future<DelegationPirPrecomputeResultView>
   crateApiVotingPrecomputeDelegationPir({
     required String dbPath,
     required String lightwalletdUrl,
@@ -664,7 +665,7 @@ abstract class RustLibApi extends BaseApi {
     required BigInt submitAt,
   });
 
-  Future<ApiSignedVoteCommitments> crateApiVotingRecoverVoteCommitment({
+  Future<SignedVoteCommitmentsView> crateApiVotingRecoverVoteCommitment({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -725,7 +726,7 @@ abstract class RustLibApi extends BaseApi {
     required BigInt limit,
   });
 
-  Future<ApiVotingNoteSelectionResult> crateApiVotingSelectVotingNotes({
+  Future<VotingNoteSelectionResultView> crateApiVotingSelectVotingNotes({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -753,7 +754,7 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 status,
   });
 
-  Future<ApiVotingBundleSetupResult> crateApiVotingSetupDelegationBundles({
+  Future<BundleSetupResultView> crateApiVotingSetupDelegationBundles({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -1017,7 +1018,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<ApiKeystoneDelegationRequest>
+  Future<KeystoneDelegationRequestView>
   crateApiVotingBuildKeystoneDelegationRequest({
     required String dbPath,
     required String lightwalletdUrl,
@@ -1052,7 +1053,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_keystone_delegation_request,
+          decodeSuccessData: sse_decode_keystone_delegation_request_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingBuildKeystoneDelegationRequestConstMeta,
@@ -1091,7 +1092,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<ApiSignedDelegationPayload>
+  Future<SignedDelegationPayloadView>
   crateApiVotingBuildProveAndSignDelegationPayload({
     required String dbPath,
     required String lightwalletdUrl,
@@ -1128,7 +1129,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_signed_delegation_payload,
+          decodeSuccessData: sse_decode_signed_delegation_payload_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingBuildProveAndSignDelegationPayloadConstMeta,
@@ -1359,15 +1360,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<ApiSignedVoteCommitments> crateApiVotingBuildVoteCommitments({
+  Future<SignedVoteCommitmentsView> crateApiVotingBuildVoteCommitments({
     required String dbPath,
     required String walletId,
     required String network,
     required String roundId,
     required int bundleIndex,
     required List<int> hotkeySeed,
-    required ApiVanWitness vanWitness,
-    required List<ApiDraftVote> draftVotes,
+    required VanWitnessView vanWitness,
+    required List<DraftVoteView> draftVotes,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -1379,8 +1380,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_list_prim_u_8_loose(hotkeySeed, serializer);
-          sse_encode_box_autoadd_api_van_witness(vanWitness, serializer);
-          sse_encode_list_api_draft_vote(draftVotes, serializer);
+          sse_encode_box_autoadd_van_witness_view(vanWitness, serializer);
+          sse_encode_list_draft_vote_view(draftVotes, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1389,7 +1390,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_signed_vote_commitments,
+          decodeSuccessData: sse_decode_signed_vote_commitments_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingBuildVoteCommitmentsConstMeta,
@@ -1431,8 +1432,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required String roundId,
     required int bundleIndex,
     required List<int> hotkeySeed,
-    required ApiVanWitness vanWitness,
-    required List<ApiDraftVote> draftVotes,
+    required VanWitnessView vanWitness,
+    required List<DraftVoteView> draftVotes,
   }) {
     final sink = RustStreamSink<ApiVoteCommitEvent>();
     unawaited(
@@ -1446,8 +1447,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             sse_encode_String(roundId, serializer);
             sse_encode_u_32(bundleIndex, serializer);
             sse_encode_list_prim_u_8_loose(hotkeySeed, serializer);
-            sse_encode_box_autoadd_api_van_witness(vanWitness, serializer);
-            sse_encode_list_api_draft_vote(draftVotes, serializer);
+            sse_encode_box_autoadd_van_witness_view(vanWitness, serializer);
+            sse_encode_list_draft_vote_view(draftVotes, serializer);
             sse_encode_StreamSink_api_vote_commit_event_Sse(sink, serializer);
             pdeCallFfi(
               generalizedFrbRustBinding,
@@ -2022,13 +2023,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateApiVotingDelegationSubmissionWireJson({
-    required ApiSignedDelegationPayload submission,
+    required SignedDelegationPayloadView submission,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_box_autoadd_api_signed_delegation_payload(
+          sse_encode_box_autoadd_signed_delegation_payload_view(
             submission,
             serializer,
           );
@@ -2784,7 +2785,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "generate_mnemonic", argNames: []);
 
   @override
-  Future<ApiVanWitness> crateApiVotingGenerateVanWitness({
+  Future<VanWitnessView> crateApiVotingGenerateVanWitness({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -2808,7 +2809,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_van_witness,
+          decodeSuccessData: sse_decode_van_witness_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingGenerateVanWitnessConstMeta,
@@ -3070,7 +3071,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<List<ApiKeystoneSignatureRecord>> crateApiVotingGetKeystoneSignatures({
+  Future<List<KeystoneSignatureRecordView>>
+  crateApiVotingGetKeystoneSignatures({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -3090,7 +3092,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_list_api_keystone_signature_record,
+          decodeSuccessData: sse_decode_list_keystone_signature_record_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingGetKeystoneSignaturesConstMeta,
@@ -3599,7 +3601,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<List<ApiVoteRecord>> crateApiVotingGetVotes({
+  Future<List<VoteRecordView>> crateApiVotingGetVotes({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -3619,7 +3621,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_list_api_vote_record,
+          decodeSuccessData: sse_decode_list_vote_record_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingGetVotesConstMeta,
@@ -4279,7 +4281,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<ApiDelegationPirPrecomputeResult>
+  Future<DelegationPirPrecomputeResultView>
   crateApiVotingPrecomputeDelegationPir({
     required String dbPath,
     required String lightwalletdUrl,
@@ -4316,7 +4318,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_delegation_pir_precompute_result,
+          decodeSuccessData: sse_decode_delegation_pir_precompute_result_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingPrecomputeDelegationPirConstMeta,
@@ -4578,7 +4580,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<ApiSignedVoteCommitments> crateApiVotingRecoverVoteCommitment({
+  Future<SignedVoteCommitmentsView> crateApiVotingRecoverVoteCommitment({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -4602,7 +4604,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_signed_vote_commitments,
+          decodeSuccessData: sse_decode_signed_vote_commitments_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingRecoverVoteCommitmentConstMeta,
@@ -4958,7 +4960,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<ApiVotingNoteSelectionResult> crateApiVotingSelectVotingNotes({
+  Future<VotingNoteSelectionResultView> crateApiVotingSelectVotingNotes({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -4984,7 +4986,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_voting_note_selection_result,
+          decodeSuccessData: sse_decode_voting_note_selection_result_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingSelectVotingNotesConstMeta,
@@ -5138,7 +5140,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<ApiVotingBundleSetupResult> crateApiVotingSetupDelegationBundles({
+  Future<BundleSetupResultView> crateApiVotingSetupDelegationBundles({
     required String dbPath,
     required String lightwalletdUrl,
     required String network,
@@ -5168,7 +5170,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_voting_bundle_setup_result,
+          decodeSuccessData: sse_decode_bundle_setup_result_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingSetupDelegationBundlesConstMeta,
@@ -5985,21 +5987,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiDelegationPirPrecomputeResult
-  dco_decode_api_delegation_pir_precompute_result(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
-    return ApiDelegationPirPrecomputeResult(
-      cachedCount: dco_decode_u_32(arr[0]),
-      fetchedCount: dco_decode_u_32(arr[1]),
-      bundleCount: dco_decode_u_32(arr[2]),
-      bundleIndex: dco_decode_u_32(arr[3]),
-    );
-  }
-
-  @protected
   ApiDelegationProofEvent dco_decode_api_delegation_proof_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -6009,60 +5996,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       phase: dco_decode_String(arr[0]),
       proofProgress: dco_decode_opt_box_autoadd_f_64(arr[1]),
       signedDelegationPayload:
-          dco_decode_opt_box_autoadd_api_signed_delegation_payload(arr[2]),
-    );
-  }
-
-  @protected
-  ApiDraftVote dco_decode_api_draft_vote(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
-    return ApiDraftVote(
-      proposalId: dco_decode_u_32(arr[0]),
-      choice: dco_decode_u_32(arr[1]),
-      numOptions: dco_decode_u_32(arr[2]),
-      vcTreePosition: dco_decode_u_64(arr[3]),
-      singleShare: dco_decode_bool(arr[4]),
-    );
-  }
-
-  @protected
-  ApiKeystoneDelegationRequest dco_decode_api_keystone_delegation_request(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
-    return ApiKeystoneDelegationRequest(
-      pcztBytes: dco_decode_list_prim_u_8_strict(arr[0]),
-      redactedPcztBytes: dco_decode_list_prim_u_8_strict(arr[1]),
-      pcztSighash: dco_decode_list_prim_u_8_strict(arr[2]),
-      rk: dco_decode_list_prim_u_8_strict(arr[3]),
-      actionIndex: dco_decode_u_32(arr[4]),
-      displayMemo: dco_decode_String(arr[5]),
-      eligibleWeightZatoshi: dco_decode_u_64(arr[6]),
-      delegatedWeightZatoshi: dco_decode_u_64(arr[7]),
-      bundleCount: dco_decode_u_32(arr[8]),
-      bundleIndex: dco_decode_u_32(arr[9]),
-    );
-  }
-
-  @protected
-  ApiKeystoneSignatureRecord dco_decode_api_keystone_signature_record(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
-    return ApiKeystoneSignatureRecord(
-      bundleIndex: dco_decode_u_32(arr[0]),
-      sig: dco_decode_list_prim_u_8_strict(arr[1]),
-      sighash: dco_decode_list_prim_u_8_strict(arr[2]),
-      rk: dco_decode_list_prim_u_8_strict(arr[3]),
+          dco_decode_opt_box_autoadd_signed_delegation_payload_view(arr[2]),
     );
   }
 
@@ -6076,51 +6010,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       txidHex: dco_decode_String(arr[0]),
       accountUuids: dco_decode_list_String(arr[1]),
       matched: dco_decode_bool(arr[2]),
-    );
-  }
-
-  @protected
-  ApiSignedDelegationPayload dco_decode_api_signed_delegation_payload(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
-    return ApiSignedDelegationPayload(
-      pcztBytes: dco_decode_list_prim_u_8_strict(arr[0]),
-      status: dco_decode_String(arr[1]),
-      message: dco_decode_opt_String(arr[2]),
-      submission: dco_decode_delegation_submission_wire(arr[3]),
-      eligibleWeightZatoshi: dco_decode_u_64(arr[4]),
-      delegatedWeightZatoshi: dco_decode_u_64(arr[5]),
-      bundleCount: dco_decode_u_32(arr[6]),
-      bundleIndex: dco_decode_u_32(arr[7]),
-    );
-  }
-
-  @protected
-  ApiSignedVoteCommitment dco_decode_api_signed_vote_commitment(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
-    return ApiSignedVoteCommitment(
-      proposalId: dco_decode_u_32(arr[0]),
-      wire: dco_decode_vote_commitment_wire(arr[1]),
-      shares: dco_decode_list_vote_share_wire(arr[2]),
-    );
-  }
-
-  @protected
-  ApiSignedVoteCommitments dco_decode_api_signed_vote_commitments(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-    return ApiSignedVoteCommitments(
-      bundleIndex: dco_decode_u_32(arr[0]),
-      commitments: dco_decode_list_api_signed_vote_commitment(arr[1]),
     );
   }
 
@@ -6168,19 +6057,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiVanWitness dco_decode_api_van_witness(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
-    return ApiVanWitness(
-      authPath: dco_decode_list_list_prim_u_8_strict(arr[0]),
-      position: dco_decode_u_32(arr[1]),
-      anchorHeight: dco_decode_u_32(arr[2]),
-    );
-  }
-
-  @protected
   ApiVoteCommitEvent dco_decode_api_vote_commit_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -6191,7 +6067,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       proposalId: dco_decode_opt_box_autoadd_u_32(arr[1]),
       bundleIndex: dco_decode_opt_box_autoadd_u_32(arr[2]),
       proofProgress: dco_decode_opt_box_autoadd_f_64(arr[3]),
-      commitments: dco_decode_opt_box_autoadd_api_signed_vote_commitments(
+      commitments: dco_decode_opt_box_autoadd_signed_vote_commitments_view(
         arr[4],
       ),
     );
@@ -6207,68 +6083,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       txHash: dco_decode_String(arr[0]),
       vanPosition: dco_decode_u_32(arr[1]),
       vcTreePosition: dco_decode_u_64(arr[2]),
-    );
-  }
-
-  @protected
-  ApiVoteRecord dco_decode_api_vote_record(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
-    return ApiVoteRecord(
-      proposalId: dco_decode_u_32(arr[0]),
-      bundleIndex: dco_decode_u_32(arr[1]),
-      choice: dco_decode_u_32(arr[2]),
-    );
-  }
-
-  @protected
-  ApiVotingBundleSetupResult dco_decode_api_voting_bundle_setup_result(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-    return ApiVotingBundleSetupResult(
-      bundleCount: dco_decode_u_32(arr[0]),
-      eligibleWeightZatoshi: dco_decode_u_64(arr[1]),
-    );
-  }
-
-  @protected
-  ApiVotingNoteRef dco_decode_api_voting_note_ref(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
-    return ApiVotingNoteRef(
-      pool: dco_decode_String(arr[0]),
-      txidHex: dco_decode_String(arr[1]),
-      outputIndex: dco_decode_u_32(arr[2]),
-      valueZatoshi: dco_decode_u_64(arr[3]),
-      votingWeightZatoshi: dco_decode_u_64(arr[4]),
-      commitmentTreePosition: dco_decode_u_64(arr[5]),
-      minedHeight: dco_decode_u_64(arr[6]),
-      anchorHeight: dco_decode_u_64(arr[7]),
-    );
-  }
-
-  @protected
-  ApiVotingNoteSelectionResult dco_decode_api_voting_note_selection_result(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
-    return ApiVotingNoteSelectionResult(
-      noteCount: dco_decode_u_32(arr[0]),
-      eligibleWeightZatoshi: dco_decode_u_64(arr[1]),
-      snapshotHeight: dco_decode_u_64(arr[2]),
-      anchorHeight: dco_decode_u_64(arr[3]),
-      notes: dco_decode_list_api_voting_note_ref(arr[4]),
     );
   }
 
@@ -6294,27 +6108,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegationPayload
-  dco_decode_box_autoadd_api_signed_delegation_payload(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_api_signed_delegation_payload(raw);
-  }
-
-  @protected
-  ApiSignedVoteCommitments dco_decode_box_autoadd_api_signed_vote_commitments(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_api_signed_vote_commitments(raw);
-  }
-
-  @protected
-  ApiVanWitness dco_decode_box_autoadd_api_van_witness(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_api_van_witness(raw);
-  }
-
-  @protected
   double dco_decode_box_autoadd_f_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
@@ -6329,6 +6122,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SignedDelegationPayloadView
+  dco_decode_box_autoadd_signed_delegation_payload_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_signed_delegation_payload_view(raw);
+  }
+
+  @protected
+  SignedVoteCommitmentsView dco_decode_box_autoadd_signed_vote_commitments_view(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_signed_vote_commitments_view(raw);
+  }
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -6338,6 +6146,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BigInt dco_decode_box_autoadd_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_u_64(raw);
+  }
+
+  @protected
+  VanWitnessView dco_decode_box_autoadd_van_witness_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_van_witness_view(raw);
   }
 
   @protected
@@ -6359,6 +6173,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BundleSetupResultView dco_decode_bundle_setup_result_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return BundleSetupResultView(
+      bundleCount: dco_decode_u_32(arr[0]),
+      eligibleWeightZatoshi: dco_decode_u_64(arr[1]),
+    );
+  }
+
+  @protected
   CommitmentBundleRecoveryView dco_decode_commitment_bundle_recovery_view(
     dynamic raw,
   ) {
@@ -6371,6 +6197,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       proposalId: dco_decode_u_32(arr[1]),
       commitmentBundleJson: dco_decode_String(arr[2]),
       vcTreePosition: dco_decode_u_64(arr[3]),
+    );
+  }
+
+  @protected
+  DelegationPirPrecomputeResultView
+  dco_decode_delegation_pir_precompute_result_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return DelegationPirPrecomputeResultView(
+      cachedCount: dco_decode_u_32(arr[0]),
+      fetchedCount: dco_decode_u_32(arr[1]),
+      bundleCount: dco_decode_u_32(arr[2]),
+      bundleIndex: dco_decode_u_32(arr[3]),
     );
   }
 
@@ -6404,6 +6245,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       govNullifiers: dco_decode_list_String(arr[6]),
       proof: dco_decode_String(arr[7]),
       voteRoundId: dco_decode_String(arr[8]),
+    );
+  }
+
+  @protected
+  DraftVoteView dco_decode_draft_vote_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return DraftVoteView(
+      proposalId: dco_decode_u_32(arr[0]),
+      choice: dco_decode_u_32(arr[1]),
+      numOptions: dco_decode_u_32(arr[2]),
+      vcTreePosition: dco_decode_u_64(arr[3]),
+      singleShare: dco_decode_bool(arr[4]),
     );
   }
 
@@ -6464,6 +6320,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  KeystoneDelegationRequestView dco_decode_keystone_delegation_request_view(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    return KeystoneDelegationRequestView(
+      pcztBytes: dco_decode_list_prim_u_8_strict(arr[0]),
+      redactedPcztBytes: dco_decode_list_prim_u_8_strict(arr[1]),
+      pcztSighash: dco_decode_list_prim_u_8_strict(arr[2]),
+      rk: dco_decode_list_prim_u_8_strict(arr[3]),
+      actionIndex: dco_decode_u_32(arr[4]),
+      displayMemo: dco_decode_String(arr[5]),
+      eligibleWeightZatoshi: dco_decode_u_64(arr[6]),
+      delegatedWeightZatoshi: dco_decode_u_64(arr[7]),
+      bundleCount: dco_decode_u_32(arr[8]),
+      bundleIndex: dco_decode_u_32(arr[9]),
+    );
+  }
+
+  @protected
+  KeystoneSignatureRecordView dco_decode_keystone_signature_record_view(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return KeystoneSignatureRecordView(
+      bundleIndex: dco_decode_u_32(arr[0]),
+      sig: dco_decode_list_prim_u_8_strict(arr[1]),
+      sighash: dco_decode_list_prim_u_8_strict(arr[2]),
+      rk: dco_decode_list_prim_u_8_strict(arr[3]),
+    );
+  }
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
@@ -6473,31 +6367,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<AccountInfo> dco_decode_list_account_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_account_info).toList();
-  }
-
-  @protected
-  List<ApiDraftVote> dco_decode_list_api_draft_vote(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_api_draft_vote).toList();
-  }
-
-  @protected
-  List<ApiKeystoneSignatureRecord>
-  dco_decode_list_api_keystone_signature_record(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>)
-        .map(dco_decode_api_keystone_signature_record)
-        .toList();
-  }
-
-  @protected
-  List<ApiSignedVoteCommitment> dco_decode_list_api_signed_vote_commitment(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>)
-        .map(dco_decode_api_signed_vote_commitment)
-        .toList();
   }
 
   @protected
@@ -6514,18 +6383,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return (raw as List<dynamic>)
         .map(dco_decode_api_tx_event_attribute)
         .toList();
-  }
-
-  @protected
-  List<ApiVoteRecord> dco_decode_list_api_vote_record(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_api_vote_record).toList();
-  }
-
-  @protected
-  List<ApiVotingNoteRef> dco_decode_list_api_voting_note_ref(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_api_voting_note_ref).toList();
   }
 
   @protected
@@ -6554,10 +6411,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<DraftVoteView> dco_decode_list_draft_vote_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_draft_vote_view).toList();
+  }
+
+  @protected
   List<KeystoneAccountInfo> dco_decode_list_keystone_account_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>)
         .map(dco_decode_keystone_account_info)
+        .toList();
+  }
+
+  @protected
+  List<KeystoneSignatureRecordView>
+  dco_decode_list_keystone_signature_record_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_keystone_signature_record_view)
         .toList();
   }
 
@@ -6634,6 +6506,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SignedVoteCommitmentView> dco_decode_list_signed_vote_commitment_view(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_signed_vote_commitment_view)
+        .toList();
+  }
+
+  @protected
   List<SubtreeRoot> dco_decode_list_subtree_root(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_subtree_root).toList();
@@ -6662,6 +6544,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<VoteRecordView> dco_decode_list_vote_record_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_vote_record_view).toList();
+  }
+
+  @protected
   List<VoteRecoveryView> dco_decode_list_vote_recovery_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_vote_recovery_view).toList();
@@ -6671,6 +6559,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<VoteShareWire> dco_decode_list_vote_share_wire(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_vote_share_wire).toList();
+  }
+
+  @protected
+  List<VotingNoteRefView> dco_decode_list_voting_note_ref_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_voting_note_ref_view).toList();
   }
 
   @protected
@@ -6705,27 +6599,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegationPayload?
-  dco_decode_opt_box_autoadd_api_signed_delegation_payload(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null
-        ? null
-        : dco_decode_box_autoadd_api_signed_delegation_payload(raw);
-  }
-
-  @protected
-  ApiSignedVoteCommitments?
-  dco_decode_opt_box_autoadd_api_signed_vote_commitments(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null
-        ? null
-        : dco_decode_box_autoadd_api_signed_vote_commitments(raw);
-  }
-
-  @protected
   double? dco_decode_opt_box_autoadd_f_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_f_64(raw);
+  }
+
+  @protected
+  SignedDelegationPayloadView?
+  dco_decode_opt_box_autoadd_signed_delegation_payload_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_signed_delegation_payload_view(raw);
+  }
+
+  @protected
+  SignedVoteCommitmentsView?
+  dco_decode_opt_box_autoadd_signed_vote_commitments_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_signed_vote_commitments_view(raw);
   }
 
   @protected
@@ -6930,6 +6824,53 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SignedDelegationPayloadView dco_decode_signed_delegation_payload_view(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return SignedDelegationPayloadView(
+      pcztBytes: dco_decode_list_prim_u_8_strict(arr[0]),
+      status: dco_decode_String(arr[1]),
+      message: dco_decode_opt_String(arr[2]),
+      submission: dco_decode_delegation_submission_wire(arr[3]),
+      eligibleWeightZatoshi: dco_decode_u_64(arr[4]),
+      delegatedWeightZatoshi: dco_decode_u_64(arr[5]),
+      bundleCount: dco_decode_u_32(arr[6]),
+      bundleIndex: dco_decode_u_32(arr[7]),
+    );
+  }
+
+  @protected
+  SignedVoteCommitmentView dco_decode_signed_vote_commitment_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return SignedVoteCommitmentView(
+      proposalId: dco_decode_u_32(arr[0]),
+      wire: dco_decode_vote_commitment_wire(arr[1]),
+      shares: dco_decode_list_vote_share_wire(arr[2]),
+    );
+  }
+
+  @protected
+  SignedVoteCommitmentsView dco_decode_signed_vote_commitments_view(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return SignedVoteCommitmentsView(
+      bundleIndex: dco_decode_u_32(arr[0]),
+      commitments: dco_decode_list_signed_vote_commitment_view(arr[1]),
+    );
+  }
+
+  @protected
   SubtreeIndices dco_decode_subtree_indices(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -7075,6 +7016,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  VanWitnessView dco_decode_van_witness_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return VanWitnessView(
+      authPath: dco_decode_list_list_prim_u_8_strict(arr[0]),
+      position: dco_decode_u_32(arr[1]),
+      anchorHeight: dco_decode_u_32(arr[2]),
+    );
+  }
+
+  @protected
   VoteCommitmentWire dco_decode_vote_commitment_wire(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -7090,6 +7044,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       anchorHeight: dco_decode_u_32(arr[6]),
       rVpk: dco_decode_String(arr[7]),
       voteAuthSig: dco_decode_String(arr[8]),
+    );
+  }
+
+  @protected
+  VoteRecordView dco_decode_vote_record_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return VoteRecordView(
+      proposalId: dco_decode_u_32(arr[0]),
+      bundleIndex: dco_decode_u_32(arr[1]),
+      choice: dco_decode_u_32(arr[2]),
     );
   }
 
@@ -7127,6 +7094,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       shareComms: dco_decode_list_String(arr[7]),
       primaryBlind: dco_decode_String(arr[8]),
       submitAt: dco_decode_u_64(arr[9]),
+    );
+  }
+
+  @protected
+  VotingNoteRefView dco_decode_voting_note_ref_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return VotingNoteRefView(
+      pool: dco_decode_String(arr[0]),
+      txidHex: dco_decode_String(arr[1]),
+      outputIndex: dco_decode_u_32(arr[2]),
+      valueZatoshi: dco_decode_u_64(arr[3]),
+      votingWeightZatoshi: dco_decode_u_64(arr[4]),
+      commitmentTreePosition: dco_decode_u_64(arr[5]),
+      minedHeight: dco_decode_u_64(arr[6]),
+      anchorHeight: dco_decode_u_64(arr[7]),
+    );
+  }
+
+  @protected
+  VotingNoteSelectionResultView dco_decode_voting_note_selection_result_view(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return VotingNoteSelectionResultView(
+      noteCount: dco_decode_u_32(arr[0]),
+      eligibleWeightZatoshi: dco_decode_u_64(arr[1]),
+      snapshotHeight: dco_decode_u_64(arr[2]),
+      anchorHeight: dco_decode_u_64(arr[3]),
+      notes: dco_decode_list_voting_note_ref_view(arr[4]),
     );
   }
 
@@ -7304,24 +7306,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiDelegationPirPrecomputeResult
-  sse_decode_api_delegation_pir_precompute_result(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_cachedCount = sse_decode_u_32(deserializer);
-    var var_fetchedCount = sse_decode_u_32(deserializer);
-    var var_bundleCount = sse_decode_u_32(deserializer);
-    var var_bundleIndex = sse_decode_u_32(deserializer);
-    return ApiDelegationPirPrecomputeResult(
-      cachedCount: var_cachedCount,
-      fetchedCount: var_fetchedCount,
-      bundleCount: var_bundleCount,
-      bundleIndex: var_bundleIndex,
-    );
-  }
-
-  @protected
   ApiDelegationProofEvent sse_decode_api_delegation_proof_event(
     SseDeserializer deserializer,
   ) {
@@ -7329,74 +7313,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_phase = sse_decode_String(deserializer);
     var var_proofProgress = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_signedDelegationPayload =
-        sse_decode_opt_box_autoadd_api_signed_delegation_payload(deserializer);
+        sse_decode_opt_box_autoadd_signed_delegation_payload_view(deserializer);
     return ApiDelegationProofEvent(
       phase: var_phase,
       proofProgress: var_proofProgress,
       signedDelegationPayload: var_signedDelegationPayload,
-    );
-  }
-
-  @protected
-  ApiDraftVote sse_decode_api_draft_vote(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_proposalId = sse_decode_u_32(deserializer);
-    var var_choice = sse_decode_u_32(deserializer);
-    var var_numOptions = sse_decode_u_32(deserializer);
-    var var_vcTreePosition = sse_decode_u_64(deserializer);
-    var var_singleShare = sse_decode_bool(deserializer);
-    return ApiDraftVote(
-      proposalId: var_proposalId,
-      choice: var_choice,
-      numOptions: var_numOptions,
-      vcTreePosition: var_vcTreePosition,
-      singleShare: var_singleShare,
-    );
-  }
-
-  @protected
-  ApiKeystoneDelegationRequest sse_decode_api_keystone_delegation_request(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_pcztBytes = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_redactedPcztBytes = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_pcztSighash = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_rk = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_actionIndex = sse_decode_u_32(deserializer);
-    var var_displayMemo = sse_decode_String(deserializer);
-    var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
-    var var_delegatedWeightZatoshi = sse_decode_u_64(deserializer);
-    var var_bundleCount = sse_decode_u_32(deserializer);
-    var var_bundleIndex = sse_decode_u_32(deserializer);
-    return ApiKeystoneDelegationRequest(
-      pcztBytes: var_pcztBytes,
-      redactedPcztBytes: var_redactedPcztBytes,
-      pcztSighash: var_pcztSighash,
-      rk: var_rk,
-      actionIndex: var_actionIndex,
-      displayMemo: var_displayMemo,
-      eligibleWeightZatoshi: var_eligibleWeightZatoshi,
-      delegatedWeightZatoshi: var_delegatedWeightZatoshi,
-      bundleCount: var_bundleCount,
-      bundleIndex: var_bundleIndex,
-    );
-  }
-
-  @protected
-  ApiKeystoneSignatureRecord sse_decode_api_keystone_signature_record(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_bundleIndex = sse_decode_u_32(deserializer);
-    var var_sig = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_sighash = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_rk = sse_decode_list_prim_u_8_strict(deserializer);
-    return ApiKeystoneSignatureRecord(
-      bundleIndex: var_bundleIndex,
-      sig: var_sig,
-      sighash: var_sighash,
-      rk: var_rk,
     );
   }
 
@@ -7412,61 +7333,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       txidHex: var_txidHex,
       accountUuids: var_accountUuids,
       matched: var_matched,
-    );
-  }
-
-  @protected
-  ApiSignedDelegationPayload sse_decode_api_signed_delegation_payload(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_pcztBytes = sse_decode_list_prim_u_8_strict(deserializer);
-    var var_status = sse_decode_String(deserializer);
-    var var_message = sse_decode_opt_String(deserializer);
-    var var_submission = sse_decode_delegation_submission_wire(deserializer);
-    var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
-    var var_delegatedWeightZatoshi = sse_decode_u_64(deserializer);
-    var var_bundleCount = sse_decode_u_32(deserializer);
-    var var_bundleIndex = sse_decode_u_32(deserializer);
-    return ApiSignedDelegationPayload(
-      pcztBytes: var_pcztBytes,
-      status: var_status,
-      message: var_message,
-      submission: var_submission,
-      eligibleWeightZatoshi: var_eligibleWeightZatoshi,
-      delegatedWeightZatoshi: var_delegatedWeightZatoshi,
-      bundleCount: var_bundleCount,
-      bundleIndex: var_bundleIndex,
-    );
-  }
-
-  @protected
-  ApiSignedVoteCommitment sse_decode_api_signed_vote_commitment(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_proposalId = sse_decode_u_32(deserializer);
-    var var_wire = sse_decode_vote_commitment_wire(deserializer);
-    var var_shares = sse_decode_list_vote_share_wire(deserializer);
-    return ApiSignedVoteCommitment(
-      proposalId: var_proposalId,
-      wire: var_wire,
-      shares: var_shares,
-    );
-  }
-
-  @protected
-  ApiSignedVoteCommitments sse_decode_api_signed_vote_commitments(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_bundleIndex = sse_decode_u_32(deserializer);
-    var var_commitments = sse_decode_list_api_signed_vote_commitment(
-      deserializer,
-    );
-    return ApiSignedVoteCommitments(
-      bundleIndex: var_bundleIndex,
-      commitments: var_commitments,
     );
   }
 
@@ -7516,19 +7382,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiVanWitness sse_decode_api_van_witness(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_authPath = sse_decode_list_list_prim_u_8_strict(deserializer);
-    var var_position = sse_decode_u_32(deserializer);
-    var var_anchorHeight = sse_decode_u_32(deserializer);
-    return ApiVanWitness(
-      authPath: var_authPath,
-      position: var_position,
-      anchorHeight: var_anchorHeight,
-    );
-  }
-
-  @protected
   ApiVoteCommitEvent sse_decode_api_vote_commit_event(
     SseDeserializer deserializer,
   ) {
@@ -7538,7 +7391,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_bundleIndex = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_proofProgress = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_commitments =
-        sse_decode_opt_box_autoadd_api_signed_vote_commitments(deserializer);
+        sse_decode_opt_box_autoadd_signed_vote_commitments_view(deserializer);
     return ApiVoteCommitEvent(
       phase: var_phase,
       proposalId: var_proposalId,
@@ -7560,76 +7413,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       txHash: var_txHash,
       vanPosition: var_vanPosition,
       vcTreePosition: var_vcTreePosition,
-    );
-  }
-
-  @protected
-  ApiVoteRecord sse_decode_api_vote_record(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_proposalId = sse_decode_u_32(deserializer);
-    var var_bundleIndex = sse_decode_u_32(deserializer);
-    var var_choice = sse_decode_u_32(deserializer);
-    return ApiVoteRecord(
-      proposalId: var_proposalId,
-      bundleIndex: var_bundleIndex,
-      choice: var_choice,
-    );
-  }
-
-  @protected
-  ApiVotingBundleSetupResult sse_decode_api_voting_bundle_setup_result(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_bundleCount = sse_decode_u_32(deserializer);
-    var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
-    return ApiVotingBundleSetupResult(
-      bundleCount: var_bundleCount,
-      eligibleWeightZatoshi: var_eligibleWeightZatoshi,
-    );
-  }
-
-  @protected
-  ApiVotingNoteRef sse_decode_api_voting_note_ref(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_pool = sse_decode_String(deserializer);
-    var var_txidHex = sse_decode_String(deserializer);
-    var var_outputIndex = sse_decode_u_32(deserializer);
-    var var_valueZatoshi = sse_decode_u_64(deserializer);
-    var var_votingWeightZatoshi = sse_decode_u_64(deserializer);
-    var var_commitmentTreePosition = sse_decode_u_64(deserializer);
-    var var_minedHeight = sse_decode_u_64(deserializer);
-    var var_anchorHeight = sse_decode_u_64(deserializer);
-    return ApiVotingNoteRef(
-      pool: var_pool,
-      txidHex: var_txidHex,
-      outputIndex: var_outputIndex,
-      valueZatoshi: var_valueZatoshi,
-      votingWeightZatoshi: var_votingWeightZatoshi,
-      commitmentTreePosition: var_commitmentTreePosition,
-      minedHeight: var_minedHeight,
-      anchorHeight: var_anchorHeight,
-    );
-  }
-
-  @protected
-  ApiVotingNoteSelectionResult sse_decode_api_voting_note_selection_result(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_noteCount = sse_decode_u_32(deserializer);
-    var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
-    var var_snapshotHeight = sse_decode_u_64(deserializer);
-    var var_anchorHeight = sse_decode_u_64(deserializer);
-    var var_notes = sse_decode_list_api_voting_note_ref(deserializer);
-    return ApiVotingNoteSelectionResult(
-      noteCount: var_noteCount,
-      eligibleWeightZatoshi: var_eligibleWeightZatoshi,
-      snapshotHeight: var_snapshotHeight,
-      anchorHeight: var_anchorHeight,
-      notes: var_notes,
     );
   }
 
@@ -7657,31 +7440,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegationPayload
-  sse_decode_box_autoadd_api_signed_delegation_payload(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_api_signed_delegation_payload(deserializer));
-  }
-
-  @protected
-  ApiSignedVoteCommitments sse_decode_box_autoadd_api_signed_vote_commitments(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_api_signed_vote_commitments(deserializer));
-  }
-
-  @protected
-  ApiVanWitness sse_decode_box_autoadd_api_van_witness(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_api_van_witness(deserializer));
-  }
-
-  @protected
   double sse_decode_box_autoadd_f_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_f_64(deserializer));
@@ -7696,6 +7454,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SignedDelegationPayloadView
+  sse_decode_box_autoadd_signed_delegation_payload_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_signed_delegation_payload_view(deserializer));
+  }
+
+  @protected
+  SignedVoteCommitmentsView sse_decode_box_autoadd_signed_vote_commitments_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_signed_vote_commitments_view(deserializer));
+  }
+
+  @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_32(deserializer));
@@ -7705,6 +7480,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_64(deserializer));
+  }
+
+  @protected
+  VanWitnessView sse_decode_box_autoadd_van_witness_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_van_witness_view(deserializer));
   }
 
   @protected
@@ -7732,6 +7515,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BundleSetupResultView sse_decode_bundle_setup_result_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_bundleCount = sse_decode_u_32(deserializer);
+    var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
+    return BundleSetupResultView(
+      bundleCount: var_bundleCount,
+      eligibleWeightZatoshi: var_eligibleWeightZatoshi,
+    );
+  }
+
+  @protected
   CommitmentBundleRecoveryView sse_decode_commitment_bundle_recovery_view(
     SseDeserializer deserializer,
   ) {
@@ -7745,6 +7541,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       proposalId: var_proposalId,
       commitmentBundleJson: var_commitmentBundleJson,
       vcTreePosition: var_vcTreePosition,
+    );
+  }
+
+  @protected
+  DelegationPirPrecomputeResultView
+  sse_decode_delegation_pir_precompute_result_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_cachedCount = sse_decode_u_32(deserializer);
+    var var_fetchedCount = sse_decode_u_32(deserializer);
+    var var_bundleCount = sse_decode_u_32(deserializer);
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    return DelegationPirPrecomputeResultView(
+      cachedCount: var_cachedCount,
+      fetchedCount: var_fetchedCount,
+      bundleCount: var_bundleCount,
+      bundleIndex: var_bundleIndex,
     );
   }
 
@@ -7789,6 +7603,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       govNullifiers: var_govNullifiers,
       proof: var_proof,
       voteRoundId: var_voteRoundId,
+    );
+  }
+
+  @protected
+  DraftVoteView sse_decode_draft_vote_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_proposalId = sse_decode_u_32(deserializer);
+    var var_choice = sse_decode_u_32(deserializer);
+    var var_numOptions = sse_decode_u_32(deserializer);
+    var var_vcTreePosition = sse_decode_u_64(deserializer);
+    var var_singleShare = sse_decode_bool(deserializer);
+    return DraftVoteView(
+      proposalId: var_proposalId,
+      choice: var_choice,
+      numOptions: var_numOptions,
+      vcTreePosition: var_vcTreePosition,
+      singleShare: var_singleShare,
     );
   }
 
@@ -7856,6 +7687,52 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  KeystoneDelegationRequestView sse_decode_keystone_delegation_request_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_pcztBytes = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_redactedPcztBytes = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_pcztSighash = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_rk = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_actionIndex = sse_decode_u_32(deserializer);
+    var var_displayMemo = sse_decode_String(deserializer);
+    var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
+    var var_delegatedWeightZatoshi = sse_decode_u_64(deserializer);
+    var var_bundleCount = sse_decode_u_32(deserializer);
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    return KeystoneDelegationRequestView(
+      pcztBytes: var_pcztBytes,
+      redactedPcztBytes: var_redactedPcztBytes,
+      pcztSighash: var_pcztSighash,
+      rk: var_rk,
+      actionIndex: var_actionIndex,
+      displayMemo: var_displayMemo,
+      eligibleWeightZatoshi: var_eligibleWeightZatoshi,
+      delegatedWeightZatoshi: var_delegatedWeightZatoshi,
+      bundleCount: var_bundleCount,
+      bundleIndex: var_bundleIndex,
+    );
+  }
+
+  @protected
+  KeystoneSignatureRecordView sse_decode_keystone_signature_record_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    var var_sig = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_sighash = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_rk = sse_decode_list_prim_u_8_strict(deserializer);
+    return KeystoneSignatureRecordView(
+      bundleIndex: var_bundleIndex,
+      sig: var_sig,
+      sighash: var_sighash,
+      rk: var_rk,
+    );
+  }
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -7875,47 +7752,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <AccountInfo>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_account_info(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  List<ApiDraftVote> sse_decode_list_api_draft_vote(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <ApiDraftVote>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_api_draft_vote(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  List<ApiKeystoneSignatureRecord>
-  sse_decode_list_api_keystone_signature_record(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <ApiKeystoneSignatureRecord>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_api_keystone_signature_record(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  List<ApiSignedVoteCommitment> sse_decode_list_api_signed_vote_commitment(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <ApiSignedVoteCommitment>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_api_signed_vote_commitment(deserializer));
     }
     return ans_;
   }
@@ -7942,34 +7778,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <ApiTxEventAttribute>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_api_tx_event_attribute(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  List<ApiVoteRecord> sse_decode_list_api_vote_record(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <ApiVoteRecord>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_api_vote_record(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  List<ApiVotingNoteRef> sse_decode_list_api_voting_note_ref(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <ApiVotingNoteRef>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_api_voting_note_ref(deserializer));
     }
     return ans_;
   }
@@ -8018,6 +7826,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<DraftVoteView> sse_decode_list_draft_vote_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <DraftVoteView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_draft_vote_view(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<KeystoneAccountInfo> sse_decode_list_keystone_account_info(
     SseDeserializer deserializer,
   ) {
@@ -8027,6 +7849,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <KeystoneAccountInfo>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_keystone_account_info(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<KeystoneSignatureRecordView>
+  sse_decode_list_keystone_signature_record_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <KeystoneSignatureRecordView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_keystone_signature_record_view(deserializer));
     }
     return ans_;
   }
@@ -8144,6 +7979,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SignedVoteCommitmentView> sse_decode_list_signed_vote_commitment_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <SignedVoteCommitmentView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_signed_vote_commitment_view(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<SubtreeRoot> sse_decode_list_subtree_root(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -8198,6 +8047,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<VoteRecordView> sse_decode_list_vote_record_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <VoteRecordView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_vote_record_view(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<VoteRecoveryView> sse_decode_list_vote_recovery_view(
     SseDeserializer deserializer,
   ) {
@@ -8221,6 +8084,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <VoteShareWire>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_vote_share_wire(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<VotingNoteRefView> sse_decode_list_voting_note_ref_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <VotingNoteRefView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_voting_note_ref_view(deserializer));
     }
     return ans_;
   }
@@ -8268,14 +8145,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedDelegationPayload?
-  sse_decode_opt_box_autoadd_api_signed_delegation_payload(
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_f_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  SignedDelegationPayloadView?
+  sse_decode_opt_box_autoadd_signed_delegation_payload_view(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_api_signed_delegation_payload(
+      return (sse_decode_box_autoadd_signed_delegation_payload_view(
         deserializer,
       ));
     } else {
@@ -8284,25 +8172,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiSignedVoteCommitments?
-  sse_decode_opt_box_autoadd_api_signed_vote_commitments(
+  SignedVoteCommitmentsView?
+  sse_decode_opt_box_autoadd_signed_vote_commitments_view(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_api_signed_vote_commitments(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
-  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_f_64(deserializer));
+      return (sse_decode_box_autoadd_signed_vote_commitments_view(
+        deserializer,
+      ));
     } else {
       return null;
     }
@@ -8555,6 +8434,61 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SignedDelegationPayloadView sse_decode_signed_delegation_payload_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_pcztBytes = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_status = sse_decode_String(deserializer);
+    var var_message = sse_decode_opt_String(deserializer);
+    var var_submission = sse_decode_delegation_submission_wire(deserializer);
+    var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
+    var var_delegatedWeightZatoshi = sse_decode_u_64(deserializer);
+    var var_bundleCount = sse_decode_u_32(deserializer);
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    return SignedDelegationPayloadView(
+      pcztBytes: var_pcztBytes,
+      status: var_status,
+      message: var_message,
+      submission: var_submission,
+      eligibleWeightZatoshi: var_eligibleWeightZatoshi,
+      delegatedWeightZatoshi: var_delegatedWeightZatoshi,
+      bundleCount: var_bundleCount,
+      bundleIndex: var_bundleIndex,
+    );
+  }
+
+  @protected
+  SignedVoteCommitmentView sse_decode_signed_vote_commitment_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_proposalId = sse_decode_u_32(deserializer);
+    var var_wire = sse_decode_vote_commitment_wire(deserializer);
+    var var_shares = sse_decode_list_vote_share_wire(deserializer);
+    return SignedVoteCommitmentView(
+      proposalId: var_proposalId,
+      wire: var_wire,
+      shares: var_shares,
+    );
+  }
+
+  @protected
+  SignedVoteCommitmentsView sse_decode_signed_vote_commitments_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    var var_commitments = sse_decode_list_signed_vote_commitment_view(
+      deserializer,
+    );
+    return SignedVoteCommitmentsView(
+      bundleIndex: var_bundleIndex,
+      commitments: var_commitments,
+    );
+  }
+
+  @protected
   SubtreeIndices sse_decode_subtree_indices(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_nextSapling = sse_decode_u_64(deserializer);
@@ -8714,6 +8648,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  VanWitnessView sse_decode_van_witness_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_authPath = sse_decode_list_list_prim_u_8_strict(deserializer);
+    var var_position = sse_decode_u_32(deserializer);
+    var var_anchorHeight = sse_decode_u_32(deserializer);
+    return VanWitnessView(
+      authPath: var_authPath,
+      position: var_position,
+      anchorHeight: var_anchorHeight,
+    );
+  }
+
+  @protected
   VoteCommitmentWire sse_decode_vote_commitment_wire(
     SseDeserializer deserializer,
   ) {
@@ -8737,6 +8684,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       anchorHeight: var_anchorHeight,
       rVpk: var_rVpk,
       voteAuthSig: var_voteAuthSig,
+    );
+  }
+
+  @protected
+  VoteRecordView sse_decode_vote_record_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_proposalId = sse_decode_u_32(deserializer);
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    var var_choice = sse_decode_u_32(deserializer);
+    return VoteRecordView(
+      proposalId: var_proposalId,
+      bundleIndex: var_bundleIndex,
+      choice: var_choice,
     );
   }
 
@@ -8787,6 +8747,50 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       shareComms: var_shareComms,
       primaryBlind: var_primaryBlind,
       submitAt: var_submitAt,
+    );
+  }
+
+  @protected
+  VotingNoteRefView sse_decode_voting_note_ref_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_pool = sse_decode_String(deserializer);
+    var var_txidHex = sse_decode_String(deserializer);
+    var var_outputIndex = sse_decode_u_32(deserializer);
+    var var_valueZatoshi = sse_decode_u_64(deserializer);
+    var var_votingWeightZatoshi = sse_decode_u_64(deserializer);
+    var var_commitmentTreePosition = sse_decode_u_64(deserializer);
+    var var_minedHeight = sse_decode_u_64(deserializer);
+    var var_anchorHeight = sse_decode_u_64(deserializer);
+    return VotingNoteRefView(
+      pool: var_pool,
+      txidHex: var_txidHex,
+      outputIndex: var_outputIndex,
+      valueZatoshi: var_valueZatoshi,
+      votingWeightZatoshi: var_votingWeightZatoshi,
+      commitmentTreePosition: var_commitmentTreePosition,
+      minedHeight: var_minedHeight,
+      anchorHeight: var_anchorHeight,
+    );
+  }
+
+  @protected
+  VotingNoteSelectionResultView sse_decode_voting_note_selection_result_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_noteCount = sse_decode_u_32(deserializer);
+    var var_eligibleWeightZatoshi = sse_decode_u_64(deserializer);
+    var var_snapshotHeight = sse_decode_u_64(deserializer);
+    var var_anchorHeight = sse_decode_u_64(deserializer);
+    var var_notes = sse_decode_list_voting_note_ref_view(deserializer);
+    return VotingNoteSelectionResultView(
+      noteCount: var_noteCount,
+      eligibleWeightZatoshi: var_eligibleWeightZatoshi,
+      snapshotHeight: var_snapshotHeight,
+      anchorHeight: var_anchorHeight,
+      notes: var_notes,
     );
   }
 
@@ -9004,18 +9008,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_api_delegation_pir_precompute_result(
-    ApiDelegationPirPrecomputeResult self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.cachedCount, serializer);
-    sse_encode_u_32(self.fetchedCount, serializer);
-    sse_encode_u_32(self.bundleCount, serializer);
-    sse_encode_u_32(self.bundleIndex, serializer);
-  }
-
-  @protected
   void sse_encode_api_delegation_proof_event(
     ApiDelegationProofEvent self,
     SseSerializer serializer,
@@ -9023,50 +9015,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.phase, serializer);
     sse_encode_opt_box_autoadd_f_64(self.proofProgress, serializer);
-    sse_encode_opt_box_autoadd_api_signed_delegation_payload(
+    sse_encode_opt_box_autoadd_signed_delegation_payload_view(
       self.signedDelegationPayload,
       serializer,
     );
-  }
-
-  @protected
-  void sse_encode_api_draft_vote(ApiDraftVote self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.proposalId, serializer);
-    sse_encode_u_32(self.choice, serializer);
-    sse_encode_u_32(self.numOptions, serializer);
-    sse_encode_u_64(self.vcTreePosition, serializer);
-    sse_encode_bool(self.singleShare, serializer);
-  }
-
-  @protected
-  void sse_encode_api_keystone_delegation_request(
-    ApiKeystoneDelegationRequest self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_list_prim_u_8_strict(self.pcztBytes, serializer);
-    sse_encode_list_prim_u_8_strict(self.redactedPcztBytes, serializer);
-    sse_encode_list_prim_u_8_strict(self.pcztSighash, serializer);
-    sse_encode_list_prim_u_8_strict(self.rk, serializer);
-    sse_encode_u_32(self.actionIndex, serializer);
-    sse_encode_String(self.displayMemo, serializer);
-    sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
-    sse_encode_u_64(self.delegatedWeightZatoshi, serializer);
-    sse_encode_u_32(self.bundleCount, serializer);
-    sse_encode_u_32(self.bundleIndex, serializer);
-  }
-
-  @protected
-  void sse_encode_api_keystone_signature_record(
-    ApiKeystoneSignatureRecord self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.bundleIndex, serializer);
-    sse_encode_list_prim_u_8_strict(self.sig, serializer);
-    sse_encode_list_prim_u_8_strict(self.sighash, serializer);
-    sse_encode_list_prim_u_8_strict(self.rk, serializer);
   }
 
   @protected
@@ -9078,43 +9030,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.txidHex, serializer);
     sse_encode_list_String(self.accountUuids, serializer);
     sse_encode_bool(self.matched, serializer);
-  }
-
-  @protected
-  void sse_encode_api_signed_delegation_payload(
-    ApiSignedDelegationPayload self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_list_prim_u_8_strict(self.pcztBytes, serializer);
-    sse_encode_String(self.status, serializer);
-    sse_encode_opt_String(self.message, serializer);
-    sse_encode_delegation_submission_wire(self.submission, serializer);
-    sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
-    sse_encode_u_64(self.delegatedWeightZatoshi, serializer);
-    sse_encode_u_32(self.bundleCount, serializer);
-    sse_encode_u_32(self.bundleIndex, serializer);
-  }
-
-  @protected
-  void sse_encode_api_signed_vote_commitment(
-    ApiSignedVoteCommitment self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.proposalId, serializer);
-    sse_encode_vote_commitment_wire(self.wire, serializer);
-    sse_encode_list_vote_share_wire(self.shares, serializer);
-  }
-
-  @protected
-  void sse_encode_api_signed_vote_commitments(
-    ApiSignedVoteCommitments self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.bundleIndex, serializer);
-    sse_encode_list_api_signed_vote_commitment(self.commitments, serializer);
   }
 
   @protected
@@ -9152,17 +9067,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_api_van_witness(
-    ApiVanWitness self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_list_list_prim_u_8_strict(self.authPath, serializer);
-    sse_encode_u_32(self.position, serializer);
-    sse_encode_u_32(self.anchorHeight, serializer);
-  }
-
-  @protected
   void sse_encode_api_vote_commit_event(
     ApiVoteCommitEvent self,
     SseSerializer serializer,
@@ -9172,7 +9076,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_32(self.proposalId, serializer);
     sse_encode_opt_box_autoadd_u_32(self.bundleIndex, serializer);
     sse_encode_opt_box_autoadd_f_64(self.proofProgress, serializer);
-    sse_encode_opt_box_autoadd_api_signed_vote_commitments(
+    sse_encode_opt_box_autoadd_signed_vote_commitments_view(
       self.commitments,
       serializer,
     );
@@ -9187,56 +9091,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.txHash, serializer);
     sse_encode_u_32(self.vanPosition, serializer);
     sse_encode_u_64(self.vcTreePosition, serializer);
-  }
-
-  @protected
-  void sse_encode_api_vote_record(
-    ApiVoteRecord self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.proposalId, serializer);
-    sse_encode_u_32(self.bundleIndex, serializer);
-    sse_encode_u_32(self.choice, serializer);
-  }
-
-  @protected
-  void sse_encode_api_voting_bundle_setup_result(
-    ApiVotingBundleSetupResult self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.bundleCount, serializer);
-    sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
-  }
-
-  @protected
-  void sse_encode_api_voting_note_ref(
-    ApiVotingNoteRef self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.pool, serializer);
-    sse_encode_String(self.txidHex, serializer);
-    sse_encode_u_32(self.outputIndex, serializer);
-    sse_encode_u_64(self.valueZatoshi, serializer);
-    sse_encode_u_64(self.votingWeightZatoshi, serializer);
-    sse_encode_u_64(self.commitmentTreePosition, serializer);
-    sse_encode_u_64(self.minedHeight, serializer);
-    sse_encode_u_64(self.anchorHeight, serializer);
-  }
-
-  @protected
-  void sse_encode_api_voting_note_selection_result(
-    ApiVotingNoteSelectionResult self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.noteCount, serializer);
-    sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
-    sse_encode_u_64(self.snapshotHeight, serializer);
-    sse_encode_u_64(self.anchorHeight, serializer);
-    sse_encode_list_api_voting_note_ref(self.notes, serializer);
   }
 
   @protected
@@ -9259,33 +9113,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_api_signed_delegation_payload(
-    ApiSignedDelegationPayload self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_api_signed_delegation_payload(self, serializer);
-  }
-
-  @protected
-  void sse_encode_box_autoadd_api_signed_vote_commitments(
-    ApiSignedVoteCommitments self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_api_signed_vote_commitments(self, serializer);
-  }
-
-  @protected
-  void sse_encode_box_autoadd_api_van_witness(
-    ApiVanWitness self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_api_van_witness(self, serializer);
-  }
-
-  @protected
   void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_f_64(self, serializer);
@@ -9301,6 +9128,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_signed_delegation_payload_view(
+    SignedDelegationPayloadView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_signed_delegation_payload_view(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_signed_vote_commitments_view(
+    SignedVoteCommitmentsView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_signed_vote_commitments_view(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self, serializer);
@@ -9310,6 +9155,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_van_witness_view(
+    VanWitnessView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_van_witness_view(self, serializer);
   }
 
   @protected
@@ -9340,6 +9194,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_bundle_setup_result_view(
+    BundleSetupResultView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.bundleCount, serializer);
+    sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
+  }
+
+  @protected
   void sse_encode_commitment_bundle_recovery_view(
     CommitmentBundleRecoveryView self,
     SseSerializer serializer,
@@ -9349,6 +9213,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.proposalId, serializer);
     sse_encode_String(self.commitmentBundleJson, serializer);
     sse_encode_u_64(self.vcTreePosition, serializer);
+  }
+
+  @protected
+  void sse_encode_delegation_pir_precompute_result_view(
+    DelegationPirPrecomputeResultView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.cachedCount, serializer);
+    sse_encode_u_32(self.fetchedCount, serializer);
+    sse_encode_u_32(self.bundleCount, serializer);
+    sse_encode_u_32(self.bundleIndex, serializer);
   }
 
   @protected
@@ -9378,6 +9254,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_String(self.govNullifiers, serializer);
     sse_encode_String(self.proof, serializer);
     sse_encode_String(self.voteRoundId, serializer);
+  }
+
+  @protected
+  void sse_encode_draft_vote_view(
+    DraftVoteView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.proposalId, serializer);
+    sse_encode_u_32(self.choice, serializer);
+    sse_encode_u_32(self.numOptions, serializer);
+    sse_encode_u_64(self.vcTreePosition, serializer);
+    sse_encode_bool(self.singleShare, serializer);
   }
 
   @protected
@@ -9429,6 +9318,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_keystone_delegation_request_view(
+    KeystoneDelegationRequestView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.pcztBytes, serializer);
+    sse_encode_list_prim_u_8_strict(self.redactedPcztBytes, serializer);
+    sse_encode_list_prim_u_8_strict(self.pcztSighash, serializer);
+    sse_encode_list_prim_u_8_strict(self.rk, serializer);
+    sse_encode_u_32(self.actionIndex, serializer);
+    sse_encode_String(self.displayMemo, serializer);
+    sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
+    sse_encode_u_64(self.delegatedWeightZatoshi, serializer);
+    sse_encode_u_32(self.bundleCount, serializer);
+    sse_encode_u_32(self.bundleIndex, serializer);
+  }
+
+  @protected
+  void sse_encode_keystone_signature_record_view(
+    KeystoneSignatureRecordView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.bundleIndex, serializer);
+    sse_encode_list_prim_u_8_strict(self.sig, serializer);
+    sse_encode_list_prim_u_8_strict(self.sighash, serializer);
+    sse_encode_list_prim_u_8_strict(self.rk, serializer);
+  }
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
@@ -9446,42 +9365,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_account_info(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_list_api_draft_vote(
-    List<ApiDraftVote> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_api_draft_vote(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_list_api_keystone_signature_record(
-    List<ApiKeystoneSignatureRecord> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_api_keystone_signature_record(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_list_api_signed_vote_commitment(
-    List<ApiSignedVoteCommitment> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_api_signed_vote_commitment(item, serializer);
     }
   }
 
@@ -9506,30 +9389,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_api_tx_event_attribute(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_list_api_vote_record(
-    List<ApiVoteRecord> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_api_vote_record(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_list_api_voting_note_ref(
-    List<ApiVotingNoteRef> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_api_voting_note_ref(item, serializer);
     }
   }
 
@@ -9570,6 +9429,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_draft_vote_view(
+    List<DraftVoteView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_draft_vote_view(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_keystone_account_info(
     List<KeystoneAccountInfo> self,
     SseSerializer serializer,
@@ -9578,6 +9449,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_keystone_account_info(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_keystone_signature_record_view(
+    List<KeystoneSignatureRecordView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_keystone_signature_record_view(item, serializer);
     }
   }
 
@@ -9698,6 +9581,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_signed_vote_commitment_view(
+    List<SignedVoteCommitmentView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_signed_vote_commitment_view(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_subtree_root(
     List<SubtreeRoot> self,
     SseSerializer serializer,
@@ -9746,6 +9641,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_vote_record_view(
+    List<VoteRecordView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_vote_record_view(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_vote_recovery_view(
     List<VoteRecoveryView> self,
     SseSerializer serializer,
@@ -9766,6 +9673,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_vote_share_wire(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_voting_note_ref_view(
+    List<VotingNoteRefView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_voting_note_ref_view(item, serializer);
     }
   }
 
@@ -9802,38 +9721,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_api_signed_delegation_payload(
-    ApiSignedDelegationPayload? self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_box_autoadd_api_signed_delegation_payload(self, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_opt_box_autoadd_api_signed_vote_commitments(
-    ApiSignedVoteCommitments? self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_box_autoadd_api_signed_vote_commitments(self, serializer);
-    }
-  }
-
-  @protected
   void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_f_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_signed_delegation_payload_view(
+    SignedDelegationPayloadView? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_signed_delegation_payload_view(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_signed_vote_commitments_view(
+    SignedVoteCommitmentsView? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_signed_vote_commitments_view(self, serializer);
     }
   }
 
@@ -10028,6 +9947,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_signed_delegation_payload_view(
+    SignedDelegationPayloadView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.pcztBytes, serializer);
+    sse_encode_String(self.status, serializer);
+    sse_encode_opt_String(self.message, serializer);
+    sse_encode_delegation_submission_wire(self.submission, serializer);
+    sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
+    sse_encode_u_64(self.delegatedWeightZatoshi, serializer);
+    sse_encode_u_32(self.bundleCount, serializer);
+    sse_encode_u_32(self.bundleIndex, serializer);
+  }
+
+  @protected
+  void sse_encode_signed_vote_commitment_view(
+    SignedVoteCommitmentView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.proposalId, serializer);
+    sse_encode_vote_commitment_wire(self.wire, serializer);
+    sse_encode_list_vote_share_wire(self.shares, serializer);
+  }
+
+  @protected
+  void sse_encode_signed_vote_commitments_view(
+    SignedVoteCommitmentsView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.bundleIndex, serializer);
+    sse_encode_list_signed_vote_commitment_view(self.commitments, serializer);
+  }
+
+  @protected
   void sse_encode_subtree_indices(
     SubtreeIndices self,
     SseSerializer serializer,
@@ -10150,6 +10106,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_van_witness_view(
+    VanWitnessView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_list_prim_u_8_strict(self.authPath, serializer);
+    sse_encode_u_32(self.position, serializer);
+    sse_encode_u_32(self.anchorHeight, serializer);
+  }
+
+  @protected
   void sse_encode_vote_commitment_wire(
     VoteCommitmentWire self,
     SseSerializer serializer,
@@ -10164,6 +10131,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.anchorHeight, serializer);
     sse_encode_String(self.rVpk, serializer);
     sse_encode_String(self.voteAuthSig, serializer);
+  }
+
+  @protected
+  void sse_encode_vote_record_view(
+    VoteRecordView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.proposalId, serializer);
+    sse_encode_u_32(self.bundleIndex, serializer);
+    sse_encode_u_32(self.choice, serializer);
   }
 
   @protected
@@ -10200,6 +10178,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_String(self.shareComms, serializer);
     sse_encode_String(self.primaryBlind, serializer);
     sse_encode_u_64(self.submitAt, serializer);
+  }
+
+  @protected
+  void sse_encode_voting_note_ref_view(
+    VotingNoteRefView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.pool, serializer);
+    sse_encode_String(self.txidHex, serializer);
+    sse_encode_u_32(self.outputIndex, serializer);
+    sse_encode_u_64(self.valueZatoshi, serializer);
+    sse_encode_u_64(self.votingWeightZatoshi, serializer);
+    sse_encode_u_64(self.commitmentTreePosition, serializer);
+    sse_encode_u_64(self.minedHeight, serializer);
+    sse_encode_u_64(self.anchorHeight, serializer);
+  }
+
+  @protected
+  void sse_encode_voting_note_selection_result_view(
+    VotingNoteSelectionResultView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.noteCount, serializer);
+    sse_encode_u_64(self.eligibleWeightZatoshi, serializer);
+    sse_encode_u_64(self.snapshotHeight, serializer);
+    sse_encode_u_64(self.anchorHeight, serializer);
+    sse_encode_list_voting_note_ref_view(self.notes, serializer);
   }
 
   @protected

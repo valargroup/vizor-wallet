@@ -6,7 +6,28 @@
 import '../../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+
+class BundleSetupResultView {
+  final int bundleCount;
+  final BigInt eligibleWeightZatoshi;
+
+  const BundleSetupResultView({
+    required this.bundleCount,
+    required this.eligibleWeightZatoshi,
+  });
+
+  @override
+  int get hashCode => bundleCount.hashCode ^ eligibleWeightZatoshi.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BundleSetupResultView &&
+          runtimeType == other.runtimeType &&
+          bundleCount == other.bundleCount &&
+          eligibleWeightZatoshi == other.eligibleWeightZatoshi;
+}
 
 class CommitmentBundleRecoveryView {
   final int bundleIndex;
@@ -37,6 +58,37 @@ class CommitmentBundleRecoveryView {
           proposalId == other.proposalId &&
           commitmentBundleJson == other.commitmentBundleJson &&
           vcTreePosition == other.vcTreePosition;
+}
+
+class DelegationPirPrecomputeResultView {
+  final int cachedCount;
+  final int fetchedCount;
+  final int bundleCount;
+  final int bundleIndex;
+
+  const DelegationPirPrecomputeResultView({
+    required this.cachedCount,
+    required this.fetchedCount,
+    required this.bundleCount,
+    required this.bundleIndex,
+  });
+
+  @override
+  int get hashCode =>
+      cachedCount.hashCode ^
+      fetchedCount.hashCode ^
+      bundleCount.hashCode ^
+      bundleIndex.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DelegationPirPrecomputeResultView &&
+          runtimeType == other.runtimeType &&
+          cachedCount == other.cachedCount &&
+          fetchedCount == other.fetchedCount &&
+          bundleCount == other.bundleCount &&
+          bundleIndex == other.bundleIndex;
 }
 
 class DelegationRecoveryView {
@@ -119,6 +171,124 @@ class DelegationSubmissionWire {
           govNullifiers == other.govNullifiers &&
           proof == other.proof &&
           voteRoundId == other.voteRoundId;
+}
+
+class DraftVoteView {
+  final int proposalId;
+  final int choice;
+  final int numOptions;
+  final BigInt vcTreePosition;
+  final bool singleShare;
+
+  const DraftVoteView({
+    required this.proposalId,
+    required this.choice,
+    required this.numOptions,
+    required this.vcTreePosition,
+    required this.singleShare,
+  });
+
+  @override
+  int get hashCode =>
+      proposalId.hashCode ^
+      choice.hashCode ^
+      numOptions.hashCode ^
+      vcTreePosition.hashCode ^
+      singleShare.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DraftVoteView &&
+          runtimeType == other.runtimeType &&
+          proposalId == other.proposalId &&
+          choice == other.choice &&
+          numOptions == other.numOptions &&
+          vcTreePosition == other.vcTreePosition &&
+          singleShare == other.singleShare;
+}
+
+class KeystoneDelegationRequestView {
+  final Uint8List pcztBytes;
+  final Uint8List redactedPcztBytes;
+  final Uint8List pcztSighash;
+  final Uint8List rk;
+  final int actionIndex;
+  final String displayMemo;
+  final BigInt eligibleWeightZatoshi;
+  final BigInt delegatedWeightZatoshi;
+  final int bundleCount;
+  final int bundleIndex;
+
+  const KeystoneDelegationRequestView({
+    required this.pcztBytes,
+    required this.redactedPcztBytes,
+    required this.pcztSighash,
+    required this.rk,
+    required this.actionIndex,
+    required this.displayMemo,
+    required this.eligibleWeightZatoshi,
+    required this.delegatedWeightZatoshi,
+    required this.bundleCount,
+    required this.bundleIndex,
+  });
+
+  @override
+  int get hashCode =>
+      pcztBytes.hashCode ^
+      redactedPcztBytes.hashCode ^
+      pcztSighash.hashCode ^
+      rk.hashCode ^
+      actionIndex.hashCode ^
+      displayMemo.hashCode ^
+      eligibleWeightZatoshi.hashCode ^
+      delegatedWeightZatoshi.hashCode ^
+      bundleCount.hashCode ^
+      bundleIndex.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is KeystoneDelegationRequestView &&
+          runtimeType == other.runtimeType &&
+          pcztBytes == other.pcztBytes &&
+          redactedPcztBytes == other.redactedPcztBytes &&
+          pcztSighash == other.pcztSighash &&
+          rk == other.rk &&
+          actionIndex == other.actionIndex &&
+          displayMemo == other.displayMemo &&
+          eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
+          delegatedWeightZatoshi == other.delegatedWeightZatoshi &&
+          bundleCount == other.bundleCount &&
+          bundleIndex == other.bundleIndex;
+}
+
+class KeystoneSignatureRecordView {
+  final int bundleIndex;
+  final Uint8List sig;
+  final Uint8List sighash;
+  final Uint8List rk;
+
+  const KeystoneSignatureRecordView({
+    required this.bundleIndex,
+    required this.sig,
+    required this.sighash,
+    required this.rk,
+  });
+
+  @override
+  int get hashCode =>
+      bundleIndex.hashCode ^ sig.hashCode ^ sighash.hashCode ^ rk.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is KeystoneSignatureRecordView &&
+          runtimeType == other.runtimeType &&
+          bundleIndex == other.bundleIndex &&
+          sig == other.sig &&
+          sighash == other.sighash &&
+          rk == other.rk;
 }
 
 class NextStepView {
@@ -349,6 +519,123 @@ class ShareWorkflowRecoveryView {
           phase == other.phase;
 }
 
+class SignedDelegationPayloadView {
+  final Uint8List pcztBytes;
+  final String status;
+  final String? message;
+  final DelegationSubmissionWire submission;
+  final BigInt eligibleWeightZatoshi;
+  final BigInt delegatedWeightZatoshi;
+  final int bundleCount;
+  final int bundleIndex;
+
+  const SignedDelegationPayloadView({
+    required this.pcztBytes,
+    required this.status,
+    this.message,
+    required this.submission,
+    required this.eligibleWeightZatoshi,
+    required this.delegatedWeightZatoshi,
+    required this.bundleCount,
+    required this.bundleIndex,
+  });
+
+  @override
+  int get hashCode =>
+      pcztBytes.hashCode ^
+      status.hashCode ^
+      message.hashCode ^
+      submission.hashCode ^
+      eligibleWeightZatoshi.hashCode ^
+      delegatedWeightZatoshi.hashCode ^
+      bundleCount.hashCode ^
+      bundleIndex.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SignedDelegationPayloadView &&
+          runtimeType == other.runtimeType &&
+          pcztBytes == other.pcztBytes &&
+          status == other.status &&
+          message == other.message &&
+          submission == other.submission &&
+          eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
+          delegatedWeightZatoshi == other.delegatedWeightZatoshi &&
+          bundleCount == other.bundleCount &&
+          bundleIndex == other.bundleIndex;
+}
+
+class SignedVoteCommitmentView {
+  final int proposalId;
+  final VoteCommitmentWire wire;
+  final List<VoteShareWire> shares;
+
+  const SignedVoteCommitmentView({
+    required this.proposalId,
+    required this.wire,
+    required this.shares,
+  });
+
+  @override
+  int get hashCode => proposalId.hashCode ^ wire.hashCode ^ shares.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SignedVoteCommitmentView &&
+          runtimeType == other.runtimeType &&
+          proposalId == other.proposalId &&
+          wire == other.wire &&
+          shares == other.shares;
+}
+
+class SignedVoteCommitmentsView {
+  final int bundleIndex;
+  final List<SignedVoteCommitmentView> commitments;
+
+  const SignedVoteCommitmentsView({
+    required this.bundleIndex,
+    required this.commitments,
+  });
+
+  @override
+  int get hashCode => bundleIndex.hashCode ^ commitments.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SignedVoteCommitmentsView &&
+          runtimeType == other.runtimeType &&
+          bundleIndex == other.bundleIndex &&
+          commitments == other.commitments;
+}
+
+class VanWitnessView {
+  final List<Uint8List> authPath;
+  final int position;
+  final int anchorHeight;
+
+  const VanWitnessView({
+    required this.authPath,
+    required this.position,
+    required this.anchorHeight,
+  });
+
+  @override
+  int get hashCode =>
+      authPath.hashCode ^ position.hashCode ^ anchorHeight.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VanWitnessView &&
+          runtimeType == other.runtimeType &&
+          authPath == other.authPath &&
+          position == other.position &&
+          anchorHeight == other.anchorHeight;
+}
+
 class VoteCommitmentWire {
   final String vanNullifier;
   final String voteAuthorityNoteNew;
@@ -398,6 +685,31 @@ class VoteCommitmentWire {
           anchorHeight == other.anchorHeight &&
           rVpk == other.rVpk &&
           voteAuthSig == other.voteAuthSig;
+}
+
+class VoteRecordView {
+  final int proposalId;
+  final int bundleIndex;
+  final int choice;
+
+  const VoteRecordView({
+    required this.proposalId,
+    required this.bundleIndex,
+    required this.choice,
+  });
+
+  @override
+  int get hashCode =>
+      proposalId.hashCode ^ bundleIndex.hashCode ^ choice.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VoteRecordView &&
+          runtimeType == other.runtimeType &&
+          proposalId == other.proposalId &&
+          bundleIndex == other.bundleIndex &&
+          choice == other.choice;
 }
 
 class VoteRecoveryView {
@@ -496,6 +808,88 @@ class VoteShareWire {
           shareComms == other.shareComms &&
           primaryBlind == other.primaryBlind &&
           submitAt == other.submitAt;
+}
+
+class VotingNoteRefView {
+  final String pool;
+  final String txidHex;
+  final int outputIndex;
+  final BigInt valueZatoshi;
+  final BigInt votingWeightZatoshi;
+  final BigInt commitmentTreePosition;
+  final BigInt minedHeight;
+  final BigInt anchorHeight;
+
+  const VotingNoteRefView({
+    required this.pool,
+    required this.txidHex,
+    required this.outputIndex,
+    required this.valueZatoshi,
+    required this.votingWeightZatoshi,
+    required this.commitmentTreePosition,
+    required this.minedHeight,
+    required this.anchorHeight,
+  });
+
+  @override
+  int get hashCode =>
+      pool.hashCode ^
+      txidHex.hashCode ^
+      outputIndex.hashCode ^
+      valueZatoshi.hashCode ^
+      votingWeightZatoshi.hashCode ^
+      commitmentTreePosition.hashCode ^
+      minedHeight.hashCode ^
+      anchorHeight.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VotingNoteRefView &&
+          runtimeType == other.runtimeType &&
+          pool == other.pool &&
+          txidHex == other.txidHex &&
+          outputIndex == other.outputIndex &&
+          valueZatoshi == other.valueZatoshi &&
+          votingWeightZatoshi == other.votingWeightZatoshi &&
+          commitmentTreePosition == other.commitmentTreePosition &&
+          minedHeight == other.minedHeight &&
+          anchorHeight == other.anchorHeight;
+}
+
+class VotingNoteSelectionResultView {
+  final int noteCount;
+  final BigInt eligibleWeightZatoshi;
+  final BigInt snapshotHeight;
+  final BigInt anchorHeight;
+  final List<VotingNoteRefView> notes;
+
+  const VotingNoteSelectionResultView({
+    required this.noteCount,
+    required this.eligibleWeightZatoshi,
+    required this.snapshotHeight,
+    required this.anchorHeight,
+    required this.notes,
+  });
+
+  @override
+  int get hashCode =>
+      noteCount.hashCode ^
+      eligibleWeightZatoshi.hashCode ^
+      snapshotHeight.hashCode ^
+      anchorHeight.hashCode ^
+      notes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VotingNoteSelectionResultView &&
+          runtimeType == other.runtimeType &&
+          noteCount == other.noteCount &&
+          eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
+          snapshotHeight == other.snapshotHeight &&
+          anchorHeight == other.anchorHeight &&
+          notes == other.notes;
 }
 
 /// Parameters for a voting round, sourced from vote chain.
