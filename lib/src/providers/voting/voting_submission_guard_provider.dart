@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const kVotingSubmissionInProgressMessage =
-    'Finish the current voting submission before changing screens.';
+    'Vote submission is still running. Wait for it to finish before '
+    'navigating or switching accounts.';
 
 @immutable
 class VotingSubmissionGuard {
