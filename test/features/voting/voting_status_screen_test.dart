@@ -33,6 +33,7 @@ import 'package:zcash_wallet/src/rust/third_party/zcash_voting/wire.dart'
 import 'package:zcash_wallet/src/services/voting/voting_config_loader.dart';
 import 'package:zcash_wallet/src/services/voting/pir_snapshot_resolver.dart';
 
+import 'round_plan_test_utils.dart';
 import '../../services/voting/fake_voting_http.dart';
 
 void main() {
@@ -238,7 +239,7 @@ void main() {
 
     final recoveryApi = _MutableVotingRecoveryApi()
       ..state = _recoveryState(bundleCount: 0)
-      ..roundPlan = rust_wire.RoundPlanView(
+      ..roundPlan = apiRoundPlan(
         roundId: _roundId,
         pendingRecovery: false,
         nextSteps: const [],
@@ -303,7 +304,7 @@ void main() {
             ),
           ],
         )
-        ..roundPlan = rust_wire.RoundPlanView(
+        ..roundPlan = apiRoundPlan(
           roundId: _roundId,
           pendingRecovery: true,
           nextSteps: const [
@@ -393,7 +394,7 @@ void main() {
           ),
         ],
       )
-      ..roundPlan = rust_wire.RoundPlanView(
+      ..roundPlan = apiRoundPlan(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
@@ -454,7 +455,7 @@ void main() {
     });
 
     final recoveryApi = _MutableVotingRecoveryApi()
-      ..roundPlan = rust_wire.RoundPlanView(
+      ..roundPlan = apiRoundPlan(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
@@ -525,7 +526,7 @@ void main() {
         shareDelegations: [share],
         unconfirmedShareDelegations: [share],
       )
-      ..roundPlan = rust_wire.RoundPlanView(
+      ..roundPlan = apiRoundPlan(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
@@ -602,7 +603,7 @@ void main() {
         shareDelegations: [share],
         unconfirmedShareDelegations: [share],
       )
-      ..roundPlan = rust_wire.RoundPlanView(
+      ..roundPlan = apiRoundPlan(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
@@ -706,7 +707,7 @@ void main() {
           ),
         ],
       )
-      ..roundPlan = rust_wire.RoundPlanView(
+      ..roundPlan = apiRoundPlan(
         roundId: _roundId,
         pendingRecovery: true,
         nextSteps: const [
@@ -1980,12 +1981,14 @@ class _FakeVotingRecoveryApi implements VotingRecoveryApi {
     required String roundId,
     required List<int> proposalIds,
   }) async {
-    return rust_wire.RoundPlanView(
+    return apiRoundPlanFromRecoveryState(
+      state: await getRoundRecoveryState(
+        dbPath: dbPath,
+        walletId: walletId,
+        roundId: roundId,
+      ),
       roundId: roundId,
-      pendingRecovery: false,
-      nextSteps: const [],
-      openProposals: Uint32List.fromList(proposalIds),
-      allDecided: false,
+      proposalIds: proposalIds,
     );
   }
 
@@ -2473,15 +2476,16 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required int vanLeafPosition,
   }) async {
     recoveryApi.state = _recoveryState(
-      delegationTxHashes: [
+      delegationWorkflows: [
         rust_frb_types.DelegationRecoveryView(
           bundleIndex: bundleIndex,
-          phase: VotingWorkflowPhase.submittedDelegation,
+          phase: VotingWorkflowPhase.confirmed,
           txHash: txHash,
-          vanLeafPosition: null,
+          vanLeafPosition: vanLeafPosition,
         ),
       ],
     );
+    recoveryApi.roundPlan = null;
   }
 
   @override
@@ -2663,26 +2667,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   Future<BigInt?> nextShareTrackingDelaySeconds({
     required List<rust_frb_types.ShareDelegationRecordView> shares,
     required BigInt nowSeconds,
-  }) async {
-    final now = nowSeconds.toInt();
-    int? nextSecond;
-    var hasUnconfirmed = false;
-    for (final share in shares.where((share) => !share.confirmed)) {
-      hasUnconfirmed = true;
-      final base = share.submitAt > BigInt.zero
-          ? share.submitAt.toInt()
-          : share.createdAt.toInt();
-      final checkAt = base + 10;
-      if (checkAt > now && (nextSecond == null || checkAt < nextSecond)) {
-        nextSecond = checkAt;
-      }
-    }
-    if (!hasUnconfirmed) return null;
-    final delay = nextSecond == null
-        ? 15
-        : (nextSecond - now).clamp(0, 30).toInt();
-    return BigInt.from(delay < 3 ? 3 : delay);
-  }
+  }) async => null;
 
   @override
   Future<String> recoveredVoteShareWireJson({
@@ -2717,26 +2702,27 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required BigInt vcTreePosition,
   }) async {
     recoveryApi.state = _recoveryState(
-      delegationTxHashes: [
+      delegationWorkflows: [
         rust_frb_types.DelegationRecoveryView(
           bundleIndex: bundleIndex,
-          phase: VotingWorkflowPhase.submittedDelegation,
+          phase: VotingWorkflowPhase.confirmed,
           txHash: 'delegation-tx',
-          vanLeafPosition: null,
+          vanLeafPosition: vanPosition,
         ),
       ],
-      voteTxHashes: [
+      votes: [
         rust_frb_types.VoteRecoveryView(
           bundleIndex: bundleIndex,
           proposalId: proposalId,
           choice: 0,
-          phase: VotingWorkflowPhase.submittedVote,
+          phase: VotingWorkflowPhase.confirmed,
           txHash: txHash,
-          vcTreePosition: null,
-          hasCommitmentBundle: false,
+          vcTreePosition: vcTreePosition,
+          hasCommitmentBundle: true,
         ),
       ],
     );
+    recoveryApi.roundPlan = null;
   }
 
   @override
@@ -2778,16 +2764,46 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required List<String> sentToUrls,
     required BigInt submitAt,
   }) async {
-    final roundPlan = recoveryApi.roundPlan;
-    if (roundPlan != null && roundPlan.openProposals.isEmpty) {
-      recoveryApi.roundPlan = rust_wire.RoundPlanView(
-        roundId: roundId,
-        pendingRecovery: false,
-        nextSteps: const [],
-        openProposals: Uint32List(0),
-        allDecided: true,
-      );
+    final current = recoveryApi.state;
+    bool matches(rust_frb_types.ShareDelegationRecordView share) {
+      return share.roundId == roundId &&
+          share.bundleIndex == bundleIndex &&
+          share.proposalId == proposalId &&
+          share.shareIndex == shareIndex;
     }
+
+    final recorded = rust_frb_types.ShareDelegationRecordView(
+      roundId: roundId,
+      bundleIndex: bundleIndex,
+      proposalId: proposalId,
+      shareIndex: shareIndex,
+      sentToUrls: sentToUrls,
+      nullifier: Uint8List.fromList(List.filled(32, shareIndex + 1)),
+      phase: VotingWorkflowPhase.submittedShare,
+      confirmed: false,
+      submitAt: submitAt,
+      createdAt: BigInt.zero,
+    );
+    final nextShares = [
+      for (final share in current.shareDelegations)
+        if (!matches(share)) share,
+      recorded,
+    ];
+    final nextUnconfirmed = [
+      for (final share in current.unconfirmedShareDelegations)
+        if (!matches(share)) share,
+      recorded,
+    ];
+    recoveryApi.state = _recoveryState(
+      bundleCount: current.bundleCount,
+      delegationWorkflows: current.delegation,
+      votes: current.votes,
+      commitmentBundles: current.commitmentBundles,
+      shareWorkflows: current.shares,
+      shareDelegations: nextShares,
+      unconfirmedShareDelegations: nextUnconfirmed,
+    );
+    recoveryApi.roundPlan = null;
   }
 
   @override
@@ -2841,18 +2857,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
       ],
       unconfirmedShareDelegations: nextUnconfirmed,
     );
-    final roundPlan = recoveryApi.roundPlan;
-    if (roundPlan != null &&
-        nextUnconfirmed.isEmpty &&
-        roundPlan.openProposals.isEmpty) {
-      recoveryApi.roundPlan = rust_wire.RoundPlanView(
-        roundId: roundId,
-        pendingRecovery: false,
-        nextSteps: const [],
-        openProposals: Uint32List(0),
-        allDecided: true,
-      );
-    }
+    recoveryApi.roundPlan = null;
   }
 }
 
