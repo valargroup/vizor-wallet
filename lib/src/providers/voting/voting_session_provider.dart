@@ -40,6 +40,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   bool _disposeHandlerRegistered = false;
   bool _activeAccountListenerRegistered = false;
   int _sessionGeneration = 0;
+  Completer<void> _sessionInvalidated = Completer<void>();
   int? _runningActionGeneration;
   bool _isDisposed = false;
 
@@ -84,7 +85,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       // keep account-wide vote-tree sync state reusable across rounds.
       final context = _currentContext;
       _isDisposed = true;
-      _sessionGeneration++;
+      _advanceSessionGeneration();
       _delegationPirPrecomputes.clear();
       _shareTrackingTimer?.cancel();
       if (context == null) return;
@@ -142,7 +143,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       );
     }
     if (hadSessionAccount) {
-      _sessionGeneration++;
+      _advanceSessionGeneration();
     }
     _sessionAccountUuid = accountUuid;
     _sessionIsHardwareAccount = null;
@@ -200,7 +201,11 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }) async {
     final context = await _loadContext(_roundId);
     if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
-    await _waitUntilWalletReadyForVoting(context);
+    try {
+      await _waitUntilWalletReadyForVoting(context);
+    } on _StaleVotingSessionAction {
+      return;
+    }
     if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
     final pirEndpoint = await _resolvePirEndpoint(context);
     if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
@@ -2487,7 +2492,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     _VotingSessionContext context,
   ) async {
     var loggedWait = false;
+    final sessionInvalidated = _sessionInvalidated.future;
     while (true) {
+      _throwIfContextStale(context, 'wallet-sync-wait');
       final readiness = await ref
           .read(votingWalletSyncReadinessCheckerProvider)
           .check(
@@ -2495,12 +2502,14 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             network: context.network,
             snapshotHeight: context.round.snapshotHeight,
           );
+      _throwIfContextStale(context, 'wallet-sync-readiness');
       if (readiness.isReady) {
         _setWalletSyncReadinessState(
           context: context,
           readiness: readiness,
           waiting: false,
         );
+        _throwIfContextStale(context, 'wallet-sync-ready');
         return;
       }
 
@@ -2518,14 +2527,16 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         readiness: readiness,
         waiting: true,
       );
+      _throwIfContextStale(context, 'wallet-sync-start');
       try {
         ref.read(votingWalletSyncStarterProvider).call();
       } catch (e) {
         debugPrint('[zcash] Voting: wallet sync start skipped: $e');
       }
-      await Future<void>.delayed(
-        ref.read(votingWalletSyncPollIntervalProvider),
-      );
+      await Future.any<void>([
+        Future<void>.delayed(ref.read(votingWalletSyncPollIntervalProvider)),
+        sessionInvalidated,
+      ]);
     }
   }
 
@@ -2627,11 +2638,25 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return !_isDisposed && generation == _sessionGeneration;
   }
 
+  void _advanceSessionGeneration() {
+    _sessionGeneration++;
+    if (!_sessionInvalidated.isCompleted) {
+      _sessionInvalidated.complete();
+    }
+    _sessionInvalidated = Completer<void>();
+  }
+
   void _throwIfActionStale() {
     final actionGeneration = _runningActionGeneration;
     if (actionGeneration != null && actionGeneration != _sessionGeneration) {
       throw const _StaleVotingSessionAction();
     }
+  }
+
+  void _throwIfContextStale(_VotingSessionContext context, String reason) {
+    if (_isCurrentContext(context)) return;
+    _logStaleSessionUpdate(reason, context.sessionGeneration, context);
+    throw const _StaleVotingSessionAction();
   }
 
   void _logStaleSessionUpdate(
@@ -2795,10 +2820,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       );
       if (step.kind == 'submit_vote') {
         work.add(
-          _RecoveredVoteWork(
-            kind: _RecoveredVoteWorkKind.submitVote,
-            key: key,
-          ),
+          _RecoveredVoteWork(kind: _RecoveredVoteWorkKind.submitVote, key: key),
         );
       } else if (step.kind == 'submit_shares') {
         final existingIndex = work.indexWhere(
@@ -2887,10 +2909,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   static bool _hasHotkeyBoundRecoveryState(VotingResumePlan plan) {
-    final delegationWorkflowRequiresHotkey = plan
-        .recoveryState
-        .delegation
-        .any((record) => record.phase != VotingWorkflowPhase.prepared);
+    final delegationWorkflowRequiresHotkey = plan.recoveryState.delegation.any(
+      (record) => record.phase != VotingWorkflowPhase.prepared,
+    );
     return delegationWorkflowRequiresHotkey ||
         plan.votesByKey.isNotEmpty ||
         plan.votePhasesByKey.isNotEmpty ||

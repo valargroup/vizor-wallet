@@ -483,6 +483,75 @@ void main() {
     expect(state.phase, VotingSessionPhase.readyToDelegate);
   });
 
+  test('wallet sync wait aborts stale account before queued action', () async {
+    final rust = FakeVotingRustApi();
+    final readiness = FakeVotingWalletSyncReadinessChecker(
+      responses: const [
+        VotingWalletSyncReadiness(
+          scannedHeight: 122,
+          snapshotHeight: 123,
+          chainTipHeight: 130,
+        ),
+        VotingWalletSyncReadiness(
+          scannedHeight: 123,
+          snapshotHeight: 123,
+          chainTipHeight: 130,
+        ),
+      ],
+    );
+    var syncStartCalls = 0;
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final container = _sessionContainer(
+      rust: rust,
+      activeAccountUuidListenable: activeAccountProvider,
+      walletSyncReadinessChecker: readiness,
+      walletSyncStarter: () {
+        syncStartCalls++;
+      },
+      walletSyncPollInterval: const Duration(milliseconds: 100),
+    );
+    final subscription = container.listen(
+      votingSessionProvider(kRoundId),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    final notifier = container.read(votingSessionProvider(kRoundId).notifier);
+    final stalePrepare = notifier.prepareDelegation();
+    while (readiness.calls < 1) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    await Future<void>.delayed(Duration.zero);
+    final reloaded = await container.read(
+      votingSessionProvider(kRoundId).future,
+    );
+    expect(reloaded.accountUuid, 'account-2');
+
+    final currentPrepare = container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .prepareDelegation();
+    await Future.wait([
+      stalePrepare,
+      currentPrepare,
+    ]).timeout(const Duration(milliseconds: 50));
+    await Future<void>.delayed(const Duration(milliseconds: 110));
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(readiness.calls, 2);
+    expect(syncStartCalls, 1);
+    expect(rust.setupCalls, 1);
+    expect(rust.accountUuids, ['account-2']);
+    expect(state.accountUuid, 'account-2');
+    expect(state.phase, VotingSessionPhase.readyToDelegate);
+  });
+
   test(
     'PIR endpoint without identity is accepted when root height matches',
     () async {
