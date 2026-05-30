@@ -808,11 +808,13 @@ Future<ApiRoundPlan> getRoundPlan({
 
 /// Persist (insert or replace) the voter's ballot intent for one proposal.
 /// Pass `skipped: true` for `Decision::Skipped`; otherwise `choice` must be set.
+/// `num_options` is the proposal's declared option count.
 Future<void> setBallotIntent({
   required String dbPath,
   required String walletId,
   required String roundId,
   required int proposalId,
+  required int numOptions,
   required bool skipped,
   int? choice,
 }) => RustLib.instance.api.crateApiVotingSetBallotIntent(
@@ -820,6 +822,7 @@ Future<void> setBallotIntent({
   walletId: walletId,
   roundId: roundId,
   proposalId: proposalId,
+  numOptions: numOptions,
   skipped: skipped,
   choice: choice,
 );
