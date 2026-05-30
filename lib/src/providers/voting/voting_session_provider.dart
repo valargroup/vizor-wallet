@@ -21,6 +21,7 @@ import '../../services/voting/voting_models.dart';
 import 'voting_config_provider.dart';
 import 'voting_service_providers.dart';
 import 'voting_state.dart';
+import 'voting_submission_guard_provider.dart';
 
 /// Orchestrates one round's voting lifecycle for the UI.
 ///
@@ -135,13 +136,19 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     final hadSessionAccount = _sessionAccountUuid != null;
     final previousContext = _currentContext;
     if (previousContext != null) {
-      unawaited(
-        _resetVotingSessionState(
-          rust: ref.read(votingRustApiProvider),
-          context: previousContext,
-          reason: 'active-account-switch',
-        ),
-      );
+      final activeSubmission = ref.read(votingSubmissionGuardProvider);
+      final submissionOwnsContext =
+          activeSubmission?.accountUuid == previousContext.accountUuid &&
+          activeSubmission?.roundId == previousContext.round.roundId;
+      if (!submissionOwnsContext) {
+        unawaited(
+          _resetVotingSessionState(
+            rust: ref.read(votingRustApiProvider),
+            context: previousContext,
+            reason: 'active-account-switch',
+          ),
+        );
+      }
     }
     if (hadSessionAccount) {
       _advanceSessionGeneration();
@@ -2977,12 +2984,33 @@ class _StaleVotingSessionAction implements Exception {
   const _StaleVotingSessionAction();
 }
 
+class VotingSubmissionSessionNotifier extends VotingSessionNotifier {
+  VotingSubmissionSessionNotifier(this._key) : super(_key.roundId);
+
+  final VotingSessionKey _key;
+
+  @override
+  void _registerActiveAccountListener() {}
+
+  @override
+  Future<void> _refreshSessionAccountFromActiveAccount() async {
+    _sessionAccountUuid = _key.accountUuid;
+  }
+}
+
 final votingSessionProvider =
     AsyncNotifierProvider.family<
       VotingSessionNotifier,
       VotingSessionState,
       String
     >(VotingSessionNotifier.new);
+
+final votingSubmissionSessionProvider =
+    AsyncNotifierProvider.family<
+      VotingSubmissionSessionNotifier,
+      VotingSessionState,
+      VotingSessionKey
+    >(VotingSubmissionSessionNotifier.new);
 
 @visibleForTesting
 final votingTxConfirmationPollingProvider =

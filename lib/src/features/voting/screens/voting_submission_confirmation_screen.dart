@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../providers/voting/voting_session_provider.dart';
+import '../../../providers/voting/voting_submission_job_provider.dart';
 import '../voting_formatters.dart';
 import '../voting_resume_plan.dart';
 
@@ -19,7 +20,14 @@ class VotingSubmissionConfirmationScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(votingSessionProvider(roundId));
+    final job = ref.watch(votingSubmissionJobProvider);
+    final jobKey = job.key;
+    final session =
+        jobKey != null &&
+            jobKey.accountUuid.isNotEmpty &&
+            jobKey.roundId == roundId
+        ? ref.watch(votingSubmissionSessionProvider(jobKey))
+        : ref.watch(votingSessionProvider(roundId));
     return AppDesktopShell(
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(

@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_submission_guard_provider.dart';
+import 'package:zcash_wallet/src/providers/voting/voting_submission_job_provider.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
@@ -1171,6 +1173,68 @@ void main() {
       containsAllInOrder(['account-1', 'account-2']),
     );
     expect(rust.resetVotingSessionStateCalls, contains('account-1:$kRoundId'));
+  });
+
+  test('submission job stays pinned after active account changes', () async {
+    final readiness = _GatedVotingWalletSyncReadinessChecker();
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final container = _sessionContainer(
+      activeAccountUuidListenable: activeAccountProvider,
+      walletSyncReadinessChecker: readiness,
+      walletSyncPollInterval: const Duration(milliseconds: 1),
+    );
+    final subscription = container.listen(
+      votingSubmissionJobProvider,
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    unawaited(
+      container.read(votingSubmissionJobProvider.notifier).start(kRoundId),
+    );
+    await readiness.firstCheck.future;
+    await _waitForJobSessionPhase(
+      container,
+      VotingSessionPhase.waitingForWalletSync,
+    );
+
+    final key = container.read(votingSubmissionJobProvider).key!;
+    expect(key.accountUuid, 'account-1');
+    expect(
+      container.read(votingSubmissionJobProvider).status,
+      VotingSubmissionJobStatus.running,
+    );
+    expect(
+      container.read(votingSubmissionGuardProvider)?.accountUuid,
+      'account-1',
+    );
+    expect(
+      container.read(votingSubmissionJobSessionProvider)?.value?.phase,
+      VotingSessionPhase.waitingForWalletSync,
+    );
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(container.read(votingSubmissionJobProvider).key, key);
+    expect(
+      container.read(votingSubmissionJobSessionProvider)?.value?.accountUuid,
+      'account-1',
+    );
+
+    readiness.allowReady();
+    final failed = await _waitForJobStatus(
+      container,
+      VotingSubmissionJobStatus.error,
+    );
+
+    expect(failed.key, key);
+    expect(failed.errorMessage, 'Choose at least one vote before submitting.');
+    expect(container.read(votingSubmissionGuardProvider), isNull);
   });
 
   test('Keystone signing starts after active account reload', () async {
@@ -3088,6 +3152,37 @@ ProviderContainer _sessionContainer({
   );
 }
 
+Future<VotingSubmissionJobState> _waitForJobStatus(
+  ProviderContainer container,
+  VotingSubmissionJobStatus status,
+) async {
+  for (var i = 0; i < 100; i++) {
+    final state = container.read(votingSubmissionJobProvider);
+    if (state.status == status) return state;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail(
+    'Timed out waiting for voting submission job status $status. '
+    'Last state: ${container.read(votingSubmissionJobProvider).status}',
+  );
+}
+
+Future<VotingSessionState> _waitForJobSessionPhase(
+  ProviderContainer container,
+  VotingSessionPhase phase,
+) async {
+  for (var i = 0; i < 100; i++) {
+    final state = container.read(votingSubmissionJobSessionProvider)?.value;
+    if (state?.phase == phase) return state!;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail(
+    'Timed out waiting for voting submission job session phase $phase. '
+    'Last phase: '
+    '${container.read(votingSubmissionJobSessionProvider)?.value?.phase}',
+  );
+}
+
 Map<String, dynamic> _postBody(FakeVotingHttpClient http, String path) {
   final request = http.requests.singleWhere(
     (request) => request.method == 'POST' && request.uri.path == path,
@@ -3644,6 +3739,30 @@ class FakeVotingWalletSyncReadinessChecker
     }
     return VotingWalletSyncReadiness(
       scannedHeight: snapshotHeight,
+      snapshotHeight: snapshotHeight,
+      chainTipHeight: snapshotHeight,
+    );
+  }
+}
+
+class _GatedVotingWalletSyncReadinessChecker
+    implements VotingWalletSyncReadinessChecker {
+  final firstCheck = Completer<void>();
+  var _ready = false;
+
+  void allowReady() {
+    _ready = true;
+  }
+
+  @override
+  Future<VotingWalletSyncReadiness> check({
+    required String dbPath,
+    required String network,
+    required int snapshotHeight,
+  }) async {
+    if (!firstCheck.isCompleted) firstCheck.complete();
+    return VotingWalletSyncReadiness(
+      scannedHeight: _ready ? snapshotHeight : snapshotHeight - 1,
       snapshotHeight: snapshotHeight,
       chainTipHeight: snapshotHeight,
     );
