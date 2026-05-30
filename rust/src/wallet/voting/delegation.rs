@@ -12,7 +12,7 @@ use crate::wallet::{
 };
 
 use super::{
-    hotkey::{derive_voting_hotkey, voting_hotkey_from_secret},
+    hotkey::{derive_hotkey, voting_hotkey_from_secret},
     progress::VotingWorkCancellation,
     state::{ensure_voting_round, open_voting_db},
     voting_network,
@@ -254,7 +254,8 @@ pub async fn precompute_delegation_pir(
 ) -> Result<zcash_voting::delegate::PreparedDelegationReport, String> {
     cancellation.check()?;
     let round_id = round_params.vote_round_id.clone();
-    let voting_hotkey = derive_voting_hotkey(seed, &round_id, account_uuid, network)?;
+    let hotkey_secret = derive_hotkey(seed, &round_id, account_uuid, network)?;
+    let voting_hotkey = voting_hotkey_from_secret(&hotkey_secret, network)?;
     let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(ResolveDelegationLwdParams {
         lightwalletd_url,
         network: voting_network(network),
@@ -344,7 +345,8 @@ where
     zcash_voting::validate_round_params(&round_params)
         .map_err(|e| format!("Invalid voting round params: {e}"))?;
     on_progress(DelegationProgress::SelectingNotes);
-    let voting_hotkey = derive_voting_hotkey(seed, &round_id, account_uuid, network)?;
+    let hotkey_secret = derive_hotkey(seed, &round_id, account_uuid, network)?;
+    let voting_hotkey = voting_hotkey_from_secret(&hotkey_secret, network)?;
     let context = prepare_delegation_bundle_context(
         db_path,
         lightwalletd_url,
