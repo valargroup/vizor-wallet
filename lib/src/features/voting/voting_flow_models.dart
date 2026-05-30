@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/storage/app_secure_store.dart';
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
-import '../../services/voting/voting_models.dart';
 import '../../providers/voting/voting_state.dart';
 
 const int _minProposalId = 1;
@@ -204,15 +203,6 @@ List<VotingProposalView> proposalsFromJson(Map<String, dynamic> json) {
     for (var i = 0; i < values.length; i++)
       _proposalFromJson(_objectFromValue(values[i]), fallbackId: i),
   ];
-}
-
-VotingRoundSummary roundSummaryFromDetails(VotingRoundDetails details) {
-  return VotingRoundSummary(
-    roundId: details.roundId,
-    title: details.title,
-    status: details.status,
-    rawJson: details.rawJson,
-  );
 }
 
 VotingProposalView _proposalFromJson(

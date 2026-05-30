@@ -446,66 +446,6 @@ fn require_len(bytes: &[u8], expected: usize, field: &str) -> Result<(), String>
     }
 }
 
-/// Initialize or load a voting round in the local voting database.
-///
-/// `session_json` is stored with the round when provided and can contain
-/// coordinator metadata such as the human-readable round name.
-pub fn prepare_voting_round(
-    db_path: String,
-    wallet_id: String,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    session_json: Option<String>,
-) -> Result<(), String> {
-    catch(|| {
-        let db = state::open_voting_db(&db_path, &wallet_id)?;
-        zcash_voting::validate_round_params(&round_params).map_err(|e| e.to_string())?;
-        db.init_round(&round_params, session_json.as_deref())
-            .map_err(|e| e.to_string())
-    })
-}
-
-/// Return the number of stored bundles for a voting round.
-pub fn get_bundle_count(
-    db_path: String,
-    wallet_id: String,
-    round_id: String,
-) -> Result<u32, String> {
-    catch(|| {
-        let db = state::open_voting_db(&db_path, &wallet_id)?;
-        db.get_bundle_count(&round_id)
-            .map_err(|e| format!("get_bundle_count failed: {e}"))
-    })
-}
-
-/// Select voting-eligible notes at `snapshot_height` using lightwalletd data.
-///
-/// The returned notes are raw snapshot-unspent notes and include the cached
-/// tree anchor used by later delegation setup. `eligible_weight_zatoshi` is
-/// computed from `zcash_voting` smart bundles.
-pub async fn select_voting_notes(
-    db_path: String,
-    lightwalletd_url: String,
-    network: String,
-    account_uuid: String,
-    snapshot_height: u64,
-    max_real_notes_per_bundle: Option<u32>,
-) -> Result<zcash_voting::wire::VotingNoteSelectionResultView, String> {
-    let network = keys::parse_network(&network)?;
-    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let voting_db = state::open_voting_db(&db_path, &account_uuid)?;
-    let selected = zcash_voting::selection::select_notes_with_lwd(
-        &voting_db,
-        &db_path,
-        &lightwalletd_url,
-        crate::wallet::voting::voting_network(network),
-        snapshot_height,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    zcash_voting::wire::VotingNoteSelectionResultView::from_selected(selected, bundle_policy)
-        .map_err(|e| e.to_string())
-}
-
 /// Select notes and persist bundle rows for the delegation pipeline.
 ///
 /// Reuses existing bundle rows for the same round/wallet, so callers can safely
@@ -575,50 +515,6 @@ pub async fn precompute_delegation_pir(
     )
     .await
     .map(zcash_voting::wire::DelegationPirPrecomputeResultView::from)
-}
-
-#[allow(clippy::too_many_arguments)]
-/// Build, prove, and sign one delegation payload.
-///
-/// This non-streaming variant drops intermediate proof progress and returns the
-/// final signed payload directly. Submission and tx-hash storage happen in Dart.
-pub async fn build_prove_and_sign_delegation_payload(
-    db_path: String,
-    lightwalletd_url: String,
-    pir_server_url: String,
-    network: String,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    round_name: String,
-    session_json: Option<String>,
-    account_uuid: String,
-    seed_bytes: Vec<u8>,
-    bundle_index: u32,
-    max_real_notes_per_bundle: Option<u32>,
-) -> Result<zcash_voting::wire::SignedDelegationPayloadView, String> {
-    let network = keys::parse_network(&network)?;
-    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let round_id = round_params.vote_round_id.clone();
-    let seed = secrecy::SecretVec::new(seed_bytes);
-    let cancellation = VotingWorkCancellation::start(&db_path, &account_uuid, Some(&round_id))?;
-    delegation::build_prove_and_sign_delegation_payload(
-        &db_path,
-        &lightwalletd_url,
-        &pir_server_url,
-        network,
-        round_params,
-        &round_name,
-        session_json.as_deref(),
-        &account_uuid,
-        &seed,
-        bundle_index,
-        bundle_policy,
-        |_| {},
-        cancellation,
-    )
-    .await
-    .and_then(|bundle| {
-        zcash_voting::wire::SignedDelegationPayloadView::try_from(bundle).map_err(|e| e.to_string())
-    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -861,20 +757,6 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
     Ok(())
 }
 
-/// Store the broadcast transaction hash for one delegation bundle.
-///
-/// Hashes are keyed by `(round_id, wallet_id, bundle_index)` to support partial
-/// bundle recovery.
-pub fn store_delegation_tx_hash(
-    db_path: String,
-    wallet_id: String,
-    round_id: String,
-    bundle_index: u32,
-    tx_hash: String,
-) -> Result<(), String> {
-    mark_delegation_submitted(db_path, wallet_id, round_id, bundle_index, tx_hash)
-}
-
 pub fn mark_delegation_submitted(
     db_path: String,
     wallet_id: String,
@@ -946,20 +828,6 @@ pub fn store_van_position(
     })
 }
 
-/// Load the broadcast transaction hash for one delegation bundle, if present.
-pub fn get_delegation_tx_hash(
-    db_path: String,
-    wallet_id: String,
-    round_id: String,
-    bundle_index: u32,
-) -> Result<Option<String>, String> {
-    catch(|| {
-        let db = state::open_voting_db(&db_path, &wallet_id)?;
-        db.get_delegation_tx_hash(&round_id, bundle_index)
-            .map_err(|e| format!("get_delegation_tx_hash failed: {e}"))
-    })
-}
-
 /// Delete bundle rows at or above `keep_count` for partial-bundle recovery.
 ///
 /// Returns the number of deleted rows.
@@ -1018,18 +886,6 @@ pub fn generate_van_witness(
     })
 }
 
-/// Reset cached vote-tree client state for one round or all rounds.
-///
-/// `None` and `Some("")` both clear every round for the `(db_path, wallet_id)`
-/// session; a non-empty round ID clears only that round.
-pub fn reset_tree_client(
-    db_path: String,
-    wallet_id: String,
-    round_id: Option<String>,
-) -> Result<(), String> {
-    catch(|| tree_sync::reset_tree_client(&db_path, &wallet_id, round_id.as_deref()))
-}
-
 /// Clear process-local voting state for a wallet or round.
 ///
 /// Passing a non-empty round ID cancels in-flight work for that round. Passing
@@ -1056,43 +912,6 @@ pub fn reset_voting_session_state(
             tree_count
         );
         Ok(())
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-/// Build signed ZKP2 vote commitments for one bundle.
-///
-/// Callers must pass a VAN witness generated for the same round and anchor
-/// height. Returned encrypted shares are wire-safe and exclude plaintext values
-/// and randomness.
-pub fn build_vote_commitments(
-    db_path: String,
-    wallet_id: String,
-    network: String,
-    round_id: String,
-    bundle_index: u32,
-    hotkey_seed: Vec<u8>,
-    van_witness: zcash_voting::wire::VanWitness,
-    draft_votes: Vec<zcash_voting::wire::DraftVote>,
-) -> Result<zcash_voting::wire::SignedVoteCommitmentsView, String> {
-    let network = keys::parse_network(&network)?;
-    let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
-    let cancellation = VotingWorkCancellation::start(&db_path, &wallet_id, Some(&round_id))?;
-    vote::build_vote_commitments(
-        &db_path,
-        &wallet_id,
-        network,
-        &round_id,
-        bundle_index,
-        &hotkey_seed,
-        van_witness,
-        draft_votes,
-        |_| {},
-        cancellation,
-    )
-    .and_then(|commitments| {
-        zcash_voting::wire::SignedVoteCommitmentsView::try_from(commitments)
-            .map_err(|e| e.to_string())
     })
 }
 
@@ -1205,15 +1024,6 @@ pub async fn build_vote_commitments_with_progress(
         log::warn!("voting vote: StreamSink closed before final result");
     }
     Ok(())
-}
-
-/// Load stored votes for a round across all bundles for this wallet.
-pub fn get_votes(
-    db_path: String,
-    wallet_id: String,
-    round_id: String,
-) -> Result<Vec<zcash_voting::wire::VoteRecord>, String> {
-    catch(|| vote::get_votes(&db_path, &wallet_id, &round_id))
 }
 
 /// Load the full recovery/share-tracking summary for one voting round.
@@ -1979,44 +1789,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_voting_round_initializes_round_happy_path() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-
-        prepare_voting_round(
-            db_path.to_str().unwrap().to_string(),
-            "wallet-1".to_string(),
-            test_api_round_params(),
-            Some(r#"{"round_name":"Demo"}"#.to_string()),
-        )
-        .unwrap();
-
-        let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-1").unwrap();
-        let state = db.get_round_state(ROUND_ID).unwrap();
-        assert_eq!(state.round_id, ROUND_ID);
-        assert_eq!(state.snapshot_height, 100);
-    }
-
-    #[test]
-    fn prepare_voting_round_rejects_invalid_round_params() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-        let mut params = test_api_round_params();
-        params.nc_root.pop();
-
-        let err = prepare_voting_round(
-            db_path.to_str().unwrap().to_string(),
-            "wallet-1".to_string(),
-            params,
-            None,
-        )
-        .unwrap_err();
-
-        assert!(err.contains("nc_root"));
-    }
-
-    #[test]
-    fn bundle_count_tx_hash_and_delete_api_are_bundle_indexed() {
+    fn delete_skipped_bundles_api_is_bundle_indexed() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-api-bundles").unwrap();
@@ -2024,36 +1797,6 @@ mod tests {
             .unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
-
-        assert_eq!(
-            get_bundle_count(
-                db_path.to_str().unwrap().to_string(),
-                "wallet-api-bundles".to_string(),
-                ROUND_ID.to_string(),
-            )
-            .unwrap(),
-            2
-        );
-
-        store_delegation_tx_hash(
-            db_path.to_str().unwrap().to_string(),
-            "wallet-api-bundles".to_string(),
-            ROUND_ID.to_string(),
-            1,
-            "txid-bundle-1".to_string(),
-        )
-        .unwrap();
-        assert_eq!(
-            get_delegation_tx_hash(
-                db_path.to_str().unwrap().to_string(),
-                "wallet-api-bundles".to_string(),
-                ROUND_ID.to_string(),
-                1,
-            )
-            .unwrap()
-            .as_deref(),
-            Some("txid-bundle-1")
-        );
 
         assert_eq!(
             delete_skipped_bundles(
@@ -2066,12 +1809,7 @@ mod tests {
             1
         );
         assert_eq!(
-            get_bundle_count(
-                db_path.to_str().unwrap().to_string(),
-                "wallet-api-bundles".to_string(),
-                ROUND_ID.to_string(),
-            )
-            .unwrap(),
+            db.get_bundle_count(ROUND_ID).unwrap(),
             1
         );
     }
@@ -2124,25 +1862,6 @@ mod tests {
         assert_eq!(witness.anchor_height, 1);
         assert_eq!(witness.auth_path.len(), 24);
         assert!(witness.auth_path.iter().all(|hash| hash.len() == 32));
-    }
-
-    #[test]
-    fn reset_tree_client_api_happy_path_accepts_round_and_all_rounds() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-
-        reset_tree_client(
-            db_path.to_str().unwrap().to_string(),
-            "wallet-api-reset".to_string(),
-            Some(ROUND_ID.to_string()),
-        )
-        .unwrap();
-        reset_tree_client(
-            db_path.to_str().unwrap().to_string(),
-            "wallet-api-reset".to_string(),
-            None,
-        )
-        .unwrap();
     }
 
     #[test]
@@ -2219,117 +1938,6 @@ mod tests {
         )
         .unwrap_err();
         assert!(!err.is_empty());
-    }
-
-    #[test]
-    fn build_vote_commitments_rejects_invalid_network_before_db_work() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-        let err = build_vote_commitments(
-            db_path.to_str().unwrap().to_string(),
-            "wallet-1".to_string(),
-            "bogus".to_string(),
-            ROUND_ID.to_string(),
-            0,
-            vec![7; 32],
-            zcash_voting::wire::VanWitness {
-                auth_path: vec![vec![1; 32]; 24],
-                position: 0,
-                anchor_height: 1,
-            },
-            vec![zcash_voting::wire::DraftVote {
-                proposal_id: 1,
-                choice: 0,
-                num_options: 2,
-                vc_tree_position: 0,
-                single_share: false,
-            }],
-        )
-        .unwrap_err();
-
-        assert!(err.contains("Unknown network"));
-    }
-
-    #[test]
-    fn build_vote_commitments_rejects_invalid_witness_before_vote_work() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-1").unwrap();
-        db.init_round(&test_api_round_params().into(), None)
-            .unwrap();
-        let notes: Vec<_> = (0..6).map(test_note_info).collect();
-        db.ensure_bundles(ROUND_ID, &notes).unwrap();
-        let err = build_vote_commitments(
-            db_path.to_str().unwrap().to_string(),
-            "wallet-1".to_string(),
-            "regtest".to_string(),
-            ROUND_ID.to_string(),
-            0,
-            vec![7; 32],
-            zcash_voting::wire::VanWitness {
-                auth_path: vec![vec![1; 32]; 23],
-                position: 0,
-                anchor_height: 1,
-            },
-            vec![zcash_voting::wire::DraftVote {
-                proposal_id: 1,
-                choice: 0,
-                num_options: 2,
-                vc_tree_position: 0,
-                single_share: false,
-            }],
-        )
-        .unwrap_err();
-
-        assert!(err.contains("24 siblings"));
-    }
-
-    #[test]
-    fn get_votes_api_preserves_bundle_and_proposal_keys() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-api-votes").unwrap();
-        db.init_round(&test_api_round_params().into(), None)
-            .unwrap();
-        let notes: Vec<_> = (0..6).map(test_note_info).collect();
-        db.ensure_bundles(ROUND_ID, &notes).unwrap();
-        let conn = db.conn();
-        zcash_voting::storage::queries::store_vote(
-            &conn,
-            ROUND_ID,
-            "wallet-api-votes",
-            0,
-            1,
-            0,
-            b"vote-0",
-        )
-        .unwrap();
-        zcash_voting::storage::queries::store_vote(
-            &conn,
-            ROUND_ID,
-            "wallet-api-votes",
-            1,
-            2,
-            1,
-            b"vote-1",
-        )
-        .unwrap();
-        drop(conn);
-
-        let votes = get_votes(
-            db_path.to_str().unwrap().to_string(),
-            "wallet-api-votes".to_string(),
-            ROUND_ID.to_string(),
-        )
-        .unwrap();
-
-        assert_eq!(votes.len(), 2);
-        assert!(votes
-            .iter()
-            .any(|vote| vote.bundle_index == 0 && vote.proposal_id == 1 && vote.choice == 0));
-        assert!(votes
-            .iter()
-            .any(|vote| vote.bundle_index == 1 && vote.proposal_id == 2 && vote.choice == 1));
     }
 
     #[test]
@@ -2437,25 +2045,6 @@ mod tests {
     }
 
     #[test]
-    fn select_voting_notes_rejects_invalid_network_before_network_io() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-        let err = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(select_voting_notes(
-                db_path.to_str().unwrap().to_string(),
-                "http://127.0.0.1:1".to_string(),
-                "bogus".to_string(),
-                "wallet-1".to_string(),
-                100,
-                None,
-            ))
-            .unwrap_err();
-
-        assert!(err.contains("Unknown network"));
-    }
-
-    #[test]
     fn setup_delegation_bundles_rejects_invalid_network_before_network_io() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
@@ -2469,30 +2058,6 @@ mod tests {
                 "Demo".to_string(),
                 None,
                 "wallet-1".to_string(),
-                None,
-            ))
-            .unwrap_err();
-
-        assert!(err.contains("Unknown network"));
-    }
-
-    #[test]
-    fn build_prove_and_sign_delegation_payload_rejects_invalid_network_before_network_io() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("voting.sqlite");
-        let err = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(build_prove_and_sign_delegation_payload(
-                db_path.to_str().unwrap().to_string(),
-                "http://127.0.0.1:1".to_string(),
-                "http://127.0.0.1:2".to_string(),
-                "bogus".to_string(),
-                test_api_round_params(),
-                "Demo".to_string(),
-                None,
-                "wallet-1".to_string(),
-                vec![7; 32],
-                0,
                 None,
             ))
             .unwrap_err();

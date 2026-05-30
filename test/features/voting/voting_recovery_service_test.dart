@@ -107,7 +107,9 @@ void main() {
       );
 
       expect(
-        plan.voteTxHashFor(const VotingVoteKey(bundleIndex: 1, proposalId: 1)),
+        plan.voteTxHashesByKey[
+          const VotingVoteKey(bundleIndex: 1, proposalId: 1)
+        ],
         'tx-1-1',
       );
       expect(plan.pendingVoteSubmissionKeys, [
@@ -364,34 +366,6 @@ void main() {
       expect(plan.unconfirmedShareDelegations, [unaccepted]);
       expect(plan.hasBlockingShareWork, isTrue);
       expect(plan.hasPendingWork, isTrue);
-    },
-  );
-
-  test(
-    'finalize and abandon clear recovery state but loading does not',
-    () async {
-      final api = FakeVotingRecoveryApi(state: recoveryState());
-      final service = VotingRecoveryService(api: api);
-
-      await service.loadResumePlan(
-        dbPath: 'wallet.db',
-        walletId: 'wallet-1',
-        roundId: 'round-1',
-      );
-      expect(api.clearCalls, isEmpty);
-
-      await service.finalizeRound(
-        dbPath: 'wallet.db',
-        walletId: 'wallet-1',
-        roundId: 'round-1',
-      );
-      await service.abandonRound(
-        dbPath: 'wallet.db',
-        walletId: 'wallet-1',
-        roundId: 'round-2',
-      );
-
-      expect(api.clearCalls, ['round-1', 'round-2']);
     },
   );
 

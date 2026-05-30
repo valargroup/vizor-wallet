@@ -168,6 +168,4 @@ class VotingResumePlan {
   rust_wire.RecoverableCommitmentBundle? commitmentBundleFor(
     VotingVoteKey key,
   ) => commitmentBundlesByKey[key];
-
-  String? voteTxHashFor(VotingVoteKey key) => voteTxHashesByKey[key];
 }
