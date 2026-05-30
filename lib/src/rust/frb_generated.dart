@@ -453,7 +453,7 @@ abstract class RustLibApi extends BaseApi {
     required String network,
   });
 
-  Future<ApiRoundPlan> crateApiVotingGetRoundPlan({
+  Future<RoundPlanView> crateApiVotingGetRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -3247,7 +3247,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<ApiRoundPlan> crateApiVotingGetRoundPlan({
+  Future<RoundPlanView> crateApiVotingGetRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -3269,7 +3269,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_api_round_plan,
+          decodeSuccessData: sse_decode_round_plan_view,
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingGetRoundPlanConstMeta,
@@ -6080,36 +6080,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiNextStep dco_decode_api_next_step(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
-    return ApiNextStep(
-      kind: dco_decode_String(arr[0]),
-      bundleIndex: dco_decode_u_32(arr[1]),
-      proposalId: dco_decode_u_32(arr[2]),
-      choice: dco_decode_u_32(arr[3]),
-      shareIndex: dco_decode_u_32(arr[4]),
-    );
-  }
-
-  @protected
-  ApiRoundPlan dco_decode_api_round_plan(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
-    return ApiRoundPlan(
-      roundId: dco_decode_String(arr[0]),
-      pendingRecovery: dco_decode_bool(arr[1]),
-      nextSteps: dco_decode_list_api_next_step(arr[2]),
-      openProposals: dco_decode_list_prim_u_32_strict(arr[3]),
-      allDecided: dco_decode_bool(arr[4]),
-    );
-  }
-
-  @protected
   ApiSignedDelegationPayload dco_decode_api_signed_delegation_payload(
     dynamic raw,
   ) {
@@ -6521,12 +6491,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<ApiNextStep> dco_decode_list_api_next_step(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_api_next_step).toList();
-  }
-
-  @protected
   List<ApiSignedVoteCommitment> dco_decode_list_api_signed_vote_commitment(
     dynamic raw,
   ) {
@@ -6601,6 +6565,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_list_prim_u_8_strict).toList();
+  }
+
+  @protected
+  List<NextStepView> dco_decode_list_next_step_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_next_step_view).toList();
   }
 
   @protected
@@ -6714,6 +6684,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NextStepView dco_decode_next_step_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return NextStepView(
+      kind: dco_decode_String(arr[0]),
+      bundleIndex: dco_decode_u_32(arr[1]),
+      proposalId: dco_decode_u_32(arr[2]),
+      choice: dco_decode_u_32(arr[3]),
+      shareIndex: dco_decode_u_32(arr[4]),
+    );
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
@@ -6771,6 +6756,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       proposalId: dco_decode_u_64(arr[0]),
       needsSaplingParams: dco_decode_bool(arr[1]),
       feeZatoshi: dco_decode_u_64(arr[2]),
+    );
+  }
+
+  @protected
+  RoundPlanView dco_decode_round_plan_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return RoundPlanView(
+      roundId: dco_decode_String(arr[0]),
+      pendingRecovery: dco_decode_bool(arr[1]),
+      nextSteps: dco_decode_list_next_step_view(arr[2]),
+      openProposals: dco_decode_list_prim_u_32_strict(arr[3]),
+      allDecided: dco_decode_bool(arr[4]),
     );
   }
 
@@ -7416,40 +7416,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ApiNextStep sse_decode_api_next_step(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_kind = sse_decode_String(deserializer);
-    var var_bundleIndex = sse_decode_u_32(deserializer);
-    var var_proposalId = sse_decode_u_32(deserializer);
-    var var_choice = sse_decode_u_32(deserializer);
-    var var_shareIndex = sse_decode_u_32(deserializer);
-    return ApiNextStep(
-      kind: var_kind,
-      bundleIndex: var_bundleIndex,
-      proposalId: var_proposalId,
-      choice: var_choice,
-      shareIndex: var_shareIndex,
-    );
-  }
-
-  @protected
-  ApiRoundPlan sse_decode_api_round_plan(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_roundId = sse_decode_String(deserializer);
-    var var_pendingRecovery = sse_decode_bool(deserializer);
-    var var_nextSteps = sse_decode_list_api_next_step(deserializer);
-    var var_openProposals = sse_decode_list_prim_u_32_strict(deserializer);
-    var var_allDecided = sse_decode_bool(deserializer);
-    return ApiRoundPlan(
-      roundId: var_roundId,
-      pendingRecovery: var_pendingRecovery,
-      nextSteps: var_nextSteps,
-      openProposals: var_openProposals,
-      allDecided: var_allDecided,
-    );
-  }
-
-  @protected
   ApiSignedDelegationPayload sse_decode_api_signed_delegation_payload(
     SseDeserializer deserializer,
   ) {
@@ -7941,20 +7907,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<ApiNextStep> sse_decode_list_api_next_step(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <ApiNextStep>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_api_next_step(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
   List<ApiSignedVoteCommitment> sse_decode_list_api_signed_vote_commitment(
     SseDeserializer deserializer,
   ) {
@@ -8089,6 +8041,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <Uint8List>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_list_prim_u_8_strict(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<NextStepView> sse_decode_list_next_step_view(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <NextStepView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_next_step_view(deserializer));
     }
     return ans_;
   }
@@ -8274,6 +8240,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NextStepView sse_decode_next_step_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_String(deserializer);
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    var var_proposalId = sse_decode_u_32(deserializer);
+    var var_choice = sse_decode_u_32(deserializer);
+    var var_shareIndex = sse_decode_u_32(deserializer);
+    return NextStepView(
+      kind: var_kind,
+      bundleIndex: var_bundleIndex,
+      proposalId: var_proposalId,
+      choice: var_choice,
+      shareIndex: var_shareIndex,
+    );
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -8368,6 +8351,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       proposalId: var_proposalId,
       needsSaplingParams: var_needsSaplingParams,
       feeZatoshi: var_feeZatoshi,
+    );
+  }
+
+  @protected
+  RoundPlanView sse_decode_round_plan_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_roundId = sse_decode_String(deserializer);
+    var var_pendingRecovery = sse_decode_bool(deserializer);
+    var var_nextSteps = sse_decode_list_next_step_view(deserializer);
+    var var_openProposals = sse_decode_list_prim_u_32_strict(deserializer);
+    var var_allDecided = sse_decode_bool(deserializer);
+    return RoundPlanView(
+      roundId: var_roundId,
+      pendingRecovery: var_pendingRecovery,
+      nextSteps: var_nextSteps,
+      openProposals: var_openProposals,
+      allDecided: var_allDecided,
     );
   }
 
@@ -9081,26 +9081,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_api_next_step(ApiNextStep self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.kind, serializer);
-    sse_encode_u_32(self.bundleIndex, serializer);
-    sse_encode_u_32(self.proposalId, serializer);
-    sse_encode_u_32(self.choice, serializer);
-    sse_encode_u_32(self.shareIndex, serializer);
-  }
-
-  @protected
-  void sse_encode_api_round_plan(ApiRoundPlan self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.roundId, serializer);
-    sse_encode_bool(self.pendingRecovery, serializer);
-    sse_encode_list_api_next_step(self.nextSteps, serializer);
-    sse_encode_list_prim_u_32_strict(self.openProposals, serializer);
-    sse_encode_bool(self.allDecided, serializer);
-  }
-
-  @protected
   void sse_encode_api_signed_delegation_payload(
     ApiSignedDelegationPayload self,
     SseSerializer serializer,
@@ -9494,18 +9474,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_api_next_step(
-    List<ApiNextStep> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_api_next_step(item, serializer);
-    }
-  }
-
-  @protected
   void sse_encode_list_api_signed_vote_commitment(
     List<ApiSignedVoteCommitment> self,
     SseSerializer serializer,
@@ -9622,6 +9590,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_list_prim_u_8_strict(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_next_step_view(
+    List<NextStepView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_next_step_view(item, serializer);
     }
   }
 
@@ -9802,6 +9782,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_next_step_view(NextStepView self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.kind, serializer);
+    sse_encode_u_32(self.bundleIndex, serializer);
+    sse_encode_u_32(self.proposalId, serializer);
+    sse_encode_u_32(self.choice, serializer);
+    sse_encode_u_32(self.shareIndex, serializer);
+  }
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -9889,6 +9879,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_64(self.proposalId, serializer);
     sse_encode_bool(self.needsSaplingParams, serializer);
     sse_encode_u_64(self.feeZatoshi, serializer);
+  }
+
+  @protected
+  void sse_encode_round_plan_view(
+    RoundPlanView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.roundId, serializer);
+    sse_encode_bool(self.pendingRecovery, serializer);
+    sse_encode_list_next_step_view(self.nextSteps, serializer);
+    sse_encode_list_prim_u_32_strict(self.openProposals, serializer);
+    sse_encode_bool(self.allDecided, serializer);
   }
 
   @protected

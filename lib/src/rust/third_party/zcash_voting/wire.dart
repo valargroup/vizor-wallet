@@ -6,7 +6,7 @@
 import '../../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 class CommitmentBundleRecoveryView {
   final int bundleIndex;
@@ -119,6 +119,76 @@ class DelegationSubmissionWire {
           govNullifiers == other.govNullifiers &&
           proof == other.proof &&
           voteRoundId == other.voteRoundId;
+}
+
+class NextStepView {
+  final String kind;
+  final int bundleIndex;
+  final int proposalId;
+  final int choice;
+  final int shareIndex;
+
+  const NextStepView({
+    required this.kind,
+    required this.bundleIndex,
+    required this.proposalId,
+    required this.choice,
+    required this.shareIndex,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      bundleIndex.hashCode ^
+      proposalId.hashCode ^
+      choice.hashCode ^
+      shareIndex.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NextStepView &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          bundleIndex == other.bundleIndex &&
+          proposalId == other.proposalId &&
+          choice == other.choice &&
+          shareIndex == other.shareIndex;
+}
+
+class RoundPlanView {
+  final String roundId;
+  final bool pendingRecovery;
+  final List<NextStepView> nextSteps;
+  final Uint32List openProposals;
+  final bool allDecided;
+
+  const RoundPlanView({
+    required this.roundId,
+    required this.pendingRecovery,
+    required this.nextSteps,
+    required this.openProposals,
+    required this.allDecided,
+  });
+
+  @override
+  int get hashCode =>
+      roundId.hashCode ^
+      pendingRecovery.hashCode ^
+      nextSteps.hashCode ^
+      openProposals.hashCode ^
+      allDecided.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RoundPlanView &&
+          runtimeType == other.runtimeType &&
+          roundId == other.roundId &&
+          pendingRecovery == other.pendingRecovery &&
+          nextSteps == other.nextSteps &&
+          openProposals == other.openProposals &&
+          allDecided == other.allDecided;
 }
 
 class RoundRecoveryStateView {

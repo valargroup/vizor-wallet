@@ -16,6 +16,7 @@ import '../../../providers/voting/voting_state.dart';
 import '../../../rust/api/keystone.dart' as rust_keystone;
 import '../../../rust/api/wallet.dart' as rust_wallet;
 import '../../../rust/api/voting.dart' as rust_voting;
+import '../../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import '../../../services/voting/pir_snapshot_resolver.dart';
 import '../../keystone/widgets/keystone_pczt_qr_stage.dart';
 import '../voting_flow_models.dart';
@@ -582,7 +583,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         resumePlan.pendingDelegationBundleIndexes.isEmpty;
   }
 
-  bool _stepCanRecoverWithoutDraft(rust_voting.ApiNextStep step) {
+  bool _stepCanRecoverWithoutDraft(rust_wire.NextStepView step) {
     return step.kind == 'submit_vote' ||
         step.kind == 'submit_shares' ||
         step.kind == 'poll_vote' ||
@@ -630,14 +631,14 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         false;
   }
 
-  bool _planNeedsDelegation(rust_voting.ApiRoundPlan? roundPlan) {
+  bool _planNeedsDelegation(rust_wire.RoundPlanView? roundPlan) {
     return roundPlan?.nextSteps.any(
           (step) => step.kind == 'delegate' || step.kind == 'poll_delegation',
         ) ??
         false;
   }
 
-  bool _planNeedsVotePolling(rust_voting.ApiRoundPlan? roundPlan) {
+  bool _planNeedsVotePolling(rust_wire.RoundPlanView? roundPlan) {
     return roundPlan?.nextSteps.any(
           (step) =>
               step.kind == 'submit_vote' ||
@@ -648,7 +649,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   }
 
   List<rust_voting.ApiDraftVote> _draftVotesFromRoundPlan(
-    rust_voting.ApiRoundPlan? roundPlan,
+    rust_wire.RoundPlanView? roundPlan,
     List<VotingProposalView> proposals,
   ) {
     if (roundPlan == null) return const [];

@@ -1,4 +1,3 @@
-import '../../rust/api/voting.dart' as rust_voting;
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import 'voting_recovery_api.dart';
 import 'voting_resume_plan.dart';
@@ -19,7 +18,7 @@ class VotingRecoveryService {
   /// `proposalIds` must be the full set of proposal IDs for the round (as
   /// returned by [proposalsFromRound]). Errors propagate so voting cannot
   /// proceed without durable intent and recovery planning.
-  Future<rust_voting.ApiRoundPlan> loadRoundPlan({
+  Future<rust_wire.RoundPlanView> loadRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,

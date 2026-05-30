@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
 import 'package:zcash_wallet/src/features/voting/voting_resume_plan.dart';
-import 'package:zcash_wallet/src/rust/api/voting.dart' as rust_voting;
 import 'package:zcash_wallet/src/rust/third_party/zcash_voting/wire.dart'
     as rust_frb_types;
 
@@ -291,11 +290,11 @@ void main() {
           unconfirmedShareDelegations: [accepted],
         ),
       );
-      final roundPlan = rust_voting.ApiRoundPlan(
+      final roundPlan = rust_frb_types.RoundPlanView(
         roundId: 'round-1',
         pendingRecovery: true,
         nextSteps: const [
-          rust_voting.ApiNextStep(
+          rust_frb_types.NextStepView(
             kind: 'confirm_share',
             bundleIndex: 0,
             proposalId: 1,
@@ -315,11 +314,11 @@ void main() {
   );
 
   test('round planner vote work blocks foreground completion', () {
-    final roundPlan = rust_voting.ApiRoundPlan(
+    final roundPlan = rust_frb_types.RoundPlanView(
       roundId: 'round-1',
       pendingRecovery: true,
       nextSteps: const [
-        rust_voting.ApiNextStep(
+        rust_frb_types.NextStepView(
           kind: 'poll_vote',
           bundleIndex: 0,
           proposalId: 1,
@@ -459,13 +458,13 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   }
 
   @override
-  Future<rust_voting.ApiRoundPlan> getRoundPlan({
+  Future<rust_frb_types.RoundPlanView> getRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
     required List<int> proposalIds,
   }) async {
-    return rust_voting.ApiRoundPlan(
+    return rust_frb_types.RoundPlanView(
       roundId: roundId,
       pendingRecovery: false,
       nextSteps: const [],

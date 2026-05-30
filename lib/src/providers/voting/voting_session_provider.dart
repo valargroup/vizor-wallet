@@ -2448,7 +2448,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   /// Loads the crate planner's round plan.
-  Future<rust_voting.ApiRoundPlan> _loadRoundPlan(
+  Future<rust_wire.RoundPlanView> _loadRoundPlan(
     _VotingSessionContext context,
   ) {
     final proposals = proposalsFromRound(context.round);
@@ -2699,7 +2699,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   static VotingSessionPhase _phaseForPlans(
     VotingResumePlan plan,
-    rust_voting.ApiRoundPlan? roundPlan,
+    rust_wire.RoundPlanView? roundPlan,
   ) {
     if (roundPlan != null) {
       final hasBlockingWork = hasBlockingRoundRecoveryWork(
@@ -2783,7 +2783,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   static List<_RecoveredVoteWork> _pendingRecoveredVoteWork(
     VotingResumePlan plan,
-    rust_voting.ApiRoundPlan? roundPlan,
+    rust_wire.RoundPlanView? roundPlan,
   ) {
     if (roundPlan == null) return const [];
     final work = <_RecoveredVoteWork>[];
@@ -2952,7 +2952,7 @@ class _VotingSessionContext {
   final VotingConfig config;
   final VotingRoundDetails round;
   final VotingResumePlan resumePlan;
-  final rust_voting.ApiRoundPlan? roundPlan;
+  final rust_wire.RoundPlanView? roundPlan;
 
   const _VotingSessionContext({
     required this.sessionGeneration,
