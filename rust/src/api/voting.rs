@@ -1582,28 +1582,6 @@ pub fn clear_recovery_state(
     catch(|| recovery::clear_recovery_state(&db_path, &wallet_id, &round_id))
 }
 
-/// One unit of remaining work for a round, flattened for the FRB boundary.
-pub struct ApiNextStep {
-    /// "delegate" | "poll_delegation" | "cast_vote" | "submit_vote" | "poll_vote" | "submit_shares" | "confirm_share".
-    pub kind: String,
-    pub bundle_index: u32,
-    /// 0 for delegation steps.
-    pub proposal_id: u32,
-    /// 0 unless `cast_vote`.
-    pub choice: u32,
-    /// 0 unless `submit_shares` or `confirm_share`.
-    pub share_index: u32,
-}
-
-/// Derived resume state for one round, produced by the crate's `resume_plan`.
-pub struct ApiRoundPlan {
-    pub round_id: String,
-    pub pending_recovery: bool,
-    pub next_steps: Vec<ApiNextStep>,
-    pub open_proposals: Vec<u32>,
-    pub all_decided: bool,
-}
-
 /// Compute the resumable voting-session plan for a round. The plan reports the
 /// ordered remaining work (`next_steps`) and which proposals are still open.
 pub fn get_round_plan(
@@ -1611,81 +1589,12 @@ pub fn get_round_plan(
     wallet_id: String,
     round_id: String,
     proposal_ids: Vec<u32>,
-) -> Result<ApiRoundPlan, String> {
+) -> Result<zcash_voting::wire::RoundPlanView, String> {
     catch(|| {
         let db = state::open_voting_db(&db_path, &wallet_id)?;
         let plan = zcash_voting::session::resume_plan(&db, &round_id, &proposal_ids)
             .map_err(|e| format!("resume_plan failed: {e}"))?;
-        let next_steps = plan
-            .next_steps
-            .into_iter()
-            .map(|step| {
-                let kind = step.kind().to_string();
-                Ok(match step {
-                    zcash_voting::session::NextStep::Delegate { bundle_index }
-                    | zcash_voting::session::NextStep::PollDelegation { bundle_index } => {
-                        ApiNextStep {
-                            kind,
-                            bundle_index,
-                            proposal_id: 0,
-                            choice: 0,
-                            share_index: 0,
-                        }
-                    }
-                    zcash_voting::session::NextStep::CastVote {
-                        bundle_index,
-                        proposal_id,
-                        choice,
-                    } => ApiNextStep {
-                        kind,
-                        bundle_index,
-                        proposal_id,
-                        choice,
-                        share_index: 0,
-                    },
-                    zcash_voting::session::NextStep::SubmitVote {
-                        bundle_index,
-                        proposal_id,
-                    }
-                    | zcash_voting::session::NextStep::PollVote {
-                        bundle_index,
-                        proposal_id,
-                    } => ApiNextStep {
-                        kind,
-                        bundle_index,
-                        proposal_id,
-                        choice: 0,
-                        share_index: 0,
-                    },
-                    zcash_voting::session::NextStep::SubmitShares {
-                        bundle_index,
-                        proposal_id,
-                        share_index,
-                    }
-                    | zcash_voting::session::NextStep::ConfirmShare {
-                        bundle_index,
-                        proposal_id,
-                        share_index,
-                    } => ApiNextStep {
-                        kind,
-                        bundle_index,
-                        proposal_id,
-                        choice: 0,
-                        share_index,
-                    },
-                    _ => {
-                        return Err("resume_plan returned an unsupported next step".to_string());
-                    }
-                })
-            })
-            .collect::<Result<Vec<_>, String>>()?;
-        Ok(ApiRoundPlan {
-            round_id: plan.round_id,
-            pending_recovery: plan.pending_recovery,
-            next_steps,
-            open_proposals: plan.open_proposals,
-            all_decided: plan.all_decided,
-        })
+        zcash_voting::wire::RoundPlanView::try_from(plan).map_err(|e| e.to_string())
     })
 }
 
@@ -1709,14 +1618,6 @@ pub fn set_ballot_intent(
             let c = choice.ok_or_else(|| {
                 "set_ballot_intent: choice must be Some when skipped is false".to_string()
             })?;
-            if num_options < 2 {
-                return Err("set_ballot_intent: num_options must be at least 2".to_string());
-            }
-            if c >= num_options {
-                return Err(format!(
-                    "set_ballot_intent: choice {c} is out of range for {num_options} options"
-                ));
-            }
             zcash_voting::session::Decision::Choice(c)
         };
         db.set_ballot_intent(&round_id, proposal_id, decision, num_options)

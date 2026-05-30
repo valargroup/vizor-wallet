@@ -1,6 +1,5 @@
 import 'dart:collection';
 
-import '../../rust/api/voting.dart' as rust_voting;
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 
 /// Phase strings emitted by Rust voting recovery.
@@ -17,7 +16,7 @@ abstract final class VotingWorkflowPhase {
 }
 
 bool hasBlockingRoundRecoveryWork({
-  required rust_voting.ApiRoundPlan? roundPlan,
+  required rust_wire.RoundPlanView? roundPlan,
   required VotingResumePlan? resumePlan,
 }) {
   if (roundPlan?.pendingRecovery != true) return false;
@@ -31,7 +30,7 @@ bool hasBlockingRoundRecoveryWork({
 }
 
 bool hasCompletedVoteForDisplay({
-  required rust_voting.ApiRoundPlan? roundPlan,
+  required rust_wire.RoundPlanView? roundPlan,
   required VotingResumePlan? resumePlan,
 }) {
   if (resumePlan == null) return false;
@@ -43,7 +42,7 @@ bool hasCompletedVoteForDisplay({
       );
 }
 
-bool roundPlanNeedsDraftSetup(rust_voting.ApiRoundPlan? roundPlan) {
+bool roundPlanNeedsDraftSetup(rust_wire.RoundPlanView? roundPlan) {
   return roundPlan != null &&
       !roundPlan.pendingRecovery &&
       !roundPlan.allDecided &&

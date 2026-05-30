@@ -236,7 +236,7 @@ class VotingSessionState {
   /// Null before the crate planner has loaded for this session.
   /// When [pendingRecovery] is true the proposal-detail screen shows a
   /// "Continue voting" button instead of the dead-end _PendingVoteContent.
-  final rust_voting.ApiRoundPlan? roundPlan;
+  final rust_wire.RoundPlanView? roundPlan;
   final Uri? pirEndpoint;
   final BigInt? eligibleWeightZatoshi;
   final int? walletScannedHeight;
@@ -315,7 +315,7 @@ class VotingSessionState {
     VotingConfig? config,
     VotingRoundDetails? round,
     VotingResumePlan? resumePlan,
-    rust_voting.ApiRoundPlan? roundPlan,
+    rust_wire.RoundPlanView? roundPlan,
     bool clearRoundPlan = false,
     Uri? pirEndpoint,
     BigInt? eligibleWeightZatoshi,
