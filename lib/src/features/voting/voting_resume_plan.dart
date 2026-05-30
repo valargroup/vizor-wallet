@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
+import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 
 /// Phase strings emitted by Rust voting recovery.
 ///
@@ -16,7 +16,7 @@ abstract final class VotingWorkflowPhase {
 }
 
 bool hasBlockingRoundRecoveryWork({
-  required rust_wire.RoundPlanView? roundPlan,
+  required rust_voting.RoundPlanView? roundPlan,
   required VotingResumePlan? resumePlan,
 }) {
   if (roundPlan?.pendingRecovery != true) return false;
@@ -30,7 +30,7 @@ bool hasBlockingRoundRecoveryWork({
 }
 
 bool hasCompletedVoteForDisplay({
-  required rust_wire.RoundPlanView? roundPlan,
+  required rust_voting.RoundPlanView? roundPlan,
   required VotingResumePlan? resumePlan,
 }) {
   if (resumePlan == null) return false;
@@ -42,7 +42,7 @@ bool hasCompletedVoteForDisplay({
       );
 }
 
-bool roundPlanNeedsDraftSetup(rust_wire.RoundPlanView? roundPlan) {
+bool roundPlanNeedsDraftSetup(rust_voting.RoundPlanView? roundPlan) {
   return roundPlan != null &&
       !roundPlan.pendingRecovery &&
       !roundPlan.allDecided &&
@@ -82,25 +82,25 @@ class VotingVoteKey {
 /// indexes and maps for the UI/state machine so resume work happens in a stable
 /// order after app restarts.
 class VotingResumePlan {
-  final rust_wire.RoundRecoveryStateView recoveryState;
+  final rust_voting.RoundRecoveryStateView recoveryState;
   final UnmodifiableListView<int> pendingDelegationBundleIndexes;
   final UnmodifiableMapView<int, String> delegationPhasesByIndex;
   final UnmodifiableListView<int> submittedDelegationBundleIndexes;
-  final UnmodifiableMapView<VotingVoteKey, rust_wire.VoteRecoveryView>
+  final UnmodifiableMapView<VotingVoteKey, rust_voting.VoteRecoveryView>
   votesByKey;
   final UnmodifiableMapView<VotingVoteKey, String> votePhasesByKey;
   final UnmodifiableMapView<VotingVoteKey, String> voteTxHashesByKey;
   final UnmodifiableMapView<
     VotingVoteKey,
-    rust_wire.CommitmentBundleRecoveryView
+    rust_voting.RecoverableCommitmentBundle
   >
   commitmentBundlesByKey;
   final UnmodifiableListView<VotingVoteKey> pendingVoteSubmissionKeys;
   final UnmodifiableListView<VotingVoteKey> submittedVoteConfirmationKeys;
   final UnmodifiableListView<VotingVoteKey> incompleteVoteRecoveryKeys;
-  final UnmodifiableListView<rust_wire.ShareDelegationRecordView>
+  final UnmodifiableListView<rust_voting.ShareDelegationRecordView>
   shareDelegations;
-  final UnmodifiableListView<rust_wire.ShareDelegationRecordView>
+  final UnmodifiableListView<rust_voting.ShareDelegationRecordView>
   unconfirmedShareDelegations;
 
   VotingResumePlan({
@@ -108,16 +108,16 @@ class VotingResumePlan {
     required List<int> pendingDelegationBundleIndexes,
     required Map<int, String> delegationPhasesByIndex,
     required List<int> submittedDelegationBundleIndexes,
-    required Map<VotingVoteKey, rust_wire.VoteRecoveryView> votesByKey,
+    required Map<VotingVoteKey, rust_voting.VoteRecoveryView> votesByKey,
     required Map<VotingVoteKey, String> votePhasesByKey,
     required Map<VotingVoteKey, String> voteTxHashesByKey,
-    required Map<VotingVoteKey, rust_wire.CommitmentBundleRecoveryView>
+    required Map<VotingVoteKey, rust_voting.RecoverableCommitmentBundle>
     commitmentBundlesByKey,
     required List<VotingVoteKey> pendingVoteSubmissionKeys,
     required List<VotingVoteKey> submittedVoteConfirmationKeys,
     required List<VotingVoteKey> incompleteVoteRecoveryKeys,
-    required List<rust_wire.ShareDelegationRecordView> shareDelegations,
-    required List<rust_wire.ShareDelegationRecordView>
+    required List<rust_voting.ShareDelegationRecordView> shareDelegations,
+    required List<rust_voting.ShareDelegationRecordView>
     unconfirmedShareDelegations,
   }) : pendingDelegationBundleIndexes = UnmodifiableListView(
          pendingDelegationBundleIndexes,
@@ -180,7 +180,7 @@ class VotingResumePlan {
       submittedVoteConfirmationKeys.isNotEmpty ||
       hasBlockingShareWork;
 
-  rust_wire.CommitmentBundleRecoveryView? commitmentBundleFor(
+  rust_voting.RecoverableCommitmentBundle? commitmentBundleFor(
     VotingVoteKey key,
   ) => commitmentBundlesByKey[key];
 

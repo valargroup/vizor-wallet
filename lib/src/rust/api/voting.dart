@@ -349,7 +349,7 @@ Future<void> storeKeystoneSignature({
 );
 
 /// Load persisted Keystone signatures for one voting round.
-Future<List<KeystoneSignatureRecordView>> getKeystoneSignatures({
+Future<List<KeystoneSignatureRecord>> getKeystoneSignatures({
   required String dbPath,
   required String walletId,
   required String roundId,
@@ -560,7 +560,7 @@ Future<SignedVoteCommitmentsView> buildVoteCommitments({
   required int bundleIndex,
   required List<int> hotkeySeed,
   required VanWitnessView vanWitness,
-  required List<DraftVoteView> draftVotes,
+  required List<DraftVote> draftVotes,
 }) => RustLib.instance.api.crateApiVotingBuildVoteCommitments(
   dbPath: dbPath,
   walletId: walletId,
@@ -599,7 +599,7 @@ Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
   required int bundleIndex,
   required List<int> hotkeySeed,
   required VanWitnessView vanWitness,
-  required List<DraftVoteView> draftVotes,
+  required List<DraftVote> draftVotes,
 }) => RustLib.instance.api.crateApiVotingBuildVoteCommitmentsWithProgress(
   dbPath: dbPath,
   walletId: walletId,
@@ -612,7 +612,7 @@ Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
 );
 
 /// Load stored votes for a round across all bundles for this wallet.
-Future<List<VoteRecordView>> getVotes({
+Future<List<VoteRecord>> getVotes({
   required String dbPath,
   required String walletId,
   required String roundId,

@@ -12,7 +12,7 @@ import '../../features/voting/voting_flow_models.dart';
 import '../../features/voting/voting_formatters.dart';
 import '../../features/voting/voting_resume_plan.dart';
 import '../../features/voting/voting_share_timing.dart';
-import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
+import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_api_client.dart';
 import '../../services/voting/voting_helper_health_tracker.dart';
@@ -301,7 +301,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             currentBundleIndex: bundleIndex,
           ),
         );
-        rust_wire.SignedDelegationPayloadView? signedDelegationPayload;
+        rust_voting.SignedDelegationPayloadView? signedDelegationPayload;
         await for (final event
             in rust.buildProveAndSignDelegationPayloadWithProgress(
               dbPath: context.dbPath,
@@ -414,7 +414,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
       final context = await _loadContext(_roundId);
       final rust = ref.read(votingRustApiProvider);
-      final signatures = Map<int, rust_wire.KeystoneSignatureRecordView>.from(
+      final signatures = Map<int, rust_voting.KeystoneSignatureRecord>.from(
         current.keystoneSignatures,
       );
       if (signatures.isEmpty) {
@@ -611,7 +611,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           ),
         );
 
-        rust_wire.SignedDelegationPayloadView? signedDelegationPayload;
+        rust_voting.SignedDelegationPayloadView? signedDelegationPayload;
         await for (final event
             in rust
                 .buildProveDelegationPayloadWithKeystoneSignatureWithProgress(
@@ -708,7 +708,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   Future<void> castVotes({
-    required List<rust_wire.DraftVoteView> draftVotes,
+    required List<rust_voting.DraftVote> draftVotes,
     List<int>? allProposalIds,
     Map<int, int>? proposalOptionCounts,
   }) {
@@ -1263,7 +1263,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   Future<void> _submitCommitmentShares(
     _VotingSessionContext context,
-    rust_wire.SignedVoteCommitmentsView commitments, {
+    rust_voting.SignedVoteCommitmentsView commitments, {
     Map<int, BigInt> vcTreePositions = const {},
     Set<int>? shareIndexFilter,
     required bool singleShare,
@@ -1482,7 +1482,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   Future<Map<int, BigInt>> _submitVoteCommitments(
     _VotingSessionContext context,
-    rust_wire.SignedVoteCommitmentsView commitments,
+    rust_voting.SignedVoteCommitmentsView commitments,
   ) async {
     final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
     final rust = ref.read(votingRustApiProvider);
@@ -1557,7 +1557,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return vcTreePositions;
   }
 
-  Future<Map<int, rust_wire.KeystoneSignatureRecordView>>
+  Future<Map<int, rust_voting.KeystoneSignatureRecord>>
   _loadKeystoneSignatures(_VotingSessionContext context) async {
     final records = await ref
         .read(votingRustApiProvider)
@@ -1625,7 +1625,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   Future<({String txHash, int leafIndex})> _submitAndConfirmDelegation({
     required _VotingSessionContext context,
     required int bundleIndex,
-    required rust_wire.SignedDelegationPayloadView submission,
+    required rust_voting.SignedDelegationPayloadView submission,
   }) async {
     final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
     final rust = ref.read(votingRustApiProvider);
@@ -1859,7 +1859,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     required VotingApiClient api,
     required _VotingSessionContext context,
     required VotingResumePlan plan,
-    required rust_wire.ShareDelegationRecordView share,
+    required rust_voting.ShareDelegationRecordView share,
     required List<String> serverUrls,
   }) async {
     final rust = ref.read(votingRustApiProvider);
@@ -1961,7 +1961,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   Future<bool> _shareConfirmedByAnyHelper({
     required VotingApiClient api,
     required VotingHelperHealthTracker helperHealth,
-    required rust_wire.ShareDelegationRecordView share,
+    required rust_voting.ShareDelegationRecordView share,
     required Iterable<String> serverUrls,
   }) async {
     final shareId = bytesToHex(share.nullifier);
@@ -2465,7 +2465,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   /// Loads the crate planner's round plan.
-  Future<rust_wire.RoundPlanView> _loadRoundPlan(
+  Future<rust_voting.RoundPlanView> _loadRoundPlan(
     _VotingSessionContext context,
   ) {
     final proposals = proposalsFromRound(context.round);
@@ -2716,7 +2716,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   static VotingSessionPhase _phaseForPlans(
     VotingResumePlan plan,
-    rust_wire.RoundPlanView? roundPlan,
+    rust_voting.RoundPlanView? roundPlan,
   ) {
     if (roundPlan != null) {
       final hasBlockingWork = hasBlockingRoundRecoveryWork(
@@ -2800,7 +2800,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   static List<_RecoveredVoteWork> _pendingRecoveredVoteWork(
     VotingResumePlan plan,
-    rust_wire.RoundPlanView? roundPlan,
+    rust_voting.RoundPlanView? roundPlan,
   ) {
     if (roundPlan == null) return const [];
     final work = <_RecoveredVoteWork>[];
@@ -2836,7 +2836,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   static bool _commitmentsUseSingleShare(
-    rust_wire.SignedVoteCommitmentsView commitments,
+    rust_voting.SignedVoteCommitmentsView commitments,
   ) {
     return commitments.commitments.isNotEmpty &&
         commitments.commitments.every(
@@ -2886,8 +2886,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }
 
   static void _verifyKeystoneDelegationSignature({
-    required rust_wire.SignedDelegationPayloadView submission,
-    required rust_wire.KeystoneSignatureRecordView signature,
+    required rust_voting.SignedDelegationPayloadView submission,
+    required rust_voting.KeystoneSignatureRecord signature,
     required int bundleIndex,
   }) {
     final wire = submission.submission;
@@ -2935,7 +2935,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 class _DraftVoteWork {
   const _DraftVoteWork({required this.draftVote, required this.bundleIndexes});
 
-  final rust_wire.DraftVoteView draftVote;
+  final rust_voting.DraftVote draftVote;
   final List<int> bundleIndexes;
 }
 
@@ -2972,7 +2972,7 @@ class _VotingSessionContext {
   final VotingConfig config;
   final VotingRoundDetails round;
   final VotingResumePlan resumePlan;
-  final rust_wire.RoundPlanView? roundPlan;
+  final rust_voting.RoundPlanView? roundPlan;
 
   const _VotingSessionContext({
     required this.sessionGeneration,

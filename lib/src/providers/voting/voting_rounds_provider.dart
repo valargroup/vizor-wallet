@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/voting/voting_flow_models.dart';
 import '../../features/voting/voting_resume_plan.dart';
-import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
+import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import '../../services/voting/voting_api_client.dart';
 import '../../services/voting/voting_models.dart';
 import 'voting_config_provider.dart';
@@ -135,7 +135,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
     );
     final proposalIds = await _proposalIdsForRound(api, round);
     var hasBlockingRecovery = false;
-    rust_wire.RoundPlanView? roundPlan;
+    rust_voting.RoundPlanView? roundPlan;
     if (proposalIds.isNotEmpty) {
       try {
         roundPlan = await recovery.loadRoundPlan(

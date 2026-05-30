@@ -722,17 +722,11 @@ pub fn get_keystone_signatures(
     db_path: String,
     wallet_id: String,
     round_id: String,
-) -> Result<Vec<zcash_voting::wire::KeystoneSignatureRecordView>, String> {
+) -> Result<Vec<zcash_voting::wire::KeystoneSignatureRecord>, String> {
     catch(|| {
         let db = state::open_voting_db(&db_path, &wallet_id)?;
         db.get_keystone_signatures(&round_id)
             .map_err(|e| format!("get_keystone_signatures failed: {e}"))
-            .map(|records| {
-                records
-                    .into_iter()
-                    .map(zcash_voting::wire::KeystoneSignatureRecordView::from)
-                    .collect()
-            })
     })
 }
 
@@ -999,7 +993,7 @@ pub fn build_vote_commitments(
     bundle_index: u32,
     hotkey_seed: Vec<u8>,
     van_witness: zcash_voting::wire::VanWitnessView,
-    draft_votes: Vec<zcash_voting::wire::DraftVoteView>,
+    draft_votes: Vec<zcash_voting::wire::DraftVote>,
 ) -> Result<zcash_voting::wire::SignedVoteCommitmentsView, String> {
     let network = keys::parse_network(&network)?;
     let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
@@ -1010,7 +1004,6 @@ pub fn build_vote_commitments(
         van_witness.anchor_height,
     )
     .map_err(|e| e.to_string())?;
-    let draft_votes = draft_votes.into_iter().map(Into::into).collect();
     vote::build_vote_commitments(
         &db_path,
         &wallet_id,
@@ -1058,7 +1051,7 @@ pub async fn build_vote_commitments_with_progress(
     bundle_index: u32,
     hotkey_seed: Vec<u8>,
     van_witness: zcash_voting::wire::VanWitnessView,
-    draft_votes: Vec<zcash_voting::wire::DraftVoteView>,
+    draft_votes: Vec<zcash_voting::wire::DraftVote>,
     sink: StreamSink<ApiVoteCommitEvent>,
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
@@ -1073,7 +1066,6 @@ pub async fn build_vote_commitments_with_progress(
         van_witness.anchor_height,
     )
     .map_err(|e| e.to_string())?;
-    let draft_votes = draft_votes.into_iter().map(Into::into).collect();
     let commitment_result = tokio::task::spawn_blocking(move || {
         vote::build_vote_commitments(
             &db_path,
@@ -1149,15 +1141,9 @@ pub fn get_votes(
     db_path: String,
     wallet_id: String,
     round_id: String,
-) -> Result<Vec<zcash_voting::wire::VoteRecordView>, String> {
+) -> Result<Vec<zcash_voting::wire::VoteRecord>, String> {
     catch(|| {
         vote::get_votes(&db_path, &wallet_id, &round_id)
-            .map(|records| {
-                records
-                    .into_iter()
-                    .map(zcash_voting::wire::VoteRecordView::from)
-                    .collect()
-            })
     })
 }
 
@@ -2153,7 +2139,7 @@ mod tests {
                 position: 0,
                 anchor_height: 1,
             },
-            vec![zcash_voting::wire::DraftVoteView {
+            vec![zcash_voting::wire::DraftVote {
                 proposal_id: 1,
                 choice: 0,
                 num_options: 2,
@@ -2186,7 +2172,7 @@ mod tests {
                 position: 0,
                 anchor_height: 1,
             },
-            vec![zcash_voting::wire::DraftVoteView {
+            vec![zcash_voting::wire::DraftVote {
                 proposal_id: 1,
                 choice: 0,
                 num_options: 2,

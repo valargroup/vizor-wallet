@@ -1,4 +1,4 @@
-import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
+import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import 'voting_recovery_api.dart';
 import 'voting_resume_plan.dart';
 
@@ -18,7 +18,7 @@ class VotingRecoveryService {
   /// `proposalIds` must be the full set of proposal IDs for the round (as
   /// returned by [proposalsFromRound]). Errors propagate so voting cannot
   /// proceed without durable intent and recovery planning.
-  Future<rust_wire.RoundPlanView> loadRoundPlan({
+  Future<rust_voting.RoundPlanView> loadRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -72,7 +72,7 @@ class VotingRecoveryService {
   ///
   /// Bundle/proposal pairs are keyed together because voting is bundle-indexed:
   /// one proposal can have independent state for each note bundle.
-  VotingResumePlan buildResumePlan(rust_wire.RoundRecoveryStateView state) {
+  VotingResumePlan buildResumePlan(rust_voting.RoundRecoveryStateView state) {
     final delegationPhasesByIndex = <int, String>{
       for (final record in state.delegation)
         record.bundleIndex: record.phase,
@@ -98,7 +98,7 @@ class VotingRecoveryService {
           index,
     ];
 
-    final votesByKey = <VotingVoteKey, rust_wire.VoteRecoveryView>{
+    final votesByKey = <VotingVoteKey, rust_voting.VoteRecoveryView>{
       for (final vote in state.votes)
         VotingVoteKey(
           bundleIndex: vote.bundleIndex,
@@ -121,7 +121,7 @@ class VotingRecoveryService {
         ): record.phase,
     };
     final commitmentBundlesByKey =
-        <VotingVoteKey, rust_wire.CommitmentBundleRecoveryView>{
+        <VotingVoteKey, rust_voting.RecoverableCommitmentBundle>{
           for (final record in state.commitmentBundles)
             VotingVoteKey(
               bundleIndex: record.bundleIndex,
@@ -184,7 +184,7 @@ class VotingRecoveryService {
   Future<void> addSentServersForShare({
     required String dbPath,
     required String walletId,
-    required rust_wire.ShareDelegationRecordView share,
+    required rust_voting.ShareDelegationRecordView share,
     required List<String> newUrls,
   }) {
     return _api.addSentServers(
@@ -243,8 +243,8 @@ class VotingRecoveryService {
   }
 
   static int _compareShareDelegations(
-    rust_wire.ShareDelegationRecordView a,
-    rust_wire.ShareDelegationRecordView b,
+    rust_voting.ShareDelegationRecordView a,
+    rust_voting.ShareDelegationRecordView b,
   ) {
     final bundleCompare = a.bundleIndex.compareTo(b.bundleIndex);
     if (bundleCompare != 0) return bundleCompare;

@@ -15,7 +15,7 @@ import '../../../providers/voting/voting_submission_guard_provider.dart';
 import '../../../providers/voting/voting_state.dart';
 import '../../../rust/api/keystone.dart' as rust_keystone;
 import '../../../rust/api/wallet.dart' as rust_wallet;
-import '../../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
+import '../../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import '../../../services/voting/pir_snapshot_resolver.dart';
 import '../../keystone/widgets/keystone_pczt_qr_stage.dart';
 import '../voting_flow_models.dart';
@@ -39,7 +39,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   String? _runErrorMessage;
   List<String> _keystoneUrParts = const [];
   String? _keystoneQrError;
-  List<rust_wire.DraftVoteView>? _pendingDraftVotes;
+  List<rust_voting.DraftVote>? _pendingDraftVotes;
   List<int> _pendingProposalIds = const [];
   Map<int, int> _pendingProposalOptionCounts = const {};
   bool _pendingRecoveryWithoutDraft = false;
@@ -143,7 +143,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
       final recoveredDraftVotes =
           userDraftVotes.isEmpty && _roundPlanHasNoOpenProposals(activeSession)
           ? _draftVotesFromRoundPlan(activeSession.roundPlan, proposals)
-          : const <rust_wire.DraftVoteView>[];
+          : const <rust_voting.DraftVote>[];
       final draftVotes = userDraftVotes.isNotEmpty
           ? userDraftVotes
           : recoveredDraftVotes;
@@ -274,7 +274,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   }
 
   Future<void> _updateKeystoneQr(
-    rust_wire.KeystoneDelegationRequestView request, {
+    rust_voting.KeystoneDelegationRequestView request, {
     required int runGeneration,
     required String accountUuid,
   }) async {
@@ -448,7 +448,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     VotingSessionNotifier sessionNotifier, {
     required int runGeneration,
     required String accountUuid,
-    required List<rust_wire.DraftVoteView> draftVotes,
+    required List<rust_voting.DraftVote> draftVotes,
     required List<int> intentProposalIds,
     required Map<int, int> proposalOptionCounts,
     VotingSessionState? initialSession,
@@ -582,7 +582,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         resumePlan.pendingDelegationBundleIndexes.isEmpty;
   }
 
-  bool _stepCanRecoverWithoutDraft(rust_wire.NextStepView step) {
+  bool _stepCanRecoverWithoutDraft(rust_voting.NextStepView step) {
     return step.kind == 'submit_vote' ||
         step.kind == 'submit_shares' ||
         step.kind == 'poll_vote' ||
@@ -630,14 +630,14 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         false;
   }
 
-  bool _planNeedsDelegation(rust_wire.RoundPlanView? roundPlan) {
+  bool _planNeedsDelegation(rust_voting.RoundPlanView? roundPlan) {
     return roundPlan?.nextSteps.any(
           (step) => step.kind == 'delegate' || step.kind == 'poll_delegation',
         ) ??
         false;
   }
 
-  bool _planNeedsVotePolling(rust_wire.RoundPlanView? roundPlan) {
+  bool _planNeedsVotePolling(rust_voting.RoundPlanView? roundPlan) {
     return roundPlan?.nextSteps.any(
           (step) =>
               step.kind == 'submit_vote' ||
@@ -647,8 +647,8 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         false;
   }
 
-  List<rust_wire.DraftVoteView> _draftVotesFromRoundPlan(
-    rust_wire.RoundPlanView? roundPlan,
+  List<rust_voting.DraftVote> _draftVotesFromRoundPlan(
+    rust_voting.RoundPlanView? roundPlan,
     List<VotingProposalView> proposals,
   ) {
     if (roundPlan == null) return const [];
@@ -661,7 +661,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     return [
       for (final proposal in proposals)
         if (choicesByProposal[proposal.id] != null)
-          rust_wire.DraftVoteView(
+          rust_voting.DraftVote(
             proposalId: proposal.id,
             choice: choicesByProposal[proposal.id]!,
             numOptions: proposal.options.length,
@@ -967,7 +967,7 @@ class _StatusContent extends StatelessWidget {
   final bool completedSubmission;
   final bool softwareAccountRequired;
   final bool isHardwareAccount;
-  final rust_wire.KeystoneDelegationRequestView? keystoneSigningRequest;
+  final rust_voting.KeystoneDelegationRequestView? keystoneSigningRequest;
   final bool canSkipRemainingKeystoneBundles;
   final List<String> keystoneUrParts;
   final String? keystoneQrError;
@@ -1202,7 +1202,7 @@ class _KeystoneSigningPanel extends StatelessWidget {
     this.onSkipRemainingBundles,
   });
 
-  final rust_wire.KeystoneDelegationRequestView request;
+  final rust_voting.KeystoneDelegationRequestView request;
   final List<String> urParts;
   final String? qrError;
   final String? scanError;

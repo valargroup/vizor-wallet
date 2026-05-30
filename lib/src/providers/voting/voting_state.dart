@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import '../../core/formatting/date_format.dart';
 import '../../core/formatting/hex_codec.dart';
 import '../../features/voting/voting_resume_plan.dart';
-import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
+import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_models.dart';
 
@@ -172,8 +172,8 @@ class VotingRoundDetails {
     );
   }
 
-  rust_wire.VotingRoundParams toRoundParams() {
-    return rust_wire.VotingRoundParams(
+  rust_voting.VotingRoundParams toRoundParams() {
+    return rust_voting.VotingRoundParams(
       voteRoundId: roundId,
       snapshotHeight: BigInt.from(snapshotHeight),
       eaPk: eaPk,
@@ -235,7 +235,7 @@ class VotingSessionState {
   /// Null before the crate planner has loaded for this session.
   /// When [pendingRecovery] is true the proposal-detail screen shows a
   /// "Continue voting" button instead of the dead-end _PendingVoteContent.
-  final rust_wire.RoundPlanView? roundPlan;
+  final rust_voting.RoundPlanView? roundPlan;
   final Uri? pirEndpoint;
   final BigInt? eligibleWeightZatoshi;
   final int? walletScannedHeight;
@@ -245,9 +245,9 @@ class VotingSessionState {
   final UnmodifiableListView<PirSnapshotEndpointDiagnostic> pirDiagnostics;
   final UnmodifiableMapView<int, VotingSessionProgress> delegationProgress;
   final UnmodifiableMapView<VotingVoteKey, VotingSessionProgress> voteProgress;
-  final UnmodifiableMapView<int, rust_wire.KeystoneSignatureRecordView>
+  final UnmodifiableMapView<int, rust_voting.KeystoneSignatureRecord>
   keystoneSignatures;
-  final rust_wire.KeystoneDelegationRequestView? keystoneSigningRequest;
+  final rust_voting.KeystoneDelegationRequestView? keystoneSigningRequest;
   final String? keystoneScanError;
   final int? currentBundleIndex;
   final VotingVoteKey? currentVoteKey;
@@ -273,7 +273,7 @@ class VotingSessionState {
     List<PirSnapshotEndpointDiagnostic> pirDiagnostics = const [],
     Map<int, VotingSessionProgress> delegationProgress = const {},
     Map<VotingVoteKey, VotingSessionProgress> voteProgress = const {},
-    Map<int, rust_wire.KeystoneSignatureRecordView> keystoneSignatures =
+    Map<int, rust_voting.KeystoneSignatureRecord> keystoneSignatures =
         const {},
     this.keystoneSigningRequest,
     this.keystoneScanError,
@@ -314,7 +314,7 @@ class VotingSessionState {
     VotingConfig? config,
     VotingRoundDetails? round,
     VotingResumePlan? resumePlan,
-    rust_wire.RoundPlanView? roundPlan,
+    rust_voting.RoundPlanView? roundPlan,
     bool clearRoundPlan = false,
     Uri? pirEndpoint,
     BigInt? eligibleWeightZatoshi,
@@ -326,8 +326,8 @@ class VotingSessionState {
     List<PirSnapshotEndpointDiagnostic>? pirDiagnostics,
     Map<int, VotingSessionProgress>? delegationProgress,
     Map<VotingVoteKey, VotingSessionProgress>? voteProgress,
-    Map<int, rust_wire.KeystoneSignatureRecordView>? keystoneSignatures,
-    rust_wire.KeystoneDelegationRequestView? keystoneSigningRequest,
+    Map<int, rust_voting.KeystoneSignatureRecord>? keystoneSignatures,
+    rust_voting.KeystoneDelegationRequestView? keystoneSigningRequest,
     bool clearKeystoneSigningRequest = false,
     String? keystoneScanError,
     bool clearKeystoneScanError = false,
@@ -395,7 +395,7 @@ class VotingSessionState {
 
 int resolvedKeystoneBundlePrefixCount({
   required VotingResumePlan? plan,
-  required Map<int, rust_wire.KeystoneSignatureRecordView> signatures,
+  required Map<int, rust_voting.KeystoneSignatureRecord> signatures,
 }) {
   final bundleCount = plan?.bundleCount ?? 0;
   if (bundleCount <= 0) return 0;

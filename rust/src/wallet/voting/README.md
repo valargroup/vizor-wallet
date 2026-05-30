@@ -299,9 +299,9 @@ Canonical wire structs now live directly in `zcash_voting::wire`:
 Canonical crate-owned wallet view DTOs also live in `zcash_voting::wire`:
 `VotingNoteRefView`, `VotingNoteSelectionResultView`, `BundleSetupResultView`,
 `DelegationPirPrecomputeResultView`, `SignedDelegationPayloadView`,
-`KeystoneDelegationRequestView`, `KeystoneSignatureRecordView`,
-`VanWitnessView`, `DraftVoteView`, `SignedVoteCommitmentView`,
-`SignedVoteCommitmentsView`, and `VoteRecordView`.
+`KeystoneDelegationRequestView`, `KeystoneSignatureRecord`,
+`VanWitnessView`, `DraftVote`, `SignedVoteCommitmentView`,
+`SignedVoteCommitmentsView`, and `VoteRecord`.
 
 Vizor no longer keeps FRB-local `Api*Wire` mirrors in
 `rust/src/api/voting.rs`. Instead, FRB codegen scans the shared wire-type module

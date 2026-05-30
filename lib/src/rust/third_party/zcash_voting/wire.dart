@@ -29,37 +29,6 @@ class BundleSetupResultView {
           eligibleWeightZatoshi == other.eligibleWeightZatoshi;
 }
 
-class CommitmentBundleRecoveryView {
-  final int bundleIndex;
-  final int proposalId;
-  final String commitmentBundleJson;
-  final BigInt vcTreePosition;
-
-  const CommitmentBundleRecoveryView({
-    required this.bundleIndex,
-    required this.proposalId,
-    required this.commitmentBundleJson,
-    required this.vcTreePosition,
-  });
-
-  @override
-  int get hashCode =>
-      bundleIndex.hashCode ^
-      proposalId.hashCode ^
-      commitmentBundleJson.hashCode ^
-      vcTreePosition.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is CommitmentBundleRecoveryView &&
-          runtimeType == other.runtimeType &&
-          bundleIndex == other.bundleIndex &&
-          proposalId == other.proposalId &&
-          commitmentBundleJson == other.commitmentBundleJson &&
-          vcTreePosition == other.vcTreePosition;
-}
-
 class DelegationPirPrecomputeResultView {
   final int cachedCount;
   final int fetchedCount;
@@ -173,14 +142,14 @@ class DelegationSubmissionWire {
           voteRoundId == other.voteRoundId;
 }
 
-class DraftVoteView {
+class DraftVote {
   final int proposalId;
   final int choice;
   final int numOptions;
   final BigInt vcTreePosition;
   final bool singleShare;
 
-  const DraftVoteView({
+  const DraftVote({
     required this.proposalId,
     required this.choice,
     required this.numOptions,
@@ -199,7 +168,7 @@ class DraftVoteView {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is DraftVoteView &&
+      other is DraftVote &&
           runtimeType == other.runtimeType &&
           proposalId == other.proposalId &&
           choice == other.choice &&
@@ -263,13 +232,13 @@ class KeystoneDelegationRequestView {
           bundleIndex == other.bundleIndex;
 }
 
-class KeystoneSignatureRecordView {
+class KeystoneSignatureRecord {
   final int bundleIndex;
   final Uint8List sig;
   final Uint8List sighash;
   final Uint8List rk;
 
-  const KeystoneSignatureRecordView({
+  const KeystoneSignatureRecord({
     required this.bundleIndex,
     required this.sig,
     required this.sighash,
@@ -283,7 +252,7 @@ class KeystoneSignatureRecordView {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is KeystoneSignatureRecordView &&
+      other is KeystoneSignatureRecord &&
           runtimeType == other.runtimeType &&
           bundleIndex == other.bundleIndex &&
           sig == other.sig &&
@@ -326,6 +295,37 @@ class NextStepView {
           shareIndex == other.shareIndex;
 }
 
+class RecoverableCommitmentBundle {
+  final int bundleIndex;
+  final int proposalId;
+  final String commitmentBundleJson;
+  final BigInt vcTreePosition;
+
+  const RecoverableCommitmentBundle({
+    required this.bundleIndex,
+    required this.proposalId,
+    required this.commitmentBundleJson,
+    required this.vcTreePosition,
+  });
+
+  @override
+  int get hashCode =>
+      bundleIndex.hashCode ^
+      proposalId.hashCode ^
+      commitmentBundleJson.hashCode ^
+      vcTreePosition.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RecoverableCommitmentBundle &&
+          runtimeType == other.runtimeType &&
+          bundleIndex == other.bundleIndex &&
+          proposalId == other.proposalId &&
+          commitmentBundleJson == other.commitmentBundleJson &&
+          vcTreePosition == other.vcTreePosition;
+}
+
 class RoundPlanView {
   final String roundId;
   final bool pendingRecovery;
@@ -366,7 +366,7 @@ class RoundRecoveryStateView {
   final int bundleCount;
   final List<DelegationRecoveryView> delegation;
   final List<VoteRecoveryView> votes;
-  final List<CommitmentBundleRecoveryView> commitmentBundles;
+  final List<RecoverableCommitmentBundle> commitmentBundles;
   final List<ShareWorkflowRecoveryView> shares;
   final List<ShareDelegationRecordView> shareDelegations;
   final List<ShareDelegationRecordView> unconfirmedShareDelegations;
@@ -687,12 +687,12 @@ class VoteCommitmentWire {
           voteAuthSig == other.voteAuthSig;
 }
 
-class VoteRecordView {
+class VoteRecord {
   final int proposalId;
   final int bundleIndex;
   final int choice;
 
-  const VoteRecordView({
+  const VoteRecord({
     required this.proposalId,
     required this.bundleIndex,
     required this.choice,
@@ -705,7 +705,7 @@ class VoteRecordView {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is VoteRecordView &&
+      other is VoteRecord &&
           runtimeType == other.runtimeType &&
           proposalId == other.proposalId &&
           bundleIndex == other.bundleIndex &&

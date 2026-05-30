@@ -18,7 +18,7 @@ import '../../../providers/voting/voting_session_provider.dart';
 import '../../../providers/voting/voting_tree_sync_provider.dart';
 import '../../../providers/voting/voting_state.dart';
 import '../../../rust/api/wallet.dart' as rust_wallet;
-import '../../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
+import '../../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import '../voting_choice_style.dart';
 import '../voting_flow_models.dart';
 import '../voting_formatters.dart';
@@ -1254,7 +1254,7 @@ class _CompletedVote {
 
   static _CompletedVote? fromPlan(
     VotingResumePlan? plan,
-    rust_wire.RoundPlanView? roundPlan,
+    rust_voting.RoundPlanView? roundPlan,
     List<VotingProposalView> proposals,
   ) {
     if (!hasCompletedVoteForDisplay(roundPlan: roundPlan, resumePlan: plan)) {
@@ -1285,7 +1285,7 @@ class _PendingVoteRecovery {
 
   static _PendingVoteRecovery? fromPlan(
     VotingResumePlan? plan,
-    rust_wire.RoundPlanView? roundPlan,
+    rust_voting.RoundPlanView? roundPlan,
   ) {
     if (plan == null ||
         !hasBlockingRoundRecoveryWork(roundPlan: roundPlan, resumePlan: plan) ||
@@ -1320,7 +1320,7 @@ class _PendingVoteRecovery {
   }
 }
 
-bool _roundPlanHasStep(rust_wire.RoundPlanView? roundPlan, Set<String> kinds) {
+bool _roundPlanHasStep(rust_voting.RoundPlanView? roundPlan, Set<String> kinds) {
   return roundPlan?.nextSteps.any((step) => kinds.contains(step.kind)) ?? false;
 }
 

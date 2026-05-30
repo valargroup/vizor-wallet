@@ -1,5 +1,5 @@
 import '../../rust/api/voting.dart' as rust_voting;
-import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
+import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 
 /// Injectable boundary around the Rust voting recovery API.
 ///
@@ -7,13 +7,13 @@ import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 /// use in-memory fakes while production code still delegates all durable state
 /// reads and writes to Rust.
 abstract interface class VotingRecoveryApi {
-  Future<rust_wire.RoundRecoveryStateView> getRoundRecoveryState({
+  Future<rust_voting.RoundRecoveryStateView> getRoundRecoveryState({
     required String dbPath,
     required String walletId,
     required String roundId,
   });
 
-  Future<rust_wire.RoundPlanView> getRoundPlan({
+  Future<rust_voting.RoundPlanView> getRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -52,7 +52,7 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   const RustVotingRecoveryApi();
 
   @override
-  Future<rust_wire.RoundRecoveryStateView> getRoundRecoveryState({
+  Future<rust_voting.RoundRecoveryStateView> getRoundRecoveryState({
     required String dbPath,
     required String walletId,
     required String roundId,
@@ -65,7 +65,7 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   }
 
   @override
-  Future<rust_wire.RoundPlanView> getRoundPlan({
+  Future<rust_voting.RoundPlanView> getRoundPlan({
     required String dbPath,
     required String walletId,
     required String roundId,
