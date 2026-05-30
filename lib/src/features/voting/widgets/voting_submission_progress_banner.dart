@@ -126,28 +126,7 @@ class _VotingSubmissionProgressBannerItem extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.s),
-            AppButton(
-              onPressed: () {
-                if (job.status == VotingSubmissionJobStatus.complete) {
-                  ref
-                      .read(votingSubmissionJobsProvider.notifier)
-                      .dismiss(jobKey);
-                  return;
-                }
-                final route = votingStatusRoute(
-                  jobKey.roundId,
-                  accountUuid: jobKey.accountUuid,
-                );
-                context.go(route);
-              },
-              variant: AppButtonVariant.secondary,
-              size: AppButtonSize.small,
-              child: Text(
-                job.status == VotingSubmissionJobStatus.complete
-                    ? 'Done'
-                    : 'View',
-              ),
-            ),
+            _BannerActions(job: job, jobKey: jobKey),
           ],
         ),
       ),
@@ -247,5 +226,65 @@ class _VotingSubmissionProgressBannerItem extends ConsumerWidget {
       }
     }
     return (completedProgress / indexes.length).clamp(0.0, 1.0);
+  }
+}
+
+class _BannerActions extends ConsumerWidget {
+  const _BannerActions({required this.job, required this.jobKey});
+
+  final VotingSubmissionJobState job;
+  final VotingSessionKey jobKey;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void dismiss() {
+      ref.read(votingSubmissionJobsProvider.notifier).dismiss(jobKey);
+    }
+
+    void viewStatus() {
+      final route = votingStatusRoute(
+        jobKey.roundId,
+        accountUuid: jobKey.accountUuid,
+      );
+      context.go(route);
+    }
+
+    if (job.status == VotingSubmissionJobStatus.complete) {
+      return AppButton(
+        onPressed: dismiss,
+        variant: AppButtonVariant.secondary,
+        size: AppButtonSize.small,
+        child: const Text('Done'),
+      );
+    }
+
+    if (job.status == VotingSubmissionJobStatus.error) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppButton(
+            key: ValueKey('voting_submission_banner_clear_$jobKey'),
+            onPressed: dismiss,
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.small,
+            child: const Text('Clear'),
+          ),
+          const SizedBox(width: AppSpacing.xxs),
+          AppButton(
+            onPressed: viewStatus,
+            variant: AppButtonVariant.secondary,
+            size: AppButtonSize.small,
+            child: const Text('View'),
+          ),
+        ],
+      );
+    }
+
+    return AppButton(
+      onPressed: viewStatus,
+      variant: AppButtonVariant.secondary,
+      size: AppButtonSize.small,
+      child: const Text('View'),
+    );
   }
 }

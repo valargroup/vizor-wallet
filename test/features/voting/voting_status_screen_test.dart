@@ -140,6 +140,40 @@ void main() {
     expect(find.text('Retry'), findsOne);
   });
 
+  testWidgets('status screen clears failed submission progress', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _statusHarness()),
+    );
+    await tester.pumpAndSettle();
+    await _pumpUntilFound(
+      tester,
+      find.text('Choose at least one vote before submitting.'),
+    );
+
+    expect(find.text('Vote submission needs attention'), findsOneWidget);
+    expect(find.text('Clear'), findsWidgets);
+
+    await tester.tap(
+      find.byKey(const ValueKey('voting_status_clear_submission_error')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('voting route'), findsOneWidget);
+    expect(find.text('Vote submission needs attention'), findsNothing);
+  });
+
   testWidgets('status screen explains ineligible account voting failure', (
     tester,
   ) async {
@@ -898,6 +932,63 @@ void main() {
 
     expect(find.text('Vote submission complete'), findsNothing);
     expect(find.text('Done'), findsNothing);
+  });
+
+  testWidgets('global progress banner clears failed submission', (
+    tester,
+  ) async {
+    const key = VotingSessionKey(roundId: _roundId, accountUuid: 'account-1');
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountProvider.overrideWith(_MnemonicAccountNotifier.new),
+          votingSubmissionJobsProvider.overrideWith(
+            () => _StaticVotingSubmissionJobsNotifier(
+              const VotingSubmissionJobsState(jobKeys: [key]),
+            ),
+          ),
+          votingSubmissionJobProvider(key).overrideWith(
+            () => _StaticVotingSubmissionJobNotifier(
+              key,
+              const VotingSubmissionJobState(
+                key: key,
+                status: VotingSubmissionJobStatus.error,
+                generation: 1,
+                errorMessage: 'Voting failed.',
+              ),
+            ),
+          ),
+          votingSubmissionJobSessionProvider(key).overrideWithValue(
+            AsyncValue.data(
+              VotingSessionState(
+                roundId: _roundId,
+                accountUuid: 'account-1',
+                phase: VotingSessionPhase.error,
+              ),
+            ),
+          ),
+        ],
+        child: AppTheme(
+          data: AppThemeData.light,
+          child: const Directionality(
+            textDirection: TextDirection.ltr,
+            child: VotingSubmissionProgressBanner(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Vote submission needs attention'), findsOneWidget);
+    expect(find.text('Clear'), findsOneWidget);
+    expect(find.text('View'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(ValueKey('voting_submission_banner_clear_$key')),
+    );
+    await tester.pump();
+
+    expect(find.text('Vote submission needs attention'), findsNothing);
+    expect(find.text('Clear'), findsNothing);
   });
 
   testWidgets('quit guard confirms while submission is active', (tester) async {
@@ -1767,6 +1858,7 @@ Widget _statusHarness({List<int>? keystoneScanResult}) {
         builder: (_, _) =>
             _ScanReturnScreen(result: keystoneScanResult ?? const [3]),
       ),
+      GoRoute(path: '/voting', builder: (_, _) => const Text('voting route')),
       GoRoute(path: '/home', builder: (_, _) => const Text('home route')),
       GoRoute(path: '/send', builder: (_, _) => const Text('send route')),
       GoRoute(path: '/receive', builder: (_, _) => const Text('receive route')),

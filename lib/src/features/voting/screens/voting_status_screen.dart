@@ -202,6 +202,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
                     phase: VotingSessionPhase.error,
                     errorMessage: job?.errorMessage,
                     onRetry: _retry,
+                    onClear: _clearError,
                   );
                 }
                 return const Center(child: CircularProgressIndicator());
@@ -210,6 +211,9 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
                 phase: VotingSessionPhase.error,
                 errorMessage: job?.errorMessage ?? _messageFromError(error),
                 onRetry: _retry,
+                onClear: job?.status == VotingSubmissionJobStatus.error
+                    ? _clearError
+                    : null,
               ),
               data: (state) {
                 final localError = job?.errorMessage;
@@ -245,6 +249,9 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
                   walletChainTipHeight: state.walletChainTipHeight,
                   errorMessage: _sessionErrorMessage(state, localError),
                   onRetry: _retry,
+                  onClear: job?.status == VotingSubmissionJobStatus.error
+                      ? _clearError
+                      : null,
                   onScanKeystone: _scanKeystoneSignature,
                   onSkipKeystoneBundles: _skipRemainingKeystoneBundles,
                 );
@@ -396,6 +403,14 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     unawaited(ref.read(votingSubmissionJobsProvider.notifier).retry(key));
   }
 
+  void _clearError() {
+    final key = _selectedJobKey();
+    if (key != null) {
+      ref.read(votingSubmissionJobsProvider.notifier).dismiss(key);
+    }
+    context.go('/voting');
+  }
+
   void _scheduleConfirmationNavigation(VotingSessionKey key) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _selectedJobKey() != key) return;
@@ -428,6 +443,7 @@ class _StatusContent extends StatelessWidget {
     this.walletChainTipHeight,
     this.errorMessage,
     this.onRetry,
+    this.onClear,
     this.onScanKeystone,
     this.onSkipKeystoneBundles,
   });
@@ -449,6 +465,7 @@ class _StatusContent extends StatelessWidget {
   final int? walletChainTipHeight;
   final String? errorMessage;
   final VoidCallback? onRetry;
+  final VoidCallback? onClear;
   final VoidCallback? onScanKeystone;
   final VoidCallback? onSkipKeystoneBundles;
 
@@ -558,10 +575,26 @@ class _StatusContent extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: AppSpacing.sm),
-                          AppButton(
-                            onPressed: onRetry,
-                            variant: AppButtonVariant.primary,
-                            child: const Text('Retry'),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: AppSpacing.xs,
+                            runSpacing: AppSpacing.xs,
+                            children: [
+                              if (onClear != null)
+                                AppButton(
+                                  key: const ValueKey(
+                                    'voting_status_clear_submission_error',
+                                  ),
+                                  onPressed: onClear,
+                                  variant: AppButtonVariant.secondary,
+                                  child: const Text('Clear'),
+                                ),
+                              AppButton(
+                                onPressed: onRetry,
+                                variant: AppButtonVariant.primary,
+                                child: const Text('Retry'),
+                              ),
+                            ],
                           ),
                         ],
                       ],
