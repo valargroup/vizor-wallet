@@ -4793,6 +4793,31 @@ impl SseDecode for crate::api::voting::ApiCommitmentBundleRecovery {
     }
 }
 
+impl SseDecode for crate::api::voting::ApiCompletedVoteChoice {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_proposalId = <u32>::sse_decode(deserializer);
+        let mut var_choice = <Option<u32>>::sse_decode(deserializer);
+        return crate::api::voting::ApiCompletedVoteChoice {
+            proposal_id: var_proposalId,
+            choice: var_choice,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voting::ApiCompletedVoteDisplay {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_choices =
+            <Vec<crate::api::voting::ApiCompletedVoteChoice>>::sse_decode(deserializer);
+        let mut var_votedAt = <Option<u64>>::sse_decode(deserializer);
+        return crate::api::voting::ApiCompletedVoteDisplay {
+            choices: var_choices,
+            voted_at: var_votedAt,
+        };
+    }
+}
+
 impl SseDecode for crate::api::voting::ApiDelegationPirPrecomputeResult {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4836,6 +4861,36 @@ impl SseDecode for crate::api::voting::ApiDelegationRecovery {
             phase: var_phase,
             tx_hash: var_txHash,
             van_leaf_position: var_vanLeafPosition,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voting::ApiDelegationRecoveryWork {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <String>::sse_decode(deserializer);
+        let mut var_bundleIndex = <u32>::sse_decode(deserializer);
+        let mut var_phase = <String>::sse_decode(deserializer);
+        let mut var_txHash = <Option<String>>::sse_decode(deserializer);
+        return crate::api::voting::ApiDelegationRecoveryWork {
+            kind: var_kind,
+            bundle_index: var_bundleIndex,
+            phase: var_phase,
+            tx_hash: var_txHash,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voting::ApiDelegationStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_bundleIndex = <u32>::sse_decode(deserializer);
+        let mut var_phase = <String>::sse_decode(deserializer);
+        let mut var_txHash = <Option<String>>::sse_decode(deserializer);
+        return crate::api::voting::ApiDelegationStatus {
+            bundle_index: var_bundleIndex,
+            phase: var_phase,
+            tx_hash: var_txHash,
         };
     }
 }
@@ -4965,13 +5020,39 @@ impl SseDecode for crate::api::voting::ApiRoundPlan {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_roundId = <String>::sse_decode(deserializer);
         let mut var_pendingRecovery = <bool>::sse_decode(deserializer);
+        let mut var_blockingRecovery = <bool>::sse_decode(deserializer);
+        let mut var_blockingShareWork = <bool>::sse_decode(deserializer);
+        let mut var_hotkeyBound = <bool>::sse_decode(deserializer);
+        let mut var_completedVoteArtifact = <bool>::sse_decode(deserializer);
+        let mut var_completedForDisplay = <bool>::sse_decode(deserializer);
+        let mut var_completedVoteDisplay =
+            <Option<crate::api::voting::ApiCompletedVoteDisplay>>::sse_decode(deserializer);
+        let mut var_needsDraftSetup = <bool>::sse_decode(deserializer);
+        let mut var_primaryAction = <String>::sse_decode(deserializer);
         let mut var_nextSteps = <Vec<crate::api::voting::ApiNextStep>>::sse_decode(deserializer);
+        let mut var_delegationStatuses =
+            <Vec<crate::api::voting::ApiDelegationStatus>>::sse_decode(deserializer);
+        let mut var_recoveredDelegationWork =
+            <Vec<crate::api::voting::ApiDelegationRecoveryWork>>::sse_decode(deserializer);
+        let mut var_recoveredVoteWork =
+            <Vec<crate::api::voting::ApiVoteRecoveryWork>>::sse_decode(deserializer);
         let mut var_openProposals = <Vec<u32>>::sse_decode(deserializer);
         let mut var_allDecided = <bool>::sse_decode(deserializer);
         return crate::api::voting::ApiRoundPlan {
             round_id: var_roundId,
             pending_recovery: var_pendingRecovery,
+            blocking_recovery: var_blockingRecovery,
+            blocking_share_work: var_blockingShareWork,
+            hotkey_bound: var_hotkeyBound,
+            completed_vote_artifact: var_completedVoteArtifact,
+            completed_for_display: var_completedForDisplay,
+            completed_vote_display: var_completedVoteDisplay,
+            needs_draft_setup: var_needsDraftSetup,
+            primary_action: var_primaryAction,
             next_steps: var_nextSteps,
+            delegation_statuses: var_delegationStatuses,
+            recovered_delegation_work: var_recoveredDelegationWork,
+            recovered_vote_work: var_recoveredVoteWork,
             open_proposals: var_openProposals,
             all_decided: var_allDecided,
         };
@@ -5238,6 +5319,26 @@ impl SseDecode for crate::api::voting::ApiVoteRecovery {
     }
 }
 
+impl SseDecode for crate::api::voting::ApiVoteRecoveryWork {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <String>::sse_decode(deserializer);
+        let mut var_bundleIndex = <u32>::sse_decode(deserializer);
+        let mut var_proposalId = <u32>::sse_decode(deserializer);
+        let mut var_txHash = <Option<String>>::sse_decode(deserializer);
+        let mut var_vcTreePosition = <Option<u64>>::sse_decode(deserializer);
+        let mut var_shareIndexes = <Vec<u32>>::sse_decode(deserializer);
+        return crate::api::voting::ApiVoteRecoveryWork {
+            kind: var_kind,
+            bundle_index: var_bundleIndex,
+            proposal_id: var_proposalId,
+            tx_hash: var_txHash,
+            vc_tree_position: var_vcTreePosition,
+            share_indexes: var_shareIndexes,
+        };
+    }
+}
+
 impl SseDecode for crate::api::voting::ApiVoteShareWire {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5477,6 +5578,20 @@ impl SseDecode for Vec<crate::api::voting::ApiCommitmentBundleRecovery> {
     }
 }
 
+impl SseDecode for Vec<crate::api::voting::ApiCompletedVoteChoice> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voting::ApiCompletedVoteChoice>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::voting::ApiDelegationRecovery> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5484,6 +5599,34 @@ impl SseDecode for Vec<crate::api::voting::ApiDelegationRecovery> {
         let mut ans_ = vec![];
         for idx_ in 0..len_ {
             ans_.push(<crate::api::voting::ApiDelegationRecovery>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voting::ApiDelegationRecoveryWork> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voting::ApiDelegationRecoveryWork>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voting::ApiDelegationStatus> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voting::ApiDelegationStatus>::sse_decode(
                 deserializer,
             ));
         }
@@ -5604,6 +5747,20 @@ impl SseDecode for Vec<crate::api::voting::ApiVoteRecovery> {
         let mut ans_ = vec![];
         for idx_ in 0..len_ {
             ans_.push(<crate::api::voting::ApiVoteRecovery>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voting::ApiVoteRecoveryWork> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voting::ApiVoteRecoveryWork>::sse_decode(
                 deserializer,
             ));
         }
@@ -5784,6 +5941,19 @@ impl SseDecode for Option<String> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::voting::ApiCompletedVoteDisplay> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::voting::ApiCompletedVoteDisplay>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -6424,6 +6594,48 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiCommitmentBundleRe
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiCompletedVoteChoice {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.proposal_id.into_into_dart().into_dart(),
+            self.choice.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiCompletedVoteChoice
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiCompletedVoteChoice>
+    for crate::api::voting::ApiCompletedVoteChoice
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiCompletedVoteChoice {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiCompletedVoteDisplay {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.choices.into_into_dart().into_dart(),
+            self.voted_at.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiCompletedVoteDisplay
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiCompletedVoteDisplay>
+    for crate::api::voting::ApiCompletedVoteDisplay
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiCompletedVoteDisplay {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiDelegationPirPrecomputeResult {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -6488,6 +6700,51 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiDelegationRecovery
     for crate::api::voting::ApiDelegationRecovery
 {
     fn into_into_dart(self) -> crate::api::voting::ApiDelegationRecovery {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiDelegationRecoveryWork {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.bundle_index.into_into_dart().into_dart(),
+            self.phase.into_into_dart().into_dart(),
+            self.tx_hash.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiDelegationRecoveryWork
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiDelegationRecoveryWork>
+    for crate::api::voting::ApiDelegationRecoveryWork
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiDelegationRecoveryWork {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiDelegationStatus {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.bundle_index.into_into_dart().into_dart(),
+            self.phase.into_into_dart().into_dart(),
+            self.tx_hash.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiDelegationStatus
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiDelegationStatus>
+    for crate::api::voting::ApiDelegationStatus
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiDelegationStatus {
         self
     }
 }
@@ -6647,7 +6904,18 @@ impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiRoundPlan {
         [
             self.round_id.into_into_dart().into_dart(),
             self.pending_recovery.into_into_dart().into_dart(),
+            self.blocking_recovery.into_into_dart().into_dart(),
+            self.blocking_share_work.into_into_dart().into_dart(),
+            self.hotkey_bound.into_into_dart().into_dart(),
+            self.completed_vote_artifact.into_into_dart().into_dart(),
+            self.completed_for_display.into_into_dart().into_dart(),
+            self.completed_vote_display.into_into_dart().into_dart(),
+            self.needs_draft_setup.into_into_dart().into_dart(),
+            self.primary_action.into_into_dart().into_dart(),
             self.next_steps.into_into_dart().into_dart(),
+            self.delegation_statuses.into_into_dart().into_dart(),
+            self.recovered_delegation_work.into_into_dart().into_dart(),
+            self.recovered_vote_work.into_into_dart().into_dart(),
             self.open_proposals.into_into_dart().into_dart(),
             self.all_decided.into_into_dart().into_dart(),
         ]
@@ -6985,6 +7253,31 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiVoteRecovery>
     for crate::api::voting::ApiVoteRecovery
 {
     fn into_into_dart(self) -> crate::api::voting::ApiVoteRecovery {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiVoteRecoveryWork {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.bundle_index.into_into_dart().into_dart(),
+            self.proposal_id.into_into_dart().into_dart(),
+            self.tx_hash.into_into_dart().into_dart(),
+            self.vc_tree_position.into_into_dart().into_dart(),
+            self.share_indexes.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiVoteRecoveryWork
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiVoteRecoveryWork>
+    for crate::api::voting::ApiVoteRecoveryWork
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiVoteRecoveryWork {
         self
     }
 }
@@ -7733,6 +8026,22 @@ impl SseEncode for crate::api::voting::ApiCommitmentBundleRecovery {
     }
 }
 
+impl SseEncode for crate::api::voting::ApiCompletedVoteChoice {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.proposal_id, serializer);
+        <Option<u32>>::sse_encode(self.choice, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voting::ApiCompletedVoteDisplay {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::api::voting::ApiCompletedVoteChoice>>::sse_encode(self.choices, serializer);
+        <Option<u64>>::sse_encode(self.voted_at, serializer);
+    }
+}
+
 impl SseEncode for crate::api::voting::ApiDelegationPirPrecomputeResult {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -7762,6 +8071,25 @@ impl SseEncode for crate::api::voting::ApiDelegationRecovery {
         <String>::sse_encode(self.phase, serializer);
         <Option<String>>::sse_encode(self.tx_hash, serializer);
         <Option<u32>>::sse_encode(self.van_leaf_position, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voting::ApiDelegationRecoveryWork {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.kind, serializer);
+        <u32>::sse_encode(self.bundle_index, serializer);
+        <String>::sse_encode(self.phase, serializer);
+        <Option<String>>::sse_encode(self.tx_hash, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voting::ApiDelegationStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.bundle_index, serializer);
+        <String>::sse_encode(self.phase, serializer);
+        <Option<String>>::sse_encode(self.tx_hash, serializer);
     }
 }
 
@@ -7842,7 +8170,30 @@ impl SseEncode for crate::api::voting::ApiRoundPlan {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.round_id, serializer);
         <bool>::sse_encode(self.pending_recovery, serializer);
+        <bool>::sse_encode(self.blocking_recovery, serializer);
+        <bool>::sse_encode(self.blocking_share_work, serializer);
+        <bool>::sse_encode(self.hotkey_bound, serializer);
+        <bool>::sse_encode(self.completed_vote_artifact, serializer);
+        <bool>::sse_encode(self.completed_for_display, serializer);
+        <Option<crate::api::voting::ApiCompletedVoteDisplay>>::sse_encode(
+            self.completed_vote_display,
+            serializer,
+        );
+        <bool>::sse_encode(self.needs_draft_setup, serializer);
+        <String>::sse_encode(self.primary_action, serializer);
         <Vec<crate::api::voting::ApiNextStep>>::sse_encode(self.next_steps, serializer);
+        <Vec<crate::api::voting::ApiDelegationStatus>>::sse_encode(
+            self.delegation_statuses,
+            serializer,
+        );
+        <Vec<crate::api::voting::ApiDelegationRecoveryWork>>::sse_encode(
+            self.recovered_delegation_work,
+            serializer,
+        );
+        <Vec<crate::api::voting::ApiVoteRecoveryWork>>::sse_encode(
+            self.recovered_vote_work,
+            serializer,
+        );
         <Vec<u32>>::sse_encode(self.open_proposals, serializer);
         <bool>::sse_encode(self.all_decided, serializer);
     }
@@ -8015,6 +8366,18 @@ impl SseEncode for crate::api::voting::ApiVoteRecovery {
     }
 }
 
+impl SseEncode for crate::api::voting::ApiVoteRecoveryWork {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.kind, serializer);
+        <u32>::sse_encode(self.bundle_index, serializer);
+        <u32>::sse_encode(self.proposal_id, serializer);
+        <Option<String>>::sse_encode(self.tx_hash, serializer);
+        <Option<u64>>::sse_encode(self.vc_tree_position, serializer);
+        <Vec<u32>>::sse_encode(self.share_indexes, serializer);
+    }
+}
+
 impl SseEncode for crate::api::voting::ApiVoteShareWire {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -8182,12 +8545,42 @@ impl SseEncode for Vec<crate::api::voting::ApiCommitmentBundleRecovery> {
     }
 }
 
+impl SseEncode for Vec<crate::api::voting::ApiCompletedVoteChoice> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voting::ApiCompletedVoteChoice>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::voting::ApiDelegationRecovery> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::voting::ApiDelegationRecovery>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voting::ApiDelegationRecoveryWork> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voting::ApiDelegationRecoveryWork>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voting::ApiDelegationStatus> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voting::ApiDelegationStatus>::sse_encode(item, serializer);
         }
     }
 }
@@ -8278,6 +8671,16 @@ impl SseEncode for Vec<crate::api::voting::ApiVoteRecovery> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::voting::ApiVoteRecovery>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voting::ApiVoteRecoveryWork> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voting::ApiVoteRecoveryWork>::sse_encode(item, serializer);
         }
     }
 }
@@ -8418,6 +8821,16 @@ impl SseEncode for Option<String> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <String>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::voting::ApiCompletedVoteDisplay> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::voting::ApiCompletedVoteDisplay>::sse_encode(value, serializer);
         }
     }
 }

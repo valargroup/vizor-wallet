@@ -552,7 +552,11 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     final roundPlan = session.roundPlan;
     if (roundPlan != null) {
       return _roundPlanHasNoOpenProposals(session) &&
-          roundPlan.nextSteps.any(_stepCanRecoverWithoutDraft);
+          (roundPlan.primaryAction == 'vote' ||
+              roundPlan.primaryAction == 'submit_shares' ||
+              roundPlan.recoveredVoteWork.isNotEmpty ||
+              roundPlan.blockingShareWork ||
+              (roundPlan.pendingRecovery && !roundPlan.blockingRecovery));
     }
     final resumePlan = session.resumePlan;
     return resumePlan != null &&
@@ -569,24 +573,14 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   bool _canPollDelegationWithoutDraft(VotingSessionState session) {
     final roundPlan = session.roundPlan;
     if (roundPlan != null) {
-      var hasSubmittedDelegation = false;
-      for (final step in roundPlan.nextSteps) {
-        if (step.kind == 'delegate') return false;
-        if (step.kind == 'poll_delegation') hasSubmittedDelegation = true;
-      }
-      return hasSubmittedDelegation;
+      final work = roundPlan.recoveredDelegationWork;
+      return work.any((item) => item.kind == 'poll_delegation') &&
+          !work.any((item) => item.kind == 'delegate');
     }
     final resumePlan = session.resumePlan;
     return resumePlan != null &&
         resumePlan.submittedDelegationBundleIndexes.isNotEmpty &&
         resumePlan.pendingDelegationBundleIndexes.isEmpty;
-  }
-
-  bool _stepCanRecoverWithoutDraft(rust_voting.ApiNextStep step) {
-    return step.kind == 'submit_vote' ||
-        step.kind == 'submit_shares' ||
-        step.kind == 'poll_vote' ||
-        step.kind == 'confirm_share';
   }
 
   bool _sessionNeedsDelegation(VotingSessionState? session) {
@@ -615,7 +609,10 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   bool _sessionNeedsKeystoneSigning(VotingSessionState session) {
     final roundPlan = session.roundPlan;
     if (roundPlan != null) {
-      return roundPlan.nextSteps.any((step) => step.kind == 'delegate') ||
+      return roundPlan.primaryAction == 'delegate' ||
+          roundPlan.recoveredDelegationWork.any(
+            (work) => work.kind == 'delegate',
+          ) ||
           roundPlanNeedsDraftSetup(roundPlan);
     }
     return session.resumePlan?.pendingDelegationBundleIndexes.isNotEmpty ??
@@ -631,20 +628,15 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   }
 
   bool _planNeedsDelegation(rust_voting.ApiRoundPlan? roundPlan) {
-    return roundPlan?.nextSteps.any(
-          (step) => step.kind == 'delegate' || step.kind == 'poll_delegation',
-        ) ??
-        false;
+    if (roundPlan == null) return false;
+    return roundPlan.primaryAction == 'delegate' ||
+        roundPlan.recoveredDelegationWork.isNotEmpty;
   }
 
   bool _planNeedsVotePolling(rust_voting.ApiRoundPlan? roundPlan) {
-    return roundPlan?.nextSteps.any(
-          (step) =>
-              step.kind == 'submit_vote' ||
-              step.kind == 'submit_shares' ||
-              step.kind == 'poll_vote',
-        ) ??
-        false;
+    if (roundPlan == null) return false;
+    return roundPlan.primaryAction == 'vote' ||
+        roundPlan.recoveredVoteWork.isNotEmpty;
   }
 
   List<rust_voting.ApiDraftVote> _draftVotesFromRoundPlan(

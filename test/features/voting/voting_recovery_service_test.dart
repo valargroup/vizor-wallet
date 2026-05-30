@@ -6,6 +6,8 @@ import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
 import 'package:zcash_wallet/src/features/voting/voting_resume_plan.dart';
 import 'package:zcash_wallet/src/rust/api/voting.dart' as rust_voting;
 
+import 'round_plan_test_utils.dart';
+
 void main() {
   test('empty round resumes delegation for every bundle', () async {
     final api = FakeVotingRecoveryApi(state: recoveryState(bundleCount: 3));
@@ -289,7 +291,7 @@ void main() {
           unconfirmedShareDelegations: [accepted],
         ),
       );
-      final roundPlan = rust_voting.ApiRoundPlan(
+      final roundPlan = apiRoundPlan(
         roundId: 'round-1',
         pendingRecovery: true,
         nextSteps: const [
@@ -313,7 +315,7 @@ void main() {
   );
 
   test('round planner vote work blocks foreground completion', () {
-    final roundPlan = rust_voting.ApiRoundPlan(
+    final roundPlan = apiRoundPlan(
       roundId: 'round-1',
       pendingRecovery: true,
       nextSteps: const [
@@ -463,7 +465,7 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
     required String roundId,
     required List<int> proposalIds,
   }) async {
-    return rust_voting.ApiRoundPlan(
+    return apiRoundPlan(
       roundId: roundId,
       pendingRecovery: false,
       nextSteps: const [],
@@ -532,8 +534,7 @@ class AddSentServersCall {
 rust_voting.ApiRoundRecoveryState recoveryState({
   int bundleCount = 0,
   List<rust_voting.ApiDelegationRecovery> delegationTxHashes = const [],
-  List<rust_voting.ApiDelegationRecovery> delegationWorkflows =
-      const [],
+  List<rust_voting.ApiDelegationRecovery> delegationWorkflows = const [],
   List<rust_voting.ApiVoteRecovery> votes = const [],
   List<rust_voting.ApiVoteRecovery> voteWorkflows = const [],
   List<rust_voting.ApiVoteRecovery> voteTxHashes = const [],

@@ -260,6 +260,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         return;
       }
       final plan = current.resumePlan ?? context.resumePlan;
+      final roundPlan = current.roundPlan ?? context.roundPlan;
       final pirEndpoint = current.pirEndpoint;
       if (pirEndpoint == null) {
         _setError('PIR endpoint has not been resolved.', context: context);
@@ -283,7 +284,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final rust = ref.read(votingRustApiProvider);
       final completedBundleIndexes = await _confirmSubmittedDelegations(
         context: context,
-        plan: plan,
+        roundPlan: roundPlan,
         progress: progress,
       );
       if (completedBundleIndexes == null) return;
@@ -566,6 +567,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         return;
       }
       final plan = current.resumePlan ?? context.resumePlan;
+      final roundPlan = current.roundPlan ?? context.roundPlan;
       final pirEndpoint = current.pirEndpoint;
       if (pirEndpoint == null) {
         _setError('PIR endpoint has not been resolved.', context: context);
@@ -579,7 +581,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       );
       final completedBundleIndexes = await _confirmSubmittedDelegations(
         context: context,
-        plan: plan,
+        roundPlan: roundPlan,
         progress: progress,
       );
       if (completedBundleIndexes == null) return;
@@ -780,10 +782,13 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         }
       }
       var confirmedSubmittedVotes = false;
-      for (final key in plan.submittedVoteConfirmationKeys) {
-        final txHash = plan.voteTxHashFor(key);
-        final commitmentBundle = plan.commitmentBundleFor(key);
-        if (txHash == null || commitmentBundle == null) continue;
+      for (final work in _pendingVotePollingWork(roundPlan)) {
+        final key = VotingVoteKey(
+          bundleIndex: work.bundleIndex,
+          proposalId: work.proposalId,
+        );
+        final txHash = work.txHash;
+        if (txHash == null) continue;
         final confirmation = await _awaitTxConfirmation(api, txHash);
         if (confirmation == null) {
           _setError(
@@ -833,7 +838,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           ),
         );
       }
-      final recoveredVoteWork = _pendingRecoveredVoteWork(plan, roundPlan);
+      final recoveredVoteWork = _pendingRecoveredVoteWork(roundPlan);
       final recoveredVoteKeys = {
         for (final work in recoveredVoteWork) work.key,
       };
@@ -908,10 +913,10 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         if (recoveredWork.kind == _RecoveredVoteWorkKind.submitVote) {
           vcTreePositions = await _submitVoteCommitments(context, commitments);
         } else {
-          final commitmentBundle = plan.commitmentBundleFor(key);
-          if (commitmentBundle == null) {
+          final vcTreePosition = recoveredWork.vcTreePosition;
+          if (vcTreePosition == null) {
             throw StateError(
-              'Missing recovery bundle for submitted shares '
+              'Missing vote tree position for submitted shares '
               'bundle=${key.bundleIndex} proposal=${key.proposalId}.',
             );
           }
@@ -939,7 +944,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               'for bundle=${key.bundleIndex} proposal=${key.proposalId}.',
             );
           }
-          vcTreePositions = {key.proposalId: commitmentBundle.vcTreePosition};
+          vcTreePositions = {key.proposalId: vcTreePosition};
           shareIndexFilter = Set<int>.unmodifiable(shareIndexes);
         }
         await _submitCommitmentShares(
@@ -1571,17 +1576,18 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   Future<Set<int>?> _confirmSubmittedDelegations({
     required _VotingSessionContext context,
-    required VotingResumePlan plan,
+    required rust_voting.ApiRoundPlan? roundPlan,
     required Map<int, VotingSessionProgress> progress,
   }) async {
     final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
     final rust = ref.read(votingRustApiProvider);
     final completedBundleIndexes = <int>{};
     final submittedDelegationsByBundle = {
-      for (final record in plan.recoveryState.delegation)
-        if (record.phase == VotingWorkflowPhase.submittedDelegation &&
-            record.txHash != null)
-          record.bundleIndex: record.txHash!,
+      for (final work
+          in roundPlan?.recoveredDelegationWork ??
+              const <rust_voting.ApiDelegationRecoveryWork>[])
+        if (work.kind == 'poll_delegation' && work.txHash != null)
+          work.bundleIndex: work.txHash!,
     };
     for (final entry in submittedDelegationsByBundle.entries) {
       final bundleIndex = entry.key;
@@ -2219,6 +2225,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     }
 
     final plan = current.resumePlan ?? context.resumePlan;
+    final roundPlan = current.roundPlan ?? context.roundPlan;
     final signatures = await _loadKeystoneSignatures(context);
     int? nextUnsignedBundle;
     for (final bundleIndex in plan.pendingDelegationBundleIndexes) {
@@ -2229,7 +2236,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     }
     final existingHotkey = await _readStoredHotkey(context);
     if (existingHotkey == null &&
-        (signatures.isNotEmpty || _hasHotkeyBoundRecoveryState(plan))) {
+        (signatures.isNotEmpty || (roundPlan?.hotkeyBound ?? false))) {
       throw const VotingHotkeyUnavailable(
         'missing stored Keystone voting hotkey',
       );
@@ -2719,31 +2726,15 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     rust_voting.ApiRoundPlan? roundPlan,
   ) {
     if (roundPlan != null) {
-      final hasBlockingWork = hasBlockingRoundRecoveryWork(
-        roundPlan: roundPlan,
-        resumePlan: plan,
-      );
-      if (!hasBlockingWork && plan.hasCompletedVoteArtifact) {
-        return VotingSessionPhase.done;
-      }
-      if (hasBlockingWork) {
-        if (roundPlan.nextSteps.any(
-          (step) => step.kind == 'delegate' || step.kind == 'poll_delegation',
-        )) {
+      switch (roundPlan.primaryAction) {
+        case 'done':
+          return VotingSessionPhase.done;
+        case 'delegate':
           return VotingSessionPhase.readyToDelegate;
-        }
-        if (roundPlan.nextSteps.any(
-          (step) =>
-              step.kind == 'cast_vote' ||
-              step.kind == 'submit_vote' ||
-              step.kind == 'poll_vote' ||
-              step.kind == 'submit_shares',
-        )) {
+        case 'vote':
           return VotingSessionPhase.readyToVote;
-        }
-        if (plan.hasBlockingShareWork) {
+        case 'submit_shares':
           return VotingSessionPhase.submittingShares;
-        }
       }
     }
     return _phaseForResumePlan(plan);
@@ -2798,41 +2789,36 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     };
   }
 
+  static List<rust_voting.ApiVoteRecoveryWork> _pendingVotePollingWork(
+    rust_voting.ApiRoundPlan? roundPlan,
+  ) {
+    return [
+      for (final work
+          in roundPlan?.recoveredVoteWork ??
+              const <rust_voting.ApiVoteRecoveryWork>[])
+        if (work.kind == 'poll_vote') work,
+    ];
+  }
+
   static List<_RecoveredVoteWork> _pendingRecoveredVoteWork(
-    VotingResumePlan plan,
     rust_voting.ApiRoundPlan? roundPlan,
   ) {
     if (roundPlan == null) return const [];
-    final work = <_RecoveredVoteWork>[];
-    for (final step in roundPlan.nextSteps) {
-      final key = VotingVoteKey(
-        bundleIndex: step.bundleIndex,
-        proposalId: step.proposalId,
-      );
-      if (step.kind == 'submit_vote') {
-        work.add(
-          _RecoveredVoteWork(kind: _RecoveredVoteWorkKind.submitVote, key: key),
-        );
-      } else if (step.kind == 'submit_shares') {
-        final existingIndex = work.indexWhere(
-          (item) =>
-              item.kind == _RecoveredVoteWorkKind.submitShares &&
-              item.key == key,
-        );
-        if (existingIndex >= 0) {
-          work[existingIndex].shareIndexes!.add(step.shareIndex);
-        } else {
-          work.add(
-            _RecoveredVoteWork(
-              kind: _RecoveredVoteWorkKind.submitShares,
-              key: key,
-              shareIndexes: {step.shareIndex},
+    return [
+      for (final work in roundPlan.recoveredVoteWork)
+        if (work.kind == 'submit_vote' || work.kind == 'submit_shares')
+          _RecoveredVoteWork(
+            kind: work.kind == 'submit_vote'
+                ? _RecoveredVoteWorkKind.submitVote
+                : _RecoveredVoteWorkKind.submitShares,
+            key: VotingVoteKey(
+              bundleIndex: work.bundleIndex,
+              proposalId: work.proposalId,
             ),
-          );
-        }
-      }
-    }
-    return work;
+            vcTreePosition: work.vcTreePosition,
+            shareIndexes: work.shareIndexes.toSet(),
+          ),
+    ];
   }
 
   static bool _commitmentsUseSingleShare(
@@ -2910,19 +2896,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     }
   }
 
-  static bool _hasHotkeyBoundRecoveryState(VotingResumePlan plan) {
-    final delegationWorkflowRequiresHotkey = plan.recoveryState.delegation.any(
-      (record) => record.phase != VotingWorkflowPhase.prepared,
-    );
-    return delegationWorkflowRequiresHotkey ||
-        plan.votesByKey.isNotEmpty ||
-        plan.votePhasesByKey.isNotEmpty ||
-        plan.voteTxHashesByKey.isNotEmpty ||
-        plan.commitmentBundlesByKey.isNotEmpty ||
-        plan.shareDelegations.isNotEmpty ||
-        plan.unconfirmedShareDelegations.isNotEmpty;
-  }
-
   static bool _bytesEqual(List<int> left, List<int> right) {
     if (left.length != right.length) return false;
     for (var i = 0; i < left.length; i++) {
@@ -2945,11 +2918,13 @@ class _RecoveredVoteWork {
   const _RecoveredVoteWork({
     required this.kind,
     required this.key,
+    this.vcTreePosition,
     this.shareIndexes,
   });
 
   final _RecoveredVoteWorkKind kind;
   final VotingVoteKey key;
+  final BigInt? vcTreePosition;
   final Set<int>? shareIndexes;
 
   String get logLabel {

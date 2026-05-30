@@ -5877,6 +5877,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ApiCompletedVoteChoice dco_decode_api_completed_vote_choice(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ApiCompletedVoteChoice(
+      proposalId: dco_decode_u_32(arr[0]),
+      choice: dco_decode_opt_box_autoadd_u_32(arr[1]),
+    );
+  }
+
+  @protected
+  ApiCompletedVoteDisplay dco_decode_api_completed_vote_display(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ApiCompletedVoteDisplay(
+      choices: dco_decode_list_api_completed_vote_choice(arr[0]),
+      votedAt: dco_decode_opt_box_autoadd_u_64(arr[1]),
+    );
+  }
+
+  @protected
   ApiDelegationPirPrecomputeResult
   dco_decode_api_delegation_pir_precompute_result(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -5916,6 +5940,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       phase: dco_decode_String(arr[1]),
       txHash: dco_decode_opt_String(arr[2]),
       vanLeafPosition: dco_decode_opt_box_autoadd_u_32(arr[3]),
+    );
+  }
+
+  @protected
+  ApiDelegationRecoveryWork dco_decode_api_delegation_recovery_work(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ApiDelegationRecoveryWork(
+      kind: dco_decode_String(arr[0]),
+      bundleIndex: dco_decode_u_32(arr[1]),
+      phase: dco_decode_String(arr[2]),
+      txHash: dco_decode_opt_String(arr[3]),
+    );
+  }
+
+  @protected
+  ApiDelegationStatus dco_decode_api_delegation_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ApiDelegationStatus(
+      bundleIndex: dco_decode_u_32(arr[0]),
+      phase: dco_decode_String(arr[1]),
+      txHash: dco_decode_opt_String(arr[2]),
     );
   }
 
@@ -6025,14 +6078,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ApiRoundPlan dco_decode_api_round_plan(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 16)
+      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
     return ApiRoundPlan(
       roundId: dco_decode_String(arr[0]),
       pendingRecovery: dco_decode_bool(arr[1]),
-      nextSteps: dco_decode_list_api_next_step(arr[2]),
-      openProposals: dco_decode_list_prim_u_32_strict(arr[3]),
-      allDecided: dco_decode_bool(arr[4]),
+      blockingRecovery: dco_decode_bool(arr[2]),
+      blockingShareWork: dco_decode_bool(arr[3]),
+      hotkeyBound: dco_decode_bool(arr[4]),
+      completedVoteArtifact: dco_decode_bool(arr[5]),
+      completedForDisplay: dco_decode_bool(arr[6]),
+      completedVoteDisplay:
+          dco_decode_opt_box_autoadd_api_completed_vote_display(arr[7]),
+      needsDraftSetup: dco_decode_bool(arr[8]),
+      primaryAction: dco_decode_String(arr[9]),
+      nextSteps: dco_decode_list_api_next_step(arr[10]),
+      delegationStatuses: dco_decode_list_api_delegation_status(arr[11]),
+      recoveredDelegationWork: dco_decode_list_api_delegation_recovery_work(
+        arr[12],
+      ),
+      recoveredVoteWork: dco_decode_list_api_vote_recovery_work(arr[13]),
+      openProposals: dco_decode_list_prim_u_32_strict(arr[14]),
+      allDecided: dco_decode_bool(arr[15]),
     );
   }
 
@@ -6247,6 +6314,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ApiVoteRecoveryWork dco_decode_api_vote_recovery_work(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return ApiVoteRecoveryWork(
+      kind: dco_decode_String(arr[0]),
+      bundleIndex: dco_decode_u_32(arr[1]),
+      proposalId: dco_decode_u_32(arr[2]),
+      txHash: dco_decode_opt_String(arr[3]),
+      vcTreePosition: dco_decode_opt_box_autoadd_u_64(arr[4]),
+      shareIndexes: dco_decode_list_prim_u_32_strict(arr[5]),
+    );
+  }
+
+  @protected
   ApiVoteShareWire dco_decode_api_vote_share_wire(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -6364,6 +6447,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool dco_decode_bool(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as bool;
+  }
+
+  @protected
+  ApiCompletedVoteDisplay dco_decode_box_autoadd_api_completed_vote_display(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_api_completed_vote_display(raw);
   }
 
   @protected
@@ -6513,12 +6604,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ApiCompletedVoteChoice> dco_decode_list_api_completed_vote_choice(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_api_completed_vote_choice)
+        .toList();
+  }
+
+  @protected
   List<ApiDelegationRecovery> dco_decode_list_api_delegation_recovery(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>)
         .map(dco_decode_api_delegation_recovery)
+        .toList();
+  }
+
+  @protected
+  List<ApiDelegationRecoveryWork> dco_decode_list_api_delegation_recovery_work(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_api_delegation_recovery_work)
+        .toList();
+  }
+
+  @protected
+  List<ApiDelegationStatus> dco_decode_list_api_delegation_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_api_delegation_status)
         .toList();
   }
 
@@ -6593,6 +6712,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<ApiVoteRecovery> dco_decode_list_api_vote_recovery(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_api_vote_recovery).toList();
+  }
+
+  @protected
+  List<ApiVoteRecoveryWork> dco_decode_list_api_vote_recovery_work(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_api_vote_recovery_work)
+        .toList();
   }
 
   @protected
@@ -6699,6 +6828,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  ApiCompletedVoteDisplay?
+  dco_decode_opt_box_autoadd_api_completed_vote_display(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_api_completed_vote_display(raw);
   }
 
   @protected
@@ -7133,6 +7271,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ApiCompletedVoteChoice sse_decode_api_completed_vote_choice(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_proposalId = sse_decode_u_32(deserializer);
+    var var_choice = sse_decode_opt_box_autoadd_u_32(deserializer);
+    return ApiCompletedVoteChoice(
+      proposalId: var_proposalId,
+      choice: var_choice,
+    );
+  }
+
+  @protected
+  ApiCompletedVoteDisplay sse_decode_api_completed_vote_display(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_choices = sse_decode_list_api_completed_vote_choice(deserializer);
+    var var_votedAt = sse_decode_opt_box_autoadd_u_64(deserializer);
+    return ApiCompletedVoteDisplay(choices: var_choices, votedAt: var_votedAt);
+  }
+
+  @protected
   ApiDelegationPirPrecomputeResult
   sse_decode_api_delegation_pir_precompute_result(
     SseDeserializer deserializer,
@@ -7180,6 +7341,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       phase: var_phase,
       txHash: var_txHash,
       vanLeafPosition: var_vanLeafPosition,
+    );
+  }
+
+  @protected
+  ApiDelegationRecoveryWork sse_decode_api_delegation_recovery_work(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_String(deserializer);
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    var var_phase = sse_decode_String(deserializer);
+    var var_txHash = sse_decode_opt_String(deserializer);
+    return ApiDelegationRecoveryWork(
+      kind: var_kind,
+      bundleIndex: var_bundleIndex,
+      phase: var_phase,
+      txHash: var_txHash,
+    );
+  }
+
+  @protected
+  ApiDelegationStatus sse_decode_api_delegation_status(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    var var_phase = sse_decode_String(deserializer);
+    var var_txHash = sse_decode_opt_String(deserializer);
+    return ApiDelegationStatus(
+      bundleIndex: var_bundleIndex,
+      phase: var_phase,
+      txHash: var_txHash,
     );
   }
 
@@ -7310,13 +7503,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_roundId = sse_decode_String(deserializer);
     var var_pendingRecovery = sse_decode_bool(deserializer);
+    var var_blockingRecovery = sse_decode_bool(deserializer);
+    var var_blockingShareWork = sse_decode_bool(deserializer);
+    var var_hotkeyBound = sse_decode_bool(deserializer);
+    var var_completedVoteArtifact = sse_decode_bool(deserializer);
+    var var_completedForDisplay = sse_decode_bool(deserializer);
+    var var_completedVoteDisplay =
+        sse_decode_opt_box_autoadd_api_completed_vote_display(deserializer);
+    var var_needsDraftSetup = sse_decode_bool(deserializer);
+    var var_primaryAction = sse_decode_String(deserializer);
     var var_nextSteps = sse_decode_list_api_next_step(deserializer);
+    var var_delegationStatuses = sse_decode_list_api_delegation_status(
+      deserializer,
+    );
+    var var_recoveredDelegationWork =
+        sse_decode_list_api_delegation_recovery_work(deserializer);
+    var var_recoveredVoteWork = sse_decode_list_api_vote_recovery_work(
+      deserializer,
+    );
     var var_openProposals = sse_decode_list_prim_u_32_strict(deserializer);
     var var_allDecided = sse_decode_bool(deserializer);
     return ApiRoundPlan(
       roundId: var_roundId,
       pendingRecovery: var_pendingRecovery,
+      blockingRecovery: var_blockingRecovery,
+      blockingShareWork: var_blockingShareWork,
+      hotkeyBound: var_hotkeyBound,
+      completedVoteArtifact: var_completedVoteArtifact,
+      completedForDisplay: var_completedForDisplay,
+      completedVoteDisplay: var_completedVoteDisplay,
+      needsDraftSetup: var_needsDraftSetup,
+      primaryAction: var_primaryAction,
       nextSteps: var_nextSteps,
+      delegationStatuses: var_delegationStatuses,
+      recoveredDelegationWork: var_recoveredDelegationWork,
+      recoveredVoteWork: var_recoveredVoteWork,
       openProposals: var_openProposals,
       allDecided: var_allDecided,
     );
@@ -7592,6 +7813,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ApiVoteRecoveryWork sse_decode_api_vote_recovery_work(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_String(deserializer);
+    var var_bundleIndex = sse_decode_u_32(deserializer);
+    var var_proposalId = sse_decode_u_32(deserializer);
+    var var_txHash = sse_decode_opt_String(deserializer);
+    var var_vcTreePosition = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_shareIndexes = sse_decode_list_prim_u_32_strict(deserializer);
+    return ApiVoteRecoveryWork(
+      kind: var_kind,
+      bundleIndex: var_bundleIndex,
+      proposalId: var_proposalId,
+      txHash: var_txHash,
+      vcTreePosition: var_vcTreePosition,
+      shareIndexes: var_shareIndexes,
+    );
+  }
+
+  @protected
   ApiVoteShareWire sse_decode_api_vote_share_wire(
     SseDeserializer deserializer,
   ) {
@@ -7736,6 +7978,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool sse_decode_bool(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  ApiCompletedVoteDisplay sse_decode_box_autoadd_api_completed_vote_display(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_api_completed_vote_display(deserializer));
   }
 
   @protected
@@ -7914,6 +8164,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ApiCompletedVoteChoice> sse_decode_list_api_completed_vote_choice(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ApiCompletedVoteChoice>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_api_completed_vote_choice(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<ApiDelegationRecovery> sse_decode_list_api_delegation_recovery(
     SseDeserializer deserializer,
   ) {
@@ -7923,6 +8187,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <ApiDelegationRecovery>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_api_delegation_recovery(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ApiDelegationRecoveryWork> sse_decode_list_api_delegation_recovery_work(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ApiDelegationRecoveryWork>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_api_delegation_recovery_work(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ApiDelegationStatus> sse_decode_list_api_delegation_status(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ApiDelegationStatus>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_api_delegation_status(deserializer));
     }
     return ans_;
   }
@@ -8048,6 +8340,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <ApiVoteRecovery>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_api_vote_recovery(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ApiVoteRecoveryWork> sse_decode_list_api_vote_recovery_work(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ApiVoteRecoveryWork>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_api_vote_recovery_work(deserializer));
     }
     return ans_;
   }
@@ -8238,6 +8544,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  ApiCompletedVoteDisplay?
+  sse_decode_opt_box_autoadd_api_completed_vote_display(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_api_completed_vote_display(deserializer));
     } else {
       return null;
     }
@@ -8763,6 +9083,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_api_completed_vote_choice(
+    ApiCompletedVoteChoice self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.proposalId, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.choice, serializer);
+  }
+
+  @protected
+  void sse_encode_api_completed_vote_display(
+    ApiCompletedVoteDisplay self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_api_completed_vote_choice(self.choices, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.votedAt, serializer);
+  }
+
+  @protected
   void sse_encode_api_delegation_pir_precompute_result(
     ApiDelegationPirPrecomputeResult self,
     SseSerializer serializer,
@@ -8798,6 +9138,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.phase, serializer);
     sse_encode_opt_String(self.txHash, serializer);
     sse_encode_opt_box_autoadd_u_32(self.vanLeafPosition, serializer);
+  }
+
+  @protected
+  void sse_encode_api_delegation_recovery_work(
+    ApiDelegationRecoveryWork self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.kind, serializer);
+    sse_encode_u_32(self.bundleIndex, serializer);
+    sse_encode_String(self.phase, serializer);
+    sse_encode_opt_String(self.txHash, serializer);
+  }
+
+  @protected
+  void sse_encode_api_delegation_status(
+    ApiDelegationStatus self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.bundleIndex, serializer);
+    sse_encode_String(self.phase, serializer);
+    sse_encode_opt_String(self.txHash, serializer);
   }
 
   @protected
@@ -8883,7 +9246,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.roundId, serializer);
     sse_encode_bool(self.pendingRecovery, serializer);
+    sse_encode_bool(self.blockingRecovery, serializer);
+    sse_encode_bool(self.blockingShareWork, serializer);
+    sse_encode_bool(self.hotkeyBound, serializer);
+    sse_encode_bool(self.completedVoteArtifact, serializer);
+    sse_encode_bool(self.completedForDisplay, serializer);
+    sse_encode_opt_box_autoadd_api_completed_vote_display(
+      self.completedVoteDisplay,
+      serializer,
+    );
+    sse_encode_bool(self.needsDraftSetup, serializer);
+    sse_encode_String(self.primaryAction, serializer);
     sse_encode_list_api_next_step(self.nextSteps, serializer);
+    sse_encode_list_api_delegation_status(self.delegationStatuses, serializer);
+    sse_encode_list_api_delegation_recovery_work(
+      self.recoveredDelegationWork,
+      serializer,
+    );
+    sse_encode_list_api_vote_recovery_work(self.recoveredVoteWork, serializer);
     sse_encode_list_prim_u_32_strict(self.openProposals, serializer);
     sse_encode_bool(self.allDecided, serializer);
   }
@@ -9079,6 +9459,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_api_vote_recovery_work(
+    ApiVoteRecoveryWork self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.kind, serializer);
+    sse_encode_u_32(self.bundleIndex, serializer);
+    sse_encode_u_32(self.proposalId, serializer);
+    sse_encode_opt_String(self.txHash, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.vcTreePosition, serializer);
+    sse_encode_list_prim_u_32_strict(self.shareIndexes, serializer);
+  }
+
+  @protected
   void sse_encode_api_vote_share_wire(
     ApiVoteShareWire self,
     SseSerializer serializer,
@@ -9179,6 +9573,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_bool(bool self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_api_completed_vote_display(
+    ApiCompletedVoteDisplay self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_api_completed_vote_display(self, serializer);
   }
 
   @protected
@@ -9344,6 +9747,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_api_completed_vote_choice(
+    List<ApiCompletedVoteChoice> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_api_completed_vote_choice(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_api_delegation_recovery(
     List<ApiDelegationRecovery> self,
     SseSerializer serializer,
@@ -9352,6 +9767,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_api_delegation_recovery(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_api_delegation_recovery_work(
+    List<ApiDelegationRecoveryWork> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_api_delegation_recovery_work(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_api_delegation_status(
+    List<ApiDelegationStatus> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_api_delegation_status(item, serializer);
     }
   }
 
@@ -9460,6 +9899,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_api_vote_recovery(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_api_vote_recovery_work(
+    List<ApiVoteRecoveryWork> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_api_vote_recovery_work(item, serializer);
     }
   }
 
@@ -9646,6 +10097,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_api_completed_vote_display(
+    ApiCompletedVoteDisplay? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_api_completed_vote_display(self, serializer);
     }
   }
 

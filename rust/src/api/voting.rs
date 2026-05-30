@@ -1983,13 +1983,116 @@ pub struct ApiNextStep {
     pub share_index: u32,
 }
 
+/// Delegation phase summary for one bundle.
+pub struct ApiDelegationStatus {
+    pub bundle_index: u32,
+    pub phase: String,
+    pub tx_hash: Option<String>,
+}
+
+/// Grouped delegation work recovered from persisted round state.
+pub struct ApiDelegationRecoveryWork {
+    /// "delegate" | "poll_delegation".
+    pub kind: String,
+    pub bundle_index: u32,
+    pub phase: String,
+    pub tx_hash: Option<String>,
+}
+
+/// Grouped vote work recovered from persisted round state.
+pub struct ApiVoteRecoveryWork {
+    /// "submit_vote" | "poll_vote" | "submit_shares".
+    pub kind: String,
+    pub bundle_index: u32,
+    pub proposal_id: u32,
+    pub tx_hash: Option<String>,
+    pub vc_tree_position: Option<u64>,
+    pub share_indexes: Vec<u32>,
+}
+
+/// Completed vote choice for display.
+pub struct ApiCompletedVoteChoice {
+    pub proposal_id: u32,
+    pub choice: Option<u32>,
+}
+
+/// Completed vote display summary owned by the voting crate.
+pub struct ApiCompletedVoteDisplay {
+    pub choices: Vec<ApiCompletedVoteChoice>,
+    pub voted_at: Option<u64>,
+}
+
 /// Derived resume state for one round, produced by the crate's `resume_plan`.
 pub struct ApiRoundPlan {
     pub round_id: String,
     pub pending_recovery: bool,
+    pub blocking_recovery: bool,
+    pub blocking_share_work: bool,
+    pub hotkey_bound: bool,
+    pub completed_vote_artifact: bool,
+    pub completed_for_display: bool,
+    pub completed_vote_display: Option<ApiCompletedVoteDisplay>,
+    pub needs_draft_setup: bool,
+    /// "idle" | "delegate" | "vote" | "submit_shares" | "done".
+    pub primary_action: String,
     pub next_steps: Vec<ApiNextStep>,
+    pub delegation_statuses: Vec<ApiDelegationStatus>,
+    pub recovered_delegation_work: Vec<ApiDelegationRecoveryWork>,
+    pub recovered_vote_work: Vec<ApiVoteRecoveryWork>,
     pub open_proposals: Vec<u32>,
     pub all_decided: bool,
+}
+
+impl From<zcash_voting::session::DelegationStatus> for ApiDelegationStatus {
+    fn from(status: zcash_voting::session::DelegationStatus) -> Self {
+        Self {
+            bundle_index: status.bundle_index,
+            phase: workflow_phase_for_delegation(status.phase).to_string(),
+            tx_hash: status.tx_hash,
+        }
+    }
+}
+
+impl From<zcash_voting::session::DelegationRecoveryWork> for ApiDelegationRecoveryWork {
+    fn from(work: zcash_voting::session::DelegationRecoveryWork) -> Self {
+        Self {
+            kind: work.kind.as_str().to_string(),
+            bundle_index: work.bundle_index,
+            phase: workflow_phase_for_delegation(work.phase).to_string(),
+            tx_hash: work.tx_hash,
+        }
+    }
+}
+
+impl From<zcash_voting::session::VoteRecoveryWork> for ApiVoteRecoveryWork {
+    fn from(work: zcash_voting::session::VoteRecoveryWork) -> Self {
+        Self {
+            kind: work.kind.as_str().to_string(),
+            bundle_index: work.bundle_index,
+            proposal_id: work.proposal_id,
+            tx_hash: work.tx_hash,
+            vc_tree_position: work.vc_tree_position,
+            share_indexes: work.share_indexes,
+        }
+    }
+}
+
+impl From<zcash_voting::session::CompletedVoteChoice> for ApiCompletedVoteChoice {
+    fn from(choice: zcash_voting::session::CompletedVoteChoice) -> Self {
+        Self {
+            proposal_id: choice.proposal_id,
+            choice: choice.choice,
+        }
+    }
+}
+
+impl From<zcash_voting::session::CompletedVoteDisplay> for ApiCompletedVoteDisplay {
+    fn from(display: zcash_voting::session::CompletedVoteDisplay) -> Self {
+        Self {
+            choices: display.choices.into_iter().map(Into::into).collect(),
+            voted_at: display.voted_at,
+        }
+    }
 }
 
 /// Compute the resumable voting-session plan for a round. The plan reports the
@@ -2070,7 +2173,30 @@ pub fn get_round_plan(
         Ok(ApiRoundPlan {
             round_id: plan.round_id,
             pending_recovery: plan.pending_recovery,
+            blocking_recovery: plan.blocking_recovery,
+            blocking_share_work: plan.blocking_share_work,
+            hotkey_bound: plan.hotkey_bound,
+            completed_vote_artifact: plan.completed_vote_artifact,
+            completed_for_display: plan.completed_for_display,
+            completed_vote_display: plan.completed_vote_display.map(Into::into),
+            needs_draft_setup: plan.needs_draft_setup,
+            primary_action: plan.primary_action.as_str().to_string(),
             next_steps,
+            delegation_statuses: plan
+                .delegation_statuses
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            recovered_delegation_work: plan
+                .recovered_delegation_work
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            recovered_vote_work: plan
+                .recovered_vote_work
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             open_proposals: plan.open_proposals,
             all_decided: plan.all_decided,
         })
@@ -2706,7 +2832,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-api-bundles").unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
 
@@ -2783,7 +2910,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-api-witness").unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
         let server = start_tree_server(1, vec![fp_one_base64()], 3);
@@ -2835,7 +2963,8 @@ mod tests {
         let db_path = temp_dir.path().join("voting.sqlite");
         let wallet_id = "wallet-api-round-reset";
         let db = state::open_voting_db(db_path.to_str().unwrap(), wallet_id).unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
         let server = start_tree_server(1, vec![fp_one_base64()], 3);
@@ -2872,7 +3001,8 @@ mod tests {
         let db_path = temp_dir.path().join("voting.sqlite");
         let wallet_id = "wallet-api-account-reset";
         let db = state::open_voting_db(db_path.to_str().unwrap(), wallet_id).unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
         let server = start_tree_server(1, vec![fp_one_base64()], 3);
@@ -2937,7 +3067,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-1").unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
         let err = build_vote_commitments(
@@ -2970,7 +3101,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-api-votes").unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
         let conn = db.conn();
@@ -3018,7 +3150,8 @@ mod tests {
         let db_path = temp_dir.path().join("voting.sqlite");
         let wallet_id = "wallet-api-recovery";
         let db = state::open_voting_db(db_path.to_str().unwrap(), wallet_id).unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
         db.store_delegation_tx_hash(ROUND_ID, 0, "delegation-tx-0")
