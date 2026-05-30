@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import '../../core/formatting/date_format.dart';
 import '../../core/formatting/hex_codec.dart';
 import '../../features/voting/voting_resume_plan.dart';
-import '../../rust/api/voting.dart' as rust_voting;
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_models.dart';
@@ -246,9 +245,9 @@ class VotingSessionState {
   final UnmodifiableListView<PirSnapshotEndpointDiagnostic> pirDiagnostics;
   final UnmodifiableMapView<int, VotingSessionProgress> delegationProgress;
   final UnmodifiableMapView<VotingVoteKey, VotingSessionProgress> voteProgress;
-  final UnmodifiableMapView<int, rust_voting.ApiKeystoneSignatureRecord>
+  final UnmodifiableMapView<int, rust_wire.KeystoneSignatureRecordView>
   keystoneSignatures;
-  final rust_voting.ApiKeystoneDelegationRequest? keystoneSigningRequest;
+  final rust_wire.KeystoneDelegationRequestView? keystoneSigningRequest;
   final String? keystoneScanError;
   final int? currentBundleIndex;
   final VotingVoteKey? currentVoteKey;
@@ -274,7 +273,7 @@ class VotingSessionState {
     List<PirSnapshotEndpointDiagnostic> pirDiagnostics = const [],
     Map<int, VotingSessionProgress> delegationProgress = const {},
     Map<VotingVoteKey, VotingSessionProgress> voteProgress = const {},
-    Map<int, rust_voting.ApiKeystoneSignatureRecord> keystoneSignatures =
+    Map<int, rust_wire.KeystoneSignatureRecordView> keystoneSignatures =
         const {},
     this.keystoneSigningRequest,
     this.keystoneScanError,
@@ -327,8 +326,8 @@ class VotingSessionState {
     List<PirSnapshotEndpointDiagnostic>? pirDiagnostics,
     Map<int, VotingSessionProgress>? delegationProgress,
     Map<VotingVoteKey, VotingSessionProgress>? voteProgress,
-    Map<int, rust_voting.ApiKeystoneSignatureRecord>? keystoneSignatures,
-    rust_voting.ApiKeystoneDelegationRequest? keystoneSigningRequest,
+    Map<int, rust_wire.KeystoneSignatureRecordView>? keystoneSignatures,
+    rust_wire.KeystoneDelegationRequestView? keystoneSigningRequest,
     bool clearKeystoneSigningRequest = false,
     String? keystoneScanError,
     bool clearKeystoneScanError = false,
@@ -396,7 +395,7 @@ class VotingSessionState {
 
 int resolvedKeystoneBundlePrefixCount({
   required VotingResumePlan? plan,
-  required Map<int, rust_voting.ApiKeystoneSignatureRecord> signatures,
+  required Map<int, rust_wire.KeystoneSignatureRecordView> signatures,
 }) {
   final bundleCount = plan?.bundleCount ?? 0;
   if (bundleCount <= 0) return 0;
