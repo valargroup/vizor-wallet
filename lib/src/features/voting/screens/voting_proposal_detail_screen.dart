@@ -232,7 +232,10 @@ class _VotingProposalDetailScreenState
       try {
         await ref
             .read(votingSessionProvider(widget.roundId).notifier)
-            .precomputeDelegationPir(seedBytes: seedBytes);
+            .precomputeDelegationPir(
+              accountUuid: accountUuid,
+              seedBytes: seedBytes,
+            );
       } finally {
         seedBytes.fillRange(0, seedBytes.length, 0);
       }

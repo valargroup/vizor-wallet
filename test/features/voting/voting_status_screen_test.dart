@@ -2171,6 +2171,28 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   }
 
   @override
+  Future<rust_voting.ApiDelegationPirPrecomputeResult> precomputeDelegationPir({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String pirServerUrl,
+    required String network,
+    required rust_voting.ApiVotingRoundParams roundParams,
+    required String roundName,
+    String? sessionJson,
+    required String accountUuid,
+    required List<int> seedBytes,
+    required int bundleIndex,
+    int? maxRealNotesPerBundle,
+  }) async {
+    return rust_voting.ApiDelegationPirPrecomputeResult(
+      cachedCount: 0,
+      fetchedCount: 1,
+      bundleCount: bundleCount,
+      bundleIndex: bundleIndex,
+    );
+  }
+
+  @override
   Stream<rust_voting.ApiDelegationProofEvent>
   buildProveAndSignDelegationPayloadWithProgress({
     required String dbPath,

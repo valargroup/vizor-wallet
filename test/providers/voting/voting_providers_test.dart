@@ -2654,7 +2654,10 @@ void main() {
     await container.read(votingSessionProvider(kRoundId).future);
     await container
         .read(votingSessionProvider(kRoundId).notifier)
-        .precomputeDelegationPir(seedBytes: seedBytes);
+        .precomputeDelegationPir(
+          accountUuid: 'account-1',
+          seedBytes: seedBytes,
+        );
     await rust.precomputeStarted.future;
 
     seedBytes.fillRange(0, seedBytes.length, 0);
@@ -2668,6 +2671,40 @@ void main() {
     expect(rust.precomputeSeedRefs.single, [0, 0, 0]);
   });
 
+  test('delegation PIR warmup skips after account switch', () async {
+    final rust = FakeVotingRustApi();
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final container = _sessionContainer(
+      rust: rust,
+      activeAccountUuidListenable: activeAccountProvider,
+    );
+    final subscription = container.listen(
+      votingSessionProvider(kRoundId),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    final first = await container.read(votingSessionProvider(kRoundId).future);
+    expect(first.accountUuid, 'account-1');
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    final second = await container.read(votingSessionProvider(kRoundId).future);
+    expect(second.accountUuid, 'account-2');
+
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .precomputeDelegationPir(
+          accountUuid: 'account-1',
+          seedBytes: [1, 2, 3],
+        );
+
+    expect(rust.precomputedDelegationPir, isEmpty);
+  });
+
   test('delegation phase activates while waiting for PIR warmup', () async {
     final precomputeGate = Completer<void>();
     final rust = FakeVotingRustApi(precomputeGate: precomputeGate);
@@ -2676,7 +2713,10 @@ void main() {
 
     await container.read(votingSessionProvider(kRoundId).future);
     final notifier = container.read(votingSessionProvider(kRoundId).notifier);
-    await notifier.precomputeDelegationPir(seedBytes: [1, 2, 3]);
+    await notifier.precomputeDelegationPir(
+      accountUuid: 'account-1',
+      seedBytes: [1, 2, 3],
+    );
     await rust.precomputeStarted.future;
 
     final delegationFuture = notifier.delegatePendingBundles(
@@ -2711,7 +2751,10 @@ void main() {
 
     await container.read(votingSessionProvider(kRoundId).future);
     final notifier = container.read(votingSessionProvider(kRoundId).notifier);
-    await notifier.precomputeDelegationPir(seedBytes: [1, 2, 3]);
+    await notifier.precomputeDelegationPir(
+      accountUuid: 'account-1',
+      seedBytes: [1, 2, 3],
+    );
     await notifier.delegatePendingBundles(seedBytes: [1, 2, 3]);
 
     expect(rust.precomputedDelegationPir, [0]);

@@ -194,10 +194,16 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     });
   }
 
-  Future<void> precomputeDelegationPir({required List<int> seedBytes}) async {
+  Future<void> precomputeDelegationPir({
+    required String accountUuid,
+    required List<int> seedBytes,
+  }) async {
     final context = await _loadContext(_roundId);
+    if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
     await _waitUntilWalletReadyForVoting(context);
+    if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
     final pirEndpoint = await _resolvePirEndpoint(context);
+    if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
     if (pirEndpoint == null) return;
 
     final rust = ref.read(votingRustApiProvider);
@@ -210,7 +216,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       sessionJson: context.round.sessionJson,
       accountUuid: context.accountUuid,
     );
+    if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
     final plan = await _loadResumePlan(context);
+    if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
     final pendingBundles = plan.pendingDelegationBundleIndexes.isNotEmpty
         ? plan.pendingDelegationBundleIndexes
         : [for (var i = 0; i < bundleSetup.bundleCount; i++) i];
@@ -2598,6 +2606,21 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   bool _isCurrentContext(_VotingSessionContext context) {
     return _isCurrentGeneration(context.sessionGeneration) &&
         _sessionAccountUuid == context.accountUuid;
+  }
+
+  bool _isCurrentPrecomputeContext(
+    _VotingSessionContext context,
+    String expectedAccountUuid,
+  ) {
+    if (context.accountUuid != expectedAccountUuid) {
+      _logStaleSessionUpdate('pir-account', context.sessionGeneration, context);
+      return false;
+    }
+    if (!_isCurrentContext(context)) {
+      _logStaleSessionUpdate('pir-context', context.sessionGeneration, context);
+      return false;
+    }
+    return true;
   }
 
   bool _isCurrentGeneration(int generation) {
