@@ -1581,6 +1581,7 @@ void main() {
               'type': 'cast_vote',
               'attributes': [
                 {'key': 'leaf_index', 'value': '1,55'},
+                {'key': 'vote_round_id', 'value': kRoundId},
               ],
             },
           ],
@@ -1801,6 +1802,73 @@ void main() {
     expect(rust.voteCommitBundleCalls, isEmpty);
   });
 
+  test('submitted vote confirmation requires event round id', () async {
+    final httpResponses = votingHttpResponses()
+      ..['/shielded-vote/v1/tx/submitted-vote-tx'] = {
+        'height': 11,
+        'code': 0,
+        'log': '',
+        'events': [
+          {
+            'type': 'cast_vote',
+            'attributes': [
+              {'key': 'leaf_index', 'value': '1,2'},
+            ],
+          },
+        ],
+      };
+    final rust = FakeVotingRustApi();
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(
+        bundleCount: 1,
+        votes: [vote(bundleIndex: 0, proposalId: 7)],
+        voteWorkflows: [
+          rust_voting.ApiVoteWorkflowRecovery(
+            bundleIndex: 0,
+            proposalId: 7,
+            phase: VotingWorkflowPhase.submittedVote,
+            txHash: 'submitted-vote-tx',
+            vcTreePosition: null,
+            hasCommitmentBundle: true,
+          ),
+        ],
+        voteTxHashes: [
+          rust_voting.ApiVoteTxRecovery(
+            bundleIndex: 0,
+            proposalId: 7,
+            txHash: 'submitted-vote-tx',
+          ),
+        ],
+        commitmentBundles: [
+          rust_voting.ApiCommitmentBundleRecovery(
+            bundleIndex: 0,
+            proposalId: 7,
+            commitmentBundleJson: '{"proposal_id":7}',
+            vcTreePosition: BigInt.zero,
+          ),
+        ],
+      ),
+    );
+    final container = _sessionContainer(
+      http: FakeVotingHttpClient(responses: httpResponses),
+      rust: rust,
+      recoveryApi: recoveryApi,
+      txConfirmationPolling: _fastTxConfirmationPolling,
+    );
+    addTearDown(container.dispose);
+
+    await container.read(votingSessionProvider(kRoundId).future);
+    await container
+        .read(votingSessionProvider(kRoundId).notifier)
+        .castVotes(draftVotes: const []);
+    final state = container.read(votingSessionProvider(kRoundId)).value!;
+
+    expect(state.phase, VotingSessionPhase.error);
+    expect(state.error?.message, contains('Missing cast_vote round id.'));
+    expect(rust.storedCommitmentBundles, isEmpty);
+    expect(rust.operationLog, isNot(contains('mark_vote_confirmed:0:7')));
+  });
+
   test(
     'recovery-only vote confirmation does not rewrite ballot intents',
     () async {
@@ -1814,6 +1882,7 @@ void main() {
               'type': 'cast_vote',
               'attributes': [
                 {'key': 'leaf_index', 'value': '1,2'},
+                {'key': 'vote_round_id', 'value': kRoundId},
               ],
             },
           ],
@@ -2735,6 +2804,7 @@ Map<String, Object> votingHttpResponses({
         'type': 'delegate_vote',
         'attributes': [
           {'key': 'leaf_index', 'value': '0'},
+          {'key': 'vote_round_id', 'value': kRoundId},
         ],
       },
     ],
@@ -2749,6 +2819,7 @@ Map<String, Object> votingHttpResponses({
         'type': 'cast_vote',
         'attributes': [
           {'key': 'leaf_index', 'value': '1,2'},
+          {'key': 'vote_round_id', 'value': kRoundId},
         ],
       },
     ],

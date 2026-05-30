@@ -131,10 +131,7 @@ submitted_delegation --different tx_hash--> error
 `workflow::mark_delegation_confirmed` passes confirmed chain transaction events
 to `zcash_voting::confirmation::confirm_delegation_submission`. The shared crate
 parses the delegation `leaf_index`, checks the round id, then atomically stores
-`bundles.delegation_tx_hash` and `bundles.van_leaf_position`. Before this Rust
-call, Dart adds the active session `vote_round_id` to legacy transaction events
-that do not already include `vote_round_id` or `round_id`, so older API
-responses can still use the shared confirmation validator.
+`bundles.delegation_tx_hash` and `bundles.van_leaf_position`.
 
 Transition:
 
@@ -181,10 +178,8 @@ submitted_vote --different tx_hash--> error
 ### Vote Confirmation
 
 `workflow::mark_vote_confirmed` passes confirmed chain transaction events to
-`zcash_voting::confirmation::confirm_vote_submission`. Before this Rust call,
-Dart adds the active session `vote_round_id` to legacy transaction events that
-do not already include `vote_round_id` or `round_id`. The shared crate then
-checks the round id, parses the cast-vote `leaf_index`, and stores:
+`zcash_voting::confirmation::confirm_vote_submission`. The shared crate checks
+the round id, parses the cast-vote `leaf_index`, and stores:
 
 - `votes.tx_hash`
 - `bundles.van_leaf_position`

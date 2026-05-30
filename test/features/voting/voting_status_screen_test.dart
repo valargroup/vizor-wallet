@@ -148,6 +148,7 @@ void main() {
                 'type': 'delegate_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '0'},
+                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -237,6 +238,7 @@ void main() {
               'type': 'delegate_vote',
               'attributes': [
                 {'key': 'leaf_index', 'value': '0'},
+                {'key': 'vote_round_id', 'value': _roundId},
               ],
             },
           ],
@@ -530,6 +532,7 @@ void main() {
                 'type': 'cast_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '1,2'},
+                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -936,6 +939,7 @@ void main() {
                 'type': 'delegate_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '0'},
+                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -954,6 +958,7 @@ void main() {
                 'type': 'cast_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '1,2'},
+                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1011,6 +1016,7 @@ void main() {
                 'type': 'delegate_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '0'},
+                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1029,6 +1035,7 @@ void main() {
                 'type': 'cast_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '1,2'},
+                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1118,6 +1125,7 @@ void main() {
                 'type': 'delegate_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '0'},
+                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],
@@ -1136,6 +1144,7 @@ void main() {
                 'type': 'cast_vote',
                 'attributes': [
                   {'key': 'leaf_index', 'value': '1,2'},
+                  {'key': 'vote_round_id', 'value': _roundId},
                 ],
               },
             ],

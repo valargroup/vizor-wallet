@@ -642,10 +642,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           bundleIndex: key.bundleIndex,
           proposalId: key.proposalId,
           txHash: txHash,
-          events: _confirmationEvents(
-            confirmation,
-            roundId: context.round.roundId,
-          ),
+          events: _confirmationEvents(confirmation),
         );
         progress[key] = VotingSessionProgress(
           phase: 'confirmed',
@@ -1374,10 +1371,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         bundleIndex: commitments.bundleIndex,
         proposalId: commitment.proposalId,
         txHash: result.txHash,
-        events: _confirmationEvents(
-          confirmation,
-          roundId: context.round.roundId,
-        ),
+        events: _confirmationEvents(confirmation),
       );
       debugPrint(
         '[zcash] Voting: cast-vote confirmed '
@@ -1440,10 +1434,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         roundId: context.round.roundId,
         bundleIndex: bundleIndex,
         txHash: txHash,
-        events: _confirmationEvents(
-          confirmation,
-          roundId: context.round.roundId,
-        ),
+        events: _confirmationEvents(confirmation),
       );
       completedBundleIndexes.add(bundleIndex);
       progress[bundleIndex] = VotingSessionProgress(
@@ -1517,25 +1508,18 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       roundId: context.round.roundId,
       bundleIndex: bundleIndex,
       txHash: result.txHash,
-      events: _confirmationEvents(confirmation, roundId: context.round.roundId),
+      events: _confirmationEvents(confirmation),
     );
     return (txHash: result.txHash, leafIndex: confirmed.vanLeafPosition);
   }
 
   static List<rust_voting.ApiTxEvent> _confirmationEvents(
-    VotingTxConfirmation confirmation, {
-    required String roundId,
-  }) {
-    return [
-      for (final event in confirmation.events)
-        _confirmationEvent(event, roundId: roundId),
-    ];
+    VotingTxConfirmation confirmation,
+  ) {
+    return [for (final event in confirmation.events) _confirmationEvent(event)];
   }
 
-  static rust_voting.ApiTxEvent _confirmationEvent(
-    VotingTxEvent event, {
-    required String roundId,
-  }) {
+  static rust_voting.ApiTxEvent _confirmationEvent(VotingTxEvent event) {
     final attributes = [
       for (final attribute in event.attributes)
         rust_voting.ApiTxEventAttribute(
@@ -1543,15 +1527,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           value: attribute.value,
         ),
     ];
-    final hasRoundId = attributes.any(
-      (attribute) =>
-          attribute.key == 'vote_round_id' || attribute.key == 'round_id',
-    );
-    if (!hasRoundId) {
-      attributes.add(
-        rust_voting.ApiTxEventAttribute(key: 'vote_round_id', value: roundId),
-      );
-    }
     return rust_voting.ApiTxEvent(
       eventType: event.type,
       attributes: attributes,
