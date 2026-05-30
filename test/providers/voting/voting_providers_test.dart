@@ -4204,17 +4204,6 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Future<void> storeDelegationTxHash({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required String txHash,
-  }) async {
-    _addUnique(storedDelegationTxHashes, '$bundleIndex:$txHash');
-  }
-
-  @override
   Future<void> markDelegationSubmitted({
     required String dbPath,
     required String walletId,

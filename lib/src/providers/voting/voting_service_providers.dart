@@ -371,14 +371,6 @@ abstract interface class VotingRustApi {
     required rust_voting.SignedDelegationPayloadView submission,
   });
 
-  Future<void> storeDelegationTxHash({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required String txHash,
-  });
-
   Future<void> markDelegationSubmitted({
     required String dbPath,
     required String walletId,
@@ -778,23 +770,6 @@ class FrbVotingRustApi implements VotingRustApi {
     required rust_voting.SignedDelegationPayloadView submission,
   }) {
     return rust_api.delegationSubmissionWireJson(submission: submission);
-  }
-
-  @override
-  Future<void> storeDelegationTxHash({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-    required int bundleIndex,
-    required String txHash,
-  }) {
-    return rust_api.storeDelegationTxHash(
-      dbPath: dbPath,
-      walletId: walletId,
-      roundId: roundId,
-      bundleIndex: bundleIndex,
-      txHash: txHash,
-    );
   }
 
   @override

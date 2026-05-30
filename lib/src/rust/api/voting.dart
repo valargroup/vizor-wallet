@@ -131,54 +131,6 @@ Future<Uint8List> deriveVotingHotkey({
 Future<Uint8List> generateVotingHotkey({required String network}) =>
     RustLib.instance.api.crateApiVotingGenerateVotingHotkey(network: network);
 
-/// Initialize or load a voting round in the local voting database.
-///
-/// `session_json` is stored with the round when provided and can contain
-/// coordinator metadata such as the human-readable round name.
-Future<void> prepareVotingRound({
-  required String dbPath,
-  required String walletId,
-  required VotingRoundParams roundParams,
-  String? sessionJson,
-}) => RustLib.instance.api.crateApiVotingPrepareVotingRound(
-  dbPath: dbPath,
-  walletId: walletId,
-  roundParams: roundParams,
-  sessionJson: sessionJson,
-);
-
-/// Return the number of stored bundles for a voting round.
-Future<int> getBundleCount({
-  required String dbPath,
-  required String walletId,
-  required String roundId,
-}) => RustLib.instance.api.crateApiVotingGetBundleCount(
-  dbPath: dbPath,
-  walletId: walletId,
-  roundId: roundId,
-);
-
-/// Select voting-eligible notes at `snapshot_height` using lightwalletd data.
-///
-/// The returned notes are raw snapshot-unspent notes and include the cached
-/// tree anchor used by later delegation setup. `eligible_weight_zatoshi` is
-/// computed from `zcash_voting` smart bundles.
-Future<VotingNoteSelectionResultView> selectVotingNotes({
-  required String dbPath,
-  required String lightwalletdUrl,
-  required String network,
-  required String accountUuid,
-  required BigInt snapshotHeight,
-  int? maxRealNotesPerBundle,
-}) => RustLib.instance.api.crateApiVotingSelectVotingNotes(
-  dbPath: dbPath,
-  lightwalletdUrl: lightwalletdUrl,
-  network: network,
-  accountUuid: accountUuid,
-  snapshotHeight: snapshotHeight,
-  maxRealNotesPerBundle: maxRealNotesPerBundle,
-);
-
 /// Select notes and persist bundle rows for the delegation pipeline.
 ///
 /// Reuses existing bundle rows for the same round/wallet, so callers can safely
@@ -220,36 +172,6 @@ Future<DelegationPirPrecomputeResultView> precomputeDelegationPir({
   required int bundleIndex,
   int? maxRealNotesPerBundle,
 }) => RustLib.instance.api.crateApiVotingPrecomputeDelegationPir(
-  dbPath: dbPath,
-  lightwalletdUrl: lightwalletdUrl,
-  pirServerUrl: pirServerUrl,
-  network: network,
-  roundParams: roundParams,
-  roundName: roundName,
-  sessionJson: sessionJson,
-  accountUuid: accountUuid,
-  seedBytes: seedBytes,
-  bundleIndex: bundleIndex,
-  maxRealNotesPerBundle: maxRealNotesPerBundle,
-);
-
-/// Build, prove, and sign one delegation payload.
-///
-/// This non-streaming variant drops intermediate proof progress and returns the
-/// final signed payload directly. Submission and tx-hash storage happen in Dart.
-Future<SignedDelegationPayloadView> buildProveAndSignDelegationPayload({
-  required String dbPath,
-  required String lightwalletdUrl,
-  required String pirServerUrl,
-  required String network,
-  required VotingRoundParams roundParams,
-  required String roundName,
-  String? sessionJson,
-  required String accountUuid,
-  required List<int> seedBytes,
-  required int bundleIndex,
-  int? maxRealNotesPerBundle,
-}) => RustLib.instance.api.crateApiVotingBuildProveAndSignDelegationPayload(
   dbPath: dbPath,
   lightwalletdUrl: lightwalletdUrl,
   pirServerUrl: pirServerUrl,
@@ -397,24 +319,6 @@ buildProveDelegationPayloadWithKeystoneSignatureWithProgress({
       maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
 
-/// Store the broadcast transaction hash for one delegation bundle.
-///
-/// Hashes are keyed by `(round_id, wallet_id, bundle_index)` to support partial
-/// bundle recovery.
-Future<void> storeDelegationTxHash({
-  required String dbPath,
-  required String walletId,
-  required String roundId,
-  required int bundleIndex,
-  required String txHash,
-}) => RustLib.instance.api.crateApiVotingStoreDelegationTxHash(
-  dbPath: dbPath,
-  walletId: walletId,
-  roundId: roundId,
-  bundleIndex: bundleIndex,
-  txHash: txHash,
-);
-
 Future<void> markDelegationSubmitted({
   required String dbPath,
   required String walletId,
@@ -477,19 +381,6 @@ Future<void> storeVanPosition({
   position: position,
 );
 
-/// Load the broadcast transaction hash for one delegation bundle, if present.
-Future<String?> getDelegationTxHash({
-  required String dbPath,
-  required String walletId,
-  required String roundId,
-  required int bundleIndex,
-}) => RustLib.instance.api.crateApiVotingGetDelegationTxHash(
-  dbPath: dbPath,
-  walletId: walletId,
-  roundId: roundId,
-  bundleIndex: bundleIndex,
-);
-
 /// Delete bundle rows at or above `keep_count` for partial-bundle recovery.
 ///
 /// Returns the number of deleted rows.
@@ -540,20 +431,6 @@ Future<VanWitness> generateVanWitness({
   anchorHeight: anchorHeight,
 );
 
-/// Reset cached vote-tree client state for one round or all rounds.
-///
-/// `None` and `Some("")` both clear every round for the `(db_path, wallet_id)`
-/// session; a non-empty round ID clears only that round.
-Future<void> resetTreeClient({
-  required String dbPath,
-  required String walletId,
-  String? roundId,
-}) => RustLib.instance.api.crateApiVotingResetTreeClient(
-  dbPath: dbPath,
-  walletId: walletId,
-  roundId: roundId,
-);
-
 /// Clear process-local voting state for a wallet or round.
 ///
 /// Passing a non-empty round ID cancels in-flight work for that round. Passing
@@ -567,31 +444,6 @@ Future<void> resetVotingSessionState({
   dbPath: dbPath,
   walletId: walletId,
   roundId: roundId,
-);
-
-/// Build signed ZKP2 vote commitments for one bundle.
-///
-/// Callers must pass a VAN witness generated for the same round and anchor
-/// height. Returned encrypted shares are wire-safe and exclude plaintext values
-/// and randomness.
-Future<SignedVoteCommitmentsView> buildVoteCommitments({
-  required String dbPath,
-  required String walletId,
-  required String network,
-  required String roundId,
-  required int bundleIndex,
-  required List<int> hotkeySeed,
-  required VanWitness vanWitness,
-  required List<DraftVote> draftVotes,
-}) => RustLib.instance.api.crateApiVotingBuildVoteCommitments(
-  dbPath: dbPath,
-  walletId: walletId,
-  network: network,
-  roundId: roundId,
-  bundleIndex: bundleIndex,
-  hotkeySeed: hotkeySeed,
-  vanWitness: vanWitness,
-  draftVotes: draftVotes,
 );
 
 /// Recover a committed but unsubmitted vote from persisted local recovery data.
@@ -631,17 +483,6 @@ Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
   hotkeySeed: hotkeySeed,
   vanWitness: vanWitness,
   draftVotes: draftVotes,
-);
-
-/// Load stored votes for a round across all bundles for this wallet.
-Future<List<VoteRecord>> getVotes({
-  required String dbPath,
-  required String walletId,
-  required String roundId,
-}) => RustLib.instance.api.crateApiVotingGetVotes(
-  dbPath: dbPath,
-  walletId: walletId,
-  roundId: roundId,
 );
 
 /// Load the full recovery/share-tracking summary for one voting round.

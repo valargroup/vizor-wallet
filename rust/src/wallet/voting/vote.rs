@@ -69,18 +69,6 @@ pub fn recover_vote_commitment(
         .map_err(|e| format!("vote commitment recovery failed: {e}"))
 }
 
-/// Load stored vote rows for `round_id` in this wallet.
-pub fn get_votes(
-    db_path: &str,
-    wallet_id: &str,
-    round_id: &str,
-) -> Result<Vec<zcash_voting::storage::VoteRecord>, String> {
-    let voting_db = open_voting_db(db_path, wallet_id)?;
-    voting_db
-        .get_votes(round_id)
-        .map_err(|e| format!("get_votes failed: {e}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,34 +176,6 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("32 bytes"));
-    }
-
-    #[test]
-    fn get_votes_preserves_bundle_index_and_proposal_keys() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let wallet_db_path = temp_dir.path().join("wallet.sqlite");
-        let voting_db_path = format!("{}.voting", wallet_db_path.to_str().unwrap());
-        let db = zcash_voting::storage::VotingDb::open(&voting_db_path).unwrap();
-        db.set_wallet_id("wallet-1");
-        db.init_round(&test_round_params(), None).unwrap();
-        let notes: Vec<_> = (0..6).map(test_note_info).collect();
-        db.ensure_bundles("round-1", &notes).unwrap();
-        let conn = db.conn();
-        zcash_voting::storage::queries::store_vote(&conn, "round-1", "wallet-1", 0, 1, 0, b"a")
-            .unwrap();
-        zcash_voting::storage::queries::store_vote(&conn, "round-1", "wallet-1", 1, 1, 1, b"b")
-            .unwrap();
-        drop(conn);
-
-        let votes = get_votes(wallet_db_path.to_str().unwrap(), "wallet-1", "round-1").unwrap();
-
-        assert_eq!(votes.len(), 2);
-        assert!(votes
-            .iter()
-            .any(|vote| vote.proposal_id == 1 && vote.bundle_index == 0 && vote.choice == 0));
-        assert!(votes
-            .iter()
-            .any(|vote| vote.proposal_id == 1 && vote.bundle_index == 1 && vote.choice == 1));
     }
 
     fn test_round_params() -> zcash_voting::VotingRoundParams {

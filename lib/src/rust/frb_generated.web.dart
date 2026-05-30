@@ -289,9 +289,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<TxDataRequest> dco_decode_list_tx_data_request(dynamic raw);
 
   @protected
-  List<VoteRecord> dco_decode_list_vote_record(dynamic raw);
-
-  @protected
   List<VoteRecoveryView> dco_decode_list_vote_recovery_view(dynamic raw);
 
   @protected
@@ -301,9 +298,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<VoteShareWire> dco_decode_list_vote_share_wire(dynamic raw);
-
-  @protected
-  List<VotingNoteRefView> dco_decode_list_voting_note_ref_view(dynamic raw);
 
   @protected
   List<WireEncryptedShare> dco_decode_list_wire_encrypted_share(dynamic raw);
@@ -444,9 +438,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VoteCommitmentWire dco_decode_vote_commitment_wire(dynamic raw);
 
   @protected
-  VoteRecord dco_decode_vote_record(dynamic raw);
-
-  @protected
   VoteRecoveryView dco_decode_vote_recovery_view(dynamic raw);
 
   @protected
@@ -454,14 +445,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   VoteShareWire dco_decode_vote_share_wire(dynamic raw);
-
-  @protected
-  VotingNoteRefView dco_decode_voting_note_ref_view(dynamic raw);
-
-  @protected
-  VotingNoteSelectionResultView dco_decode_voting_note_selection_result_view(
-    dynamic raw,
-  );
 
   @protected
   VotingRoundParams dco_decode_voting_round_params(dynamic raw);
@@ -803,9 +786,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  List<VoteRecord> sse_decode_list_vote_record(SseDeserializer deserializer);
-
-  @protected
   List<VoteRecoveryView> sse_decode_list_vote_recovery_view(
     SseDeserializer deserializer,
   );
@@ -817,11 +797,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<VoteShareWire> sse_decode_list_vote_share_wire(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  List<VotingNoteRefView> sse_decode_list_voting_note_ref_view(
     SseDeserializer deserializer,
   );
 
@@ -988,9 +963,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  VoteRecord sse_decode_vote_record(SseDeserializer deserializer);
-
-  @protected
   VoteRecoveryView sse_decode_vote_recovery_view(SseDeserializer deserializer);
 
   @protected
@@ -1000,16 +972,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   VoteShareWire sse_decode_vote_share_wire(SseDeserializer deserializer);
-
-  @protected
-  VotingNoteRefView sse_decode_voting_note_ref_view(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  VotingNoteSelectionResultView sse_decode_voting_note_selection_result_view(
-    SseDeserializer deserializer,
-  );
 
   @protected
   VotingRoundParams sse_decode_voting_round_params(
@@ -1440,12 +1402,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_list_vote_record(
-    List<VoteRecord> self,
-    SseSerializer serializer,
-  );
-
-  @protected
   void sse_encode_list_vote_recovery_view(
     List<VoteRecoveryView> self,
     SseSerializer serializer,
@@ -1460,12 +1416,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_vote_share_wire(
     List<VoteShareWire> self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_list_voting_note_ref_view(
-    List<VotingNoteRefView> self,
     SseSerializer serializer,
   );
 
@@ -1665,9 +1615,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_vote_record(VoteRecord self, SseSerializer serializer);
-
-  @protected
   void sse_encode_vote_recovery_view(
     VoteRecoveryView self,
     SseSerializer serializer,
@@ -1681,18 +1628,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_vote_share_wire(VoteShareWire self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_voting_note_ref_view(
-    VotingNoteRefView self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_voting_note_selection_result_view(
-    VotingNoteSelectionResultView self,
-    SseSerializer serializer,
-  );
 
   @protected
   void sse_encode_voting_round_params(

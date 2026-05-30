@@ -60,21 +60,6 @@ pub fn generate_van_witness_with_db(
         .map_err(|e| format!("generate_van_witness failed: {e}"))
 }
 
-/// Reset cached vote-tree state for one round or all rounds in a session.
-///
-/// Passing `None` or an empty string clears all in-memory tree clients for the
-/// `(db_path, wallet_id)` session. Passing a round ID clears only that round.
-pub fn reset_tree_client(
-    db_path: &str,
-    wallet_id: &str,
-    round_id: Option<&str>,
-) -> Result<(), String> {
-    let round_id = round_id.unwrap_or("");
-    let db = state::open_voting_db(db_path, wallet_id)?;
-    zcash_voting::precompute::reset_vote_tree(&db, round_id)
-        .map_err(|e| format!("reset_tree_client failed: {e}"))
-}
-
 /// Drop the process-local vote-tree sync client for a voting session.
 ///
 /// Use this for account-wide lifecycle boundaries such as lock, account switch,
@@ -100,13 +85,6 @@ mod tests {
     use vote_commitment_tree::{MemoryTreeServer, MerkleHashVote};
 
     const ROUND_ID: &str = "0000000000000000000000000000000000000000000000000000000000000001";
-
-    #[test]
-    fn reset_tree_client_accepts_round_and_all_rounds() {
-        reset_tree_client("/tmp/voting-reset.sqlite", "wallet-1", Some("round-1")).unwrap();
-        reset_tree_client("/tmp/voting-reset.sqlite", "wallet-1", None).unwrap();
-        reset_tree_client("/tmp/voting-reset.sqlite", "wallet-1", Some("")).unwrap();
-    }
 
     #[test]
     fn sync_commitment_tree_happy_path_accepts_empty_tree() {

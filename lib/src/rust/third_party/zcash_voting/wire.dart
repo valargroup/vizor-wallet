@@ -7,7 +7,7 @@ import '../../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'types.dart';
 
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BoundedU32`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `BoundedU32`, `VoteRecord`, `VotingNoteRefView`, `VotingNoteSelectionResultView`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `try_from`, `try_from`
 
 class CompletedVoteChoiceView {
@@ -695,31 +695,6 @@ class VoteCommitmentWire {
           voteAuthSig == other.voteAuthSig;
 }
 
-class VoteRecord {
-  final int proposalId;
-  final int bundleIndex;
-  final int choice;
-
-  const VoteRecord({
-    required this.proposalId,
-    required this.bundleIndex,
-    required this.choice,
-  });
-
-  @override
-  int get hashCode =>
-      proposalId.hashCode ^ bundleIndex.hashCode ^ choice.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is VoteRecord &&
-          runtimeType == other.runtimeType &&
-          proposalId == other.proposalId &&
-          bundleIndex == other.bundleIndex &&
-          choice == other.choice;
-}
-
 class VoteRecoveryView {
   final int bundleIndex;
   final int proposalId;
@@ -855,88 +830,6 @@ class VoteShareWire {
           shareComms == other.shareComms &&
           primaryBlind == other.primaryBlind &&
           submitAt == other.submitAt;
-}
-
-class VotingNoteRefView {
-  final String pool;
-  final String txidHex;
-  final int outputIndex;
-  final BigInt valueZatoshi;
-  final BigInt votingWeightZatoshi;
-  final BigInt commitmentTreePosition;
-  final BigInt minedHeight;
-  final BigInt anchorHeight;
-
-  const VotingNoteRefView({
-    required this.pool,
-    required this.txidHex,
-    required this.outputIndex,
-    required this.valueZatoshi,
-    required this.votingWeightZatoshi,
-    required this.commitmentTreePosition,
-    required this.minedHeight,
-    required this.anchorHeight,
-  });
-
-  @override
-  int get hashCode =>
-      pool.hashCode ^
-      txidHex.hashCode ^
-      outputIndex.hashCode ^
-      valueZatoshi.hashCode ^
-      votingWeightZatoshi.hashCode ^
-      commitmentTreePosition.hashCode ^
-      minedHeight.hashCode ^
-      anchorHeight.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is VotingNoteRefView &&
-          runtimeType == other.runtimeType &&
-          pool == other.pool &&
-          txidHex == other.txidHex &&
-          outputIndex == other.outputIndex &&
-          valueZatoshi == other.valueZatoshi &&
-          votingWeightZatoshi == other.votingWeightZatoshi &&
-          commitmentTreePosition == other.commitmentTreePosition &&
-          minedHeight == other.minedHeight &&
-          anchorHeight == other.anchorHeight;
-}
-
-class VotingNoteSelectionResultView {
-  final int noteCount;
-  final BigInt eligibleWeightZatoshi;
-  final BigInt snapshotHeight;
-  final BigInt anchorHeight;
-  final List<VotingNoteRefView> notes;
-
-  const VotingNoteSelectionResultView({
-    required this.noteCount,
-    required this.eligibleWeightZatoshi,
-    required this.snapshotHeight,
-    required this.anchorHeight,
-    required this.notes,
-  });
-
-  @override
-  int get hashCode =>
-      noteCount.hashCode ^
-      eligibleWeightZatoshi.hashCode ^
-      snapshotHeight.hashCode ^
-      anchorHeight.hashCode ^
-      notes.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is VotingNoteSelectionResultView &&
-          runtimeType == other.runtimeType &&
-          noteCount == other.noteCount &&
-          eligibleWeightZatoshi == other.eligibleWeightZatoshi &&
-          snapshotHeight == other.snapshotHeight &&
-          anchorHeight == other.anchorHeight &&
-          notes == other.notes;
 }
 
 /// Parameters for a voting round, sourced from vote chain.

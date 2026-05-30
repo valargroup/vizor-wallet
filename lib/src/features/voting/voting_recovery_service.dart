@@ -196,44 +196,6 @@ class VotingRecoveryService {
     );
   }
 
-  /// Clears recovery data after a round has finished successfully.
-  Future<void> finalizeRound({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-  }) {
-    return _clearRoundRecoveryState(
-      dbPath: dbPath,
-      walletId: walletId,
-      roundId: roundId,
-    );
-  }
-
-  /// Clears recovery data when the user intentionally stops participating.
-  Future<void> abandonRound({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-  }) {
-    return _clearRoundRecoveryState(
-      dbPath: dbPath,
-      walletId: walletId,
-      roundId: roundId,
-    );
-  }
-
-  Future<void> _clearRoundRecoveryState({
-    required String dbPath,
-    required String walletId,
-    required String roundId,
-  }) {
-    return _api.clearRecoveryState(
-      dbPath: dbPath,
-      walletId: walletId,
-      roundId: roundId,
-    );
-  }
-
   static int _compareVoteKeys(VotingVoteKey a, VotingVoteKey b) {
     final bundleCompare = a.bundleIndex.compareTo(b.bundleIndex);
     if (bundleCompare != 0) return bundleCompare;
