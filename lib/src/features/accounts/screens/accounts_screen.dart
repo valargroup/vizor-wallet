@@ -246,7 +246,6 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
         .value
         ?.activeAccountUuid;
     if (uuid == activeAccountUuid) return;
-    if (_blockIfVotingSubmissionInProgress()) return;
     final accountNotifier = ref.read(accountProvider.notifier);
     final syncNotifier = ref.read(syncProvider.notifier);
 

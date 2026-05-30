@@ -54,7 +54,7 @@ void main() {
   );
 
   test(
-    'account mutations are rejected while voting submission is guarded',
+    'destructive account mutations are rejected while voting submission is guarded',
     () async {
       final container = ProviderContainer(
         overrides: [
@@ -68,10 +68,6 @@ void main() {
           .read(votingSubmissionGuardProvider.notifier)
           .acquire(accountUuid: 'account-1', roundId: 'round-1');
 
-      await expectLater(
-        container.read(accountProvider.notifier).switchAccount('account-2'),
-        throwsA(isA<VotingSubmissionInProgressException>()),
-      );
       await expectLater(
         container.read(accountProvider.notifier).removeAccount('account-2'),
         throwsA(isA<VotingSubmissionInProgressException>()),

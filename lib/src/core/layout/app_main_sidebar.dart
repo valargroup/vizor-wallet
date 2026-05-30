@@ -40,7 +40,6 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
 
   void _navigateTo(String routePath) {
     if (_matches(routePath)) return;
-    if (_blockIfVotingSubmissionInProgress()) return;
     context.go(routePath);
   }
 

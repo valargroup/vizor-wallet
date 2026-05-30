@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const kVotingSubmissionInProgressMessage =
     'Vote submission is still running. Wait for it to finish before '
-    'navigating or switching accounts.';
+    'changing wallet state.';
 
 @immutable
 class VotingSubmissionGuard {
