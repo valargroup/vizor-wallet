@@ -37,6 +37,7 @@ class VotingStatusScreen extends ConsumerStatefulWidget {
 class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   bool _startScheduled = false;
   VotingSessionKey? _jobKey;
+  VotingSessionKey? _confirmationNavigationScheduledFor;
 
   @override
   void initState() {
@@ -58,6 +59,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
             roundId: widget.roundId,
             accountUuid: widget.accountUuid!,
           );
+    _confirmationNavigationScheduledFor = null;
     _scheduleStart();
   }
 
@@ -154,12 +156,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
               next.status != VotingSubmissionJobStatus.complete) {
             return;
           }
-          context.go(
-            votingSubmissionConfirmedRoute(
-              widget.roundId,
-              accountUuid: selectedKey.accountUuid,
-            ),
-          );
+          _scheduleConfirmationNavigation(selectedKey);
         },
       );
     }
@@ -412,8 +409,16 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
   }
 
   void _scheduleConfirmationNavigation(VotingSessionKey key) {
+    if (_confirmationNavigationScheduledFor == key) return;
+    _confirmationNavigationScheduledFor = key;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _selectedJobKey() != key) return;
+      if (!mounted) return;
+      if (_selectedJobKey() != key) {
+        if (_confirmationNavigationScheduledFor == key) {
+          _confirmationNavigationScheduledFor = null;
+        }
+        return;
+      }
       context.go(
         votingSubmissionConfirmedRoute(
           widget.roundId,

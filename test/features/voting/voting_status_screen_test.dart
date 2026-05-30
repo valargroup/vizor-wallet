@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
@@ -21,6 +22,7 @@ import 'package:zcash_wallet/src/features/voting/voting_flow_models.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_api.dart';
 import 'package:zcash_wallet/src/features/voting/voting_recovery_service.dart';
 import 'package:zcash_wallet/src/features/voting/voting_resume_plan.dart';
+import 'package:zcash_wallet/src/features/voting/voting_routes.dart';
 import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_config_source_provider.dart';
@@ -828,6 +830,58 @@ void main() {
     expect(find.text('Retry'), findsOne);
   });
 
+  testWidgets(
+    'status screen opens already completed job on confirmation route',
+    (tester) async {
+      const key = VotingSessionKey(roundId: _roundId, accountUuid: 'account-1');
+      final container = _statusContainer(
+        accountOverride: _MnemonicAccountNotifier.new,
+        overrides: [
+          votingSubmissionJobsProvider.overrideWith(
+            () => _StaticVotingSubmissionJobsNotifier(
+              const VotingSubmissionJobsState(jobKeys: [key]),
+            ),
+          ),
+          votingSubmissionJobProvider(key).overrideWith(
+            () => _StaticVotingSubmissionJobNotifier(
+              key,
+              const VotingSubmissionJobState(
+                key: key,
+                status: VotingSubmissionJobStatus.complete,
+                generation: 1,
+              ),
+            ),
+          ),
+          votingSubmissionJobSessionProvider(key).overrideWithValue(
+            AsyncValue.data(
+              VotingSessionState(
+                roundId: _roundId,
+                accountUuid: 'account-1',
+                phase: VotingSessionPhase.done,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: _statusHarness(
+            initialLocation: votingStatusRoute(
+              _roundId,
+              accountUuid: 'account-1',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('submission confirmed route'), findsOneWidget);
+    },
+  );
+
   testWidgets('global progress banner appears during background submission', (
     tester,
   ) async {
@@ -981,6 +1035,12 @@ void main() {
     expect(find.text('Vote submission needs attention'), findsOneWidget);
     expect(find.text('Clear'), findsOneWidget);
     expect(find.text('View'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0,
+    );
 
     await tester.tap(
       find.byKey(ValueKey('voting_submission_banner_clear_$key')),
@@ -1779,6 +1839,7 @@ ProviderContainer _statusContainer({
   VotingRecoveryApi? recoveryApi,
   VotingRustApi? rust,
   VotingHotkeyStore? hotkeyStore,
+  List<Override> overrides = const [],
 }) {
   final effectiveHttp =
       http ?? FakeVotingHttpClient(responses: _votingHttpResponses());
@@ -1836,18 +1897,24 @@ ProviderContainer _statusContainer({
       votingTxConfirmationPollingProvider.overrideWithValue(
         const VotingTxConfirmationPolling(attempts: 1, delay: Duration.zero),
       ),
+      ...overrides,
     ],
   );
 }
 
-Widget _statusHarness({List<int>? keystoneScanResult}) {
+Widget _statusHarness({
+  List<int>? keystoneScanResult,
+  String? initialLocation,
+}) {
   final router = GoRouter(
-    initialLocation: '/voting/poll/$_roundId/status',
+    initialLocation: initialLocation ?? '/voting/poll/$_roundId/status',
     routes: [
       GoRoute(
         path: '/voting/poll/:roundId/status',
-        builder: (_, state) =>
-            VotingStatusScreen(roundId: state.pathParameters['roundId']!),
+        builder: (_, state) => VotingStatusScreen(
+          roundId: state.pathParameters['roundId']!,
+          accountUuid: state.uri.queryParameters['account'],
+        ),
       ),
       GoRoute(
         path: '/voting/poll/:roundId/submitted',

@@ -3018,6 +3018,8 @@ class VotingSubmissionSessionNotifier extends VotingSessionNotifier {
 
   final VotingSessionKey _key;
 
+  // This subclass must remain in this library because it overrides private
+  // hooks to pin background submissions to their original account.
   @override
   void _registerActiveAccountListener() {}
 

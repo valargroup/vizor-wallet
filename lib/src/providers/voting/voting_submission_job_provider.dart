@@ -794,6 +794,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
     if (_retainedSessionKey == key && _sessionSubscription != null) return;
     _releaseSessionSubscription();
     _retainedSessionKey = key;
+    // Keep the session provider alive while the background job owns submission.
     _sessionSubscription = ref.listen<AsyncValue<VotingSessionState>>(
       votingSubmissionSessionProvider(key),
       (_, _) {},

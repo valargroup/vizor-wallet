@@ -189,7 +189,9 @@ class _VotingSubmissionProgressBannerItem extends ConsumerWidget {
     VotingSessionState? session,
   ) {
     if (job.status == VotingSubmissionJobStatus.complete) return 1;
-    if (job.status == VotingSubmissionJobStatus.error) return 1;
+    if (job.status == VotingSubmissionJobStatus.error) {
+      return session?.voteSubmissionProgress?.clamp(0.0, 1.0).toDouble() ?? 0;
+    }
     if (job.status == VotingSubmissionJobStatus.waitingForKeystone) {
       return session?.voteSubmissionProgress?.clamp(0.0, 1.0).toDouble() ??
           0.55;
