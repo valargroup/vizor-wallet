@@ -73,12 +73,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ApiSyncProgressEvent dco_decode_api_sync_progress_event(dynamic raw);
 
   @protected
-  ApiTxEvent dco_decode_api_tx_event(dynamic raw);
-
-  @protected
-  ApiTxEventAttribute dco_decode_api_tx_event_attribute(dynamic raw);
-
-  @protected
   ApiVoteCommitEvent dco_decode_api_vote_commit_event(dynamic raw);
 
   @protected
@@ -190,12 +184,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<AccountInfo> dco_decode_list_account_info(dynamic raw);
 
   @protected
-  List<ApiTxEvent> dco_decode_list_api_tx_event(dynamic raw);
-
-  @protected
-  List<ApiTxEventAttribute> dco_decode_list_api_tx_event_attribute(dynamic raw);
-
-  @protected
   List<BlockMetaInfo> dco_decode_list_block_meta_info(dynamic raw);
 
   @protected
@@ -284,6 +272,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<TxDataRequest> dco_decode_list_tx_data_request(dynamic raw);
+
+  @protected
+  List<TxEvent> dco_decode_list_tx_event(dynamic raw);
+
+  @protected
+  List<TxEventAttribute> dco_decode_list_tx_event_attribute(dynamic raw);
 
   @protected
   List<VoteRecoveryView> dco_decode_list_vote_recovery_view(dynamic raw);
@@ -411,6 +405,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   TxDataRequest dco_decode_tx_data_request(dynamic raw);
 
   @protected
+  TxEvent dco_decode_tx_event(dynamic raw);
+
+  @protected
+  TxEventAttribute dco_decode_tx_event_attribute(dynamic raw);
+
+  @protected
   int dco_decode_u_32(dynamic raw);
 
   @protected
@@ -512,14 +512,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ApiSyncProgressEvent sse_decode_api_sync_progress_event(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  ApiTxEvent sse_decode_api_tx_event(SseDeserializer deserializer);
-
-  @protected
-  ApiTxEventAttribute sse_decode_api_tx_event_attribute(
     SseDeserializer deserializer,
   );
 
@@ -667,14 +659,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<AccountInfo> sse_decode_list_account_info(SseDeserializer deserializer);
 
   @protected
-  List<ApiTxEvent> sse_decode_list_api_tx_event(SseDeserializer deserializer);
-
-  @protected
-  List<ApiTxEventAttribute> sse_decode_list_api_tx_event_attribute(
-    SseDeserializer deserializer,
-  );
-
-  @protected
   List<BlockMetaInfo> sse_decode_list_block_meta_info(
     SseDeserializer deserializer,
   );
@@ -777,6 +761,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<TxDataRequest> sse_decode_list_tx_data_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<TxEvent> sse_decode_list_tx_event(SseDeserializer deserializer);
+
+  @protected
+  List<TxEventAttribute> sse_decode_list_tx_event_attribute(
     SseDeserializer deserializer,
   );
 
@@ -932,6 +924,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   TxDataRequest sse_decode_tx_data_request(SseDeserializer deserializer);
 
   @protected
+  TxEvent sse_decode_tx_event(SseDeserializer deserializer);
+
+  @protected
+  TxEventAttribute sse_decode_tx_event_attribute(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
@@ -1060,15 +1058,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_api_sync_progress_event(
     ApiSyncProgressEvent self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_api_tx_event(ApiTxEvent self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_api_tx_event_attribute(
-    ApiTxEventAttribute self,
     SseSerializer serializer,
   );
 
@@ -1241,18 +1230,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_list_api_tx_event(
-    List<ApiTxEvent> self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_list_api_tx_event_attribute(
-    List<ApiTxEventAttribute> self,
-    SseSerializer serializer,
-  );
-
-  @protected
   void sse_encode_list_block_meta_info(
     List<BlockMetaInfo> self,
     SseSerializer serializer,
@@ -1390,6 +1367,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_tx_data_request(
     List<TxDataRequest> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_tx_event(List<TxEvent> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_tx_event_attribute(
+    List<TxEventAttribute> self,
     SseSerializer serializer,
   );
 
@@ -1575,6 +1561,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_tx_data_request(TxDataRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_tx_event(TxEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_tx_event_attribute(
+    TxEventAttribute self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

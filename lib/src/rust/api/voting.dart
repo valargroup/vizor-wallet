@@ -12,8 +12,8 @@ import '../third_party/zcash_voting/vote.dart';
 import '../third_party/zcash_voting/wire.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_vote_commitments_result`, `bundle_policy`, `catch`, `emit_signed_delegation_result`, `finalize_vote_commitments`, `prepare_delegation_bundle_params`, `require_len`, `resolve_delegation_prep_inputs`, `seed_from_mnemonic`, `share_tracking_record`, `voting_network`, `wallet_network`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `build_vote_commitments_result`, `bundle_policy`, `catch`, `emit_signed_delegation_result`, `prepare_delegation_bundle_params`, `require_len`, `resolve_delegation_prep_inputs`, `seed_from_mnemonic`, `voting_network`, `wallet_network`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `from`, `from`
 
 /// Returns the vote-chain delegation submission body as validated wire JSON.
 ///
@@ -364,7 +364,7 @@ Future<DelegationConfirmation> confirmDelegationSubmission({
   required String roundId,
   required int bundleIndex,
   required String txHash,
-  required List<ApiTxEvent> events,
+  required List<TxEvent> events,
 }) => RustLib.instance.api.crateApiVotingConfirmDelegationSubmission(
   dbPath: dbPath,
   accountUuid: accountUuid,
@@ -527,7 +527,7 @@ Future<VoteConfirmation> confirmVoteSubmission({
   required int bundleIndex,
   required int proposalId,
   required String txHash,
-  required List<ApiTxEvent> events,
+  required List<TxEvent> events,
 }) => RustLib.instance.api.crateApiVotingConfirmVoteSubmission(
   dbPath: dbPath,
   accountUuid: accountUuid,
@@ -688,44 +688,6 @@ class ApiDelegationProofEvent {
           phase == other.phase &&
           proofProgress == other.proofProgress &&
           signedDelegationPayload == other.signedDelegationPayload;
-}
-
-/// One vote-chain event from a confirmed transaction.
-class ApiTxEvent {
-  final String eventType;
-  final List<ApiTxEventAttribute> attributes;
-
-  const ApiTxEvent({required this.eventType, required this.attributes});
-
-  @override
-  int get hashCode => eventType.hashCode ^ attributes.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiTxEvent &&
-          runtimeType == other.runtimeType &&
-          eventType == other.eventType &&
-          attributes == other.attributes;
-}
-
-/// One vote-chain event attribute from a confirmed transaction.
-class ApiTxEventAttribute {
-  final String key;
-  final String value;
-
-  const ApiTxEventAttribute({required this.key, required this.value});
-
-  @override
-  int get hashCode => key.hashCode ^ value.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ApiTxEventAttribute &&
-          runtimeType == other.runtimeType &&
-          key == other.key &&
-          value == other.value;
 }
 
 /// Progress event emitted while building ZKP2 vote commitments.

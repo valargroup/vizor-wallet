@@ -12,7 +12,6 @@ import '../../features/voting/voting_flow_models.dart';
 import '../../features/voting/voting_formatters.dart';
 import '../../features/voting/voting_resume_plan.dart';
 import '../../features/voting/voting_share_timing.dart';
-import '../../rust/api/voting.dart' as rust_voting;
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_api_client.dart';
@@ -2875,16 +2874,14 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     throw const FormatException('Rust voting wire JSON is not an object.');
   }
 
-  static List<rust_voting.ApiTxEvent> _txEvents(
-    VotingTxConfirmation confirmation,
-  ) {
+  static List<rust_wire.TxEvent> _txEvents(VotingTxConfirmation confirmation) {
     return [
       for (final event in confirmation.events)
-        rust_voting.ApiTxEvent(
+        rust_wire.TxEvent(
           eventType: event.type,
           attributes: [
             for (final attribute in event.attributes)
-              rust_voting.ApiTxEventAttribute(
+              rust_wire.TxEventAttribute(
                 key: attribute.key,
                 value: attribute.value,
               ),

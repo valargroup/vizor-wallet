@@ -56,20 +56,6 @@ pub struct ApiVoteCommitEvent {
     pub commitments: Option<zcash_voting::wire::SignedVoteCommitmentsView>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// One vote-chain event attribute from a confirmed transaction.
-pub struct ApiTxEventAttribute {
-    pub key: String,
-    pub value: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// One vote-chain event from a confirmed transaction.
-pub struct ApiTxEvent {
-    pub event_type: String,
-    pub attributes: Vec<ApiTxEventAttribute>,
-}
-
 fn bundle_policy(max_real_notes_per_bundle: Option<u32>) -> Result<BundlePolicy, String> {
     BundlePolicy::from_optional_max_real_notes_per_bundle(max_real_notes_per_bundle)
         .map_err(|e| e.to_string())
@@ -134,24 +120,6 @@ fn prepare_delegation_bundle_params<'a>(
         hotkey_seed,
         bundle_index,
         bundle_policy,
-    }
-}
-
-impl From<ApiTxEventAttribute> for zcash_voting::confirmation::TxEventAttribute {
-    fn from(attribute: ApiTxEventAttribute) -> Self {
-        Self {
-            key: attribute.key,
-            value: attribute.value,
-        }
-    }
-}
-
-impl From<ApiTxEvent> for zcash_voting::confirmation::TxEvent {
-    fn from(event: ApiTxEvent) -> Self {
-        Self {
-            event_type: event.event_type,
-            attributes: event.attributes.into_iter().map(Into::into).collect(),
-        }
     }
 }
 
@@ -246,7 +214,17 @@ pub fn share_tracking_flags(
     vote_end_time_seconds: Option<u64>,
 ) -> Result<u32, String> {
     catch(|| {
-        let share = share_tracking_record(&share);
+        let share = zcash_voting::ShareDelegationRecord {
+            round_id: share.round_id,
+            bundle_index: share.bundle_index,
+            proposal_id: share.proposal_id,
+            share_index: share.share_index,
+            sent_to_urls: share.sent_to_urls,
+            nullifier: share.nullifier,
+            confirmed: share.confirmed,
+            submit_at: share.submit_at,
+            created_at: share.created_at,
+        };
         let policy = zcash_voting::share::ShareTimingPolicy::default();
         let mut flags = 0u32;
         if zcash_voting::share::policy::is_share_ready_for_status_check(&share, now_seconds, policy)
@@ -276,7 +254,20 @@ pub fn next_share_tracking_delay_seconds(
     now_seconds: u64,
 ) -> Result<Option<u64>, String> {
     catch(|| {
-        let shares = shares.iter().map(share_tracking_record).collect::<Vec<_>>();
+        let shares = shares
+            .into_iter()
+            .map(|share| zcash_voting::ShareDelegationRecord {
+                round_id: share.round_id,
+                bundle_index: share.bundle_index,
+                proposal_id: share.proposal_id,
+                share_index: share.share_index,
+                sent_to_urls: share.sent_to_urls,
+                nullifier: share.nullifier,
+                confirmed: share.confirmed,
+                submit_at: share.submit_at,
+                created_at: share.created_at,
+            })
+            .collect::<Vec<_>>();
         Ok(zcash_voting::share::policy::next_tracking_delay_seconds(
             &shares,
             now_seconds,
@@ -451,22 +442,10 @@ impl From<zcash_voting::vote::VoteCommitStage> for ApiVoteCommitEvent {
     }
 }
 
-fn share_tracking_record(
-    share: &zcash_voting::wire::ShareDelegationRecordView,
-) -> zcash_voting::ShareDelegationRecord {
-    zcash_voting::ShareDelegationRecord {
-        round_id: share.round_id.clone(),
-        bundle_index: share.bundle_index,
-        proposal_id: share.proposal_id,
-        share_index: share.share_index,
-        sent_to_urls: share.sent_to_urls.clone(),
-        nullifier: share.nullifier.clone(),
-        confirmed: share.confirmed,
-        submit_at: share.submit_at,
-        created_at: share.created_at,
-    }
-}
-
+/// Executes an API helper and converts Rust panics into string errors.
+///
+/// This preserves the existing `Result<T, String>` contract used by FRB entry
+/// points so callers receive a normal error instead of an unwind crossing FFI.
 fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result<T, String> {
     match panic::catch_unwind(f) {
         Ok(result) => result,
@@ -483,6 +462,9 @@ fn catch<T>(f: impl FnOnce() -> Result<T, String> + panic::UnwindSafe) -> Result
     }
 }
 
+/// Validates that `bytes` has exactly `expected` length.
+///
+/// Returns an error naming `field` when the provided length differs.
 fn require_len(bytes: &[u8], expected: usize, field: &str) -> Result<(), String> {
     if bytes.len() == expected {
         Ok(())
@@ -494,6 +476,10 @@ fn require_len(bytes: &[u8], expected: usize, field: &str) -> Result<(), String>
     }
 }
 
+/// Emits the terminal `"result"` delegation event to a progress sink.
+///
+/// If signing failed, this forwards the error through `sink.add_error` and
+/// returns `Ok(())` so closed sinks do not fail the outer task.
 fn emit_signed_delegation_result(
     sink: &StreamSink<ApiDelegationProofEvent>,
     signed_result: Result<zcash_voting::wire::SignedDelegationPayloadView, String>,
@@ -525,6 +511,7 @@ fn emit_signed_delegation_result(
 ///
 /// Reuses existing bundle rows for the same round/wallet, so callers can safely
 /// retry setup before proving a specific bundle.
+#[allow(clippy::too_many_arguments)]
 pub async fn setup_delegation_bundles(
     db_path: String,
     lightwalletd_url: String,
@@ -548,7 +535,6 @@ pub async fn setup_delegation_bundles(
         bundle_policy,
     )
     .await
-    .map(zcash_voting::wire::BundleLayout::from)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -696,7 +682,6 @@ pub async fn build_keystone_delegation_request(
         prepare_params,
     )
     .await
-    .map(zcash_voting::wire::KeystoneSigningRequest::from)
 }
 
 /// Extract the ZIP-244 sighash from PCZT bytes.
@@ -855,11 +840,9 @@ pub fn confirm_delegation_submission(
     round_id: String,
     bundle_index: u32,
     tx_hash: String,
-    events: Vec<ApiTxEvent>,
+    events: Vec<zcash_voting::wire::TxEvent>,
 ) -> Result<zcash_voting::wire::DelegationConfirmation, String> {
     catch(|| {
-        let events: Vec<zcash_voting::confirmation::TxEvent> =
-            events.into_iter().map(Into::into).collect();
         let db = state::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::confirmation::confirm_delegation_submission(
             &db,
@@ -930,7 +913,6 @@ pub fn generate_van_witness(
         zcash_voting::validate_bundle_index(bundle_count, bundle_index, "voting")
             .map_err(|e| e.to_string())?;
         zcash_voting::precompute::van_witness(&db, &round_id, bundle_index, anchor_height)
-            .map(zcash_voting::wire::VanWitness::from)
             .map_err(|e| format!("generate_van_witness failed: {e}"))
     })
 }
@@ -1139,11 +1121,9 @@ pub fn confirm_vote_submission(
     bundle_index: u32,
     proposal_id: u32,
     tx_hash: String,
-    events: Vec<ApiTxEvent>,
+    events: Vec<zcash_voting::wire::TxEvent>,
 ) -> Result<zcash_voting::wire::VoteConfirmation, String> {
     catch(|| {
-        let events: Vec<zcash_voting::confirmation::TxEvent> =
-            events.into_iter().map(Into::into).collect();
         let db = state::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::confirmation::confirm_vote_submission(
             &db,
@@ -1330,12 +1310,12 @@ mod tests {
         base64::engine::general_purpose::STANDARD.encode(bytes)
     }
 
-    fn tx_event(event_type: &str, attributes: &[(&str, &str)]) -> ApiTxEvent {
-        ApiTxEvent {
+    fn tx_event(event_type: &str, attributes: &[(&str, &str)]) -> zcash_voting::wire::TxEvent {
+        zcash_voting::wire::TxEvent {
             event_type: event_type.to_string(),
             attributes: attributes
                 .iter()
-                .map(|(key, value)| ApiTxEventAttribute {
+                .map(|(key, value)| zcash_voting::wire::TxEventAttribute {
                     key: (*key).to_string(),
                     value: (*value).to_string(),
                 })

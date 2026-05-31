@@ -19,7 +19,7 @@ import 'package:zcash_wallet/src/providers/voting/voting_service_providers.dart'
 import 'package:zcash_wallet/src/providers/voting/voting_session_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_state.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_tree_sync_provider.dart';
-import 'package:zcash_wallet/src/rust/api/voting.dart' as rust_voting;
+import 'package:zcash_wallet/src/rust/api/voting.dart' as rust_api;
 import 'package:zcash_wallet/src/rust/third_party/zcash_voting/delegate.dart'
     as rust_delegate;
 import 'package:zcash_wallet/src/rust/third_party/zcash_voting/round.dart'
@@ -32,6 +32,8 @@ import 'package:zcash_wallet/src/rust/third_party/zcash_voting/vote.dart'
     as rust_vote;
 import 'package:zcash_wallet/src/rust/third_party/zcash_voting/wire.dart'
     as rust_frb_types;
+import 'package:zcash_wallet/src/rust/third_party/zcash_voting/wire.dart'
+    as rust_voting;
 import 'package:zcash_wallet/src/rust/third_party/zcash_voting/wire.dart'
     as rust_wire;
 import 'package:zcash_wallet/src/services/voting/pir_snapshot_resolver.dart';
@@ -3946,7 +3948,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Stream<rust_voting.ApiDelegationProofEvent>
+  Stream<rust_api.ApiDelegationProofEvent>
   buildProveAndSignDelegationPayloadWithProgress({
     required String dbPath,
     required String lightwalletdUrl,
@@ -3964,7 +3966,7 @@ class FakeVotingRustApi implements VotingRustApi {
     delegationBundleCalls.add(bundleIndex);
     final error = delegationStreamError;
     if (error != null) throw error;
-    yield rust_voting.ApiDelegationProofEvent(
+    yield rust_api.ApiDelegationProofEvent(
       phase: 'result',
       proofProgress: null,
       signedDelegationPayload: rust_wire.SignedDelegationPayloadView(
@@ -4090,7 +4092,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Stream<rust_voting.ApiDelegationProofEvent>
+  Stream<rust_api.ApiDelegationProofEvent>
   buildProveDelegationPayloadWithKeystoneSignatureWithProgress({
     required String dbPath,
     required String lightwalletdUrl,
@@ -4112,7 +4114,7 @@ class FakeVotingRustApi implements VotingRustApi {
     final rk = mismatchKeystoneSubmission
         ? const [99]
         : signature?.rk ?? const [2];
-    yield rust_voting.ApiDelegationProofEvent(
+    yield rust_api.ApiDelegationProofEvent(
       phase: 'result',
       proofProgress: null,
       signedDelegationPayload: rust_wire.SignedDelegationPayloadView(
@@ -4223,7 +4225,7 @@ class FakeVotingRustApi implements VotingRustApi {
     required String roundId,
     required int bundleIndex,
     required String txHash,
-    required List<rust_voting.ApiTxEvent> events,
+    required List<rust_voting.TxEvent> events,
   }) async {
     final vanLeafPosition = _eventInt(
       events,
@@ -4278,7 +4280,7 @@ class FakeVotingRustApi implements VotingRustApi {
   }
 
   @override
-  Stream<rust_voting.ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
+  Stream<rust_api.ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
     required String dbPath,
     required String walletId,
     required String network,
@@ -4293,7 +4295,7 @@ class FakeVotingRustApi implements VotingRustApi {
       voteCommitmentKeys.add('$bundleIndex:${draft.proposalId}');
       operationLog.add('build_vote:$bundleIndex:${draft.proposalId}');
       draftSingleShareValues.add(draft.singleShare);
-      yield rust_voting.ApiVoteCommitEvent(
+      yield rust_api.ApiVoteCommitEvent(
         phase: 'result',
         proposalId: draft.proposalId,
         bundleIndex: bundleIndex,
@@ -4542,7 +4544,7 @@ class FakeVotingRustApi implements VotingRustApi {
     required int bundleIndex,
     required int proposalId,
     required String txHash,
-    required List<rust_voting.ApiTxEvent> events,
+    required List<rust_voting.TxEvent> events,
   }) async {
     final leafPositions = _castVoteLeafPositions(events, roundId);
     _recordVoteConfirmed(
@@ -4617,7 +4619,7 @@ void _addUnique<T>(List<T> values, T value) {
 }
 
 int _eventInt(
-  List<rust_voting.ApiTxEvent> events,
+  List<rust_voting.TxEvent> events,
   String eventType,
   String roundId,
   String key,
@@ -4631,7 +4633,7 @@ int _eventInt(
 }
 
 ({int vanPosition, BigInt vcTreePosition}) _castVoteLeafPositions(
-  List<rust_voting.ApiTxEvent> events,
+  List<rust_voting.TxEvent> events,
   String roundId,
 ) {
   final raw = _eventAttribute(events, 'cast_vote', roundId, 'leaf_index');
@@ -4651,7 +4653,7 @@ int _eventInt(
 }
 
 String? _eventAttribute(
-  List<rust_voting.ApiTxEvent> events,
+  List<rust_voting.TxEvent> events,
   String eventType,
   String roundId,
   String key,
@@ -4667,7 +4669,7 @@ String? _eventAttribute(
   return null;
 }
 
-String? _eventRoundId(rust_voting.ApiTxEvent event) {
+String? _eventRoundId(rust_voting.TxEvent event) {
   for (final attribute in event.attributes) {
     if (attribute.key == 'vote_round_id' || attribute.key == 'round_id') {
       return attribute.value;
