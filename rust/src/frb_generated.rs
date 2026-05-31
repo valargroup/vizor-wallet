@@ -196,32 +196,18 @@ fn wire__crate__api__voting__build_keystone_delegation_request_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
-            let api_network = <String>::sse_decode(&mut deserializer);
-            let api_round_params =
-                <zcash_voting::wire::VotingRoundParams>::sse_decode(&mut deserializer);
-            let api_round_name = <String>::sse_decode(&mut deserializer);
-            let api_session_json = <Option<String>>::sse_decode(&mut deserializer);
-            let api_account_uuid = <String>::sse_decode(&mut deserializer);
+            let api_ctx =
+                <crate::api::voting::ApiVotingRoundContext>::sse_decode(&mut deserializer);
             let api_hotkey_seed = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
-            let api_max_real_notes_per_bundle = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, String>(
                     (move || async move {
                         let output_ok = crate::api::voting::build_keystone_delegation_request(
-                            api_db_path,
-                            api_lightwalletd_url,
-                            api_network,
-                            api_round_params,
-                            api_round_name,
-                            api_session_json,
-                            api_account_uuid,
+                            api_ctx,
                             api_hotkey_seed,
                             api_bundle_index,
-                            api_max_real_notes_per_bundle,
                         )
                         .await?;
                         Ok(output_ok)
@@ -241,20 +227,13 @@ fn wire__crate__api__voting__build_prove_and_sign_delegation_payload_with_progre
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "build_prove_and_sign_delegation_payload_with_progress", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || { 
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_db_path = <String>::sse_decode(&mut deserializer);
-let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
+            let api_ctx = <crate::api::voting::ApiVotingRoundContext>::sse_decode(&mut deserializer);
 let api_pir_server_url = <String>::sse_decode(&mut deserializer);
-let api_network = <String>::sse_decode(&mut deserializer);
-let api_round_params = <zcash_voting::wire::VotingRoundParams>::sse_decode(&mut deserializer);
-let api_round_name = <String>::sse_decode(&mut deserializer);
-let api_session_json = <Option<String>>::sse_decode(&mut deserializer);
-let api_account_uuid = <String>::sse_decode(&mut deserializer);
 let api_mnemonic = <String>::sse_decode(&mut deserializer);
 let api_bundle_index = <u32>::sse_decode(&mut deserializer);
-let api_max_real_notes_per_bundle = <Option<u32>>::sse_decode(&mut deserializer);
 let api_sink = <StreamSink<crate::api::voting::ApiDelegationProofEvent,flutter_rust_bridge::for_generated::SseCodec>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
                     transform_result_sse::<_, String>((move || async move {
-                         let output_ok = crate::api::voting::build_prove_and_sign_delegation_payload_with_progress(api_db_path, api_lightwalletd_url, api_pir_server_url, api_network, api_round_params, api_round_name, api_session_json, api_account_uuid, api_mnemonic, api_bundle_index, api_max_real_notes_per_bundle, api_sink).await?;   Ok(output_ok)
+                         let output_ok = crate::api::voting::build_prove_and_sign_delegation_payload_with_progress(api_ctx, api_pir_server_url, api_mnemonic, api_bundle_index, api_sink).await?;   Ok(output_ok)
                     })().await)
                 } })
 }
@@ -267,22 +246,15 @@ fn wire__crate__api__voting__build_prove_delegation_payload_with_keystone_signat
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "build_prove_delegation_payload_with_keystone_signature_with_progress", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || { 
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_db_path = <String>::sse_decode(&mut deserializer);
-let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
+            let api_ctx = <crate::api::voting::ApiVotingRoundContext>::sse_decode(&mut deserializer);
 let api_pir_server_url = <String>::sse_decode(&mut deserializer);
-let api_network = <String>::sse_decode(&mut deserializer);
-let api_round_params = <zcash_voting::wire::VotingRoundParams>::sse_decode(&mut deserializer);
-let api_round_name = <String>::sse_decode(&mut deserializer);
-let api_session_json = <Option<String>>::sse_decode(&mut deserializer);
-let api_account_uuid = <String>::sse_decode(&mut deserializer);
 let api_hotkey_seed = <Vec<u8>>::sse_decode(&mut deserializer);
 let api_bundle_index = <u32>::sse_decode(&mut deserializer);
 let api_keystone_sig = <Vec<u8>>::sse_decode(&mut deserializer);
 let api_keystone_sighash = <Vec<u8>>::sse_decode(&mut deserializer);
-let api_max_real_notes_per_bundle = <Option<u32>>::sse_decode(&mut deserializer);
 let api_sink = <StreamSink<crate::api::voting::ApiDelegationProofEvent,flutter_rust_bridge::for_generated::SseCodec>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
                     transform_result_sse::<_, String>((move || async move {
-                         let output_ok = crate::api::voting::build_prove_delegation_payload_with_keystone_signature_with_progress(api_db_path, api_lightwalletd_url, api_pir_server_url, api_network, api_round_params, api_round_name, api_session_json, api_account_uuid, api_hotkey_seed, api_bundle_index, api_keystone_sig, api_keystone_sighash, api_max_real_notes_per_bundle, api_sink).await?;   Ok(output_ok)
+                         let output_ok = crate::api::voting::build_prove_delegation_payload_with_keystone_signature_with_progress(api_ctx, api_pir_server_url, api_hotkey_seed, api_bundle_index, api_keystone_sig, api_keystone_sighash, api_sink).await?;   Ok(output_ok)
                     })().await)
                 } })
 }
@@ -2900,34 +2872,20 @@ fn wire__crate__api__voting__precompute_delegation_pir_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
+            let api_ctx =
+                <crate::api::voting::ApiVotingRoundContext>::sse_decode(&mut deserializer);
             let api_pir_server_url = <String>::sse_decode(&mut deserializer);
-            let api_network = <String>::sse_decode(&mut deserializer);
-            let api_round_params =
-                <zcash_voting::wire::VotingRoundParams>::sse_decode(&mut deserializer);
-            let api_round_name = <String>::sse_decode(&mut deserializer);
-            let api_session_json = <Option<String>>::sse_decode(&mut deserializer);
-            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_mnemonic = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
-            let api_max_real_notes_per_bundle = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, String>(
                     (move || async move {
                         let output_ok = crate::api::voting::precompute_delegation_pir(
-                            api_db_path,
-                            api_lightwalletd_url,
+                            api_ctx,
                             api_pir_server_url,
-                            api_network,
-                            api_round_params,
-                            api_round_name,
-                            api_session_json,
-                            api_account_uuid,
                             api_mnemonic,
                             api_bundle_index,
-                            api_max_real_notes_per_bundle,
                         )
                         .await?;
                         Ok(output_ok)
@@ -3544,30 +3502,14 @@ fn wire__crate__api__voting__setup_delegation_bundles_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
-            let api_network = <String>::sse_decode(&mut deserializer);
-            let api_round_params =
-                <zcash_voting::wire::VotingRoundParams>::sse_decode(&mut deserializer);
-            let api_round_name = <String>::sse_decode(&mut deserializer);
-            let api_session_json = <Option<String>>::sse_decode(&mut deserializer);
-            let api_account_uuid = <String>::sse_decode(&mut deserializer);
-            let api_max_real_notes_per_bundle = <Option<u32>>::sse_decode(&mut deserializer);
+            let api_ctx =
+                <crate::api::voting::ApiVotingRoundContext>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, String>(
                     (move || async move {
-                        let output_ok = crate::api::voting::setup_delegation_bundles(
-                            api_db_path,
-                            api_lightwalletd_url,
-                            api_network,
-                            api_round_params,
-                            api_round_name,
-                            api_session_json,
-                            api_account_uuid,
-                            api_max_real_notes_per_bundle,
-                        )
-                        .await?;
+                        let output_ok =
+                            crate::api::voting::setup_delegation_bundles(api_ctx).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -4652,6 +4594,30 @@ impl SseDecode for crate::api::voting::ApiVoteCommitEvent {
             bundle_index: var_bundleIndex,
             proof_progress: var_proofProgress,
             commitments: var_commitments,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voting::ApiVotingRoundContext {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_dbPath = <String>::sse_decode(deserializer);
+        let mut var_lightwalletdUrl = <String>::sse_decode(deserializer);
+        let mut var_network = <String>::sse_decode(deserializer);
+        let mut var_roundParams = <zcash_voting::wire::VotingRoundParams>::sse_decode(deserializer);
+        let mut var_roundName = <String>::sse_decode(deserializer);
+        let mut var_sessionJson = <Option<String>>::sse_decode(deserializer);
+        let mut var_accountUuid = <String>::sse_decode(deserializer);
+        let mut var_maxRealNotesPerBundle = <Option<u32>>::sse_decode(deserializer);
+        return crate::api::voting::ApiVotingRoundContext {
+            db_path: var_dbPath,
+            lightwalletd_url: var_lightwalletdUrl,
+            network: var_network,
+            round_params: var_roundParams,
+            round_name: var_roundName,
+            session_json: var_sessionJson,
+            account_uuid: var_accountUuid,
+            max_real_notes_per_bundle: var_maxRealNotesPerBundle,
         };
     }
 }
@@ -6454,6 +6420,33 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiVoteCommitEvent>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voting::ApiVotingRoundContext {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.db_path.into_into_dart().into_dart(),
+            self.lightwalletd_url.into_into_dart().into_dart(),
+            self.network.into_into_dart().into_dart(),
+            self.round_params.into_into_dart().into_dart(),
+            self.round_name.into_into_dart().into_dart(),
+            self.session_json.into_into_dart().into_dart(),
+            self.account_uuid.into_into_dart().into_dart(),
+            self.max_real_notes_per_bundle.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voting::ApiVotingRoundContext
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voting::ApiVotingRoundContext>
+    for crate::api::voting::ApiVotingRoundContext
+{
+    fn into_into_dart(self) -> crate::api::voting::ApiVotingRoundContext {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::sync::BlockMetaInfo {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -7871,6 +7864,20 @@ impl SseEncode for crate::api::voting::ApiVoteCommitEvent {
             self.commitments,
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::voting::ApiVotingRoundContext {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.db_path, serializer);
+        <String>::sse_encode(self.lightwalletd_url, serializer);
+        <String>::sse_encode(self.network, serializer);
+        <zcash_voting::wire::VotingRoundParams>::sse_encode(self.round_params, serializer);
+        <String>::sse_encode(self.round_name, serializer);
+        <Option<String>>::sse_encode(self.session_json, serializer);
+        <String>::sse_encode(self.account_uuid, serializer);
+        <Option<u32>>::sse_encode(self.max_real_notes_per_bundle, serializer);
     }
 }
 

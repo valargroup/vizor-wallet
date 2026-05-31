@@ -74,10 +74,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ApiVoteCommitEvent dco_decode_api_vote_commit_event(dynamic raw);
 
   @protected
+  ApiVotingRoundContext dco_decode_api_voting_round_context(dynamic raw);
+
+  @protected
   BlockMetaInfo dco_decode_block_meta_info(dynamic raw);
 
   @protected
   bool dco_decode_bool(dynamic raw);
+
+  @protected
+  ApiVotingRoundContext dco_decode_box_autoadd_api_voting_round_context(
+    dynamic raw,
+  );
 
   @protected
   CompletedVoteDisplayView dco_decode_box_autoadd_completed_vote_display_view(
@@ -115,9 +123,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   VoteShareWire dco_decode_box_autoadd_vote_share_wire(dynamic raw);
-
-  @protected
-  VotingRoundParams dco_decode_box_autoadd_voting_round_params(dynamic raw);
 
   @protected
   BundleLayout dco_decode_bundle_layout(dynamic raw);
@@ -519,10 +524,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ApiVotingRoundContext sse_decode_api_voting_round_context(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   BlockMetaInfo sse_decode_block_meta_info(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  ApiVotingRoundContext sse_decode_box_autoadd_api_voting_round_context(
+    SseDeserializer deserializer,
+  );
 
   @protected
   CompletedVoteDisplayView sse_decode_box_autoadd_completed_vote_display_view(
@@ -564,11 +579,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   VoteShareWire sse_decode_box_autoadd_vote_share_wire(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  VotingRoundParams sse_decode_box_autoadd_voting_round_params(
     SseDeserializer deserializer,
   );
 
@@ -1066,10 +1076,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_api_voting_round_context(
+    ApiVotingRoundContext self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_block_meta_info(BlockMetaInfo self, SseSerializer serializer);
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_api_voting_round_context(
+    ApiVotingRoundContext self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_completed_vote_display_view(
@@ -1119,12 +1141,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_vote_share_wire(
     VoteShareWire self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_box_autoadd_voting_round_params(
-    VotingRoundParams self,
     SseSerializer serializer,
   );
 

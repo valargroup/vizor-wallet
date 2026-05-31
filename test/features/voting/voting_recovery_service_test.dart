@@ -16,7 +16,7 @@ void main() {
 
     final plan = await service.loadResumePlan(
       dbPath: 'wallet.db',
-      walletId: 'wallet-1',
+      accountUuid: 'wallet-1',
       roundId: 'round-1',
     );
 
@@ -41,7 +41,7 @@ void main() {
 
     final plan = await service.loadResumePlan(
       dbPath: 'wallet.db',
-      walletId: 'wallet-1',
+      accountUuid: 'wallet-1',
       roundId: 'round-1',
     );
 
@@ -72,7 +72,7 @@ void main() {
 
       final plan = await service.loadResumePlan(
         dbPath: 'wallet.db',
-        walletId: 'wallet-1',
+        accountUuid: 'wallet-1',
         roundId: 'round-1',
       );
 
@@ -102,14 +102,15 @@ void main() {
 
       final plan = await service.loadResumePlan(
         dbPath: 'wallet.db',
-        walletId: 'wallet-1',
+        accountUuid: 'wallet-1',
         roundId: 'round-1',
       );
 
       expect(
-        plan.voteTxHashesByKey[
-          const VotingVoteKey(bundleIndex: 1, proposalId: 1)
-        ],
+        plan.voteTxHashesByKey[const VotingVoteKey(
+          bundleIndex: 1,
+          proposalId: 1,
+        )],
         'tx-1-1',
       );
       expect(plan.pendingVoteSubmissionKeys, [
@@ -142,7 +143,7 @@ void main() {
 
     final plan = await service.loadResumePlan(
       dbPath: 'wallet.db',
-      walletId: 'wallet-1',
+      accountUuid: 'wallet-1',
       roundId: 'round-1',
     );
 
@@ -225,7 +226,7 @@ void main() {
 
       final plan = await service.loadResumePlan(
         dbPath: 'wallet.db',
-        walletId: 'wallet-1',
+        accountUuid: 'wallet-1',
         roundId: 'round-1',
       );
 
@@ -251,7 +252,7 @@ void main() {
 
     final plan = await service.loadResumePlan(
       dbPath: 'wallet.db',
-      walletId: 'wallet-1',
+      accountUuid: 'wallet-1',
       roundId: 'round-1',
     );
 
@@ -274,7 +275,7 @@ void main() {
 
       final plan = await service.loadResumePlan(
         dbPath: 'wallet.db',
-        walletId: 'wallet-1',
+        accountUuid: 'wallet-1',
         roundId: 'round-1',
       );
 
@@ -359,7 +360,7 @@ void main() {
 
       final plan = await service.loadResumePlan(
         dbPath: 'wallet.db',
-        walletId: 'wallet-1',
+        accountUuid: 'wallet-1',
         roundId: 'round-1',
       );
 
@@ -378,7 +379,7 @@ void main() {
 
       await service.addSentServersForShare(
         dbPath: 'wallet.db',
-        walletId: 'wallet-1',
+        accountUuid: 'wallet-1',
         share: record,
         newUrls: ['https://helper-b.example'],
       );
@@ -406,7 +407,7 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<rust_frb_types.RoundRecoveryStateView> getRoundRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) async {
     return state;
@@ -415,7 +416,7 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> addSentServers({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -436,7 +437,7 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<rust_frb_types.RoundPlanView> getRoundPlan({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required List<int> proposalIds,
   }) async {
@@ -452,7 +453,7 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> setBallotIntent({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int proposalId,
     required int numOptions,
@@ -463,7 +464,7 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> clearRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) async {
     clearCalls.add(roundId);

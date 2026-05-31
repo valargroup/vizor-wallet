@@ -16,7 +16,7 @@ pub fn open_voting_db(
         std::path::Path::new(db_path),
         account_uuid,
     )
-        .map_err(|e| format!("Error opening voting database: {e}"))
+    .map_err(|e| format!("Error opening voting database: {e}"))
 }
 
 #[cfg(test)]

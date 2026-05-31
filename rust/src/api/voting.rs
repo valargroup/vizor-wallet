@@ -31,6 +31,14 @@ const KEYSTONE_RK_LEN: usize = 32;
 
 const SHARE_TRACKING_FLAG_READY: u32 = 1;
 const SHARE_TRACKING_FLAG_OVERDUE: u32 = 1 << 1;
+#[cfg(test)]
+const MAX_SAFE_JSON_INTEGER: u64 = 0x1f_ffff_ffff_ffff;
+
+const DELEGATION_STREAM_CONTEXT: &str = "voting delegation";
+const VOTE_STREAM_CONTEXT: &str = "voting vote";
+const SINK_PROGRESS_NOT_DELIVERED: &str = "StreamSink closed, progress not delivered";
+const SINK_ERROR_NOT_DELIVERED: &str = "StreamSink closed before error delivery";
+const SINK_RESULT_NOT_DELIVERED: &str = "StreamSink closed before final result";
 
 #[derive(Clone, Debug, PartialEq)]
 /// Progress event emitted while building, proving, and signing a delegation payload.
@@ -54,6 +62,22 @@ pub struct ApiVoteCommitEvent {
     pub bundle_index: Option<u32>,
     pub proof_progress: Option<f64>,
     pub commitments: Option<zcash_voting::wire::SignedVoteCommitmentsView>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+/// Shared delegation/voting round context passed across the FRB boundary.
+///
+/// This bundles the reusable round and wallet scope required by delegation setup,
+/// proving, and keystone request flows.
+pub struct ApiVotingRoundContext {
+    pub db_path: String,
+    pub lightwalletd_url: String,
+    pub network: String,
+    pub round_params: zcash_voting::wire::VotingRoundParams,
+    pub round_name: String,
+    pub session_json: Option<String>,
+    pub account_uuid: String,
+    pub max_real_notes_per_bundle: Option<u32>,
 }
 
 fn bundle_policy(max_real_notes_per_bundle: Option<u32>) -> Result<BundlePolicy, String> {
@@ -159,6 +183,11 @@ pub fn vote_share_wire_json(
 /// This mirrors the zcash-swift-wallet-sdk wrapper around
 /// `zcash_voting::share_policy::plan_share_submissions`, with Rust drawing the
 /// policy-sized entropy from the OS CSPRNG before returning FRB-safe plans.
+///
+/// # Errors
+///
+/// Returns an error if `share_count` does not fit `usize`, entropy generation
+/// fails, or crate policy rejects the supplied timing/server inputs.
 pub fn plan_share_submissions(
     share_count: u32,
     server_urls: Vec<String>,
@@ -305,6 +334,11 @@ pub fn recovered_vote_share_wire_json(
 /// Rust derives the wallet seed from the account mnemonic, then derives scoped
 /// hotkey seed material locally and returns bytes for secure storage.
 /// The returned `Vec<u8>` is an unavoidable FRB copy boundary
+///
+/// # Errors
+///
+/// Returns an error if network parsing fails, mnemonic decoding fails, or
+/// contextual hotkey derivation fails.
 pub fn derive_voting_hotkey(
     mnemonic: String,
     round_id: String,
@@ -327,6 +361,10 @@ pub fn derive_voting_hotkey(
 /// Hardware accounts cannot expose their wallet seed to derive the deterministic
 /// software hotkey, so the app persists this random per-round hotkey in secure
 /// storage and reuses it for vote commitment signing.
+///
+/// # Errors
+///
+/// Returns an error if network parsing fails or random hotkey generation fails.
 pub fn generate_voting_hotkey(network: String) -> Result<Vec<u8>, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
@@ -476,6 +514,10 @@ fn require_len(bytes: &[u8], expected: usize, field: &str) -> Result<(), String>
     }
 }
 
+fn log_sink_closed(context: &str, detail: &str) {
+    log::warn!("{context}: {detail}");
+}
+
 /// Emits the terminal `"result"` delegation event to a progress sink.
 ///
 /// If signing failed, this forwards the error through `sink.add_error` and
@@ -488,7 +530,7 @@ fn emit_signed_delegation_result(
         Ok(signed) => signed,
         Err(error) => {
             if sink.add_error(error.clone()).is_err() {
-                log::warn!("voting delegation: StreamSink closed before error delivery");
+                log_sink_closed(DELEGATION_STREAM_CONTEXT, SINK_ERROR_NOT_DELIVERED);
             }
             return Ok(());
         }
@@ -502,7 +544,36 @@ fn emit_signed_delegation_result(
         })
         .is_err()
     {
-        log::warn!("voting delegation: StreamSink closed before final result");
+        log_sink_closed(DELEGATION_STREAM_CONTEXT, SINK_RESULT_NOT_DELIVERED);
+    }
+    Ok(())
+}
+
+fn emit_signed_vote_result(
+    sink: &StreamSink<ApiVoteCommitEvent>,
+    signed_result: Result<zcash_voting::wire::SignedVoteCommitmentsView, String>,
+) -> Result<(), String> {
+    let commitments = match signed_result {
+        Ok(commitments) => commitments,
+        Err(error) => {
+            if sink.add_error(error.clone()).is_err() {
+                log_sink_closed(VOTE_STREAM_CONTEXT, SINK_ERROR_NOT_DELIVERED);
+            }
+            return Ok(());
+        }
+    };
+
+    if sink
+        .add(ApiVoteCommitEvent {
+            phase: PHASE_RESULT.to_string(),
+            proposal_id: None,
+            bundle_index: Some(commitments.bundle_index),
+            proof_progress: None,
+            commitments: Some(commitments),
+        })
+        .is_err()
+    {
+        log_sink_closed(VOTE_STREAM_CONTEXT, SINK_RESULT_NOT_DELIVERED);
     }
     Ok(())
 }
@@ -511,114 +582,102 @@ fn emit_signed_delegation_result(
 ///
 /// Reuses existing bundle rows for the same round/wallet, so callers can safely
 /// retry setup before proving a specific bundle.
-#[allow(clippy::too_many_arguments)]
+///
+/// # Errors
+///
+/// Returns an error if bundle policy parsing, opening the sidecar DB, round
+/// initialization, note selection, or bundle layout persistence fails.
 pub async fn setup_delegation_bundles(
-    db_path: String,
-    lightwalletd_url: String,
-    network: String,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    round_name: String,
-    session_json: Option<String>,
-    account_uuid: String,
-    max_real_notes_per_bundle: Option<u32>,
+    ctx: ApiVotingRoundContext,
 ) -> Result<zcash_voting::wire::BundleLayout, String> {
-    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let voting_db = state::open_voting_db(&db_path, &account_uuid)?;
+    let bundle_policy = bundle_policy(ctx.max_real_notes_per_bundle)?;
+    let voting_db = state::open_voting_db(&ctx.db_path, &ctx.account_uuid)?;
     delegation::setup_delegation_bundles(
         &voting_db,
-        &db_path,
-        &lightwalletd_url,
-        &network,
-        round_params,
-        &round_name,
-        session_json.as_deref(),
+        &ctx.db_path,
+        &ctx.lightwalletd_url,
+        &ctx.network,
+        ctx.round_params,
+        &ctx.round_name,
+        ctx.session_json.as_deref(),
         bundle_policy,
     )
     .await
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Build delegation PCZT material and prefetch/cache PIR-backed IMT proofs.
 ///
 /// This is a background warm-up path. The normal proof path still fetches any
 /// missing PIR proofs if this was not run or did not complete in time.
+///
+/// # Errors
+///
+/// Returns an error if round input resolution, mnemonic-to-seed derivation,
+/// hotkey derivation, bundle preparation, or PIR precompute fails.
 pub async fn precompute_delegation_pir(
-    db_path: String,
-    lightwalletd_url: String,
+    ctx: ApiVotingRoundContext,
     pir_server_url: String,
-    network: String,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    round_name: String,
-    session_json: Option<String>,
-    account_uuid: String,
     mnemonic: String,
     bundle_index: u32,
-    max_real_notes_per_bundle: Option<u32>,
 ) -> Result<zcash_voting::wire::DelegationPirPrecomputeResultView, String> {
     let (wallet_network, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
-        &network,
-        &lightwalletd_url,
-        round_params,
-        &round_name,
-        max_real_notes_per_bundle,
+        &ctx.network,
+        &ctx.lightwalletd_url,
+        ctx.round_params,
+        &ctx.round_name,
+        ctx.max_real_notes_per_bundle,
     )
     .await?;
     let seed = seed_from_mnemonic(mnemonic)?;
     let round_id = lwd.round_params.vote_round_id.clone();
-    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &account_uuid, wallet_network)?;
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &ctx.account_uuid, wallet_network)?;
     let prepare_params = prepare_delegation_bundle_params(
         lwd,
-        session_json.as_deref(),
-        &account_uuid,
+        ctx.session_json.as_deref(),
+        &ctx.account_uuid,
         voting_network,
         hotkey_secret.expose_secret(),
         bundle_index,
         bundle_policy,
     );
-    delegation::precompute_delegation_pir(
-        &db_path,
-        &pir_server_url,
-        prepare_params,
-    )
-    .await
-    .map(zcash_voting::wire::DelegationPirPrecomputeResultView::from)
+    delegation::precompute_delegation_pir(&ctx.db_path, &pir_server_url, prepare_params)
+        .await
+        .map(zcash_voting::wire::DelegationPirPrecomputeResultView::from)
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Streaming variant of `build_prove_and_sign_delegation_payload`.
 ///
 /// Emits local preparation phase events while work progresses, then emits a
 /// final `"result"` event containing `SignedDelegationPayloadView`. The function
 /// returns `Ok(())` after the terminal event is queued.
+///
+/// # Errors
+///
+/// Returns an error if round input resolution fails before the stream work
+/// starts. Runtime delegation/proving errors are forwarded into the sink as
+/// stream errors.
 pub async fn build_prove_and_sign_delegation_payload_with_progress(
-    db_path: String,
-    lightwalletd_url: String,
+    ctx: ApiVotingRoundContext,
     pir_server_url: String,
-    network: String,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    round_name: String,
-    session_json: Option<String>,
-    account_uuid: String,
     mnemonic: String,
     bundle_index: u32,
-    max_real_notes_per_bundle: Option<u32>,
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
     let (wallet_network, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
-        &network,
-        &lightwalletd_url,
-        round_params,
-        &round_name,
-        max_real_notes_per_bundle,
+        &ctx.network,
+        &ctx.lightwalletd_url,
+        ctx.round_params,
+        &ctx.round_name,
+        ctx.max_real_notes_per_bundle,
     )
     .await?;
     let seed = seed_from_mnemonic(mnemonic)?;
     let round_id = lwd.round_params.vote_round_id.clone();
-    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &account_uuid, wallet_network)?;
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &ctx.account_uuid, wallet_network)?;
     let prepare_params = prepare_delegation_bundle_params(
         lwd,
-        session_json.as_deref(),
-        &account_uuid,
+        ctx.session_json.as_deref(),
+        &ctx.account_uuid,
         voting_network,
         hotkey_secret.expose_secret(),
         bundle_index,
@@ -627,13 +686,13 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let signed_result = delegation::build_prove_and_sign_delegation_payload(
-        &db_path,
+        &ctx.db_path,
         &pir_server_url,
         &seed,
         prepare_params,
         move |event| {
             if progress_sink.add(event.into()).is_err() {
-                log::warn!("voting delegation: StreamSink closed, progress not delivered");
+                log_sink_closed(DELEGATION_STREAM_CONTEXT, SINK_PROGRESS_NOT_DELIVERED);
             }
         },
     )
@@ -644,47 +703,45 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     emit_signed_delegation_result(sink.as_ref(), signed_result)
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Build and redact a voting PCZT that Keystone must sign for one bundle.
+///
+/// # Errors
+///
+/// Returns an error if round input resolution fails or if PCZT construction and
+/// redaction for the requested bundle fails.
 pub async fn build_keystone_delegation_request(
-    db_path: String,
-    lightwalletd_url: String,
-    network: String,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    round_name: String,
-    session_json: Option<String>,
-    account_uuid: String,
+    ctx: ApiVotingRoundContext,
     hotkey_seed: Vec<u8>,
     bundle_index: u32,
-    max_real_notes_per_bundle: Option<u32>,
 ) -> Result<zcash_voting::wire::KeystoneSigningRequest, String> {
     let (_, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
-        &network,
-        &lightwalletd_url,
-        round_params,
-        &round_name,
-        max_real_notes_per_bundle,
+        &ctx.network,
+        &ctx.lightwalletd_url,
+        ctx.round_params,
+        &ctx.round_name,
+        ctx.max_real_notes_per_bundle,
     )
     .await?;
     let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
     let prepare_params = prepare_delegation_bundle_params(
         lwd,
-        session_json.as_deref(),
-        &account_uuid,
+        ctx.session_json.as_deref(),
+        &ctx.account_uuid,
         voting_network,
         hotkey_secret.expose_secret(),
         bundle_index,
         bundle_policy,
     );
-    delegation::build_keystone_delegation_request(
-        &db_path,
-        &account_uuid,
-        prepare_params,
-    )
-    .await
+    delegation::build_keystone_delegation_request(&ctx.db_path, &ctx.account_uuid, prepare_params)
+        .await
 }
 
 /// Extract the ZIP-244 sighash from PCZT bytes.
+///
+/// # Errors
+///
+/// Returns an error if `pczt_bytes` cannot be decoded or does not contain a
+/// spend authorization sighash.
 pub fn extract_pczt_sighash(pczt_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     catch(|| {
         zcash_voting::delegate::pczt_sighash(&pczt_bytes)
@@ -699,7 +756,9 @@ pub fn extract_spend_auth_signature_from_signed_pczt(
     action_index: u32,
 ) -> Result<Vec<u8>, String> {
     catch(|| {
-        zcash_voting::delegate::spend_auth_signature(&signed_pczt_bytes, action_index as usize)
+        let action_index =
+            usize::try_from(action_index).map_err(|_| "action_index does not fit in usize")?;
+        zcash_voting::delegate::spend_auth_signature(&signed_pczt_bytes, action_index)
             .map(|sig| sig.to_vec())
             .map_err(|e| format!("extract_spend_auth_sig failed: {e}"))
     })
@@ -748,37 +807,34 @@ pub fn get_keystone_signatures(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Streaming Keystone variant of `build_prove_and_sign_delegation_payload`.
+///
+/// # Errors
+///
+/// Returns an error if round input resolution fails before stream work starts.
+/// Runtime proving/signature errors are emitted through the sink.
 pub async fn build_prove_delegation_payload_with_keystone_signature_with_progress(
-    db_path: String,
-    lightwalletd_url: String,
+    ctx: ApiVotingRoundContext,
     pir_server_url: String,
-    network: String,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    round_name: String,
-    session_json: Option<String>,
-    account_uuid: String,
     hotkey_seed: Vec<u8>,
     bundle_index: u32,
     keystone_sig: Vec<u8>,
     keystone_sighash: Vec<u8>,
-    max_real_notes_per_bundle: Option<u32>,
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
     let (_, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
-        &network,
-        &lightwalletd_url,
-        round_params,
-        &round_name,
-        max_real_notes_per_bundle,
+        &ctx.network,
+        &ctx.lightwalletd_url,
+        ctx.round_params,
+        &ctx.round_name,
+        ctx.max_real_notes_per_bundle,
     )
     .await?;
     let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
     let prepare_params = prepare_delegation_bundle_params(
         lwd,
-        session_json.as_deref(),
-        &account_uuid,
+        ctx.session_json.as_deref(),
+        &ctx.account_uuid,
         voting_network,
         hotkey_secret.expose_secret(),
         bundle_index,
@@ -787,15 +843,15 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let signed_result = delegation::build_prove_delegation_payload_with_keystone_signature(
-        &db_path,
+        &ctx.db_path,
         &pir_server_url,
-        &account_uuid,
+        &ctx.account_uuid,
         prepare_params,
         &keystone_sig,
         &keystone_sighash,
         move |event| {
             if progress_sink.add(event.into()).is_err() {
-                log::warn!("voting delegation: StreamSink closed, progress not delivered");
+                log_sink_closed(DELEGATION_STREAM_CONTEXT, SINK_PROGRESS_NOT_DELIVERED);
             }
         },
     )
@@ -881,6 +937,11 @@ pub fn delete_skipped_bundles(
 /// Returns the latest synced tree height. The underlying tree client is cached
 /// per `(db_path, account_uuid)` so later VAN witness calls can reuse the synced
 /// in-memory tree state.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails or tree sync against
+/// `node_url` fails for `round_id`.
 pub fn sync_vote_tree(
     db_path: String,
     account_uuid: String,
@@ -898,6 +959,11 @@ pub fn sync_vote_tree(
 ///
 /// `anchor_height` is the vote-tree height where the witness should be anchored;
 /// callers must sync the same round before requesting the witness.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, `bundle_index` is out of
+/// range for the round, or witness generation fails.
 pub fn generate_van_witness(
     db_path: String,
     account_uuid: String,
@@ -950,6 +1016,11 @@ pub fn reset_voting_session_state(
 }
 
 /// Recover a committed but unsubmitted vote from persisted local recovery data.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, no matching commitment is
+/// recoverable, or wire conversion fails.
 pub fn recover_vote_commitment(
     db_path: String,
     account_uuid: String,
@@ -1030,7 +1101,7 @@ pub async fn build_vote_commitments_with_progress(
 ) -> Result<(), String> {
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
-    let commitments = match build_vote_commitments_result(
+    let commitments = build_vote_commitments_result(
         db_path,
         account_uuid,
         network,
@@ -1041,34 +1112,13 @@ pub async fn build_vote_commitments_with_progress(
         draft_votes,
         move |stage| {
             if progress_sink.add(stage.into()).is_err() {
-                log::warn!("voting vote: StreamSink closed, progress not delivered");
+                log_sink_closed(VOTE_STREAM_CONTEXT, SINK_PROGRESS_NOT_DELIVERED);
             }
         },
     )
-    .await
-    {
-        Ok(commitments) => commitments,
-        Err(error) => {
-            if sink.add_error(error.clone()).is_err() {
-                log::warn!("voting vote: StreamSink closed before error delivery");
-            }
-            return Ok(());
-        }
-    };
+    .await;
 
-    if sink
-        .add(ApiVoteCommitEvent {
-            phase: PHASE_RESULT.to_string(),
-            proposal_id: None,
-            bundle_index: Some(commitments.bundle_index),
-            proof_progress: None,
-            commitments: Some(commitments),
-        })
-        .is_err()
-    {
-        log::warn!("voting vote: StreamSink closed before final result");
-    }
-    Ok(())
+    emit_signed_vote_result(sink.as_ref(), commitments)
 }
 
 /// Load the full recovery/share-tracking summary for one voting round.
@@ -1295,6 +1345,9 @@ pub(crate) fn wallet_network(network: zcash_voting::Network) -> WalletNetwork {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wallet::voting::test_support::{
+        test_api_round_params, test_note_info, ROUND_ID, TEST_ACCOUNT_UUID, TEST_MNEMONIC,
+    };
     use base64::Engine as _;
     use std::{
         io::{Read, Write},
@@ -1302,9 +1355,6 @@ mod tests {
         thread,
     };
     use zcash_client_backend::proto::service::TreeState;
-
-    const ROUND_ID: &str = "0000000000000000000000000000000000000000000000000000000000000001";
-    const TEST_ACCOUNT_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
 
     fn b64(bytes: impl AsRef<[u8]>) -> String {
         base64::engine::general_purpose::STANDARD.encode(bytes)
@@ -1321,6 +1371,71 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    fn test_round_context(
+        db_path: &std::path::Path,
+        network: &str,
+        account_uuid: &str,
+    ) -> ApiVotingRoundContext {
+        ApiVotingRoundContext {
+            db_path: db_path.to_str().unwrap().to_string(),
+            lightwalletd_url: "http://127.0.0.1:1".to_string(),
+            network: network.to_string(),
+            round_params: test_api_round_params(),
+            round_name: "Demo".to_string(),
+            session_json: None,
+            account_uuid: account_uuid.to_string(),
+            max_real_notes_per_bundle: None,
+        }
+    }
+
+    #[test]
+    fn derive_voting_hotkey_happy_path_is_deterministic() {
+        let hotkey_a = derive_voting_hotkey(
+            TEST_MNEMONIC.to_string(),
+            ROUND_ID.to_string(),
+            TEST_ACCOUNT_UUID.to_string(),
+            "regtest".to_string(),
+        )
+        .unwrap();
+        let hotkey_b = derive_voting_hotkey(
+            TEST_MNEMONIC.to_string(),
+            ROUND_ID.to_string(),
+            TEST_ACCOUNT_UUID.to_string(),
+            "regtest".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(hotkey_a, hotkey_b);
+        assert_eq!(hotkey_a.len(), 64);
+
+        let seed = seed_from_mnemonic(TEST_MNEMONIC.to_string()).unwrap();
+        let expected =
+            hotkey::derive_hotkey(&seed, ROUND_ID, TEST_ACCOUNT_UUID, WalletNetwork::Regtest)
+                .unwrap();
+        assert_eq!(hotkey_a, expected.expose_secret().to_vec());
+    }
+
+    #[test]
+    fn generate_voting_hotkey_happy_path_returns_valid_distinct_seeds() {
+        let hotkey_a = generate_voting_hotkey("regtest".to_string()).unwrap();
+        let hotkey_b = generate_voting_hotkey("regtest".to_string()).unwrap();
+        assert_eq!(hotkey_a.len(), 64);
+        assert_eq!(hotkey_b.len(), 64);
+        assert_ne!(hotkey_a, hotkey_b);
+    }
+
+    #[test]
+    fn bundle_policy_happy_path_maps_optional_limit() {
+        assert_eq!(
+            bundle_policy(None).unwrap(),
+            BundlePolicy::from_optional_max_real_notes_per_bundle(None).unwrap()
+        );
+        assert_eq!(
+            bundle_policy(Some(2)).unwrap(),
+            BundlePolicy::from_optional_max_real_notes_per_bundle(Some(2)).unwrap()
+        );
     }
 
     #[test]
@@ -1408,14 +1523,8 @@ mod tests {
         assert_eq!(api.pczt_bytes, vec![1, 2, 3]);
         assert_eq!(api.status, "ready_for_submission");
         assert_eq!(api.message, None);
-        assert_eq!(
-            api.submission.proof,
-            b64(vec![4])
-        );
-        assert_eq!(
-            api.submission.vote_round_id,
-            b64([0, 1, 2, 3])
-        );
+        assert_eq!(api.submission.proof, b64(vec![4]));
+        assert_eq!(api.submission.vote_round_id, b64([0, 1, 2, 3]));
         assert_eq!(api.eligible_weight_zatoshi, 20);
         assert_eq!(api.delegated_weight_zatoshi, 10);
         assert_eq!(api.bundle_count, 2);
@@ -1648,7 +1757,8 @@ mod tests {
                 primary_blind: "CQ==".to_string(),
                 submit_at: 0,
             },
-            Some(0x1f_ffff_ffff_ffff + 1),
+            // JSON numbers are constrained to the IEEE-754 safe-integer range.
+            Some(MAX_SAFE_JSON_INTEGER + 1),
             123,
         )
         .unwrap_err();
@@ -1708,6 +1818,27 @@ mod tests {
             next_share_tracking_delay_seconds(vec![future], 120).unwrap(),
             Some(30)
         );
+    }
+
+    #[test]
+    fn plan_share_submissions_happy_path_returns_helper_targets() {
+        let server_urls = vec![
+            "https://helper-a.example".to_string(),
+            "https://helper-b.example".to_string(),
+        ];
+        let plans =
+            plan_share_submissions(3, server_urls.clone(), 100, 600, Some(120), false).unwrap();
+
+        assert_eq!(plans.len(), 3);
+        for plan in plans {
+            assert!(plan.submit_at >= 100);
+            assert!(!plan.target_servers.is_empty());
+            assert!(plan.target_servers.len() <= plan.target_count as usize);
+            assert!(plan
+                .target_servers
+                .iter()
+                .all(|url| server_urls.contains(url)));
+        }
     }
 
     #[test]
@@ -1857,14 +1988,8 @@ mod tests {
         assert_eq!(api.commitments[0].proposal_id, 2);
         assert_eq!(api.commitments[0].wire.proposal_id, 2);
         assert_eq!(api.commitments[0].shares[0].encrypted_share.c1, vec![5; 32]);
-        assert_eq!(
-            api.commitments[0].shares[0].primary_blind,
-            b64(vec![9; 32])
-        );
-        assert_eq!(
-            api.commitments[0].wire.vote_auth_sig,
-            b64(vec![9; 64])
-        );
+        assert_eq!(api.commitments[0].shares[0].primary_blind, b64(vec![9; 32]));
+        assert_eq!(api.commitments[0].wire.vote_auth_sig, b64(vec![9; 64]));
     }
 
     #[test]
@@ -1963,7 +2088,10 @@ mod tests {
 
         assert_eq!(witness.position, 0);
         assert_eq!(witness.anchor_height, 1);
-        assert_eq!(witness.auth_path.len(), zcash_voting::vote::VAN_AUTH_PATH_LEN);
+        assert_eq!(
+            witness.auth_path.len(),
+            zcash_voting::vote::VAN_AUTH_PATH_LEN
+        );
         assert!(witness.auth_path.iter().all(|hash| hash.len() == 32));
     }
 
@@ -2044,6 +2172,62 @@ mod tests {
     }
 
     #[test]
+    fn recover_vote_commitment_happy_path_returns_wire_commitment() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("voting.sqlite");
+        let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
+        db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
+        let recovery_json = test_vote_recovery_json(0, 7, 1, 88);
+        let recovery = zcash_voting::vote::parse_recovery(&recovery_json).unwrap();
+        let commitment_bytes = serde_json::to_vec(&serde_json::json!({
+            "van_nullifier": hex::encode(recovery.van_nullifier),
+            "vote_authority_note_new": hex::encode(recovery.vote_authority_note_new),
+            "vote_commitment": hex::encode(recovery.vote_commitment),
+            "proof": hex::encode(recovery.proof),
+        }))
+        .unwrap();
+        zcash_voting::storage::queries::store_vote(
+            &db.conn(),
+            ROUND_ID,
+            TEST_ACCOUNT_UUID,
+            0,
+            7,
+            1,
+            &commitment_bytes,
+        )
+        .unwrap();
+        db.conn()
+            .execute(
+                "UPDATE votes SET commitment_bundle_json = :json
+                 WHERE round_id = :round_id AND wallet_id = :wallet_id
+                   AND bundle_index = :bundle_index AND proposal_id = :proposal_id",
+                rusqlite::named_params! {
+                    ":json": recovery_json,
+                    ":round_id": ROUND_ID,
+                    ":wallet_id": TEST_ACCOUNT_UUID,
+                    ":bundle_index": 0i64,
+                    ":proposal_id": 7i64,
+                },
+            )
+            .unwrap();
+
+        let recovered = recover_vote_commitment(
+            db_path.to_str().unwrap().to_string(),
+            TEST_ACCOUNT_UUID.to_string(),
+            ROUND_ID.to_string(),
+            0,
+            7,
+        )
+        .unwrap();
+
+        assert_eq!(recovered.bundle_index, 0);
+        assert_eq!(recovered.commitments.len(), 1);
+        assert_eq!(recovered.commitments[0].proposal_id, 7);
+    }
+
+    #[test]
     fn recovery_api_preserves_round_summary_and_share_records() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
@@ -2065,7 +2249,7 @@ mod tests {
             1,
             b"vote-1",
         )
-            .unwrap();
+        .unwrap();
         drop(conn);
         mark_vote_submitted(
             db_path.to_str().unwrap().to_string(),
@@ -2160,7 +2344,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
 
         store_keystone_signature(
@@ -2202,7 +2387,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
 
         set_ballot_intent(
             db_path.to_str().unwrap().to_string(),
@@ -2243,7 +2429,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
 
         let plan = get_round_plan(
             db_path.to_str().unwrap().to_string(),
@@ -2262,7 +2449,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
 
         mark_delegation_submitted(
@@ -2292,7 +2480,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params().into(), None).unwrap();
+        db.init_round(&test_api_round_params().into(), None)
+            .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         let recovery_json = test_vote_recovery_json(0, 7, 1, 88);
         let recovery = zcash_voting::vote::parse_recovery(&recovery_json).unwrap();
@@ -2366,16 +2555,9 @@ mod tests {
         let db_path = temp_dir.path().join("voting.sqlite");
         let err = tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(setup_delegation_bundles(
-                db_path.to_str().unwrap().to_string(),
-                "http://127.0.0.1:1".to_string(),
-                "bogus".to_string(),
-                test_api_round_params(),
-                "Demo".to_string(),
-                None,
-                "wallet-1".to_string(),
-                None,
-            ))
+            .block_on(setup_delegation_bundles(test_round_context(
+                &db_path, "bogus", "wallet-1",
+            )))
             .unwrap_err();
 
         assert!(err.contains("Unknown network"));
@@ -2388,17 +2570,10 @@ mod tests {
         let err = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(precompute_delegation_pir(
-                db_path.to_str().unwrap().to_string(),
-                "http://127.0.0.1:1".to_string(),
+                test_round_context(&db_path, "bogus", "wallet-1"),
                 "http://127.0.0.1:2".to_string(),
-                "bogus".to_string(),
-                test_api_round_params(),
-                "Demo".to_string(),
-                None,
-                "wallet-1".to_string(),
                 "mnemonic".to_string(),
                 0,
-                None,
             ))
             .unwrap_err();
 
@@ -2412,30 +2587,13 @@ mod tests {
         let err = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(build_keystone_delegation_request(
-                db_path.to_str().unwrap().to_string(),
-                "http://127.0.0.1:1".to_string(),
-                "bogus".to_string(),
-                test_api_round_params(),
-                "Demo".to_string(),
-                None,
-                "wallet-1".to_string(),
+                test_round_context(&db_path, "bogus", "wallet-1"),
                 vec![9; 32],
                 0,
-                None,
             ))
             .unwrap_err();
 
         assert!(err.contains("Unknown network"));
-    }
-
-    fn test_api_round_params() -> zcash_voting::wire::VotingRoundParams {
-        zcash_voting::wire::VotingRoundParams {
-            vote_round_id: ROUND_ID.to_string(),
-            snapshot_height: 100,
-            ea_pk: vec![0xEA; 32],
-            nc_root: vec![2; 32],
-            nullifier_imt_root: vec![3; 32],
-        }
     }
 
     fn test_vote_recovery_json(
@@ -2625,19 +2783,5 @@ mod tests {
 
     fn fp_one_base64() -> String {
         "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string()
-    }
-
-    fn test_note_info(position: u64) -> zcash_voting::NoteInfo {
-        zcash_voting::NoteInfo {
-            commitment: vec![1; 32],
-            nullifier: vec![2; 32],
-            value: zcash_voting::governance::BALLOT_DIVISOR,
-            position,
-            diversifier: vec![3; 11],
-            rho: vec![4; 32],
-            rseed: vec![5; 32],
-            scope: 0,
-            ufvk_str: "uviewtest".to_string(),
-        }
     }
 }

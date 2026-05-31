@@ -265,59 +265,31 @@ class AppSecureStoreVotingHotkeyStore implements VotingHotkeyStore {
 /// and progress forwarding without invoking FRB or cryptographic proof work.
 abstract interface class VotingRustApi {
   Future<rust_round.BundleLayout> setupDelegationBundles({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
-    int? maxRealNotesPerBundle,
+    required rust_api.ApiVotingRoundContext ctx,
   });
 
   Future<rust_voting.DelegationPirPrecomputeResultView>
   precomputeDelegationPir({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   });
 
   Stream<rust_api.ApiDelegationProofEvent>
   buildProveAndSignDelegationPayloadWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   });
 
   Future<List<int>> generateVotingHotkey({required String network});
 
   Future<rust_delegate.KeystoneSigningRequest> buildKeystoneDelegationRequest({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
+    required rust_api.ApiVotingRoundContext ctx,
     required List<int> hotkeySeed,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   });
 
   Future<List<int>> extractPcztSighash({required List<int> pcztBytes});
@@ -352,19 +324,12 @@ abstract interface class VotingRustApi {
 
   Stream<rust_api.ApiDelegationProofEvent>
   buildProveDelegationPayloadWithKeystoneSignatureWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required List<int> hotkeySeed,
     required int bundleIndex,
     required List<int> keystoneSig,
     required List<int> keystoneSighash,
-    int? maxRealNotesPerBundle,
   });
 
   Future<String> delegationSubmissionWireJson({
@@ -524,84 +489,40 @@ class FrbVotingRustApi implements VotingRustApi {
 
   @override
   Future<rust_round.BundleLayout> setupDelegationBundles({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
-    int? maxRealNotesPerBundle,
+    required rust_api.ApiVotingRoundContext ctx,
   }) {
-    return rust_api.setupDelegationBundles(
-      dbPath: dbPath,
-      lightwalletdUrl: lightwalletdUrl,
-      network: network,
-      roundParams: roundParams,
-      roundName: roundName,
-      sessionJson: sessionJson,
-      accountUuid: accountUuid,
-      maxRealNotesPerBundle: maxRealNotesPerBundle,
-    );
+    return rust_api.setupDelegationBundles(ctx: ctx);
   }
 
   @override
   Future<rust_voting.DelegationPirPrecomputeResultView>
   precomputeDelegationPir({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) {
     return rust_api.precomputeDelegationPir(
-      dbPath: dbPath,
-      lightwalletdUrl: lightwalletdUrl,
+      ctx: ctx,
       pirServerUrl: pirServerUrl,
-      network: network,
-      roundParams: roundParams,
-      roundName: roundName,
-      sessionJson: sessionJson,
-      accountUuid: accountUuid,
       mnemonic: mnemonic,
       bundleIndex: bundleIndex,
-      maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
   }
 
   @override
   Stream<rust_api.ApiDelegationProofEvent>
   buildProveAndSignDelegationPayloadWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) {
     return rust_api.buildProveAndSignDelegationPayloadWithProgress(
-      dbPath: dbPath,
-      lightwalletdUrl: lightwalletdUrl,
+      ctx: ctx,
       pirServerUrl: pirServerUrl,
-      network: network,
-      roundParams: roundParams,
-      roundName: roundName,
-      sessionJson: sessionJson,
-      accountUuid: accountUuid,
       mnemonic: mnemonic,
       bundleIndex: bundleIndex,
-      maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
   }
 
@@ -612,28 +533,14 @@ class FrbVotingRustApi implements VotingRustApi {
 
   @override
   Future<rust_delegate.KeystoneSigningRequest> buildKeystoneDelegationRequest({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
+    required rust_api.ApiVotingRoundContext ctx,
     required List<int> hotkeySeed,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) {
     return rust_api.buildKeystoneDelegationRequest(
-      dbPath: dbPath,
-      lightwalletdUrl: lightwalletdUrl,
-      network: network,
-      roundParams: roundParams,
-      roundName: roundName,
-      sessionJson: sessionJson,
-      accountUuid: accountUuid,
+      ctx: ctx,
       hotkeySeed: hotkeySeed,
       bundleIndex: bundleIndex,
-      maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
   }
 
@@ -705,35 +612,21 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Stream<rust_api.ApiDelegationProofEvent>
   buildProveDelegationPayloadWithKeystoneSignatureWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_voting.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required List<int> hotkeySeed,
     required int bundleIndex,
     required List<int> keystoneSig,
     required List<int> keystoneSighash,
-    int? maxRealNotesPerBundle,
   }) {
     return rust_api
         .buildProveDelegationPayloadWithKeystoneSignatureWithProgress(
-          dbPath: dbPath,
-          lightwalletdUrl: lightwalletdUrl,
+          ctx: ctx,
           pirServerUrl: pirServerUrl,
-          network: network,
-          roundParams: roundParams,
-          roundName: roundName,
-          sessionJson: sessionJson,
-          accountUuid: accountUuid,
           hotkeySeed: hotkeySeed,
           bundleIndex: bundleIndex,
           keystoneSig: keystoneSig,
           keystoneSighash: keystoneSighash,
-          maxRealNotesPerBundle: maxRealNotesPerBundle,
         );
   }
 

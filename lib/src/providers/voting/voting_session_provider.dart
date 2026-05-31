@@ -12,6 +12,7 @@ import '../../features/voting/voting_flow_models.dart';
 import '../../features/voting/voting_formatters.dart';
 import '../../features/voting/voting_resume_plan.dart';
 import '../../features/voting/voting_share_timing.dart';
+import '../../rust/api/voting.dart' as rust_api;
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_api_client.dart';
@@ -46,6 +47,21 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   Completer<void> _sessionInvalidated = Completer<void>();
   int? _runningActionGeneration;
   bool _isDisposed = false;
+
+  rust_api.ApiVotingRoundContext _apiRoundContext(
+    _VotingSessionContext context,
+  ) {
+    return rust_api.ApiVotingRoundContext(
+      dbPath: context.dbPath,
+      lightwalletdUrl: context.lightwalletdUrl,
+      network: context.network,
+      roundParams: context.round.toRoundParams(),
+      roundName: context.round.title,
+      sessionJson: context.round.sessionJson,
+      accountUuid: context.accountUuid,
+      maxRealNotesPerBundle: null,
+    );
+  }
 
   @override
   Future<VotingSessionState> build() async {
@@ -239,13 +255,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
     final rust = ref.read(votingRustApiProvider);
     final bundleSetup = await rust.setupDelegationBundles(
-      dbPath: context.dbPath,
-      lightwalletdUrl: context.lightwalletdUrl,
-      network: context.network,
-      roundParams: context.round.toRoundParams(),
-      roundName: context.round.title,
-      sessionJson: context.round.sessionJson,
-      accountUuid: context.accountUuid,
+      ctx: _apiRoundContext(context),
     );
     if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
     final plan = await _loadResumePlan(context);
@@ -331,14 +341,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         rust_wire.SignedDelegationPayloadView? signedDelegationPayload;
         await for (final event
             in rust.buildProveAndSignDelegationPayloadWithProgress(
-              dbPath: context.dbPath,
-              lightwalletdUrl: context.lightwalletdUrl,
+              ctx: _apiRoundContext(context),
               pirServerUrl: pirEndpoint.toString(),
-              network: context.network,
-              roundParams: context.round.toRoundParams(),
-              roundName: context.round.title,
-              sessionJson: context.round.sessionJson,
-              accountUuid: context.accountUuid,
               mnemonic: mnemonic,
               bundleIndex: bundleIndex,
             )) {
@@ -643,14 +647,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         await for (final event
             in rust
                 .buildProveDelegationPayloadWithKeystoneSignatureWithProgress(
-                  dbPath: context.dbPath,
-                  lightwalletdUrl: context.lightwalletdUrl,
+                  ctx: _apiRoundContext(context),
                   pirServerUrl: pirEndpoint.toString(),
-                  network: context.network,
-                  roundParams: context.round.toRoundParams(),
-                  roundName: context.round.title,
-                  sessionJson: context.round.sessionJson,
-                  accountUuid: context.accountUuid,
                   hotkeySeed: hotkeySeed,
                   bundleIndex: bundleIndex,
                   keystoneSig: signature.sig,
@@ -2048,14 +2046,8 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final result = await ref
           .read(votingRustApiProvider)
           .precomputeDelegationPir(
-            dbPath: context.dbPath,
-            lightwalletdUrl: context.lightwalletdUrl,
+            ctx: _apiRoundContext(context),
             pirServerUrl: pirEndpoint.toString(),
-            network: context.network,
-            roundParams: context.round.toRoundParams(),
-            roundName: context.round.title,
-            sessionJson: context.round.sessionJson,
-            accountUuid: context.accountUuid,
             mnemonic: mnemonic,
             bundleIndex: bundleIndex,
           );
@@ -2292,13 +2284,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     final request = await ref
         .read(votingRustApiProvider)
         .buildKeystoneDelegationRequest(
-          dbPath: context.dbPath,
-          lightwalletdUrl: context.lightwalletdUrl,
-          network: context.network,
-          roundParams: context.round.toRoundParams(),
-          roundName: context.round.title,
-          sessionJson: context.round.sessionJson,
-          accountUuid: context.accountUuid,
+          ctx: _apiRoundContext(context),
           hotkeySeed: hotkeySeed,
           bundleIndex: nextUnsignedBundle,
         );
@@ -2372,15 +2358,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
     final bundleSetup = await ref
         .read(votingRustApiProvider)
-        .setupDelegationBundles(
-          dbPath: context.dbPath,
-          lightwalletdUrl: context.lightwalletdUrl,
-          network: context.network,
-          roundParams: context.round.toRoundParams(),
-          roundName: context.round.title,
-          sessionJson: context.round.sessionJson,
-          accountUuid: context.accountUuid,
-        );
+        .setupDelegationBundles(ctx: _apiRoundContext(context));
     final refreshedPlan = await _loadResumePlan(context);
     final refreshedRoundPlan = await _loadRoundPlan(context);
     _setStateForContext(

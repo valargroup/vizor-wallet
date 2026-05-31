@@ -3570,7 +3570,7 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> addSentServers({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -3585,24 +3585,24 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> clearRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) async {}
 
   @override
   Future<rust_frb_types.RoundRecoveryStateView> getRoundRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) async {
-    walletIds.add(walletId);
+    walletIds.add(accountUuid);
     return state;
   }
 
   @override
   Future<rust_wire.RoundPlanView> getRoundPlan({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required List<int> proposalIds,
   }) async {
@@ -3625,7 +3625,7 @@ class FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> setBallotIntent({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int proposalId,
     required int numOptions,
@@ -3917,16 +3917,9 @@ class FakeVotingRustApi implements VotingRustApi {
 
   @override
   Future<rust_round.BundleLayout> setupDelegationBundles({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required rust_wire.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
-    int? maxRealNotesPerBundle,
+    required rust_api.ApiVotingRoundContext ctx,
   }) async {
-    accountUuids.add(accountUuid);
+    accountUuids.add(ctx.accountUuid);
     _activeSetups++;
     if (_activeSetups > maxConcurrentSetups) {
       maxConcurrentSetups = _activeSetups;
@@ -3950,19 +3943,12 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Stream<rust_api.ApiDelegationProofEvent>
   buildProveAndSignDelegationPayloadWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_wire.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) async* {
-    accountUuids.add(accountUuid);
+    accountUuids.add(ctx.accountUuid);
     delegationBundleCalls.add(bundleIndex);
     final error = delegationStreamError;
     if (error != null) throw error;
@@ -3984,7 +3970,7 @@ class FakeVotingRustApi implements VotingRustApi {
             base64Encode(const [8]),
           ],
           proof: base64Encode(const [1]),
-          voteRoundId: base64Encode(_bytesFromHex(roundParams.voteRoundId)),
+          voteRoundId: base64Encode(_bytesFromHex(ctx.roundParams.voteRoundId)),
         ),
         eligibleWeightZatoshi: BigInt.from(100),
         delegatedWeightZatoshi: BigInt.from(100),
@@ -4002,18 +3988,11 @@ class FakeVotingRustApi implements VotingRustApi {
 
   @override
   Future<rust_delegate.KeystoneSigningRequest> buildKeystoneDelegationRequest({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required rust_wire.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
+    required rust_api.ApiVotingRoundContext ctx,
     required List<int> hotkeySeed,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) async {
-    accountUuids.add(accountUuid);
+    accountUuids.add(ctx.accountUuid);
     keystoneDelegationRequestCalls.add(bundleIndex);
     return rust_delegate.KeystoneSigningRequest(
       pcztBytes: Uint8List.fromList([20, bundleIndex]),
@@ -4022,7 +4001,7 @@ class FakeVotingRustApi implements VotingRustApi {
       rk: Uint8List.fromList([2, bundleIndex]),
       actionIndex: 0,
       displayMemo:
-          'I am authorizing this hotkey managed by my wallet to vote on $roundName with 0.00000100 ZEC.',
+          'I am authorizing this hotkey managed by my wallet to vote on ${ctx.roundName} with 0.00000100 ZEC.',
       eligibleWeightZatoshi: BigInt.from(100),
       delegatedWeightZatoshi: BigInt.from(100),
       bundleCount: bundleCount,
@@ -4047,7 +4026,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<void> storeKeystoneSignature({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required List<int> sig,
@@ -4065,7 +4044,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<List<rust_wire.KeystoneSignatureRecord>> getKeystoneSignatures({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) async {
     final records = storedKeystoneSignatures.values.toList()
@@ -4076,7 +4055,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<int> deleteSkippedBundles({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int keepCount,
   }) async {
@@ -4094,21 +4073,14 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Stream<rust_api.ApiDelegationProofEvent>
   buildProveDelegationPayloadWithKeystoneSignatureWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_wire.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required List<int> hotkeySeed,
     required int bundleIndex,
     required List<int> keystoneSig,
     required List<int> keystoneSighash,
-    int? maxRealNotesPerBundle,
   }) async* {
-    accountUuids.add(accountUuid);
+    accountUuids.add(ctx.accountUuid);
     keystoneProofBundleCalls.add(bundleIndex);
     final signature = storedKeystoneSignatures[bundleIndex];
     final rk = mismatchKeystoneSubmission
@@ -4132,7 +4104,7 @@ class FakeVotingRustApi implements VotingRustApi {
             base64Encode(const [8]),
           ],
           proof: base64Encode(const [1]),
-          voteRoundId: base64Encode(_bytesFromHex(roundParams.voteRoundId)),
+          voteRoundId: base64Encode(_bytesFromHex(ctx.roundParams.voteRoundId)),
         ),
         eligibleWeightZatoshi: BigInt.from(100),
         delegatedWeightZatoshi: BigInt.from(100),
@@ -4162,19 +4134,12 @@ class FakeVotingRustApi implements VotingRustApi {
 
   @override
   Future<rust_wire.DelegationPirPrecomputeResultView> precomputeDelegationPir({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required rust_api.ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required rust_wire.VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) async {
-    accountUuids.add(accountUuid);
+    accountUuids.add(ctx.accountUuid);
     precomputedDelegationPir.add(bundleIndex);
     precomputeMnemonics.add(mnemonic);
     if (!precomputeStarted.isCompleted) {
@@ -4201,7 +4166,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<void> markDelegationSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -4221,7 +4186,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<rust_wire.DelegationConfirmation> confirmDelegationSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -4247,7 +4212,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<int> syncVoteTree({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required String nodeUrl,
   }) async {
@@ -4258,7 +4223,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<rust_vote.VanWitness> generateVanWitness({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int anchorHeight,
@@ -4273,16 +4238,16 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<void> resetVotingSessionState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     String? roundId,
   }) async {
-    resetVotingSessionStateCalls.add('$walletId:${roundId ?? '*'}');
+    resetVotingSessionStateCalls.add('$accountUuid:${roundId ?? '*'}');
   }
 
   @override
   Stream<rust_api.ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String network,
     required String roundId,
     required int bundleIndex,
@@ -4316,7 +4281,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<rust_wire.SignedVoteCommitmentsView> recoverVoteCommitment({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -4513,7 +4478,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<void> markVoteSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -4539,7 +4504,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<rust_wire.VoteConfirmation> confirmVoteSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -4564,7 +4529,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<void> recordShareDelegation({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -4587,7 +4552,7 @@ class FakeVotingRustApi implements VotingRustApi {
   @override
   Future<void> markShareConfirmed({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,

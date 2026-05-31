@@ -204,12 +204,9 @@ where
     let voting_db = open_voting_db(db_path, account_uuid)?;
     let wallet_db = open_wallet_db_for_read(db_path, wallet_network(prepare_params.network))?;
 
-    let prepared_bundle = zcash_voting::delegate::prepare_delegation_bundle(
-        &voting_db,
-        &wallet_db,
-        prepare_params,
-    )
-    .map_err(|e| e.to_string())?;
+    let prepared_bundle =
+        zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
+            .map_err(|e| e.to_string())?;
 
     let pczt_progress = on_progress.clone();
     let setup_stages = zcash_voting::DelegationProgressBridge::new(move |progress| {
@@ -296,16 +293,10 @@ pub async fn build_keystone_delegation_request(
     prepare_params: PrepareDelegationBundleParams<'_>,
 ) -> Result<zcash_voting::delegate::KeystoneSigningRequest, String> {
     let voting_db = open_voting_db(db_path, account_uuid)?;
-    let wallet_db = open_wallet_db_for_read(
-        db_path,
-        wallet_network(prepare_params.network),
-    )?;
-    let prepared = zcash_voting::delegate::prepare_delegation_bundle(
-        &voting_db,
-        &wallet_db,
-        prepare_params,
-    )
-    .map_err(|e| e.to_string())?;
+    let wallet_db = open_wallet_db_for_read(db_path, wallet_network(prepare_params.network))?;
+    let prepared =
+        zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
+            .map_err(|e| e.to_string())?;
     let noop_stages = zcash_voting::NoopProgressReporter;
     prepared
         .keystone_request(&voting_db, &noop_stages)
@@ -338,16 +329,10 @@ where
 
     on_progress(DelegationProgress::SelectingNotes);
     let voting_db = open_voting_db(db_path, account_uuid)?;
-    let wallet_db = open_wallet_db_for_read(
-        db_path,
-        wallet_network(prepare_params.network),
-    )?;
-    let prepared_bundle = zcash_voting::delegate::prepare_delegation_bundle(
-        &voting_db,
-        &wallet_db,
-        prepare_params,
-    )
-    .map_err(|e| e.to_string())?;
+    let wallet_db = open_wallet_db_for_read(db_path, wallet_network(prepare_params.network))?;
+    let prepared_bundle =
+        zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
+            .map_err(|e| e.to_string())?;
     prove_delegation_bundle(
         db_path,
         pir_server_url,
@@ -374,6 +359,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wallet::voting::test_support::{ROUND_ID, TEST_ACCOUNT_UUID};
     use ff::PrimeField;
     use orchard::{
         keys::SpendAuthorizingKey,
@@ -382,9 +368,6 @@ mod tests {
     use secrecy::ExposeSecret;
     use std::sync::{Arc, Mutex};
     use zip32::{fingerprint::SeedFingerprint, AccountId};
-
-    const ACCOUNT_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
-    const ROUND_ID: &str = "0000000000000000000000000000000000000000000000000000000000000001";
 
     #[test]
     fn build_prove_and_sign_delegation_payload_rejects_invalid_round_params_before_progress() {
@@ -415,7 +398,7 @@ mod tests {
                             zcash_voting::delegate::LightwalletdBranchIdProvider::resolved(0),
                     },
                     session_json: None,
-                    account_uuid: ACCOUNT_UUID,
+                    account_uuid: TEST_ACCOUNT_UUID,
                     network: zcash_voting::Network::Regtest,
                     hotkey_seed: &[9; 32],
                     bundle_index: 0,
@@ -434,9 +417,12 @@ mod tests {
         let seed = SecretVec::new(vec![0x42; 32]);
         let account_index = 0u32;
         let account = AccountId::try_from(account_index).unwrap();
-        let usk =
-            UnifiedSpendingKey::from_seed(&zcash_voting::Network::Testnet, seed.expose_secret(), account)
-                .unwrap();
+        let usk = UnifiedSpendingKey::from_seed(
+            &zcash_voting::Network::Testnet,
+            seed.expose_secret(),
+            account,
+        )
+        .unwrap();
         let ask = SpendAuthorizingKey::from(usk.orchard());
         let alpha = pasta_curves::pallas::Scalar::from(7);
         let sighash = [0xAB; 32];
@@ -457,29 +443,5 @@ mod tests {
             .verify(&sighash, &Signature::<SpendAuth>::from(sig_bytes))
             .unwrap();
         assert_eq!(returned_sighash, sighash);
-    }
-
-    fn test_round_params() -> zcash_voting::VotingRoundParams {
-        zcash_voting::VotingRoundParams {
-            vote_round_id: ROUND_ID.to_string(),
-            snapshot_height: 100,
-            ea_pk: vec![1; 32],
-            nc_root: vec![2; 32],
-            nullifier_imt_root: vec![3; 32],
-        }
-    }
-
-    fn test_note_info(position: u64) -> zcash_voting::NoteInfo {
-        zcash_voting::NoteInfo {
-            commitment: vec![1; 32],
-            nullifier: vec![2; 32],
-            value: zcash_voting::governance::BALLOT_DIVISOR,
-            position,
-            diversifier: vec![3; 11],
-            rho: vec![4; 32],
-            rseed: vec![5; 32],
-            scope: 0,
-            ufvk_str: "uviewtest".to_string(),
-        }
     }
 }

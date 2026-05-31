@@ -12,8 +12,8 @@ import '../third_party/zcash_voting/vote.dart';
 import '../third_party/zcash_voting/wire.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_vote_commitments_result`, `bundle_policy`, `catch`, `emit_signed_delegation_result`, `prepare_delegation_bundle_params`, `require_len`, `resolve_delegation_prep_inputs`, `seed_from_mnemonic`, `voting_network`, `wallet_network`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `build_vote_commitments_result`, `bundle_policy`, `catch`, `emit_signed_delegation_result`, `emit_signed_vote_result`, `log_sink_closed`, `prepare_delegation_bundle_params`, `require_len`, `resolve_delegation_prep_inputs`, `seed_from_mnemonic`, `voting_network`, `wallet_network`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`
 
 /// Returns the vote-chain delegation submission body as validated wire JSON.
 ///
@@ -48,6 +48,11 @@ Future<String> voteShareWireJson({
 /// This mirrors the zcash-swift-wallet-sdk wrapper around
 /// `zcash_voting::share_policy::plan_share_submissions`, with Rust drawing the
 /// policy-sized entropy from the OS CSPRNG before returning FRB-safe plans.
+///
+/// # Errors
+///
+/// Returns an error if `share_count` does not fit `usize`, entropy generation
+/// fails, or crate policy rejects the supplied timing/server inputs.
 Future<List<ShareSubmissionPlan>> planShareSubmissions({
   required int shareCount,
   required List<String> serverUrls,
@@ -112,6 +117,11 @@ Future<String> recoveredVoteShareWireJson({
 /// Rust derives the wallet seed from the account mnemonic, then derives scoped
 /// hotkey seed material locally and returns bytes for secure storage.
 /// The returned `Vec<u8>` is an unavoidable FRB copy boundary
+///
+/// # Errors
+///
+/// Returns an error if network parsing fails, mnemonic decoding fails, or
+/// contextual hotkey derivation fails.
 Future<Uint8List> deriveVotingHotkey({
   required String mnemonic,
   required String roundId,
@@ -129,6 +139,10 @@ Future<Uint8List> deriveVotingHotkey({
 /// Hardware accounts cannot expose their wallet seed to derive the deterministic
 /// software hotkey, so the app persists this random per-round hotkey in secure
 /// storage and reuses it for vote commitment signing.
+///
+/// # Errors
+///
+/// Returns an error if network parsing fails or random hotkey generation fails.
 Future<Uint8List> generateVotingHotkey({required String network}) =>
     RustLib.instance.api.crateApiVotingGenerateVotingHotkey(network: network);
 
@@ -136,54 +150,34 @@ Future<Uint8List> generateVotingHotkey({required String network}) =>
 ///
 /// Reuses existing bundle rows for the same round/wallet, so callers can safely
 /// retry setup before proving a specific bundle.
+///
+/// # Errors
+///
+/// Returns an error if bundle policy parsing, opening the sidecar DB, round
+/// initialization, note selection, or bundle layout persistence fails.
 Future<BundleLayout> setupDelegationBundles({
-  required String dbPath,
-  required String lightwalletdUrl,
-  required String network,
-  required VotingRoundParams roundParams,
-  required String roundName,
-  String? sessionJson,
-  required String accountUuid,
-  int? maxRealNotesPerBundle,
-}) => RustLib.instance.api.crateApiVotingSetupDelegationBundles(
-  dbPath: dbPath,
-  lightwalletdUrl: lightwalletdUrl,
-  network: network,
-  roundParams: roundParams,
-  roundName: roundName,
-  sessionJson: sessionJson,
-  accountUuid: accountUuid,
-  maxRealNotesPerBundle: maxRealNotesPerBundle,
-);
+  required ApiVotingRoundContext ctx,
+}) => RustLib.instance.api.crateApiVotingSetupDelegationBundles(ctx: ctx);
 
 /// Build delegation PCZT material and prefetch/cache PIR-backed IMT proofs.
 ///
 /// This is a background warm-up path. The normal proof path still fetches any
 /// missing PIR proofs if this was not run or did not complete in time.
+///
+/// # Errors
+///
+/// Returns an error if round input resolution, mnemonic-to-seed derivation,
+/// hotkey derivation, bundle preparation, or PIR precompute fails.
 Future<DelegationPirPrecomputeResultView> precomputeDelegationPir({
-  required String dbPath,
-  required String lightwalletdUrl,
+  required ApiVotingRoundContext ctx,
   required String pirServerUrl,
-  required String network,
-  required VotingRoundParams roundParams,
-  required String roundName,
-  String? sessionJson,
-  required String accountUuid,
   required String mnemonic,
   required int bundleIndex,
-  int? maxRealNotesPerBundle,
 }) => RustLib.instance.api.crateApiVotingPrecomputeDelegationPir(
-  dbPath: dbPath,
-  lightwalletdUrl: lightwalletdUrl,
+  ctx: ctx,
   pirServerUrl: pirServerUrl,
-  network: network,
-  roundParams: roundParams,
-  roundName: roundName,
-  sessionJson: sessionJson,
-  accountUuid: accountUuid,
   mnemonic: mnemonic,
   bundleIndex: bundleIndex,
-  maxRealNotesPerBundle: maxRealNotesPerBundle,
 );
 
 /// Streaming variant of `build_prove_and_sign_delegation_payload`.
@@ -191,59 +185,47 @@ Future<DelegationPirPrecomputeResultView> precomputeDelegationPir({
 /// Emits local preparation phase events while work progresses, then emits a
 /// final `"result"` event containing `SignedDelegationPayloadView`. The function
 /// returns `Ok(())` after the terminal event is queued.
+///
+/// # Errors
+///
+/// Returns an error if round input resolution fails before the stream work
+/// starts. Runtime delegation/proving errors are forwarded into the sink as
+/// stream errors.
 Stream<ApiDelegationProofEvent> buildProveAndSignDelegationPayloadWithProgress({
-  required String dbPath,
-  required String lightwalletdUrl,
+  required ApiVotingRoundContext ctx,
   required String pirServerUrl,
-  required String network,
-  required VotingRoundParams roundParams,
-  required String roundName,
-  String? sessionJson,
-  required String accountUuid,
   required String mnemonic,
   required int bundleIndex,
-  int? maxRealNotesPerBundle,
 }) => RustLib.instance.api
     .crateApiVotingBuildProveAndSignDelegationPayloadWithProgress(
-      dbPath: dbPath,
-      lightwalletdUrl: lightwalletdUrl,
+      ctx: ctx,
       pirServerUrl: pirServerUrl,
-      network: network,
-      roundParams: roundParams,
-      roundName: roundName,
-      sessionJson: sessionJson,
-      accountUuid: accountUuid,
       mnemonic: mnemonic,
       bundleIndex: bundleIndex,
-      maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
 
 /// Build and redact a voting PCZT that Keystone must sign for one bundle.
+///
+/// # Errors
+///
+/// Returns an error if round input resolution fails or if PCZT construction and
+/// redaction for the requested bundle fails.
 Future<KeystoneSigningRequest> buildKeystoneDelegationRequest({
-  required String dbPath,
-  required String lightwalletdUrl,
-  required String network,
-  required VotingRoundParams roundParams,
-  required String roundName,
-  String? sessionJson,
-  required String accountUuid,
+  required ApiVotingRoundContext ctx,
   required List<int> hotkeySeed,
   required int bundleIndex,
-  int? maxRealNotesPerBundle,
 }) => RustLib.instance.api.crateApiVotingBuildKeystoneDelegationRequest(
-  dbPath: dbPath,
-  lightwalletdUrl: lightwalletdUrl,
-  network: network,
-  roundParams: roundParams,
-  roundName: roundName,
-  sessionJson: sessionJson,
-  accountUuid: accountUuid,
+  ctx: ctx,
   hotkeySeed: hotkeySeed,
   bundleIndex: bundleIndex,
-  maxRealNotesPerBundle: maxRealNotesPerBundle,
 );
 
 /// Extract the ZIP-244 sighash from PCZT bytes.
+///
+/// # Errors
+///
+/// Returns an error if `pczt_bytes` cannot be decoded or does not contain a
+/// spend authorization sighash.
 Future<Uint8List> extractPcztSighash({required List<int> pcztBytes}) =>
     RustLib.instance.api.crateApiVotingExtractPcztSighash(pcztBytes: pcztBytes);
 
@@ -298,36 +280,27 @@ Future<List<KeystoneSignatureRecord>> getKeystoneSignatures({
 );
 
 /// Streaming Keystone variant of `build_prove_and_sign_delegation_payload`.
+///
+/// # Errors
+///
+/// Returns an error if round input resolution fails before stream work starts.
+/// Runtime proving/signature errors are emitted through the sink.
 Stream<ApiDelegationProofEvent>
 buildProveDelegationPayloadWithKeystoneSignatureWithProgress({
-  required String dbPath,
-  required String lightwalletdUrl,
+  required ApiVotingRoundContext ctx,
   required String pirServerUrl,
-  required String network,
-  required VotingRoundParams roundParams,
-  required String roundName,
-  String? sessionJson,
-  required String accountUuid,
   required List<int> hotkeySeed,
   required int bundleIndex,
   required List<int> keystoneSig,
   required List<int> keystoneSighash,
-  int? maxRealNotesPerBundle,
 }) => RustLib.instance.api
     .crateApiVotingBuildProveDelegationPayloadWithKeystoneSignatureWithProgress(
-      dbPath: dbPath,
-      lightwalletdUrl: lightwalletdUrl,
+      ctx: ctx,
       pirServerUrl: pirServerUrl,
-      network: network,
-      roundParams: roundParams,
-      roundName: roundName,
-      sessionJson: sessionJson,
-      accountUuid: accountUuid,
       hotkeySeed: hotkeySeed,
       bundleIndex: bundleIndex,
       keystoneSig: keystoneSig,
       keystoneSighash: keystoneSighash,
-      maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
 
 /// Record a submitted delegation transaction hash for one bundle.
@@ -394,6 +367,11 @@ Future<int> deleteSkippedBundles({
 /// Returns the latest synced tree height. The underlying tree client is cached
 /// per `(db_path, account_uuid)` so later VAN witness calls can reuse the synced
 /// in-memory tree state.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails or tree sync against
+/// `node_url` fails for `round_id`.
 Future<int> syncVoteTree({
   required String dbPath,
   required String accountUuid,
@@ -410,6 +388,11 @@ Future<int> syncVoteTree({
 ///
 /// `anchor_height` is the vote-tree height where the witness should be anchored;
 /// callers must sync the same round before requesting the witness.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, `bundle_index` is out of
+/// range for the round, or witness generation fails.
 Future<VanWitness> generateVanWitness({
   required String dbPath,
   required String accountUuid,
@@ -441,6 +424,11 @@ Future<void> resetVotingSessionState({
 );
 
 /// Recover a committed but unsubmitted vote from persisted local recovery data.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, no matching commitment is
+/// recoverable, or wire conversion fails.
 Future<SignedVoteCommitmentsView> recoverVoteCommitment({
   required String dbPath,
   required String accountUuid,
@@ -727,4 +715,55 @@ class ApiVoteCommitEvent {
           bundleIndex == other.bundleIndex &&
           proofProgress == other.proofProgress &&
           commitments == other.commitments;
+}
+
+/// Shared delegation/voting round context passed across the FRB boundary.
+///
+/// This bundles the reusable round and wallet scope required by delegation setup,
+/// proving, and keystone request flows.
+class ApiVotingRoundContext {
+  final String dbPath;
+  final String lightwalletdUrl;
+  final String network;
+  final VotingRoundParams roundParams;
+  final String roundName;
+  final String? sessionJson;
+  final String accountUuid;
+  final int? maxRealNotesPerBundle;
+
+  const ApiVotingRoundContext({
+    required this.dbPath,
+    required this.lightwalletdUrl,
+    required this.network,
+    required this.roundParams,
+    required this.roundName,
+    this.sessionJson,
+    required this.accountUuid,
+    this.maxRealNotesPerBundle,
+  });
+
+  @override
+  int get hashCode =>
+      dbPath.hashCode ^
+      lightwalletdUrl.hashCode ^
+      network.hashCode ^
+      roundParams.hashCode ^
+      roundName.hashCode ^
+      sessionJson.hashCode ^
+      accountUuid.hashCode ^
+      maxRealNotesPerBundle.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ApiVotingRoundContext &&
+          runtimeType == other.runtimeType &&
+          dbPath == other.dbPath &&
+          lightwalletdUrl == other.lightwalletdUrl &&
+          network == other.network &&
+          roundParams == other.roundParams &&
+          roundName == other.roundName &&
+          sessionJson == other.sessionJson &&
+          accountUuid == other.accountUuid &&
+          maxRealNotesPerBundle == other.maxRealNotesPerBundle;
 }

@@ -114,48 +114,27 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<KeystoneSigningRequest> crateApiVotingBuildKeystoneDelegationRequest({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
+    required ApiVotingRoundContext ctx,
     required List<int> hotkeySeed,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   });
 
   Stream<ApiDelegationProofEvent>
   crateApiVotingBuildProveAndSignDelegationPayloadWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   });
 
   Stream<ApiDelegationProofEvent>
   crateApiVotingBuildProveDelegationPayloadWithKeystoneSignatureWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required List<int> hotkeySeed,
     required int bundleIndex,
     required List<int> keystoneSig,
     required List<int> keystoneSighash,
-    int? maxRealNotesPerBundle,
   });
 
   Stream<ApiVoteCommitEvent> crateApiVotingBuildVoteCommitmentsWithProgress({
@@ -551,17 +530,10 @@ abstract class RustLibApi extends BaseApi {
 
   Future<DelegationPirPrecomputeResultView>
   crateApiVotingPrecomputeDelegationPir({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   });
 
   Future<ProposalResult> crateApiSyncProposeSend({
@@ -669,14 +641,7 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<BundleLayout> crateApiVotingSetupDelegationBundles({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
-    int? maxRealNotesPerBundle,
+    required ApiVotingRoundContext ctx,
   });
 
   Future<int> crateApiVotingShareTrackingFlags({
@@ -917,31 +882,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<KeystoneSigningRequest> crateApiVotingBuildKeystoneDelegationRequest({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
+    required ApiVotingRoundContext ctx,
     required List<int> hotkeySeed,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(dbPath, serializer);
-          sse_encode_String(lightwalletdUrl, serializer);
-          sse_encode_String(network, serializer);
-          sse_encode_box_autoadd_voting_round_params(roundParams, serializer);
-          sse_encode_String(roundName, serializer);
-          sse_encode_opt_String(sessionJson, serializer);
-          sse_encode_String(accountUuid, serializer);
+          sse_encode_box_autoadd_api_voting_round_context(ctx, serializer);
           sse_encode_list_prim_u_8_loose(hotkeySeed, serializer);
           sse_encode_u_32(bundleIndex, serializer);
-          sse_encode_opt_box_autoadd_u_32(maxRealNotesPerBundle, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -954,18 +905,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingBuildKeystoneDelegationRequestConstMeta,
-        argValues: [
-          dbPath,
-          lightwalletdUrl,
-          network,
-          roundParams,
-          roundName,
-          sessionJson,
-          accountUuid,
-          hotkeySeed,
-          bundleIndex,
-          maxRealNotesPerBundle,
-        ],
+        argValues: [ctx, hotkeySeed, bundleIndex],
         apiImpl: this,
       ),
     );
@@ -974,34 +914,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingBuildKeystoneDelegationRequestConstMeta =>
       const TaskConstMeta(
         debugName: "build_keystone_delegation_request",
-        argNames: [
-          "dbPath",
-          "lightwalletdUrl",
-          "network",
-          "roundParams",
-          "roundName",
-          "sessionJson",
-          "accountUuid",
-          "hotkeySeed",
-          "bundleIndex",
-          "maxRealNotesPerBundle",
-        ],
+        argNames: ["ctx", "hotkeySeed", "bundleIndex"],
       );
 
   @override
   Stream<ApiDelegationProofEvent>
   crateApiVotingBuildProveAndSignDelegationPayloadWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) {
     final sink = RustStreamSink<ApiDelegationProofEvent>();
     unawaited(
@@ -1009,17 +931,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         NormalTask(
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
-            sse_encode_String(dbPath, serializer);
-            sse_encode_String(lightwalletdUrl, serializer);
+            sse_encode_box_autoadd_api_voting_round_context(ctx, serializer);
             sse_encode_String(pirServerUrl, serializer);
-            sse_encode_String(network, serializer);
-            sse_encode_box_autoadd_voting_round_params(roundParams, serializer);
-            sse_encode_String(roundName, serializer);
-            sse_encode_opt_String(sessionJson, serializer);
-            sse_encode_String(accountUuid, serializer);
             sse_encode_String(mnemonic, serializer);
             sse_encode_u_32(bundleIndex, serializer);
-            sse_encode_opt_box_autoadd_u_32(maxRealNotesPerBundle, serializer);
             sse_encode_StreamSink_api_delegation_proof_event_Sse(
               sink,
               serializer,
@@ -1037,20 +952,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           ),
           constMeta:
               kCrateApiVotingBuildProveAndSignDelegationPayloadWithProgressConstMeta,
-          argValues: [
-            dbPath,
-            lightwalletdUrl,
-            pirServerUrl,
-            network,
-            roundParams,
-            roundName,
-            sessionJson,
-            accountUuid,
-            mnemonic,
-            bundleIndex,
-            maxRealNotesPerBundle,
-            sink,
-          ],
+          argValues: [ctx, pirServerUrl, mnemonic, bundleIndex, sink],
           apiImpl: this,
         ),
       ),
@@ -1062,38 +964,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   get kCrateApiVotingBuildProveAndSignDelegationPayloadWithProgressConstMeta =>
       const TaskConstMeta(
         debugName: "build_prove_and_sign_delegation_payload_with_progress",
-        argNames: [
-          "dbPath",
-          "lightwalletdUrl",
-          "pirServerUrl",
-          "network",
-          "roundParams",
-          "roundName",
-          "sessionJson",
-          "accountUuid",
-          "mnemonic",
-          "bundleIndex",
-          "maxRealNotesPerBundle",
-          "sink",
-        ],
+        argNames: ["ctx", "pirServerUrl", "mnemonic", "bundleIndex", "sink"],
       );
 
   @override
   Stream<ApiDelegationProofEvent>
   crateApiVotingBuildProveDelegationPayloadWithKeystoneSignatureWithProgress({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required List<int> hotkeySeed,
     required int bundleIndex,
     required List<int> keystoneSig,
     required List<int> keystoneSighash,
-    int? maxRealNotesPerBundle,
   }) {
     final sink = RustStreamSink<ApiDelegationProofEvent>();
     unawaited(
@@ -1101,19 +983,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         NormalTask(
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
-            sse_encode_String(dbPath, serializer);
-            sse_encode_String(lightwalletdUrl, serializer);
+            sse_encode_box_autoadd_api_voting_round_context(ctx, serializer);
             sse_encode_String(pirServerUrl, serializer);
-            sse_encode_String(network, serializer);
-            sse_encode_box_autoadd_voting_round_params(roundParams, serializer);
-            sse_encode_String(roundName, serializer);
-            sse_encode_opt_String(sessionJson, serializer);
-            sse_encode_String(accountUuid, serializer);
             sse_encode_list_prim_u_8_loose(hotkeySeed, serializer);
             sse_encode_u_32(bundleIndex, serializer);
             sse_encode_list_prim_u_8_loose(keystoneSig, serializer);
             sse_encode_list_prim_u_8_loose(keystoneSighash, serializer);
-            sse_encode_opt_box_autoadd_u_32(maxRealNotesPerBundle, serializer);
             sse_encode_StreamSink_api_delegation_proof_event_Sse(
               sink,
               serializer,
@@ -1132,19 +1007,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           constMeta:
               kCrateApiVotingBuildProveDelegationPayloadWithKeystoneSignatureWithProgressConstMeta,
           argValues: [
-            dbPath,
-            lightwalletdUrl,
+            ctx,
             pirServerUrl,
-            network,
-            roundParams,
-            roundName,
-            sessionJson,
-            accountUuid,
             hotkeySeed,
             bundleIndex,
             keystoneSig,
             keystoneSighash,
-            maxRealNotesPerBundle,
             sink,
           ],
           apiImpl: this,
@@ -1160,19 +1028,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName:
             "build_prove_delegation_payload_with_keystone_signature_with_progress",
         argNames: [
-          "dbPath",
-          "lightwalletdUrl",
+          "ctx",
           "pirServerUrl",
-          "network",
-          "roundParams",
-          "roundName",
-          "sessionJson",
-          "accountUuid",
           "hotkeySeed",
           "bundleIndex",
           "keystoneSig",
           "keystoneSighash",
-          "maxRealNotesPerBundle",
           "sink",
         ],
       );
@@ -3780,33 +3641,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<DelegationPirPrecomputeResultView>
   crateApiVotingPrecomputeDelegationPir({
-    required String dbPath,
-    required String lightwalletdUrl,
+    required ApiVotingRoundContext ctx,
     required String pirServerUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
     required String mnemonic,
     required int bundleIndex,
-    int? maxRealNotesPerBundle,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(dbPath, serializer);
-          sse_encode_String(lightwalletdUrl, serializer);
+          sse_encode_box_autoadd_api_voting_round_context(ctx, serializer);
           sse_encode_String(pirServerUrl, serializer);
-          sse_encode_String(network, serializer);
-          sse_encode_box_autoadd_voting_round_params(roundParams, serializer);
-          sse_encode_String(roundName, serializer);
-          sse_encode_opt_String(sessionJson, serializer);
-          sse_encode_String(accountUuid, serializer);
           sse_encode_String(mnemonic, serializer);
           sse_encode_u_32(bundleIndex, serializer);
-          sse_encode_opt_box_autoadd_u_32(maxRealNotesPerBundle, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -3819,19 +3666,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingPrecomputeDelegationPirConstMeta,
-        argValues: [
-          dbPath,
-          lightwalletdUrl,
-          pirServerUrl,
-          network,
-          roundParams,
-          roundName,
-          sessionJson,
-          accountUuid,
-          mnemonic,
-          bundleIndex,
-          maxRealNotesPerBundle,
-        ],
+        argValues: [ctx, pirServerUrl, mnemonic, bundleIndex],
         apiImpl: this,
       ),
     );
@@ -3840,19 +3675,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingPrecomputeDelegationPirConstMeta =>
       const TaskConstMeta(
         debugName: "precompute_delegation_pir",
-        argNames: [
-          "dbPath",
-          "lightwalletdUrl",
-          "pirServerUrl",
-          "network",
-          "roundParams",
-          "roundName",
-          "sessionJson",
-          "accountUuid",
-          "mnemonic",
-          "bundleIndex",
-          "maxRealNotesPerBundle",
-        ],
+        argNames: ["ctx", "pirServerUrl", "mnemonic", "bundleIndex"],
       );
 
   @override
@@ -4505,27 +4328,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<BundleLayout> crateApiVotingSetupDelegationBundles({
-    required String dbPath,
-    required String lightwalletdUrl,
-    required String network,
-    required VotingRoundParams roundParams,
-    required String roundName,
-    String? sessionJson,
-    required String accountUuid,
-    int? maxRealNotesPerBundle,
+    required ApiVotingRoundContext ctx,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(dbPath, serializer);
-          sse_encode_String(lightwalletdUrl, serializer);
-          sse_encode_String(network, serializer);
-          sse_encode_box_autoadd_voting_round_params(roundParams, serializer);
-          sse_encode_String(roundName, serializer);
-          sse_encode_opt_String(sessionJson, serializer);
-          sse_encode_String(accountUuid, serializer);
-          sse_encode_opt_box_autoadd_u_32(maxRealNotesPerBundle, serializer);
+          sse_encode_box_autoadd_api_voting_round_context(ctx, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -4538,16 +4347,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingSetupDelegationBundlesConstMeta,
-        argValues: [
-          dbPath,
-          lightwalletdUrl,
-          network,
-          roundParams,
-          roundName,
-          sessionJson,
-          accountUuid,
-          maxRealNotesPerBundle,
-        ],
+        argValues: [ctx],
         apiImpl: this,
       ),
     );
@@ -4556,16 +4356,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingSetupDelegationBundlesConstMeta =>
       const TaskConstMeta(
         debugName: "setup_delegation_bundles",
-        argNames: [
-          "dbPath",
-          "lightwalletdUrl",
-          "network",
-          "roundParams",
-          "roundName",
-          "sessionJson",
-          "accountUuid",
-          "maxRealNotesPerBundle",
-        ],
+        argNames: ["ctx"],
       );
 
   @override
@@ -5322,6 +5113,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ApiVotingRoundContext dco_decode_api_voting_round_context(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return ApiVotingRoundContext(
+      dbPath: dco_decode_String(arr[0]),
+      lightwalletdUrl: dco_decode_String(arr[1]),
+      network: dco_decode_String(arr[2]),
+      roundParams: dco_decode_voting_round_params(arr[3]),
+      roundName: dco_decode_String(arr[4]),
+      sessionJson: dco_decode_opt_String(arr[5]),
+      accountUuid: dco_decode_String(arr[6]),
+      maxRealNotesPerBundle: dco_decode_opt_box_autoadd_u_32(arr[7]),
+    );
+  }
+
+  @protected
   BlockMetaInfo dco_decode_block_meta_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -5340,6 +5149,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool dco_decode_bool(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as bool;
+  }
+
+  @protected
+  ApiVotingRoundContext dco_decode_box_autoadd_api_voting_round_context(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_api_voting_round_context(raw);
   }
 
   @protected
@@ -5407,12 +5224,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   VoteShareWire dco_decode_box_autoadd_vote_share_wire(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_vote_share_wire(raw);
-  }
-
-  @protected
-  VotingRoundParams dco_decode_box_autoadd_voting_round_params(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_voting_round_params(raw);
   }
 
   @protected
@@ -6720,6 +6531,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ApiVotingRoundContext sse_decode_api_voting_round_context(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_dbPath = sse_decode_String(deserializer);
+    var var_lightwalletdUrl = sse_decode_String(deserializer);
+    var var_network = sse_decode_String(deserializer);
+    var var_roundParams = sse_decode_voting_round_params(deserializer);
+    var var_roundName = sse_decode_String(deserializer);
+    var var_sessionJson = sse_decode_opt_String(deserializer);
+    var var_accountUuid = sse_decode_String(deserializer);
+    var var_maxRealNotesPerBundle = sse_decode_opt_box_autoadd_u_32(
+      deserializer,
+    );
+    return ApiVotingRoundContext(
+      dbPath: var_dbPath,
+      lightwalletdUrl: var_lightwalletdUrl,
+      network: var_network,
+      roundParams: var_roundParams,
+      roundName: var_roundName,
+      sessionJson: var_sessionJson,
+      accountUuid: var_accountUuid,
+      maxRealNotesPerBundle: var_maxRealNotesPerBundle,
+    );
+  }
+
+  @protected
   BlockMetaInfo sse_decode_block_meta_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_height = sse_decode_u_64(deserializer);
@@ -6740,6 +6578,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool sse_decode_bool(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  ApiVotingRoundContext sse_decode_box_autoadd_api_voting_round_context(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_api_voting_round_context(deserializer));
   }
 
   @protected
@@ -6813,14 +6659,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_vote_share_wire(deserializer));
-  }
-
-  @protected
-  VotingRoundParams sse_decode_box_autoadd_voting_round_params(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_voting_round_params(deserializer));
   }
 
   @protected
@@ -8492,6 +8330,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_api_voting_round_context(
+    ApiVotingRoundContext self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.dbPath, serializer);
+    sse_encode_String(self.lightwalletdUrl, serializer);
+    sse_encode_String(self.network, serializer);
+    sse_encode_voting_round_params(self.roundParams, serializer);
+    sse_encode_String(self.roundName, serializer);
+    sse_encode_opt_String(self.sessionJson, serializer);
+    sse_encode_String(self.accountUuid, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.maxRealNotesPerBundle, serializer);
+  }
+
+  @protected
   void sse_encode_block_meta_info(
     BlockMetaInfo self,
     SseSerializer serializer,
@@ -8508,6 +8362,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_bool(bool self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_api_voting_round_context(
+    ApiVotingRoundContext self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_api_voting_round_context(self, serializer);
   }
 
   @protected
@@ -8589,15 +8452,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_vote_share_wire(self, serializer);
-  }
-
-  @protected
-  void sse_encode_box_autoadd_voting_round_params(
-    VotingRoundParams self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_voting_round_params(self, serializer);
   }
 
   @protected
