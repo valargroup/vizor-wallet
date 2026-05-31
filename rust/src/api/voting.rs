@@ -1,15 +1,13 @@
 use std::{panic, sync::Arc};
 
 use super::voting_helpers::{
-    bundle_policy, prepare_delegation_bundle_params, resolve_delegation_prep_inputs,
-    seed_from_mnemonic,
+    bundle_policy, delegation_static_inputs, prepare_delegation_bundle_params,
+    resolve_delegation_lwd_inputs, seed_from_mnemonic,
 };
 use crate::frb_generated::StreamSink;
 use crate::wallet::{
     keys,
-    voting::{
-        db, delegation, delegation::DelegationProgress, hotkey, network::voting_network,
-    },
+    voting::{db, delegation, delegation::DelegationProgress, hotkey, network::voting_network},
 };
 use rand::{rngs::OsRng, RngCore};
 use secrecy::ExposeSecret;
@@ -225,10 +223,7 @@ pub fn next_share_tracking_delay_seconds(
     now_seconds: u64,
 ) -> Result<Option<u64>, String> {
     catch(|| {
-        let shares = shares
-            .into_iter()
-            .map(share_record)
-            .collect::<Vec<_>>();
+        let shares = shares.into_iter().map(share_record).collect::<Vec<_>>();
         Ok(zcash_voting::share::policy::next_tracking_delay_seconds(
             &shares,
             now_seconds,
@@ -552,17 +547,18 @@ pub async fn precompute_delegation_pir(
     mnemonic: String,
     bundle_index: u32,
 ) -> Result<zcash_voting::wire::DelegationPirPrecomputeResultView, String> {
-    let (wallet_network, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
-        &ctx.network,
+    let (wallet_network, voting_network, bundle_policy) =
+        delegation_static_inputs(&ctx.network, ctx.max_real_notes_per_bundle)?;
+    let seed = seed_from_mnemonic(mnemonic)?;
+    let round_id = ctx.round_params.vote_round_id.clone();
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &ctx.account_uuid, wallet_network)?;
+    let lwd = resolve_delegation_lwd_inputs(
         &ctx.lightwalletd_url,
         ctx.round_params,
         &ctx.round_name,
-        ctx.max_real_notes_per_bundle,
+        voting_network,
     )
     .await?;
-    let seed = seed_from_mnemonic(mnemonic)?;
-    let round_id = lwd.round_params.vote_round_id.clone();
-    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &ctx.account_uuid, wallet_network)?;
     let prepare_params = prepare_delegation_bundle_params(
         lwd,
         ctx.session_json.as_deref(),
@@ -595,17 +591,18 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     bundle_index: u32,
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
-    let (wallet_network, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
-        &ctx.network,
+    let (wallet_network, voting_network, bundle_policy) =
+        delegation_static_inputs(&ctx.network, ctx.max_real_notes_per_bundle)?;
+    let seed = seed_from_mnemonic(mnemonic)?;
+    let round_id = ctx.round_params.vote_round_id.clone();
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &ctx.account_uuid, wallet_network)?;
+    let lwd = resolve_delegation_lwd_inputs(
         &ctx.lightwalletd_url,
         ctx.round_params,
         &ctx.round_name,
-        ctx.max_real_notes_per_bundle,
+        voting_network,
     )
     .await?;
-    let seed = seed_from_mnemonic(mnemonic)?;
-    let round_id = lwd.round_params.vote_round_id.clone();
-    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &ctx.account_uuid, wallet_network)?;
     let prepare_params = prepare_delegation_bundle_params(
         lwd,
         ctx.session_json.as_deref(),
@@ -646,15 +643,16 @@ pub async fn build_keystone_delegation_request(
     hotkey_seed: Vec<u8>,
     bundle_index: u32,
 ) -> Result<zcash_voting::wire::KeystoneSigningRequest, String> {
-    let (_, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
-        &ctx.network,
+    let (_, voting_network, bundle_policy) =
+        delegation_static_inputs(&ctx.network, ctx.max_real_notes_per_bundle)?;
+    let hotkey_secret = hotkey::validated_hotkey_seed(hotkey_seed, voting_network)?;
+    let lwd = resolve_delegation_lwd_inputs(
         &ctx.lightwalletd_url,
         ctx.round_params,
         &ctx.round_name,
-        ctx.max_real_notes_per_bundle,
+        voting_network,
     )
     .await?;
-    let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
     let prepare_params = prepare_delegation_bundle_params(
         lwd,
         ctx.session_json.as_deref(),
@@ -754,15 +752,16 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
     keystone_sighash: Vec<u8>,
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
-    let (_, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
-        &ctx.network,
+    let (_, voting_network, bundle_policy) =
+        delegation_static_inputs(&ctx.network, ctx.max_real_notes_per_bundle)?;
+    let hotkey_secret = hotkey::validated_hotkey_seed(hotkey_seed, voting_network)?;
+    let lwd = resolve_delegation_lwd_inputs(
         &ctx.lightwalletd_url,
         ctx.round_params,
         &ctx.round_name,
-        ctx.max_real_notes_per_bundle,
+        voting_network,
     )
     .await?;
-    let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
     let prepare_params = prepare_delegation_bundle_params(
         lwd,
         ctx.session_json.as_deref(),
@@ -2390,6 +2389,23 @@ mod tests {
     }
 
     #[test]
+    fn precompute_delegation_pir_rejects_invalid_mnemonic_before_network_io() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("voting.sqlite");
+        let err = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(precompute_delegation_pir(
+                test_round_context(&db_path, "regtest", "wallet-1"),
+                "http://127.0.0.1:2".to_string(),
+                "mnemonic".to_string(),
+                0,
+            ))
+            .unwrap_err();
+
+        assert!(err.contains("Invalid mnemonic"));
+    }
+
+    #[test]
     fn build_keystone_delegation_request_rejects_invalid_network_before_network_io() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
@@ -2403,6 +2419,22 @@ mod tests {
             .unwrap_err();
 
         assert!(err.contains("Unknown network"));
+    }
+
+    #[test]
+    fn build_keystone_delegation_request_rejects_invalid_hotkey_before_network_io() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("voting.sqlite");
+        let err = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(build_keystone_delegation_request(
+                test_round_context(&db_path, "regtest", "wallet-1"),
+                vec![9; 1],
+                0,
+            ))
+            .unwrap_err();
+
+        assert!(err.contains("Voting hotkey reconstruction failed"));
     }
 
     fn test_vote_recovery_json(

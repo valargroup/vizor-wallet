@@ -15,29 +15,32 @@ pub(super) fn seed_from_mnemonic(mnemonic: String) -> Result<SecretVec<u8>, Stri
     keys::mnemonic_bytes_to_seed(mnemonic.as_slice())
 }
 
-/// Resolve reusable delegation setup inputs shared by API entrypoints.
-///
-/// This keeps network parsing, bundle policy selection, and lightwalletd round
-/// input fetching in one place so callers only handle flow-specific logic.
-pub(super) async fn resolve_delegation_prep_inputs(
+/// Parse local delegation inputs that do not require lightwalletd network I/O.
+pub(super) fn delegation_static_inputs(
     network: &str,
-    lightwalletd_url: &str,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    round_name: &str,
     max_real_notes_per_bundle: Option<u32>,
 ) -> Result<
     (
         WalletNetwork,
         zcash_voting::Network,
         zcash_voting::BundlePolicy,
-        zcash_voting::delegate::DelegationLwdInputs,
     ),
     String,
 > {
     let wallet_network = keys::parse_network(network)?;
     let voting_network = voting_network(wallet_network);
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
+    Ok((wallet_network, voting_network, bundle_policy))
+}
+
+/// Fetch lightwalletd-backed delegation inputs after local validation succeeds.
+pub(super) async fn resolve_delegation_lwd_inputs(
+    lightwalletd_url: &str,
+    round_params: zcash_voting::wire::VotingRoundParams,
+    round_name: &str,
+    voting_network: zcash_voting::Network,
+) -> Result<zcash_voting::delegate::DelegationLwdInputs, String> {
+    zcash_voting::delegate::gather_delegation_lwd_inputs(
         zcash_voting::delegate::ResolveDelegationLwdParams {
             lightwalletd_url,
             network: voting_network,
@@ -46,8 +49,7 @@ pub(super) async fn resolve_delegation_prep_inputs(
         },
     )
     .await
-    .map_err(|e| e.to_string())?;
-    Ok((wallet_network, voting_network, bundle_policy, lwd))
+    .map_err(|e| e.to_string())
 }
 
 /// Build the common `PrepareDelegationBundleParams` shape for wallet-layer

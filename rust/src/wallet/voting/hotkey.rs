@@ -38,6 +38,34 @@ pub fn derive_hotkey(
     Ok(hotkey_secret)
 }
 
+/// Wraps hotkey seed bytes and verifies they reconstruct for `network`.
+///
+/// Returns the seed as a `SecretVec` when it is accepted by `zcash_voting`.
+///
+/// # Errors
+///
+/// Returns an error if the seed bytes are not valid hotkey material for the
+/// supplied voting network.
+pub fn validated_hotkey_seed(
+    hotkey_seed: Vec<u8>,
+    network: zcash_voting::Network,
+) -> Result<SecretVec<u8>, String> {
+    let hotkey_secret = SecretVec::new(hotkey_seed);
+    zcash_voting::hotkey::voting_hotkey_from_seed(hotkey_secret.expose_secret(), network)
+        .map_err(|e| format!("Voting hotkey reconstruction failed: {e}"))?;
+    Ok(hotkey_secret)
+}
+
+/// Derives deterministic, round-scoped hotkey seed material from wallet context.
+///
+/// The returned seed is bound to the wallet seed, round ID, account UUID, and
+/// network. It is suitable only after reconstruction succeeds through
+/// `validated_hotkey_seed` or the caller's equivalent validation.
+///
+/// # Errors
+///
+/// Returns an error if the wallet seed is too short or any context field cannot
+/// be length-prefixed for domain-separated hashing.
 fn derive_contextual_hotkey_seed(
     seed: &[u8],
     round_id: &str,
