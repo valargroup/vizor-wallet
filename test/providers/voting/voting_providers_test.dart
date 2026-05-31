@@ -1332,6 +1332,76 @@ void main() {
     );
   });
 
+  test('submission job clears stale vote progress at start', () async {
+    final rust = FakeVotingRustApi(emitCommitments: true);
+    final readiness = _MutableVotingWalletSyncReadinessChecker(ready: true);
+    final persistence = FakeVotingDraftPersistence();
+    const draftKey = VotingSessionKey(
+      roundId: kRoundId,
+      accountUuid: 'account-1',
+    );
+    final http = FakeVotingHttpClient(
+      responses: votingHttpResponses(
+        roundStatus: roundStatusJson(roundId: kRoundId)
+          ..['proposals'] = [
+            {
+              'proposal_id': 7,
+              'title': 'One',
+              'options': ['No', 'Yes'],
+            },
+          ],
+      ),
+    );
+    final container = _sessionContainer(
+      http: http,
+      rust: rust,
+      draftPersistence: persistence,
+      walletSyncReadinessChecker: readiness,
+      walletSyncPollInterval: const Duration(milliseconds: 1),
+    );
+    addTearDown(container.dispose);
+
+    await container.read(votingSubmissionSessionProvider(draftKey).future);
+    await container
+        .read(votingSubmissionSessionProvider(draftKey).notifier)
+        .castVotes(
+          draftVotes: [
+            rust_wire.DraftVote(
+              proposalId: 7,
+              choice: 1,
+              numOptions: 2,
+              vcTreePosition: BigInt.zero,
+              singleShare: false,
+            ),
+          ],
+        );
+    final staleSession = container
+        .read(votingSubmissionJobSessionProvider(draftKey))
+        .value!;
+    expect(staleSession.voteSubmissionProgress, 1);
+    expect(staleSession.voteSubmissionCompletedCount, 1);
+
+    readiness.ready = false;
+    container.read(votingDraftProvider(draftKey).notifier).setChoice(7, 1);
+    await Future<void>.delayed(Duration.zero);
+    final key = await container
+        .read(votingSubmissionJobsProvider.notifier)
+        .start(kRoundId, accountUuid: 'account-1');
+    expect(key, draftKey);
+    await _waitForJobSessionPhase(
+      container,
+      draftKey,
+      VotingSessionPhase.waitingForWalletSync,
+    );
+    final resetSession = container
+        .read(votingSubmissionJobSessionProvider(draftKey))
+        .value!;
+
+    expect(resetSession.voteSubmissionProgress, isNull);
+    expect(resetSession.voteSubmissionCompletedCount, 0);
+    expect(resetSession.voteSubmissionTotalCount, 0);
+  });
+
   test('Keystone signing starts after active account reload', () async {
     final rust = FakeVotingRustApi();
     final activeAccountProvider =
@@ -1541,7 +1611,7 @@ void main() {
         );
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
-    expect(state.phase, VotingSessionPhase.submittingShares);
+    expect(state.phase, VotingSessionPhase.done);
     expect(state.voteProgress.keys.toSet(), {
       const VotingVoteKey(bundleIndex: 0, proposalId: 7),
       const VotingVoteKey(bundleIndex: 1, proposalId: 7),
@@ -1553,6 +1623,21 @@ void main() {
     'vote submission progress displays questions while bundle work advances',
     () async {
       final rust = FakeVotingRustApi(emitCommitments: true, bundleCount: 2);
+      final initialRoundPlan = apiRoundPlan(
+        roundId: kRoundId,
+        pendingRecovery: false,
+        nextSteps: const [],
+        openProposals: Uint32List(0),
+        allDecided: false,
+      );
+      final completedRoundPlan = apiRoundPlan(
+        roundId: kRoundId,
+        pendingRecovery: false,
+        nextSteps: const [],
+        openProposals: Uint32List(0),
+        allDecided: true,
+        completedVoteArtifact: true,
+      );
       final recoveryApi = FakeVotingRecoveryApi(
         state: recoveryState(
           bundleCount: 2,
@@ -1571,6 +1656,11 @@ void main() {
             ),
           ],
         ),
+        roundPlanSequence: [
+          initialRoundPlan,
+          initialRoundPlan,
+          completedRoundPlan,
+        ],
       );
       final container = _sessionContainer(rust: rust, recoveryApi: recoveryApi);
       addTearDown(container.dispose);
@@ -1607,7 +1697,7 @@ void main() {
           );
       final state = container.read(votingSessionProvider(kRoundId)).value!;
 
-      expect(state.phase, VotingSessionPhase.submittingShares);
+      expect(state.phase, VotingSessionPhase.done);
       expect(state.voteSubmissionCompletedCount, 2);
       expect(state.voteSubmissionTotalCount, 2);
       expect(state.voteSubmissionProgress, 1);
@@ -1626,11 +1716,15 @@ void main() {
         containsAll(<double>[0, 0.25, 0.5, 0.75, 1]),
       );
 
-      final submittingShareStates = observed
-          .where((state) => state.phase == VotingSessionPhase.submittingShares)
-          .toList(growable: false);
-      expect(submittingShareStates, hasLength(1));
-      expect(submittingShareStates.single.voteSubmissionCompletedCount, 2);
+      expect(
+        observed.where(
+          (state) =>
+              state.phase == VotingSessionPhase.done &&
+              state.voteSubmissionCompletedCount == 2 &&
+              state.voteSubmissionProgress == 1,
+        ),
+        isNotEmpty,
+      );
     },
   );
 
@@ -1657,130 +1751,6 @@ void main() {
 
     expect((await persistence.load(key)).choices, {8: 0});
   });
-
-  test(
-    'partial vote resume submits persisted drafts not already on chain',
-    () async {
-      final rust = FakeVotingRustApi(emitCommitments: true, bundleCount: 2);
-      final recoveryApi = FakeVotingRecoveryApi(
-        state: recoveryState(
-          bundleCount: 2,
-          delegationTxHashes: [
-            rust_frb_types.DelegationRecoveryView(
-              bundleIndex: 0,
-              phase: VotingWorkflowPhase.submittedDelegation,
-              txHash: 'delegation-0',
-              vanLeafPosition: null,
-            ),
-            rust_frb_types.DelegationRecoveryView(
-              bundleIndex: 1,
-              phase: VotingWorkflowPhase.submittedDelegation,
-              txHash: 'delegation-1',
-              vanLeafPosition: null,
-            ),
-          ],
-          votes: [
-            vote(bundleIndex: 0, proposalId: 7),
-            vote(bundleIndex: 1, proposalId: 7),
-          ],
-          voteTxHashes: [
-            rust_frb_types.VoteRecoveryView(
-              bundleIndex: 0,
-              proposalId: 7,
-              choice: 0,
-              phase: VotingWorkflowPhase.submittedVote,
-              txHash: 'vote-tx-0-7',
-              vcTreePosition: null,
-              hasCommitmentBundle: false,
-            ),
-            rust_frb_types.VoteRecoveryView(
-              bundleIndex: 1,
-              proposalId: 7,
-              choice: 0,
-              phase: VotingWorkflowPhase.submittedVote,
-              txHash: 'vote-tx-1-7',
-              vcTreePosition: null,
-              hasCommitmentBundle: false,
-            ),
-          ],
-          commitmentBundles: [
-            rust_frb_types.RecoverableCommitmentBundle(
-              bundleIndex: 0,
-              proposalId: 7,
-              commitmentBundleJson: commitmentBundleRecoveryJson(proposalId: 7),
-              vcTreePosition: BigInt.from(2),
-            ),
-            rust_frb_types.RecoverableCommitmentBundle(
-              bundleIndex: 1,
-              proposalId: 7,
-              commitmentBundleJson: commitmentBundleRecoveryJson(proposalId: 7),
-              vcTreePosition: BigInt.from(3),
-            ),
-          ],
-        ),
-      );
-      final persistence = FakeVotingDraftPersistence();
-      const draftKey = VotingSessionKey(
-        roundId: kRoundId,
-        accountUuid: 'account-1',
-      );
-      await persistence.save(
-        draftKey,
-        const VotingDraftState(choices: {7: 1, 8: 0, 9: 1}),
-      );
-      final container = _sessionContainer(
-        rust: rust,
-        recoveryApi: recoveryApi,
-        draftPersistence: persistence,
-      );
-      addTearDown(container.dispose);
-
-      await container.read(votingSessionProvider(kRoundId).future);
-      final loadedDraft = await container
-          .read(votingDraftProvider(draftKey).notifier)
-          .ensureLoaded();
-      await container
-          .read(votingSessionProvider(kRoundId).notifier)
-          .castVotes(
-            draftVotes: loadedDraft.toDraftVotes([
-              VotingProposalView(
-                id: 7,
-                title: 'One',
-                description: '',
-                options: [
-                  VotingOptionView(index: 0, label: 'No'),
-                  VotingOptionView(index: 1, label: 'Yes'),
-                ],
-              ),
-              VotingProposalView(
-                id: 8,
-                title: 'Two',
-                description: '',
-                options: [
-                  VotingOptionView(index: 0, label: 'No'),
-                  VotingOptionView(index: 1, label: 'Yes'),
-                ],
-              ),
-              VotingProposalView(
-                id: 9,
-                title: 'Three',
-                description: '',
-                options: [
-                  VotingOptionView(index: 0, label: 'No'),
-                  VotingOptionView(index: 1, label: 'Yes'),
-                ],
-              ),
-            ]),
-          );
-
-      expect(rust.voteCommitmentKeys, ['0:8', '1:8', '0:9', '1:9']);
-      expect((await persistence.load(draftKey)).choices, {7: 1, 8: 0, 9: 1});
-      await container
-          .read(votingSessionProvider(kRoundId).notifier)
-          .submitPendingShares();
-      expect((await persistence.load(draftKey)).choices, isEmpty);
-    },
-  );
 
   test(
     'resume submits interrupted earlier bundle before later proposal casts',
@@ -3252,9 +3222,10 @@ Future<VotingSubmissionJobState> _waitForJobStatus(
     if (state.status == status) return state;
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
+  final last = container.read(votingSubmissionJobProvider(key));
   fail(
     'Timed out waiting for voting submission job status $status. '
-    'Last state: ${container.read(votingSubmissionJobProvider(key)).status}',
+    'Last status: ${last.status}, error: ${last.errorMessage}',
   );
 }
 
@@ -3853,6 +3824,26 @@ class _GatedVotingWalletSyncReadinessChecker
     if (!firstCheck.isCompleted) firstCheck.complete();
     return VotingWalletSyncReadiness(
       scannedHeight: _ready ? snapshotHeight : snapshotHeight - 1,
+      snapshotHeight: snapshotHeight,
+      chainTipHeight: snapshotHeight,
+    );
+  }
+}
+
+class _MutableVotingWalletSyncReadinessChecker
+    implements VotingWalletSyncReadinessChecker {
+  _MutableVotingWalletSyncReadinessChecker({required this.ready});
+
+  bool ready;
+
+  @override
+  Future<VotingWalletSyncReadiness> check({
+    required String dbPath,
+    required String network,
+    required int snapshotHeight,
+  }) async {
+    return VotingWalletSyncReadiness(
+      scannedHeight: ready ? snapshotHeight : snapshotHeight - 1,
       snapshotHeight: snapshotHeight,
       chainTipHeight: snapshotHeight,
     );

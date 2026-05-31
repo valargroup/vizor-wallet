@@ -92,6 +92,7 @@ class VotingDraftNotifier extends Notifier<VotingDraftState> {
   /// Round/account owner for this in-memory draft.
   final VotingSessionKey key;
   Future<VotingDraftState>? _loadFuture;
+  Future<void> _saveChain = Future.value();
   bool _loaded = false;
   bool _mutatedBeforeLoad = false;
 
@@ -120,6 +121,13 @@ class VotingDraftNotifier extends Notifier<VotingDraftState> {
     unawaited(_persist(next));
   }
 
+  Future<void> clearAll() async {
+    _mutatedBeforeLoad = !_loaded;
+    const next = VotingDraftState();
+    state = next;
+    await _persist(next);
+  }
+
   Future<VotingDraftState> _loadPersisted() async {
     final persisted = await ref.read(votingDraftPersistenceProvider).load(key);
     _loaded = true;
@@ -131,7 +139,11 @@ class VotingDraftNotifier extends Notifier<VotingDraftState> {
   }
 
   Future<void> _persist(VotingDraftState draft) {
-    return ref.read(votingDraftPersistenceProvider).save(key, draft);
+    final save = _saveChain.then(
+      (_) => ref.read(votingDraftPersistenceProvider).save(key, draft),
+    );
+    _saveChain = save.catchError((_) {});
+    return save;
   }
 }
 

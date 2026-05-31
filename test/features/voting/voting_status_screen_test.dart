@@ -45,6 +45,7 @@ import 'package:zcash_wallet/src/rust/third_party/zcash_voting/wire.dart'
 import 'package:zcash_wallet/src/rust/third_party/zcash_voting/wire.dart'
     as rust_wire;
 import 'package:zcash_wallet/src/services/voting/voting_config_loader.dart';
+import 'package:zcash_wallet/src/services/voting/voting_http.dart';
 import 'package:zcash_wallet/src/services/voting/pir_snapshot_resolver.dart';
 
 import 'round_plan_test_utils.dart';
@@ -896,6 +897,136 @@ void main() {
     },
   );
 
+  testWidgets('status screen shows finalizing step before job completion', (
+    tester,
+  ) async {
+    const key = VotingSessionKey(roundId: _roundId, accountUuid: 'account-1');
+    final completedRoundPlan = apiRoundPlan(
+      roundId: _roundId,
+      pendingRecovery: false,
+      nextSteps: const [],
+      openProposals: Uint32List(0),
+      allDecided: true,
+      completedVoteArtifact: true,
+    );
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      overrides: [
+        votingSubmissionJobsProvider.overrideWith(
+          () => _StaticVotingSubmissionJobsNotifier(
+            const VotingSubmissionJobsState(jobKeys: [key]),
+          ),
+        ),
+        votingSubmissionJobProvider(key).overrideWith(
+          () => _StaticVotingSubmissionJobNotifier(
+            key,
+            const VotingSubmissionJobState(
+              key: key,
+              status: VotingSubmissionJobStatus.running,
+              generation: 1,
+            ),
+          ),
+        ),
+        votingSubmissionJobSessionProvider(key).overrideWithValue(
+          AsyncValue.data(
+            VotingSessionState(
+              roundId: _roundId,
+              accountUuid: 'account-1',
+              phase: VotingSessionPhase.done,
+              roundPlan: completedRoundPlan,
+              voteSubmissionCompletedCount: 3,
+              voteSubmissionTotalCount: 3,
+              voteSubmissionProgress: 1,
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _statusHarness(
+          initialLocation: votingStatusRoute(
+            _roundId,
+            accountUuid: 'account-1',
+          ),
+        ),
+      ),
+    );
+    await _pumpUntilFound(tester, find.text('Finalizing submission'));
+
+    expect(find.text('Casting votes and submitting shares'), findsOneWidget);
+    expect(find.text('Finalizing submission'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('submission confirmed route'), findsNothing);
+  });
+
+  testWidgets('status screen ignores stale completed plan for running draft', (
+    tester,
+  ) async {
+    const key = VotingSessionKey(roundId: _roundId, accountUuid: 'account-1');
+    final completedRoundPlan = apiRoundPlan(
+      roundId: _roundId,
+      pendingRecovery: false,
+      nextSteps: const [],
+      openProposals: Uint32List.fromList(const [1]),
+      allDecided: false,
+      completedVoteArtifact: true,
+      completedForDisplay: true,
+    );
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      overrides: [
+        votingSubmissionJobsProvider.overrideWith(
+          () => _StaticVotingSubmissionJobsNotifier(
+            const VotingSubmissionJobsState(jobKeys: [key]),
+          ),
+        ),
+        votingSubmissionJobProvider(key).overrideWith(
+          () => _StaticVotingSubmissionJobNotifier(
+            key,
+            const VotingSubmissionJobState(
+              key: key,
+              status: VotingSubmissionJobStatus.running,
+              generation: 1,
+            ),
+          ),
+        ),
+        votingSubmissionJobSessionProvider(key).overrideWithValue(
+          AsyncValue.data(
+            VotingSessionState(
+              roundId: _roundId,
+              accountUuid: 'account-1',
+              phase: VotingSessionPhase.done,
+              roundPlan: completedRoundPlan,
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _statusHarness(
+          initialLocation: votingStatusRoute(
+            _roundId,
+            accountUuid: 'account-1',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Casting votes and submitting shares'), findsOneWidget);
+    expect(find.text('Finalizing submission'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('submission confirmed route'), findsNothing);
+  });
+
   testWidgets('proposal detail hides View more when description fits', (
     tester,
   ) async {
@@ -1205,7 +1336,8 @@ void main() {
           'options': ['Aye', 'Nay', 'Abstain'],
         },
       ];
-    final http = FakeVotingHttpClient(
+    final shareId = List.filled(32, '01').join();
+    final http = _GatedShareVotingHttpClient(
       responses: _votingHttpResponses()
         ..['/shielded-vote/v1/round/$_roundId'] = {'round': round}
         ..addAll({
@@ -1247,7 +1379,9 @@ void main() {
               },
             ],
           },
-          '/shielded-vote/v1/shares': {'share_id': '0102'},
+          '/shielded-vote/v1/share-status/$_roundId/$shareId': {
+            'status': 'confirmed',
+          },
         }),
     );
     final recoveryApi = _MutableVotingRecoveryApi();
@@ -1255,7 +1389,10 @@ void main() {
       http: http,
       accountOverride: _MnemonicAccountNotifier.new,
       recoveryApi: recoveryApi,
-      rust: _VotingStatusRustApi(recoveryApi),
+      rust: _VotingStatusRustApi(
+        recoveryApi,
+        shareTrackingDelaySeconds: BigInt.one,
+      ),
       hotkeyStore: const _FakeVotingHotkeyStore([9, 9, 9]),
     );
     addTearDown(container.dispose);
@@ -1266,6 +1403,29 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Confirmed by helper'), findsNothing);
+    await _pumpUntilCondition(
+      tester,
+      () => http.shareRequestStarted.isCompleted,
+    );
+    expect(http.shareRequestStarted.isCompleted, isTrue);
+
+    expect(find.text('submission confirmed route'), findsNothing);
+    expect(
+      http.requests.any(
+        (request) =>
+            request.method == 'POST' &&
+            request.uri.path == '/shielded-vote/v1/shares',
+      ),
+      isTrue,
+    );
+    expect(
+      http.requests.any(
+        (request) => request.uri.path.contains('/share-status/'),
+      ),
+      isFalse,
+    );
+
+    http.allowShareResponse.complete();
     await _pumpUntilFound(tester, find.text('submission confirmed route'));
 
     expect(find.text('submission confirmed route'), findsOne);
@@ -1274,6 +1434,30 @@ void main() {
       findsNothing,
     );
     expect(recoveryApi.ballotIntents, ['1:2:false:0', '2:3:true:null']);
+    expect(
+      http.requests.any(
+        (request) => request.uri.path.contains('/share-status/'),
+      ),
+      isFalse,
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    for (var i = 0; i < 20; i++) {
+      if (http.requests.any(
+        (request) => request.uri.path.contains('/share-status/'),
+      )) {
+        break;
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('submission confirmed route'), findsOne);
+    expect(
+      http.requests.any(
+        (request) => request.uri.path.contains('/share-status/'),
+      ),
+      isTrue,
+    );
   });
 
   testWidgets('hardware status screen scans Keystone signature and submits', (
@@ -1623,6 +1807,17 @@ Future<void> _pumpUntilFound(
   for (var i = 0; i < attempts; i++) {
     await tester.pump(const Duration(milliseconds: 100));
     if (finder.evaluate().isNotEmpty) return;
+  }
+}
+
+Future<void> _pumpUntilCondition(
+  WidgetTester tester,
+  bool Function() condition, {
+  int attempts = 50,
+}) async {
+  for (var i = 0; i < attempts; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (condition()) return;
   }
 }
 
@@ -2075,6 +2270,12 @@ class _StaticVotingSubmissionJobsNotifier extends VotingSubmissionJobsNotifier {
 
   @override
   VotingSubmissionJobsState build() => _initial;
+
+  @override
+  Future<VotingSessionKey?> start(String roundId, {String? accountUuid}) async {
+    if (_initial.jobKeys.isEmpty) return null;
+    return _initial.jobKeys.first;
+  }
 }
 
 class _FakeVotingRecoveryApi implements VotingRecoveryApi {
@@ -2337,10 +2538,15 @@ class _FakeVotingHotkeyStore implements VotingHotkeyStore {
 }
 
 class _VotingStatusRustApi extends _NoopVotingRustApi {
-  _VotingStatusRustApi(this.recoveryApi, {this.bundleCount = 1});
+  _VotingStatusRustApi(
+    this.recoveryApi, {
+    this.bundleCount = 1,
+    this.shareTrackingDelaySeconds,
+  });
 
   final _MutableVotingRecoveryApi recoveryApi;
   final int bundleCount;
+  final BigInt? shareTrackingDelaySeconds;
   final storedKeystoneSignatures = <int, rust_wire.KeystoneSignatureRecord>{};
   int setupDelegationBundleCalls = 0;
   int keystoneDelegationRequestCalls = 0;
@@ -2789,7 +2995,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
   Future<BigInt?> nextShareTrackingDelaySeconds({
     required List<rust_frb_types.ShareDelegationRecordView> shares,
     required BigInt nowSeconds,
-  }) async => null;
+  }) async => shareTrackingDelaySeconds;
 
   @override
   Future<String> recoveredVoteShareWireJson({
@@ -3089,6 +3295,32 @@ rust_wire.SignedVoteCommitmentsView _commitments({
       ),
     ],
   );
+}
+
+class _GatedShareVotingHttpClient extends FakeVotingHttpClient {
+  _GatedShareVotingHttpClient({required super.responses});
+
+  final shareRequestStarted = Completer<void>();
+  final allowShareResponse = Completer<void>();
+
+  @override
+  Future<VotingHttpResponse> postJson(
+    Uri uri,
+    Map<String, dynamic> body, {
+    Duration? timeout,
+  }) async {
+    if (uri.path != '/shielded-vote/v1/shares') {
+      return super.postJson(uri, body, timeout: timeout);
+    }
+    requests.add(
+      FakeVotingHttpRequest('POST', uri, body: body, timeout: timeout),
+    );
+    if (!shareRequestStarted.isCompleted) {
+      shareRequestStarted.complete();
+    }
+    await allowShareResponse.future;
+    return jsonResponse({'share_id': '0102'});
+  }
 }
 
 class _RustApiFake implements RustLibApi {
