@@ -4,12 +4,14 @@ use crate::frb_generated::StreamSink;
 use crate::wallet::{
     keys,
     network::WalletNetwork,
-    voting::{delegation, delegation::DelegationProgress, hotkey, state, vote},
+    voting::{delegation, delegation::DelegationProgress, hotkey, state},
 };
 use rand::{rngs::OsRng, RngCore};
 use secrecy::ExposeSecret;
 use zcash_voting::BundlePolicy;
 use zeroize::Zeroizing;
+
+pub use zcash_voting::vote::{DraftVote, SignedVoteCommitments};
 
 #[derive(Clone, Debug, PartialEq)]
 /// Progress event emitted while building, proving, and signing a delegation payload.
@@ -48,7 +50,6 @@ pub struct ApiTxEvent {
     pub event_type: String,
     pub attributes: Vec<ApiTxEventAttribute>,
 }
-
 
 fn bundle_policy(max_real_notes_per_bundle: Option<u32>) -> Result<BundlePolicy, String> {
     BundlePolicy::from_optional_max_real_notes_per_bundle(max_real_notes_per_bundle)
@@ -851,7 +852,9 @@ pub fn recover_vote_commitment(
     proposal_id: u32,
 ) -> Result<zcash_voting::wire::SignedVoteCommitmentsView, String> {
     catch(|| {
-        vote::recover_vote_commitment(&db_path, &wallet_id, &round_id, bundle_index, proposal_id)
+        let db = state::open_voting_db(&db_path, &wallet_id)?;
+        zcash_voting::vote::recover_signed_commitments(&db, &round_id, bundle_index, proposal_id)
+            .map_err(|e| format!("vote commitment recovery failed: {e}"))
             .and_then(|commitments| {
                 zcash_voting::wire::SignedVoteCommitmentsView::try_from(commitments)
                     .map_err(|e| e.to_string())
@@ -880,21 +883,24 @@ pub async fn build_vote_commitments_with_progress(
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let commitment_result = tokio::task::spawn_blocking(move || {
-        vote::build_vote_commitments(
-            &db_path,
-            &wallet_id,
-            network,
+        let reporter = zcash_voting::VoteCommitStageBridge::new(move |stage| {
+            if progress_sink.add(stage.into()).is_err() {
+                log::warn!("voting vote: StreamSink closed, progress not delivered");
+            }
+        });
+        let voting_db = state::open_voting_db(&db_path, &wallet_id)?;
+        let voting_hotkey = hotkey::voting_hotkey_from_secret(&hotkey_seed, network)?;
+
+        zcash_voting::vote::commit_batch(
+            &voting_db,
             &round_id,
             bundle_index,
-            &hotkey_seed,
-            van_witness,
-            draft_votes,
-            move |event| {
-                if progress_sink.add(event.into()).is_err() {
-                    log::warn!("voting vote: StreamSink closed, progress not delivered");
-                }
-            },
+            &draft_votes,
+            &van_witness,
+            zcash_voting::vote::VoteSigner::hotkey(&voting_hotkey),
+            &reporter,
         )
+        .map_err(|e| format!("vote commit batch failed: {e}"))
     })
     .await
     .map_err(|e| format!("vote commitment task failed: {e}"))
@@ -1651,8 +1657,8 @@ mod tests {
 
     #[test]
     fn api_signed_vote_commitments_preserve_public_wire_fields() {
-        let api =
-            zcash_voting::wire::SignedVoteCommitmentsView::try_from(vote::SignedVoteCommitments {
+        let api = zcash_voting::wire::SignedVoteCommitmentsView::try_from(
+            zcash_voting::vote::SignedVoteCommitments {
                 bundle_index: 1,
                 commitments: vec![zcash_voting::vote::SignedVoteCommitment {
                     proposal_id: 2,
@@ -1688,8 +1694,9 @@ mod tests {
                     vote_auth_sig: [9; 64],
                     commitment_bundle_json: "{\"proposal_id\":2}".to_string(),
                 }],
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
 
         assert_eq!(api.bundle_index, 1);
         assert_eq!(api.commitments[0].proposal_id, 2);
