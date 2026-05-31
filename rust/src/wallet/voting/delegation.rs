@@ -31,6 +31,17 @@ struct PreparedDelegationContext {
     prepared: PreparedDelegationBundle,
 }
 
+/// Resolves round inputs and prepares one delegation bundle context.
+///
+/// This validates/persists round metadata, fetches lightwalletd-derived round
+/// inputs, snapshots wallet state at the current scanned height, and ensures
+/// required witnesses exist for the selected bundle.
+///
+/// # Errors
+///
+/// Returns an error if hotkey conversion, round context initialization,
+/// lightwalletd resolution, wallet access, bundle preparation, or witness
+/// persistence fails.
 #[allow(clippy::too_many_arguments)]
 async fn prepare_delegation_bundle_context(
     db_path: &str,
@@ -40,10 +51,12 @@ async fn prepare_delegation_bundle_context(
     round_name: &str,
     session_json: Option<&str>,
     account_uuid: &str,
-    voting_hotkey: zcash_voting::VotingHotkey,
+    hotkey_secret: &SecretVec<u8>,
     bundle_index: u32,
     bundle_policy: BundlePolicy,
 ) -> Result<PreparedDelegationContext, String> {
+    let voting_hotkey = voting_hotkey_from_secret(hotkey_secret, network)?;
+
     let voting_db = open_voting_db(db_path, account_uuid)?;
     zcash_voting::delegate::ensure_round_context(
         &voting_db,
@@ -64,6 +77,7 @@ async fn prepare_delegation_bundle_context(
     })
     .await
     .map_err(|e| e.to_string())?;
+
     // 2. Open the wallet once and do all wallet-DB work synchronously: snapshot
     //    notes plus account keys, and (only on a cold cache) the witnesses.
     let wallet_db = open_wallet_db_for_read(db_path, network)?;
@@ -82,9 +96,7 @@ async fn prepare_delegation_bundle_context(
     )
     .map_err(|e| e.to_string())?;
 
-    // 3. Skip the expensive Orchard witness walk when a prior precompute pass
-    //    already cached witnesses for this bundle. `store_witnesses`
-    //    short-circuits, but `note_witnesses` would still regenerate first.
+    // Ensure witnesses are present in the voting database
     prepared
         .ensure_witnesses(&voting_db, &wallet_db)
         .map_err(|e| e.to_string())?;
@@ -291,7 +303,6 @@ where
         .map_err(|e| format!("Invalid voting round params: {e}"))?;
     on_progress(DelegationProgress::SelectingNotes);
     let hotkey_secret = derive_hotkey(seed, &round_id, account_uuid, network)?;
-    let voting_hotkey = voting_hotkey_from_secret(&hotkey_secret, network)?;
     let context = prepare_delegation_bundle_context(
         db_path,
         lightwalletd_url,
@@ -300,7 +311,7 @@ where
         round_name,
         session_json,
         account_uuid,
-        voting_hotkey,
+        &hotkey_secret,
         bundle_index,
         bundle_policy,
     )
@@ -392,7 +403,6 @@ pub async fn build_keystone_delegation_request(
     bundle_index: u32,
     bundle_policy: BundlePolicy,
 ) -> Result<zcash_voting::delegate::KeystoneSigningRequest, String> {
-    let voting_hotkey = voting_hotkey_from_secret(hotkey_secret, network)?;
     let context = prepare_delegation_bundle_context(
         db_path,
         lightwalletd_url,
@@ -401,7 +411,7 @@ pub async fn build_keystone_delegation_request(
         round_name,
         session_json,
         account_uuid,
-        voting_hotkey,
+        hotkey_secret,
         bundle_index,
         bundle_policy,
     )
@@ -444,7 +454,6 @@ where
     F: Fn(DelegationProgress) + Send + Sync + 'static,
 {
     let on_progress = Arc::new(on_progress);
-    let voting_hotkey = voting_hotkey_from_secret(hotkey_secret, network)?;
 
     on_progress(DelegationProgress::SelectingNotes);
     let context = prepare_delegation_bundle_context(
@@ -455,7 +464,7 @@ where
         round_name,
         session_json,
         account_uuid,
-        voting_hotkey,
+        hotkey_secret,
         bundle_index,
         bundle_policy,
     )

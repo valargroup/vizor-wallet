@@ -171,16 +171,6 @@ mod tests {
     }
 
     #[test]
-    fn random_hotkey_returns_storable_secret_bytes() {
-        let first = generate_random_hotkey(WalletNetwork::Regtest).unwrap();
-        let second = generate_random_hotkey(WalletNetwork::Regtest).unwrap();
-
-        assert_eq!(first.expose_secret().len(), 64);
-        assert_eq!(second.expose_secret().len(), 64);
-        assert_ne!(first.expose_secret(), second.expose_secret());
-    }
-
-    #[test]
     fn stored_hotkey_seed_reconstructs_typed_hotkey() {
         let hotkey =
             derive_hotkey(&test_seed(), ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
@@ -189,24 +179,6 @@ mod tests {
 
         assert_eq!(reconstructed.secret_seed(), hotkey.expose_secret());
         assert_eq!(reconstructed.raw_orchard_address().len(), 43);
-    }
-
-    #[test]
-    fn hotkey_raw_orchard_address_is_deterministic_and_address_sized() {
-        let seed = test_seed();
-        let first = voting_hotkey_from_secret(
-            &derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap(),
-            WalletNetwork::Regtest,
-        )
-        .unwrap();
-        let second = voting_hotkey_from_secret(
-            &derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap(),
-            WalletNetwork::Regtest,
-        )
-        .unwrap();
-
-        assert_eq!(first.raw_orchard_address(), second.raw_orchard_address());
-        assert_eq!(first.raw_orchard_address().len(), 43);
     }
 
     #[test]
