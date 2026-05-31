@@ -6,10 +6,10 @@ use zcash_keys::keys::UnifiedSpendingKey;
 use zeroize::Zeroizing;
 use zip32::{fingerprint::SeedFingerprint, AccountId};
 
-use crate::api::voting::{voting_network, wallet_network};
+use crate::wallet::voting::network::{voting_network, wallet_network};
 use crate::wallet::{keys, sync::open_wallet_db_for_read};
 
-use super::state::open_voting_db;
+use super::db::open_voting_db;
 
 pub use zcash_voting::delegate::DelegationProgress;
 use zcash_voting::delegate::{

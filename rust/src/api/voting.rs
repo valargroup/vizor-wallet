@@ -1,15 +1,18 @@
 use std::{panic, sync::Arc};
 
+use super::voting_helpers::{
+    bundle_policy, prepare_delegation_bundle_params, resolve_delegation_prep_inputs,
+    seed_from_mnemonic,
+};
 use crate::frb_generated::StreamSink;
 use crate::wallet::{
     keys,
-    network::WalletNetwork,
-    voting::{delegation, delegation::DelegationProgress, hotkey, state},
+    voting::{
+        db as state, delegation, delegation::DelegationProgress, hotkey, network::voting_network,
+    },
 };
 use rand::{rngs::OsRng, RngCore};
 use secrecy::ExposeSecret;
-use zcash_voting::BundlePolicy;
-use zeroize::Zeroizing;
 
 pub use zcash_voting::vote::{DraftVote, SignedVoteCommitments};
 
@@ -78,73 +81,6 @@ pub struct ApiVotingRoundContext {
     pub session_json: Option<String>,
     pub account_uuid: String,
     pub max_real_notes_per_bundle: Option<u32>,
-}
-
-fn bundle_policy(max_real_notes_per_bundle: Option<u32>) -> Result<BundlePolicy, String> {
-    BundlePolicy::from_optional_max_real_notes_per_bundle(max_real_notes_per_bundle)
-        .map_err(|e| e.to_string())
-}
-
-fn seed_from_mnemonic(mnemonic: String) -> Result<secrecy::SecretVec<u8>, String> {
-    let mnemonic = Zeroizing::new(mnemonic.into_bytes());
-    keys::mnemonic_bytes_to_seed(mnemonic.as_slice())
-}
-
-/// Resolve reusable delegation setup inputs shared by API entrypoints.
-///
-/// This keeps network parsing, bundle policy selection, and lightwalletd round
-/// input fetching in one place so callers only handle flow-specific logic.
-async fn resolve_delegation_prep_inputs(
-    network: &str,
-    lightwalletd_url: &str,
-    round_params: zcash_voting::wire::VotingRoundParams,
-    round_name: &str,
-    max_real_notes_per_bundle: Option<u32>,
-) -> Result<
-    (
-        WalletNetwork,
-        zcash_voting::Network,
-        BundlePolicy,
-        zcash_voting::delegate::DelegationLwdInputs,
-    ),
-    String,
-> {
-    let wallet_network = keys::parse_network(network)?;
-    let voting_network = voting_network(wallet_network);
-    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
-        zcash_voting::delegate::ResolveDelegationLwdParams {
-            lightwalletd_url,
-            network: voting_network,
-            round_params,
-            round_name,
-        },
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok((wallet_network, voting_network, bundle_policy, lwd))
-}
-
-/// Build the common `PrepareDelegationBundleParams` shape for wallet-layer
-/// delegation helpers from API-owned inputs.
-fn prepare_delegation_bundle_params<'a>(
-    lwd: zcash_voting::delegate::DelegationLwdInputs,
-    session_json: Option<&'a str>,
-    account_uuid: &'a str,
-    network: zcash_voting::Network,
-    hotkey_seed: &'a [u8],
-    bundle_index: u32,
-    bundle_policy: BundlePolicy,
-) -> zcash_voting::delegate::PrepareDelegationBundleParams<'a> {
-    zcash_voting::delegate::PrepareDelegationBundleParams {
-        lwd,
-        session_json,
-        account_uuid,
-        network,
-        hotkey_seed,
-        bundle_index,
-        bundle_policy,
-    }
 }
 
 /// Returns the vote-chain delegation submission body as validated wire JSON.
@@ -1326,25 +1262,10 @@ pub fn set_ballot_intent(
     })
 }
 
-pub(crate) fn voting_network(network: WalletNetwork) -> zcash_voting::Network {
-    match network {
-        WalletNetwork::Main => zcash_voting::Network::Mainnet,
-        WalletNetwork::Test => zcash_voting::Network::Testnet,
-        WalletNetwork::Regtest => zcash_voting::Network::Regtest,
-    }
-}
-
-pub(crate) fn wallet_network(network: zcash_voting::Network) -> WalletNetwork {
-    match network {
-        zcash_voting::Network::Mainnet => WalletNetwork::Main,
-        zcash_voting::Network::Testnet => WalletNetwork::Test,
-        zcash_voting::Network::Regtest => WalletNetwork::Regtest,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wallet::network::WalletNetwork;
     use crate::wallet::voting::test_support::{
         test_api_round_params, test_note_info, ROUND_ID, TEST_ACCOUNT_UUID, TEST_MNEMONIC,
     };
@@ -1355,6 +1276,7 @@ mod tests {
         thread,
     };
     use zcash_client_backend::proto::service::TreeState;
+    use zcash_voting::BundlePolicy;
 
     fn b64(bytes: impl AsRef<[u8]>) -> String {
         base64::engine::general_purpose::STANDARD.encode(bytes)
@@ -1435,38 +1357,6 @@ mod tests {
         assert_eq!(
             bundle_policy(Some(2)).unwrap(),
             BundlePolicy::from_optional_max_real_notes_per_bundle(Some(2)).unwrap()
-        );
-    }
-
-    #[test]
-    fn converts_wallet_network_to_voting_network() {
-        assert_eq!(
-            voting_network(WalletNetwork::Main),
-            zcash_voting::Network::Mainnet
-        );
-        assert_eq!(
-            voting_network(WalletNetwork::Test),
-            zcash_voting::Network::Testnet
-        );
-        assert_eq!(
-            voting_network(WalletNetwork::Regtest),
-            zcash_voting::Network::Regtest
-        );
-    }
-
-    #[test]
-    fn converts_voting_network_to_wallet_network() {
-        assert_eq!(
-            wallet_network(zcash_voting::Network::Mainnet),
-            WalletNetwork::Main
-        );
-        assert_eq!(
-            wallet_network(zcash_voting::Network::Testnet),
-            WalletNetwork::Test
-        );
-        assert_eq!(
-            wallet_network(zcash_voting::Network::Regtest),
-            WalletNetwork::Regtest
         );
     }
 
