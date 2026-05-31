@@ -2721,6 +2721,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   ///
   /// Passing the round ID intentionally preserves the account-wide vote-tree
   /// sync client while discarding prepared delegation PCZTs for abandoned work.
+  /// This cache reset does not abort in-flight proof or vote jobs.
   static Future<void> _resetVotingSessionState({
     required VotingRustApi rust,
     required _VotingSessionContext context,

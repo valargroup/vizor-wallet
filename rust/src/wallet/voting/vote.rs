@@ -2,9 +2,7 @@ use crate::wallet::network::WalletNetwork;
 
 use secrecy::SecretVec;
 
-use super::{
-    hotkey::voting_hotkey_from_secret, progress::VotingWorkCancellation, state::open_voting_db,
-};
+use super::{hotkey::voting_hotkey_from_secret, state::open_voting_db};
 
 /// One proposal choice to turn into a signed vote commitment.
 pub use zcash_voting::vote::DraftVote;
@@ -27,7 +25,6 @@ pub fn build_vote_commitments<F>(
     van_witness: zcash_voting::vote::VanWitness,
     draft_votes: Vec<DraftVote>,
     on_progress: F,
-    cancellation: VotingWorkCancellation,
 ) -> Result<SignedVoteCommitments, String>
 where
     F: Fn(zcash_voting::vote::VoteCommitStage) + Send + Sync + 'static,
@@ -35,12 +32,9 @@ where
     let on_progress = std::sync::Arc::new(on_progress);
     let voting_db = open_voting_db(db_path, wallet_id)?;
     let voting_hotkey = voting_hotkey_from_secret(hotkey_seed, network)?;
-    let progress_cancellation = cancellation.clone();
     let vote_stages = on_progress.clone();
     let reporter = zcash_voting::VoteCommitStageBridge::new(move |stage| {
-        if progress_cancellation.check().is_ok() {
-            vote_stages(stage);
-        }
+        vote_stages(stage);
     });
 
     zcash_voting::vote::commit_batch(
@@ -50,7 +44,6 @@ where
         &draft_votes,
         &van_witness,
         zcash_voting::vote::VoteSigner::hotkey(&voting_hotkey),
-        &cancellation,
         &reporter,
     )
     .map_err(|e| format!("vote commit batch failed: {e}"))
@@ -142,12 +135,6 @@ mod tests {
                 single_share: false,
             }],
             move |event| captured_events.lock().unwrap().push(event),
-            VotingWorkCancellation::start(
-                wallet_db_path.to_str().unwrap(),
-                "wallet-1",
-                Some("round-1"),
-            )
-            .unwrap(),
         )
         .unwrap_err();
 

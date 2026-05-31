@@ -247,6 +247,8 @@ Durable recovery state lives in `zcash_voting` tables. Resetting process-local
 voting state must not delete recovery rows, signed artifacts, transaction hashes,
 or share submission history. It only clears Rust memory owned by the current app
 process.
+It does not cancel in-flight proof or vote jobs already running on worker
+threads.
 
 ### VoteTreeSync Registry
 

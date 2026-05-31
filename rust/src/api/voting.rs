@@ -4,11 +4,8 @@ use crate::frb_generated::StreamSink;
 use crate::wallet::{
     keys,
     voting::{
-        delegation,
-        delegation::DelegationProgress,
-        hotkey,
-        progress::{cancel_voting_work, VotingWorkCancellation},
-        recovery, state, tree_sync, vote, workflow,
+        delegation, delegation::DelegationProgress, hotkey, recovery, state, tree_sync, vote,
+        workflow,
     },
 };
 use rand::{rngs::OsRng, RngCore};
@@ -496,9 +493,7 @@ pub async fn precompute_delegation_pir(
 ) -> Result<zcash_voting::wire::DelegationPirPrecomputeResultView, String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let round_id = round_params.vote_round_id.clone();
     let seed = secrecy::SecretVec::new(seed_bytes);
-    let cancellation = VotingWorkCancellation::start(&db_path, &account_uuid, Some(&round_id))?;
     delegation::precompute_delegation_pir(
         &db_path,
         &lightwalletd_url,
@@ -511,7 +506,6 @@ pub async fn precompute_delegation_pir(
         &seed,
         bundle_index,
         bundle_policy,
-        cancellation,
     )
     .await
     .map(zcash_voting::wire::DelegationPirPrecomputeResultView::from)
@@ -539,12 +533,9 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let round_id = round_params.vote_round_id.clone();
     let seed = secrecy::SecretVec::new(seed_bytes);
-    let cancellation = VotingWorkCancellation::start(&db_path, &account_uuid, Some(&round_id))?;
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
-    let progress_cancellation = cancellation.clone();
     let signed_result = delegation::build_prove_and_sign_delegation_payload(
         &db_path,
         &lightwalletd_url,
@@ -559,11 +550,9 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
         bundle_policy,
         move |event| {
             if progress_sink.add(event.into()).is_err() {
-                progress_cancellation.cancel_local();
                 log::warn!("voting delegation: StreamSink closed, progress not delivered");
             }
         },
-        cancellation,
     )
     .await
     .and_then(|bundle| {
@@ -608,9 +597,7 @@ pub async fn build_keystone_delegation_request(
 ) -> Result<zcash_voting::wire::KeystoneSigningRequest, String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let round_id = round_params.vote_round_id.clone();
     let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
-    let cancellation = VotingWorkCancellation::start(&db_path, &account_uuid, Some(&round_id))?;
     delegation::build_keystone_delegation_request(
         &db_path,
         &lightwalletd_url,
@@ -622,7 +609,6 @@ pub async fn build_keystone_delegation_request(
         &hotkey_secret,
         bundle_index,
         bundle_policy,
-        cancellation,
     )
     .await
     .map(zcash_voting::wire::KeystoneSigningRequest::from)
@@ -702,12 +688,9 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let round_id = round_params.vote_round_id.clone();
     let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
-    let cancellation = VotingWorkCancellation::start(&db_path, &account_uuid, Some(&round_id))?;
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
-    let progress_cancellation = cancellation.clone();
     let signed_result = delegation::build_prove_delegation_payload_with_keystone_signature(
         &db_path,
         &lightwalletd_url,
@@ -724,11 +707,9 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
         bundle_policy,
         move |event| {
             if progress_sink.add(event.into()).is_err() {
-                progress_cancellation.cancel_local();
                 log::warn!("voting delegation: StreamSink closed, progress not delivered");
             }
         },
-        cancellation,
     )
     .await
     .and_then(|bundle| {
@@ -853,16 +834,16 @@ pub fn generate_van_witness(
 
 /// Clear process-local voting state for a wallet or round.
 ///
-/// Passing a non-empty round ID cancels in-flight work for that round. Passing
-/// `None` or an empty round ID also drops the cached vote-tree client for the
-/// wallet.
+/// Passing a non-empty round ID clears round-scoped caches only. Passing `None`
+/// or an empty round ID also drops the cached vote-tree client for the wallet.
+/// This does not abort in-flight proof or vote work already running on worker
+/// threads.
 pub fn reset_voting_session_state(
     db_path: String,
     wallet_id: String,
     round_id: Option<String>,
 ) -> Result<(), String> {
     catch(|| {
-        cancel_voting_work(&db_path, &wallet_id, round_id.as_deref())?;
         let account_wide = round_id.as_deref().map(str::is_empty).unwrap_or(true);
         let tree_count = if account_wide {
             tree_sync::clear_tree_sync_session(&db_path, &wallet_id)?
@@ -915,10 +896,8 @@ pub async fn build_vote_commitments_with_progress(
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
     let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
-    let cancellation = VotingWorkCancellation::start(&db_path, &wallet_id, Some(&round_id))?;
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
-    let progress_cancellation = cancellation.clone();
     let commitment_result = tokio::task::spawn_blocking(move || {
         vote::build_vote_commitments(
             &db_path,
@@ -931,11 +910,9 @@ pub async fn build_vote_commitments_with_progress(
             draft_votes,
             move |event| {
                 if progress_sink.add(event.into()).is_err() {
-                    progress_cancellation.cancel_local();
                     log::warn!("voting vote: StreamSink closed, progress not delivered");
                 }
             },
-            cancellation,
         )
     })
     .await
