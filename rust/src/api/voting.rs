@@ -522,21 +522,30 @@ pub async fn precompute_delegation_pir(
     bundle_index: u32,
     max_real_notes_per_bundle: Option<u32>,
 ) -> Result<zcash_voting::wire::DelegationPirPrecomputeResultView, String> {
-    let network = keys::parse_network(&network)?;
-    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let seed = seed_from_mnemonic(mnemonic)?;
-    delegation::precompute_delegation_pir(
-        &db_path,
+    let (wallet_network, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
+        &network,
         &lightwalletd_url,
-        &pir_server_url,
-        network,
         round_params,
         &round_name,
+        max_real_notes_per_bundle,
+    )
+    .await?;
+    let seed = seed_from_mnemonic(mnemonic)?;
+    let round_id = lwd.round_params.vote_round_id.clone();
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &account_uuid, wallet_network)?;
+    let prepare_params = prepare_delegation_bundle_params(
+        lwd,
         session_json.as_deref(),
         &account_uuid,
-        &seed,
+        voting_network,
+        hotkey_secret.expose_secret(),
         bundle_index,
         bundle_policy,
+    );
+    delegation::precompute_delegation_pir(
+        &db_path,
+        &pir_server_url,
+        prepare_params,
     )
     .await
     .map(zcash_voting::wire::DelegationPirPrecomputeResultView::from)
@@ -2094,6 +2103,29 @@ mod tests {
                 "Demo".to_string(),
                 None,
                 "wallet-1".to_string(),
+                None,
+            ))
+            .unwrap_err();
+
+        assert!(err.contains("Unknown network"));
+    }
+
+    #[test]
+    fn build_keystone_delegation_request_rejects_invalid_network_before_network_io() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("voting.sqlite");
+        let err = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(build_keystone_delegation_request(
+                db_path.to_str().unwrap().to_string(),
+                "http://127.0.0.1:1".to_string(),
+                "bogus".to_string(),
+                test_api_round_params(),
+                "Demo".to_string(),
+                None,
+                "wallet-1".to_string(),
+                vec![9; 32],
+                0,
                 None,
             ))
             .unwrap_err();

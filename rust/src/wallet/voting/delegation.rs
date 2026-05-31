@@ -3,22 +3,33 @@ use std::sync::Arc;
 use ff::PrimeField;
 use secrecy::{ExposeSecret, SecretVec};
 use zcash_keys::keys::UnifiedSpendingKey;
+use zeroize::Zeroizing;
 use zip32::{fingerprint::SeedFingerprint, AccountId};
 
 use crate::api::voting::{voting_network, wallet_network};
-use crate::wallet::{keys, network::WalletNetwork, sync::open_wallet_db_for_read};
+use crate::wallet::{keys, sync::open_wallet_db_for_read};
 
-use super::{hotkey::derive_hotkey, state::open_voting_db};
+use super::state::open_voting_db;
 
 pub use zcash_voting::delegate::DelegationProgress;
 use zcash_voting::delegate::{
     DelegationSigningRequest, PrepareDelegationBundleParams, PreparedDelegationBundle,
-    ResolveDelegationLwdParams,
 };
 use zcash_voting::selection::select_notes_with_lwd;
 use zcash_voting::storage::VotingDb;
 use zcash_voting::BundlePolicy;
 
+/// Completes the proof phase for a previously prepared delegation bundle.
+///
+/// Opens the voting database for `account_uuid`, connects to `pir_server_url`,
+/// then runs bundle proving on a blocking worker thread while forwarding
+/// `DelegationProgress` updates to `on_progress`.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting database fails, connecting to the PIR
+/// server fails, the underlying `PreparedDelegationBundle::prove` call fails, or
+/// the spawned blocking task is cancelled or panics.
 async fn prove_delegation_bundle<F>(
     db_path: &str,
     pir_server_url: &str,
@@ -112,39 +123,31 @@ pub async fn setup_delegation_bundles(
 /// Returns an error if the round, endpoint, note selection, bundle index,
 /// witness generation, padded-secret initialization, or PIR precompute step
 /// fails.
-#[allow(clippy::too_many_arguments)]
 pub async fn precompute_delegation_pir(
     db_path: &str,
-    lightwalletd_url: &str,
     pir_server_url: &str,
-    network: WalletNetwork,
-    round_params: zcash_voting::VotingRoundParams,
-    round_name: &str,
-    session_json: Option<&str>,
-    account_uuid: &str,
-    seed: &SecretVec<u8>,
-    bundle_index: u32,
-    bundle_policy: BundlePolicy,
+    prepare_params: PrepareDelegationBundleParams<'_>,
 ) -> Result<zcash_voting::delegate::PreparedDelegationReport, String> {
-    let round_id = round_params.vote_round_id.clone();
-    let voting_network = voting_network(network);
-    let hotkey_secret = derive_hotkey(seed, &round_id, account_uuid, network)?;
-    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(ResolveDelegationLwdParams {
-        lightwalletd_url,
-        network: voting_network,
-        round_params,
-        round_name,
-    })
-    .await
-    .map_err(|e| e.to_string())?;
+    let PrepareDelegationBundleParams {
+        lwd,
+        session_json,
+        account_uuid,
+        network,
+        hotkey_seed,
+        bundle_index,
+        bundle_policy,
+    } = prepare_params;
+
     let db_path = db_path.to_string();
     let pir_server_url = pir_server_url.to_string();
     let account_uuid = account_uuid.to_string();
     let session_json = session_json.map(str::to_string);
+    // Keep the copied hotkey seed zeroized after the blocking task returns.
+    let hotkey_seed = Zeroizing::new(hotkey_seed.to_vec());
 
     tokio::task::spawn_blocking(move || {
         let voting_db = open_voting_db(&db_path, &account_uuid)?;
-        let wallet_db = open_wallet_db_for_read(&db_path, network)?;
+        let wallet_db = open_wallet_db_for_read(&db_path, wallet_network(network))?;
         let prepared = zcash_voting::delegate::prepare_delegation_bundle(
             &voting_db,
             &wallet_db,
@@ -152,8 +155,8 @@ pub async fn precompute_delegation_pir(
                 lwd,
                 session_json: session_json.as_deref(),
                 account_uuid: &account_uuid,
-                network: voting_network,
-                hotkey_seed: hotkey_secret.expose_secret(),
+                network,
+                hotkey_seed: hotkey_seed.as_slice(),
                 bundle_index,
                 bundle_policy,
             },
@@ -240,11 +243,17 @@ where
     Ok(signed_bundle)
 }
 
+/// Signs a delegation request with the Orchard spend authorizing key derived from
+/// the wallet seed and account in the request.
+///
+/// Returns the detached signature bytes plus the original sighash when the seed,
+/// account index, and randomizer all validate.
 fn sign_delegation_request(
     seed: &SecretVec<u8>,
     request: DelegationSigningRequest,
 ) -> Result<([u8; 64], [u8; 32]), String> {
     let seed = seed.expose_secret();
+    // Bind the request to this exact wallet seed before deriving any keys.
     let seed_fingerprint = SeedFingerprint::from_seed(seed)
         .ok_or_else(|| "wallet seed length is not valid for ZIP-32".to_string())?;
     if seed_fingerprint.to_bytes() != request.seed_fingerprint {
@@ -253,16 +262,19 @@ fn sign_delegation_request(
         );
     }
 
+    // Derive the account Orchard signing key specified by the request metadata.
     let account = AccountId::try_from(request.account_index)
         .map_err(|_| format!("invalid account_index {}", request.account_index))?;
     let usk = UnifiedSpendingKey::from_seed(&request.network, seed, account)
         .map_err(|e| format!("derive account unified spending key failed: {e}"))?;
     let sk = *usk.orchard();
     let ask = orchard::keys::SpendAuthorizingKey::from(&sk);
+    // The alpha randomizer must decode as a canonical Pallas scalar.
     let alpha = Option::<pasta_curves::pallas::Scalar>::from(
         pasta_curves::pallas::Scalar::from_repr(request.alpha),
     )
     .ok_or_else(|| "delegation alpha is not a valid Pallas scalar".to_string())?;
+    // Sign the request-specific sighash with the randomized spend auth key.
     let rsk = ask.randomize(&alpha);
     let mut rng = rand::rngs::OsRng;
     let sig = rsk.sign(&mut rng, &request.sighash);
@@ -362,6 +374,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wallet::network::WalletNetwork;
     use prost::Message;
     use std::sync::{Arc, Mutex};
 
