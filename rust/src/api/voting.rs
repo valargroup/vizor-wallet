@@ -49,7 +49,6 @@ pub struct ApiTxEvent {
     pub attributes: Vec<ApiTxEventAttribute>,
 }
 
-
 fn bundle_policy(max_real_notes_per_bundle: Option<u32>) -> Result<BundlePolicy, String> {
     BundlePolicy::from_optional_max_real_notes_per_bundle(max_real_notes_per_bundle)
         .map_err(|e| e.to_string())
