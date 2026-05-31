@@ -1360,7 +1360,7 @@ mod tests {
     fn api_round_params_convert_to_core_round_params() {
         let api = test_api_round_params();
 
-        let core: zcash_voting::VotingRoundParams = api.clone().into();
+        let core: zcash_voting::VotingRoundParams = api.clone();
 
         assert_eq!(core.vote_round_id, api.vote_round_id);
         assert_eq!(core.snapshot_height, api.snapshot_height);
@@ -1371,11 +1371,11 @@ mod tests {
 
     #[test]
     fn api_bundle_setup_result_preserves_core_fields() {
-        let api = zcash_voting::wire::BundleLayout::from(zcash_voting::round::BundleLayout {
+        let api = zcash_voting::wire::BundleLayout {
             bundle_count: 2,
             eligible_weight: 50,
             dropped_count: 0,
-        });
+        };
 
         assert_eq!(api.bundle_count, 2);
         assert_eq!(api.eligible_weight, 50);
@@ -1419,20 +1419,18 @@ mod tests {
 
     #[test]
     fn api_keystone_delegation_request_preserves_display_memo() {
-        let api = zcash_voting::wire::KeystoneSigningRequest::from(
-            zcash_voting::delegate::KeystoneSigningRequest {
-                pczt_bytes: vec![1],
-                redacted_pczt_bytes: vec![2],
-                pczt_sighash: vec![3; 32],
-                rk: vec![4; 32],
-                action_index: 5,
-                display_memo: "I am authorizing this hotkey.".to_string(),
-                eligible_weight_zatoshi: 20,
-                delegated_weight_zatoshi: 10,
-                bundle_count: 2,
-                bundle_index: 1,
-            },
-        );
+        let api = zcash_voting::wire::KeystoneSigningRequest {
+            pczt_bytes: vec![1],
+            redacted_pczt_bytes: vec![2],
+            pczt_sighash: vec![3; 32],
+            rk: vec![4; 32],
+            action_index: 5,
+            display_memo: "I am authorizing this hotkey.".to_string(),
+            eligible_weight_zatoshi: 20,
+            delegated_weight_zatoshi: 10,
+            bundle_count: 2,
+            bundle_index: 1,
+        };
 
         assert_eq!(api.display_memo, "I am authorizing this hotkey.");
         assert_eq!(api.bundle_count, 2);
@@ -1732,11 +1730,11 @@ mod tests {
         let mut witness = vec![vec![0u8; 32]; zcash_voting::vote::VAN_AUTH_PATH_LEN];
         witness[0] = vec![1; 32];
         witness[1] = vec![2; 32];
-        let api = zcash_voting::wire::VanWitness::from(zcash_voting::vote::VanWitness {
+        let api = zcash_voting::wire::VanWitness {
             auth_path: witness,
             position: 7,
             anchor_height: 123,
-        });
+        };
 
         assert_eq!(api.auth_path[0], vec![1; 32]);
         assert_eq!(api.auth_path[1], vec![2; 32]);

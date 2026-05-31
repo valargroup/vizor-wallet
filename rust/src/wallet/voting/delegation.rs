@@ -273,8 +273,8 @@ fn sign_delegation_request(
     .ok_or_else(|| "delegation alpha is not a valid Pallas scalar".to_string())?;
     // Sign the request-specific sighash with the randomized spend auth key.
     let rsk = ask.randomize(&alpha);
-    let mut rng = rand::rngs::OsRng;
-    let sig = rsk.sign(&mut rng, &request.sighash);
+    let rng = rand::rngs::OsRng;
+    let sig = rsk.sign(rng, &request.sighash);
     Ok(((&sig).into(), request.sighash))
 }
 
