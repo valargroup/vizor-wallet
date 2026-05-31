@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
+use ff::PrimeField;
 use secrecy::{ExposeSecret, SecretVec};
+use zcash_keys::keys::UnifiedSpendingKey;
+use zip32::{fingerprint::SeedFingerprint, AccountId};
 
 use crate::wallet::{
     keys,
@@ -16,7 +19,8 @@ use super::{
 
 pub use zcash_voting::delegate::DelegationProgress;
 use zcash_voting::delegate::{
-    PrepareDelegationBundleParams, PreparedDelegationBundle, ResolveDelegationLwdParams,
+    DelegationSigningRequest, PrepareDelegationBundleParams, PreparedDelegationBundle,
+    ResolveDelegationLwdParams,
 };
 use zcash_voting::selection::select_notes_with_lwd;
 use zcash_voting::storage::VotingDb;
@@ -118,8 +122,8 @@ where
         });
         prepared
             .prove(&proof_voting_db, &pir_client, &reporter)
-        .map(|_| ())
-        .map_err(|e| format!("delegate::prove failed: {e}"))
+            .map(|_| ())
+            .map_err(|e| format!("delegate::prove failed: {e}"))
     })
     .await
     .map_err(|e| format!("delegation proof task failed: {e}"))??;
@@ -325,11 +329,9 @@ where
         .prepared
         .signing_request(&context.voting_db)
         .map_err(|e| format!("delegation signing request failed: {e}"))?;
-    let signer = zcash_voting::delegate::PreparedSigner::from_wallet_seed(
-        seed.expose_secret(),
-        signing_request,
-    )
-    .map_err(|e| format!("delegation signing failed: {e}"))?;
+    let (sig, sighash) = sign_delegation_request(seed, signing_request)
+        .map_err(|e| format!("delegation signing failed: {e}"))?;
+    let signer = zcash_voting::delegate::PreparedSigner::signature(sig, sighash);
     let signed_bundle = context
         .prepared
         .signed_bundle(&context.voting_db, delegation_setup.pczt_bytes, signer)
@@ -337,6 +339,35 @@ where
 
     on_progress(DelegationProgress::PayloadReady);
     Ok(signed_bundle)
+}
+
+fn sign_delegation_request(
+    seed: &SecretVec<u8>,
+    request: DelegationSigningRequest,
+) -> Result<([u8; 64], [u8; 32]), String> {
+    let seed = seed.expose_secret();
+    let seed_fingerprint = SeedFingerprint::from_seed(seed)
+        .ok_or_else(|| "wallet seed length is not valid for ZIP-32".to_string())?;
+    if seed_fingerprint.to_bytes() != request.seed_fingerprint {
+        return Err(
+            "wallet seed fingerprint does not match delegation signing request".to_string(),
+        );
+    }
+
+    let account = AccountId::try_from(request.account_index)
+        .map_err(|_| format!("invalid account_index {}", request.account_index))?;
+    let usk = UnifiedSpendingKey::from_seed(&request.network, seed, account)
+        .map_err(|e| format!("derive account unified spending key failed: {e}"))?;
+    let sk = *usk.orchard();
+    let ask = orchard::keys::SpendAuthorizingKey::from(&sk);
+    let alpha = Option::<pasta_curves::pallas::Scalar>::from(
+        pasta_curves::pallas::Scalar::from_repr(request.alpha),
+    )
+    .ok_or_else(|| "delegation alpha is not a valid Pallas scalar".to_string())?;
+    let rsk = ask.randomize(&alpha);
+    let mut rng = rand::rngs::OsRng;
+    let sig = rsk.sign(&mut rng, &request.sighash);
+    Ok(((&sig).into(), request.sighash))
 }
 
 /// Build one voting PCZT request for Keystone signing.

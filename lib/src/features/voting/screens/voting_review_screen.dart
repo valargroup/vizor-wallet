@@ -11,7 +11,6 @@ import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/voting/voting_session_provider.dart';
-import '../../../rust/api/wallet.dart' as rust_wallet;
 import '../voting_choice_style.dart';
 import '../voting_flow_models.dart';
 import '../voting_routes.dart';
@@ -52,18 +51,13 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
           .getMnemonicForAccount(accountUuid);
       if (!mounted) return;
       if (mnemonic == null || mnemonic.isEmpty) return;
-      final seedBytes = await rust_wallet.deriveSeed(mnemonic: mnemonic);
-      try {
-        if (!mounted) return;
-        await ref
-            .read(votingSessionProvider(widget.roundId).notifier)
-            .precomputeDelegationPir(
-              accountUuid: accountUuid,
-              seedBytes: seedBytes,
-            );
-      } finally {
-        seedBytes.fillRange(0, seedBytes.length, 0);
-      }
+      if (!mounted) return;
+      await ref
+          .read(votingSessionProvider(widget.roundId).notifier)
+          .precomputeDelegationPir(
+            accountUuid: accountUuid,
+            mnemonic: mnemonic,
+          );
     } catch (e) {
       debugPrint('[zcash] Voting: delegation PIR precompute skipped: $e');
     }

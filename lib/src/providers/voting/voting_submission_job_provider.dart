@@ -7,7 +7,6 @@ import '../../features/voting/voting_error_messages.dart';
 import '../../features/voting/voting_flow_models.dart';
 import '../../features/voting/voting_resume_plan.dart';
 import '../../rust/api/keystone.dart' as rust_keystone;
-import '../../rust/api/wallet.dart' as rust_wallet;
 import '../../rust/third_party/zcash_voting/delegate.dart' as rust_delegate;
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import '../account_provider.dart';
@@ -490,13 +489,8 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
           );
           return;
         }
-        final seedBytes = await rust_wallet.deriveSeed(mnemonic: mnemonic);
-        try {
-          if (!_isCurrentJob(key: key, generation: generation)) return;
-          await sessionNotifier.delegatePendingBundles(seedBytes: seedBytes);
-        } finally {
-          seedBytes.fillRange(0, seedBytes.length, 0);
-        }
+        if (!_isCurrentJob(key: key, generation: generation)) return;
+        await sessionNotifier.delegatePendingBundles(mnemonic: mnemonic);
         if (!_isCurrentJob(key: key, generation: generation)) return;
         final afterDelegation = _sessionForJob(key);
         if (afterDelegation?.phase == VotingSessionPhase.error) {

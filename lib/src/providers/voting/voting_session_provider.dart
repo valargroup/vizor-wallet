@@ -224,7 +224,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   Future<void> precomputeDelegationPir({
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
   }) async {
     final context = await _loadContext(_roundId);
     if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
@@ -260,13 +260,13 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       _delegationPirPrecomputes[key] ??= _runDelegationPirPrecompute(
         context: context,
         pirEndpoint: pirEndpoint,
-        seedBytes: List<int>.from(seedBytes),
+        mnemonic: mnemonic,
         bundleIndex: bundleIndex,
       );
     }
   }
 
-  Future<void> delegatePendingBundles({required List<int> seedBytes}) {
+  Future<void> delegatePendingBundles({required String mnemonic}) {
     return _enqueue(() async {
       var current = await future;
       if (_needsDelegationPreparation(current)) {
@@ -303,7 +303,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         _setStateForContext(context, nextState);
         current = nextState;
       }
-      await _ensureHotkey(context, seedBytes: seedBytes);
+      await _ensureHotkey(context, mnemonic: mnemonic);
 
       final progress = Map<int, VotingSessionProgress>.from(
         current.delegationProgress,
@@ -340,7 +340,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               roundName: context.round.title,
               sessionJson: context.round.sessionJson,
               accountUuid: context.accountUuid,
-              seedBytes: seedBytes,
+              mnemonic: mnemonic,
               bundleIndex: bundleIndex,
             )) {
           signedDelegationPayload =
@@ -1247,7 +1247,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
   Future<List<int>> _ensureHotkey(
     _VotingSessionContext context, {
-    List<int>? seedBytes,
+    String? mnemonic,
     bool allowHardwareGeneration = false,
   }) async {
     final existing = await _readStoredHotkey(context);
@@ -1264,7 +1264,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       hotkey = await rust.generateVotingHotkey(network: context.network);
     } else {
       hotkey = await rust.deriveHotkey(
-        seedBytes: seedBytes ?? (throw StateError('Missing wallet seed.')),
+        mnemonic: mnemonic ?? (throw StateError('Missing wallet mnemonic.')),
         roundId: context.round.roundId,
         accountUuid: context.accountUuid,
         network: context.network,
@@ -2036,7 +2036,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   Future<void> _runDelegationPirPrecompute({
     required _VotingSessionContext context,
     required Uri pirEndpoint,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
   }) async {
     final key = _delegationPirPrecomputeKey(context, bundleIndex);
@@ -2057,7 +2057,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             roundName: context.round.title,
             sessionJson: context.round.sessionJson,
             accountUuid: context.accountUuid,
-            seedBytes: seedBytes,
+            mnemonic: mnemonic,
             bundleIndex: bundleIndex,
           );
       debugPrint(
@@ -2074,7 +2074,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         'reason=cache-miss',
       );
     } finally {
-      seedBytes.fillRange(0, seedBytes.length, 0);
       _delegationPirPrecomputes.remove(key);
     }
   }

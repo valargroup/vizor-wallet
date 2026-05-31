@@ -3,13 +3,12 @@ use std::{panic, sync::Arc};
 use crate::frb_generated::StreamSink;
 use crate::wallet::{
     keys,
-    voting::{
-        delegation, delegation::DelegationProgress, hotkey, state, vote,
-    },
+    voting::{delegation, delegation::DelegationProgress, hotkey, state, vote},
 };
 use rand::{rngs::OsRng, RngCore};
 use secrecy::ExposeSecret;
 use zcash_voting::BundlePolicy;
+use zeroize::Zeroizing;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Progress event emitted while building, proving, and signing a delegation payload.
@@ -67,6 +66,11 @@ pub struct ApiVoteConfirmation {
 fn bundle_policy(max_real_notes_per_bundle: Option<u32>) -> Result<BundlePolicy, String> {
     BundlePolicy::from_optional_max_real_notes_per_bundle(max_real_notes_per_bundle)
         .map_err(|e| e.to_string())
+}
+
+fn seed_from_mnemonic(mnemonic: String) -> Result<secrecy::SecretVec<u8>, String> {
+    let mnemonic = Zeroizing::new(mnemonic.into_bytes());
+    keys::mnemonic_bytes_to_seed(mnemonic.as_slice())
 }
 
 impl From<ApiTxEventAttribute> for zcash_voting::confirmation::TxEventAttribute {
@@ -261,18 +265,18 @@ pub fn recovered_vote_share_wire_json(
 
 /// Derive the opaque per-account, per-round voting hotkey bytes.
 ///
-/// The seed stays inside Vizor's wallet boundary. Rust derives scoped hotkey
-/// seed material locally and returns bytes for secure storage.
+/// Rust derives the wallet seed from the account mnemonic, then derives scoped
+/// hotkey seed material locally and returns bytes for secure storage.
 /// The returned `Vec<u8>` is an unavoidable FRB copy boundary
 pub fn derive_voting_hotkey(
-    seed_bytes: Vec<u8>,
+    mnemonic: String,
     round_id: String,
     account_uuid: String,
     network: String,
 ) -> Result<Vec<u8>, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
-        let seed = secrecy::SecretVec::new(seed_bytes);
+        let seed = seed_from_mnemonic(mnemonic)?;
         hotkey::derive_hotkey(&seed, &round_id, &account_uuid, network).map(|hotkey| {
             // FRB returns owned bytes, so this copy cannot be zeroized by Rust
             // after Dart receives it.
@@ -486,13 +490,13 @@ pub async fn precompute_delegation_pir(
     round_name: String,
     session_json: Option<String>,
     account_uuid: String,
-    seed_bytes: Vec<u8>,
+    mnemonic: String,
     bundle_index: u32,
     max_real_notes_per_bundle: Option<u32>,
 ) -> Result<zcash_voting::wire::DelegationPirPrecomputeResultView, String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let seed = secrecy::SecretVec::new(seed_bytes);
+    let seed = seed_from_mnemonic(mnemonic)?;
     delegation::precompute_delegation_pir(
         &db_path,
         &lightwalletd_url,
@@ -525,14 +529,14 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     round_name: String,
     session_json: Option<String>,
     account_uuid: String,
-    seed_bytes: Vec<u8>,
+    mnemonic: String,
     bundle_index: u32,
     max_real_notes_per_bundle: Option<u32>,
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let seed = secrecy::SecretVec::new(seed_bytes);
+    let seed = seed_from_mnemonic(mnemonic)?;
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let signed_result = delegation::build_prove_and_sign_delegation_payload(

@@ -630,7 +630,7 @@ void main() {
     await container.read(votingSessionProvider(kRoundId).future);
     await container
         .read(votingSessionProvider(kRoundId).notifier)
-        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+        .delegatePendingBundles(mnemonic: kTestMnemonic);
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
     expect(state.phase, VotingSessionPhase.delegated);
@@ -666,7 +666,7 @@ void main() {
     await container.read(votingSessionProvider(kRoundId).future);
     await container
         .read(votingSessionProvider(kRoundId).notifier)
-        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+        .delegatePendingBundles(mnemonic: kTestMnemonic);
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
     expect(state.phase, VotingSessionPhase.error);
@@ -683,7 +683,7 @@ void main() {
     await container.read(votingSessionProvider(kRoundId).future);
     await container
         .read(votingSessionProvider(kRoundId).notifier)
-        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+        .delegatePendingBundles(mnemonic: kTestMnemonic);
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
     expect(state.phase, VotingSessionPhase.delegated);
@@ -704,7 +704,7 @@ void main() {
     await container.read(votingSessionProvider(kRoundId).future);
     await container
         .read(votingSessionProvider(kRoundId).notifier)
-        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+        .delegatePendingBundles(mnemonic: kTestMnemonic);
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
     expect(state.phase, VotingSessionPhase.error);
@@ -792,7 +792,7 @@ void main() {
     await container.read(votingSessionProvider(kRoundId).future);
     await container
         .read(votingSessionProvider(kRoundId).notifier)
-        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+        .delegatePendingBundles(mnemonic: kTestMnemonic);
     final state = container.read(votingSessionProvider(kRoundId)).value!;
 
     expect(state.phase, VotingSessionPhase.error);
@@ -1147,7 +1147,7 @@ void main() {
     activeAccount.value = 'account-2';
     await container
         .read(votingSessionProvider(kRoundId).notifier)
-        .delegatePendingBundles(seedBytes: [1, 2, 3]);
+        .delegatePendingBundles(mnemonic: kTestMnemonic);
 
     expect(rust.accountUuids.toSet(), {'account-1'});
     expect(recoveryApi.walletIds.toSet(), {'account-1'});
@@ -1488,7 +1488,7 @@ void main() {
       await container.read(votingSessionProvider(kRoundId).future);
       await container
           .read(votingSessionProvider(kRoundId).notifier)
-          .delegatePendingBundles(seedBytes: [1, 2, 3]);
+          .delegatePendingBundles(mnemonic: kTestMnemonic);
 
       expect(
         _postBodyJson(http, '/shielded-vote/v1/delegate-vote'),
@@ -2953,31 +2953,26 @@ void main() {
     expect(rust.maxConcurrentSetups, 1);
   });
 
-  test('delegation PIR warmup owns and zeros task-local seed bytes', () async {
+  test('delegation PIR warmup passes the account mnemonic to Rust', () async {
     final precomputeGate = Completer<void>();
     final rust = FakeVotingRustApi(precomputeGate: precomputeGate);
     final container = _sessionContainer(rust: rust);
     addTearDown(container.dispose);
-    final seedBytes = [1, 2, 3];
 
     await container.read(votingSessionProvider(kRoundId).future);
     await container
         .read(votingSessionProvider(kRoundId).notifier)
         .precomputeDelegationPir(
           accountUuid: 'account-1',
-          seedBytes: seedBytes,
+          mnemonic: kTestMnemonic,
         );
     await rust.precomputeStarted.future;
 
-    seedBytes.fillRange(0, seedBytes.length, 0);
-    expect(rust.precomputeSeedRefs.single, [1, 2, 3]);
-    expect(identical(rust.precomputeSeedRefs.single, seedBytes), isFalse);
+    expect(rust.precomputeMnemonics.single, kTestMnemonic);
 
     precomputeGate.complete();
     await rust.precomputeFinished.future;
     await Future<void>.delayed(Duration.zero);
-
-    expect(rust.precomputeSeedRefs.single, [0, 0, 0]);
   });
 
   test('delegation PIR warmup skips after account switch', () async {
@@ -3008,7 +3003,7 @@ void main() {
         .read(votingSessionProvider(kRoundId).notifier)
         .precomputeDelegationPir(
           accountUuid: 'account-1',
-          seedBytes: [1, 2, 3],
+          mnemonic: kTestMnemonic,
         );
 
     expect(rust.precomputedDelegationPir, isEmpty);
@@ -3024,12 +3019,12 @@ void main() {
     final notifier = container.read(votingSessionProvider(kRoundId).notifier);
     await notifier.precomputeDelegationPir(
       accountUuid: 'account-1',
-      seedBytes: [1, 2, 3],
+      mnemonic: kTestMnemonic,
     );
     await rust.precomputeStarted.future;
 
     final delegationFuture = notifier.delegatePendingBundles(
-      seedBytes: [1, 2, 3],
+      mnemonic: kTestMnemonic,
     );
 
     VotingSessionState? activeState;
@@ -3062,9 +3057,9 @@ void main() {
     final notifier = container.read(votingSessionProvider(kRoundId).notifier);
     await notifier.precomputeDelegationPir(
       accountUuid: 'account-1',
-      seedBytes: [1, 2, 3],
+      mnemonic: kTestMnemonic,
     );
-    await notifier.delegatePendingBundles(seedBytes: [1, 2, 3]);
+    await notifier.delegatePendingBundles(mnemonic: kTestMnemonic);
 
     expect(rust.precomputedDelegationPir, [0]);
     expect(rust.delegationBundleCalls, [0]);
@@ -3341,6 +3336,7 @@ const kRoundId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const kOtherRoundId =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const kTestMnemonic = 'abandon abandon abandon';
 const kEncodedRoundId = 'El5UdfZTsHTV9MNnMIUmlfNWQWwrbDBCUWqRLlv/3RE=';
 const kEncodedRoundIdHex =
     '125e5475f653b074d5f4c36730852695f356416c2b6c3042516a912e5bffdd11';
@@ -3902,7 +3898,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final recordedShares = <_RecordedShare>[];
   final syncedVoteTrees = <String>[];
   final precomputedDelegationPir = <int>[];
-  final precomputeSeedRefs = <List<int>>[];
+  final precomputeMnemonics = <String>[];
   final setupStarted = Completer<void>();
   final precomputeStarted = Completer<void>();
   final precomputeFinished = Completer<void>();
@@ -3960,7 +3956,7 @@ class FakeVotingRustApi implements VotingRustApi {
     required String roundName,
     String? sessionJson,
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   }) async* {
@@ -4172,13 +4168,13 @@ class FakeVotingRustApi implements VotingRustApi {
     required String roundName,
     String? sessionJson,
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   }) async {
     accountUuids.add(accountUuid);
     precomputedDelegationPir.add(bundleIndex);
-    precomputeSeedRefs.add(seedBytes);
+    precomputeMnemonics.add(mnemonic);
     if (!precomputeStarted.isCompleted) {
       precomputeStarted.complete();
     }
@@ -4600,7 +4596,7 @@ class FakeVotingRustApi implements VotingRustApi {
 
   @override
   Future<List<int>> deriveHotkey({
-    required List<int> seedBytes,
+    required String mnemonic,
     required String roundId,
     required String accountUuid,
     required String network,
@@ -4609,7 +4605,7 @@ class FakeVotingRustApi implements VotingRustApi {
       roundId.length,
       accountUuid.length,
       network.length,
-      ...seedBytes.take(2),
+      ...mnemonic.codeUnits.take(2),
     ];
   }
 }

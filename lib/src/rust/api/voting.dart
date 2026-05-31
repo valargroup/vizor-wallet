@@ -12,7 +12,7 @@ import '../third_party/zcash_voting/vote.dart';
 import '../third_party/zcash_voting/wire.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bundle_policy`, `catch`, `require_len`, `share_tracking_record`
+// These functions are ignored because they are not marked as `pub`: `bundle_policy`, `catch`, `require_len`, `seed_from_mnemonic`, `share_tracking_record`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Returns the vote-chain delegation submission body as validated wire JSON.
@@ -108,16 +108,16 @@ Future<String> recoveredVoteShareWireJson({
 
 /// Derive the opaque per-account, per-round voting hotkey bytes.
 ///
-/// The seed stays inside Vizor's wallet boundary. Rust derives scoped hotkey
-/// seed material locally and returns bytes for secure storage.
+/// Rust derives the wallet seed from the account mnemonic, then derives scoped
+/// hotkey seed material locally and returns bytes for secure storage.
 /// The returned `Vec<u8>` is an unavoidable FRB copy boundary
 Future<Uint8List> deriveVotingHotkey({
-  required List<int> seedBytes,
+  required String mnemonic,
   required String roundId,
   required String accountUuid,
   required String network,
 }) => RustLib.instance.api.crateApiVotingDeriveVotingHotkey(
-  seedBytes: seedBytes,
+  mnemonic: mnemonic,
   roundId: roundId,
   accountUuid: accountUuid,
   network: network,
@@ -168,7 +168,7 @@ Future<DelegationPirPrecomputeResultView> precomputeDelegationPir({
   required String roundName,
   String? sessionJson,
   required String accountUuid,
-  required List<int> seedBytes,
+  required String mnemonic,
   required int bundleIndex,
   int? maxRealNotesPerBundle,
 }) => RustLib.instance.api.crateApiVotingPrecomputeDelegationPir(
@@ -180,7 +180,7 @@ Future<DelegationPirPrecomputeResultView> precomputeDelegationPir({
   roundName: roundName,
   sessionJson: sessionJson,
   accountUuid: accountUuid,
-  seedBytes: seedBytes,
+  mnemonic: mnemonic,
   bundleIndex: bundleIndex,
   maxRealNotesPerBundle: maxRealNotesPerBundle,
 );
@@ -199,7 +199,7 @@ Stream<ApiDelegationProofEvent> buildProveAndSignDelegationPayloadWithProgress({
   required String roundName,
   String? sessionJson,
   required String accountUuid,
-  required List<int> seedBytes,
+  required String mnemonic,
   required int bundleIndex,
   int? maxRealNotesPerBundle,
 }) => RustLib.instance.api
@@ -212,7 +212,7 @@ Stream<ApiDelegationProofEvent> buildProveAndSignDelegationPayloadWithProgress({
       roundName: roundName,
       sessionJson: sessionJson,
       accountUuid: accountUuid,
-      seedBytes: seedBytes,
+      mnemonic: mnemonic,
       bundleIndex: bundleIndex,
       maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
@@ -404,7 +404,8 @@ Future<VanWitness> generateVanWitness({
 ///
 /// Passing a non-empty round ID clears round-scoped caches only. Passing `None`
 /// or an empty round ID also drops the cached vote-tree client for the wallet.
-/// In-flight proof and vote work already running in Rust is not cancelled.
+/// This does not abort in-flight proof or vote work already running on worker
+/// threads.
 Future<void> resetVotingSessionState({
   required String dbPath,
   required String walletId,

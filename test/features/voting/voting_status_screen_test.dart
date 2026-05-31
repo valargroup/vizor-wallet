@@ -2374,7 +2374,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required String roundName,
     String? sessionJson,
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   }) async {
@@ -2397,7 +2397,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
     required String roundName,
     String? sessionJson,
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   }) async* {
@@ -3093,11 +3093,6 @@ rust_wire.SignedVoteCommitmentsView _commitments({
 
 class _RustApiFake implements RustLibApi {
   static bool failPcztEncoding = false;
-
-  @override
-  Future<Uint8List> crateApiWalletDeriveSeed({required String mnemonic}) async {
-    return Uint8List.fromList(List.filled(64, 1));
-  }
 
   @override
   Future<List<String>> crateApiKeystoneEncodePcztUrParts({

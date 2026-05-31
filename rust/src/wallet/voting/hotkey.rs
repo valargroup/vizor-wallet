@@ -1,8 +1,14 @@
+use blake2b_simd::Params;
 use secrecy::{ExposeSecret, SecretVec};
+use zeroize::Zeroizing;
 
 use crate::wallet::network::WalletNetwork;
 
 use super::voting_network;
+
+const HOTKEY_CONTEXT_PREFIX: &[u8] = b"ZcashVotingHotkeyV1";
+const HOTKEY_SEED_PERSONALIZATION: &[u8] = b"ZcashVotingHotKy";
+const HOTKEY_SEED_LEN: usize = 64;
 
 /// Derives opaque voting hotkey bytes for a wallet account in a voting round.
 ///
@@ -23,14 +29,10 @@ pub fn derive_hotkey(
     account_uuid: &str,
     network: WalletNetwork,
 ) -> Result<SecretVec<u8>, String> {
-    zcash_voting::hotkey::derive_voting_hotkey(
-        seed.expose_secret(),
-        round_id,
-        account_uuid,
-        voting_network(network),
-    )
-    .map(|hotkey| SecretVec::new(hotkey.secret_seed().to_vec()))
-    .map_err(|e| format!("Voting hotkey derivation failed: {e}"))
+    let hotkey_secret =
+        derive_contextual_hotkey_seed(seed.expose_secret(), round_id, account_uuid, network)?;
+    voting_hotkey_from_secret(&hotkey_secret, network)?;
+    Ok(hotkey_secret)
 }
 
 /// Generates opaque voting hotkey bytes for hardware-account voting.
@@ -66,6 +68,50 @@ pub fn voting_hotkey_from_secret(
         voting_network(network),
     )
     .map_err(|e| format!("Voting hotkey reconstruction failed: {e}"))
+}
+
+fn derive_contextual_hotkey_seed(
+    seed: &[u8],
+    round_id: &str,
+    account_uuid: &str,
+    network: WalletNetwork,
+) -> Result<SecretVec<u8>, String> {
+    if seed.len() < 32 {
+        return Err(format!(
+            "wallet seed must be at least 32 bytes, got {}",
+            seed.len()
+        ));
+    }
+
+    let mut material = Zeroizing::new(Vec::new());
+    material.extend_from_slice(HOTKEY_CONTEXT_PREFIX);
+    append_context_part(&mut material, seed)?;
+    append_context_part(&mut material, round_id.as_bytes())?;
+    append_context_part(&mut material, account_uuid.as_bytes())?;
+    append_context_part(&mut material, network_tag(network))?;
+
+    let hash = Params::new()
+        .hash_length(HOTKEY_SEED_LEN)
+        .personal(HOTKEY_SEED_PERSONALIZATION)
+        .hash(&material);
+
+    Ok(SecretVec::new(hash.as_bytes().to_vec()))
+}
+
+fn append_context_part(material: &mut Vec<u8>, part: &[u8]) -> Result<(), String> {
+    let len = u32::try_from(part.len())
+        .map_err(|_| "voting hotkey context part length exceeds u32::MAX".to_string())?;
+    material.extend_from_slice(&len.to_be_bytes());
+    material.extend_from_slice(part);
+    Ok(())
+}
+
+fn network_tag(network: WalletNetwork) -> &'static [u8] {
+    match network {
+        WalletNetwork::Main => b"mainnet",
+        WalletNetwork::Test => b"testnet",
+        WalletNetwork::Regtest => b"regtest",
+    }
 }
 
 #[cfg(test)]

@@ -139,12 +139,6 @@ Future<void> ensureWalletDbMigrated({
 bool validateMnemonic({required String mnemonic}) =>
     RustLib.instance.api.crateApiWalletValidateMnemonic(mnemonic: mnemonic);
 
-/// Derive the ZIP-39 seed bytes for callers that must pass seed material to
-/// voting APIs. The mnemonic input buffer is zeroized after derivation; callers
-/// are still responsible for zeroizing the returned seed bytes.
-Future<Uint8List> deriveSeed({required String mnemonic}) =>
-    RustLib.instance.api.crateApiWalletDeriveSeed(mnemonic: mnemonic);
-
 /// Get the transparent address for a specific account (or first account if uuid is None).
 Future<String> getTransparentAddress({
   required String dbPath,
