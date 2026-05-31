@@ -1,6 +1,5 @@
 pub mod delegation;
 pub mod hotkey;
-pub mod progress;
 pub mod recovery;
 pub mod state;
 pub mod tree_sync;

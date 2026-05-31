@@ -402,9 +402,9 @@ Future<VanWitness> generateVanWitness({
 
 /// Clear process-local voting state for a wallet or round.
 ///
-/// Passing a non-empty round ID cancels in-flight work for that round. Passing
-/// `None` or an empty round ID also drops the cached vote-tree client for the
-/// wallet.
+/// Passing a non-empty round ID clears round-scoped caches only. Passing `None`
+/// or an empty round ID also drops the cached vote-tree client for the wallet.
+/// In-flight proof and vote work already running in Rust is not cancelled.
 Future<void> resetVotingSessionState({
   required String dbPath,
   required String walletId,

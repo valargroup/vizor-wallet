@@ -10,7 +10,6 @@ use crate::wallet::{
 
 use super::{
     hotkey::{derive_hotkey, voting_hotkey_from_secret},
-    progress::VotingWorkCancellation,
     state::open_voting_db,
     voting_network,
 };
@@ -58,7 +57,6 @@ async fn prepare_delegation_bundle_context(
         network: voting_network(network),
         round_params,
         round_name,
-        cancellation: &zcash_voting::NoopCancellation,
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -99,20 +97,16 @@ async fn prove_delegation_for_context<F>(
     account_uuid: &str,
     context: &PreparedDelegationContext,
     on_progress: Arc<F>,
-    cancellation: VotingWorkCancellation,
 ) -> Result<(), String>
 where
     F: Fn(DelegationProgress) + Send + Sync + 'static,
 {
-    cancellation.check()?;
     let proof_db_path = db_path.to_string();
     let proof_pir_server_url = pir_server_url.to_string();
     let proof_account_uuid = account_uuid.to_string();
     let prepared = context.prepared.clone();
-    let proof_cancellation = cancellation.clone();
     let proof_progress = on_progress.clone();
     tokio::task::spawn_blocking(move || {
-        proof_cancellation.check()?;
         let proof_voting_db = open_voting_db(&proof_db_path, &proof_account_uuid)?;
         let pir_client = zcash_voting::PirClientBlocking::with_transport(
             &proof_pir_server_url,
@@ -122,15 +116,13 @@ where
         let reporter = zcash_voting::DelegationProgressBridge::new(move |progress| {
             proof_progress(progress);
         });
-        proof_cancellation.check()?;
         prepared
             .prove(&proof_voting_db, &pir_client, &reporter)
-            .map(|_| ())
-            .map_err(|e| format!("delegate::prove failed: {e}"))
+        .map(|_| ())
+        .map_err(|e| format!("delegate::prove failed: {e}"))
     })
     .await
     .map_err(|e| format!("delegation proof task failed: {e}"))??;
-    cancellation.check()?;
     Ok(())
 }
 
@@ -205,9 +197,7 @@ pub async fn precompute_delegation_pir(
     seed: &SecretVec<u8>,
     bundle_index: u32,
     bundle_policy: BundlePolicy,
-    cancellation: VotingWorkCancellation,
 ) -> Result<zcash_voting::delegate::PreparedDelegationReport, String> {
-    cancellation.check()?;
     let round_id = round_params.vote_round_id.clone();
     let hotkey_secret = derive_hotkey(seed, &round_id, account_uuid, network)?;
     let voting_hotkey = voting_hotkey_from_secret(&hotkey_secret, network)?;
@@ -216,18 +206,15 @@ pub async fn precompute_delegation_pir(
         network: voting_network(network),
         round_params,
         round_name,
-        cancellation: &cancellation,
     })
     .await
     .map_err(|e| e.to_string())?;
-    cancellation.check()?;
     let db_path = db_path.to_string();
     let pir_server_url = pir_server_url.to_string();
     let account_uuid = account_uuid.to_string();
     let session_json = session_json.map(str::to_string);
 
     tokio::task::spawn_blocking(move || {
-        cancellation.check()?;
         let voting_db = open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::delegate::ensure_round_context(
             &voting_db,
@@ -257,7 +244,7 @@ pub async fn precompute_delegation_pir(
         )
         .map_err(|e| e.to_string())?;
         prepared
-            .precompute(&voting_db, &wallet_db, &pir_client, &cancellation)
+            .precompute(&voting_db, &wallet_db, &pir_client)
             .map_err(|e| e.to_string())
     })
     .await
@@ -289,7 +276,6 @@ pub async fn build_prove_and_sign_delegation_payload<F>(
     bundle_index: u32,
     bundle_policy: BundlePolicy,
     on_progress: F,
-    cancellation: VotingWorkCancellation,
 ) -> Result<zcash_voting::delegate::SignedDelegationBundle, String>
 where
     F: Fn(DelegationProgress) + Send + Sync + 'static,
@@ -297,7 +283,6 @@ where
     let on_progress = Arc::new(on_progress);
     let round_id = round_params.vote_round_id.clone();
 
-    cancellation.check()?;
     zcash_voting::validate_round_params(&round_params)
         .map_err(|e| format!("Invalid voting round params: {e}"))?;
     on_progress(DelegationProgress::SelectingNotes);
@@ -332,7 +317,6 @@ where
         account_uuid,
         &context,
         on_progress.clone(),
-        cancellation.clone(),
     )
     .await?;
 
@@ -376,10 +360,8 @@ pub async fn build_keystone_delegation_request(
     hotkey_secret: &SecretVec<u8>,
     bundle_index: u32,
     bundle_policy: BundlePolicy,
-    cancellation: VotingWorkCancellation,
 ) -> Result<zcash_voting::delegate::KeystoneSigningRequest, String> {
     let voting_hotkey = voting_hotkey_from_secret(hotkey_secret, network)?;
-    cancellation.check()?;
     let context = prepare_delegation_bundle_context(
         db_path,
         lightwalletd_url,
@@ -426,7 +408,6 @@ pub async fn build_prove_delegation_payload_with_keystone_signature<F>(
     keystone_sighash: &[u8],
     bundle_policy: BundlePolicy,
     on_progress: F,
-    cancellation: VotingWorkCancellation,
 ) -> Result<zcash_voting::delegate::SignedDelegationBundle, String>
 where
     F: Fn(DelegationProgress) + Send + Sync + 'static,
@@ -434,7 +415,6 @@ where
     let on_progress = Arc::new(on_progress);
     let voting_hotkey = voting_hotkey_from_secret(hotkey_secret, network)?;
 
-    cancellation.check()?;
     on_progress(DelegationProgress::SelectingNotes);
     let context = prepare_delegation_bundle_context(
         db_path,
@@ -456,7 +436,6 @@ where
         account_uuid,
         &context,
         on_progress.clone(),
-        cancellation.clone(),
     )
     .await?;
 
@@ -512,12 +491,6 @@ mod tests {
                 0,
                 BundlePolicy::default(),
                 move |event| events_for_callback.lock().unwrap().push(event),
-                VotingWorkCancellation::start(
-                    db_path.to_str().unwrap(),
-                    ACCOUNT_UUID,
-                    Some(ROUND_ID),
-                )
-                .unwrap(),
             ))
             .unwrap_err();
 
