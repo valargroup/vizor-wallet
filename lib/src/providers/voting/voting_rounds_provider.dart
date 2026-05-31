@@ -32,6 +32,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
   void startPolling({Duration interval = defaultPollInterval}) {
     if (_pollTimer != null) return;
     _pollTimer = Timer.periodic(interval, (_) => refresh());
+    unawaited(refresh());
   }
 
   void stopPolling() {
@@ -40,7 +41,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
   }
 
   Future<void> refresh() async {
-    if (_refreshInFlight) return;
+    if (_refreshInFlight || state.isLoading) return;
     _refreshInFlight = true;
     final previous = state.value;
     if (previous == null) {
