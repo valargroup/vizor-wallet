@@ -89,10 +89,10 @@ Vote-tree sync and reset are owned by the crate
 maintain its own tree-sync registry. The tree client is account/DB scoped, not
 round scoped, so a round-scoped reset must not drop it.
 
-Account-wide reset runs when switching away from the active account, removing an
-account, resetting the wallet, or locking/signing out. These lifecycle
-boundaries invalidate the owner of the process-local tree client but never
-delete durable `zcash_voting` recovery rows.
+Account-wide reset runs only on destructive account lifecycle boundaries:
+removing an account or resetting the wallet. These paths invalidate the owner of
+the process-local tree client but never delete durable `zcash_voting` recovery
+rows.
 
 ## Lifecycle And Recovery
 

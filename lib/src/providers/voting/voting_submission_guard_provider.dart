@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const kVotingSubmissionInProgressMessage =
     'Vote submission is still running. Wait for it to finish before '
-    'changing wallet state.';
+    'removing an account or resetting the wallet.';
 
 /// Marker for a vote submission that is using account state in this process.
 ///

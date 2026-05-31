@@ -54,7 +54,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   }
 
   void _showRemoveAccountModal(AccountInfo account) {
-    if (_blockIfVotingSubmissionInProgress()) return;
+    if (_blockDestructiveWalletChangeIfVotingSubmissionInProgress()) return;
     _showModal(_AccountModalType.removeAccount, account);
   }
 
@@ -94,7 +94,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     required bool isLastAccount,
     AccountRemoveProgressCallback? onProgress,
   }) async {
-    if (_blockIfVotingSubmissionInProgress()) return;
+    if (_blockDestructiveWalletChangeIfVotingSubmissionInProgress()) return;
     if (isLastAccount) {
       await _resetWalletFromAccountRemoval(onProgress);
       return;
@@ -139,7 +139,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   Future<void> _resetWalletFromAccountRemoval(
     AccountRemoveProgressCallback? onProgress,
   ) async {
-    if (_blockIfVotingSubmissionInProgress()) return;
+    if (_blockDestructiveWalletChangeIfVotingSubmissionInProgress()) return;
     final syncNotifier = ref.read(syncProvider.notifier);
     final accountNotifier = ref.read(accountProvider.notifier);
 
@@ -249,14 +249,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     final accountNotifier = ref.read(accountProvider.notifier);
     final syncNotifier = ref.read(syncProvider.notifier);
 
-    try {
-      await accountNotifier.switchAccount(uuid);
-    } on VotingSubmissionInProgressException catch (e) {
-      if (mounted) {
-        showAppToast(context, e.message);
-      }
-      return;
-    }
+    await accountNotifier.switchAccount(uuid);
     if (mounted) {
       context.go('/home');
     }
@@ -271,7 +264,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     }
   }
 
-  bool _blockIfVotingSubmissionInProgress() {
+  bool _blockDestructiveWalletChangeIfVotingSubmissionInProgress() {
     final guards = ref.read(votingSubmissionGuardProvider);
     if (guards.isEmpty) return false;
     final guard = guards.first;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
@@ -7,6 +8,8 @@ import 'package:zcash_wallet/src/providers/account_provider.dart';
 import 'package:zcash_wallet/src/providers/voting/voting_submission_guard_provider.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test(
     'next active account stays unchanged when removing a non-active account',
     () {
@@ -79,6 +82,32 @@ void main() {
 
       final state = container.read(accountProvider).value!;
       expect(state.activeAccountUuid, 'account-1');
+      expect(state.accounts, hasLength(2));
+
+      container.read(votingSubmissionGuardProvider.notifier).release(guard);
+    },
+  );
+
+  test(
+    'account switching is allowed while voting submission is guarded',
+    () async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final container = ProviderContainer(
+        overrides: [
+          appBootstrapProvider.overrideWithValue(_bootstrapWithAccounts()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(accountProvider.future);
+      final guard = container
+          .read(votingSubmissionGuardProvider.notifier)
+          .acquire(accountUuid: 'account-1', roundId: 'round-1');
+
+      await container.read(accountProvider.notifier).switchAccount('account-2');
+
+      final state = container.read(accountProvider).value!;
+      expect(state.activeAccountUuid, 'account-2');
       expect(state.accounts, hasLength(2));
 
       container.read(votingSubmissionGuardProvider.notifier).release(guard);
