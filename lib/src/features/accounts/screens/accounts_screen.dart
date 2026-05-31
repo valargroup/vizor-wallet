@@ -264,6 +264,11 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     }
   }
 
+  /// Blocks wallet mutations that would delete account state during submission.
+  ///
+  /// Account switching remains allowed while a vote submission is guarded.
+  /// This UI guard only covers destructive account removal and wallet reset
+  /// flows; `AccountNotifier` repeats the same check before mutating state.
   bool _blockDestructiveWalletChangeIfVotingSubmissionInProgress() {
     final guards = ref.read(votingSubmissionGuardProvider);
     if (guards.isEmpty) return false;

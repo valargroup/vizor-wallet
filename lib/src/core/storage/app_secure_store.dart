@@ -285,6 +285,12 @@ class AppSecureStore {
     });
   }
 
+  /// Deletes one value from the storage backend that owns `key`.
+  ///
+  /// Account mnemonics live in the mnemonic backend, while voting hotkeys live
+  /// in the primary encrypted-secret backend. Routing delete through this
+  /// helper keeps callers from needing to know which backend owns a given app
+  /// storage key.
   Future<void> delete(String key) async {
     if (key.startsWith(_accountMnemonicKeyPrefix)) {
       await _secretMutationLock.run(() async {
