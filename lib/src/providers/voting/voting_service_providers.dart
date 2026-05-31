@@ -329,7 +329,7 @@ abstract interface class VotingRustApi {
 
   Future<void> storeKeystoneSignature({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required List<int> sig,
@@ -339,13 +339,13 @@ abstract interface class VotingRustApi {
 
   Future<List<rust_voting.KeystoneSignatureRecord>> getKeystoneSignatures({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   });
 
   Future<int> deleteSkippedBundles({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int keepCount,
   });
@@ -373,7 +373,7 @@ abstract interface class VotingRustApi {
 
   Future<void> markDelegationSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -381,7 +381,7 @@ abstract interface class VotingRustApi {
 
   Future<rust_voting.DelegationConfirmation> confirmDelegationSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -390,33 +390,33 @@ abstract interface class VotingRustApi {
 
   Future<int> syncVoteTree({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required String nodeUrl,
   });
 
   Future<rust_vote.VanWitness> generateVanWitness({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int anchorHeight,
   });
 
-  /// Clear process-local Rust voting caches for a round or wallet.
+  /// Clear process-local Rust voting caches for a round or account.
   ///
   /// A non-null, non-empty `roundId` clears only prepared delegation PCZTs for
   /// that round. `null` performs account-wide cleanup, including vote-tree sync
-  /// state for `walletId`.
+  /// state for `accountUuid`.
   Future<void> resetVotingSessionState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     String? roundId,
   });
 
   Stream<rust_api.ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String network,
     required String roundId,
     required int bundleIndex,
@@ -427,7 +427,7 @@ abstract interface class VotingRustApi {
 
   Future<rust_voting.SignedVoteCommitmentsView> recoverVoteCommitment({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -473,7 +473,7 @@ abstract interface class VotingRustApi {
 
   Future<void> markVoteSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -482,7 +482,7 @@ abstract interface class VotingRustApi {
 
   Future<rust_voting.VoteConfirmation> confirmVoteSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -492,7 +492,7 @@ abstract interface class VotingRustApi {
 
   Future<void> recordShareDelegation({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -503,7 +503,7 @@ abstract interface class VotingRustApi {
 
   Future<void> markShareConfirmed({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -656,7 +656,7 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<void> storeKeystoneSignature({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required List<int> sig,
@@ -665,7 +665,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }) {
     return rust_api.storeKeystoneSignature(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       sig: sig,
@@ -677,12 +677,12 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<List<rust_voting.KeystoneSignatureRecord>> getKeystoneSignatures({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) {
     return rust_api.getKeystoneSignatures(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
     );
   }
@@ -690,13 +690,13 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<int> deleteSkippedBundles({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int keepCount,
   }) {
     return rust_api.deleteSkippedBundles(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       keepCount: keepCount,
     );
@@ -747,14 +747,14 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<void> markDelegationSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
   }) {
     return rust_api.markDelegationSubmitted(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       txHash: txHash,
@@ -764,7 +764,7 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<rust_voting.DelegationConfirmation> confirmDelegationSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -772,7 +772,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }) {
     return rust_api.confirmDelegationSubmission(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       txHash: txHash,
@@ -783,13 +783,13 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<int> syncVoteTree({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required String nodeUrl,
   }) {
     return rust_api.syncVoteTree(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       nodeUrl: nodeUrl,
     );
@@ -798,14 +798,14 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<rust_vote.VanWitness> generateVanWitness({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int anchorHeight,
   }) {
     return rust_api.generateVanWitness(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       anchorHeight: anchorHeight,
@@ -815,12 +815,12 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<void> resetVotingSessionState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     String? roundId,
   }) {
     return rust_api.resetVotingSessionState(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
     );
   }
@@ -828,7 +828,7 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Stream<rust_api.ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String network,
     required String roundId,
     required int bundleIndex,
@@ -838,7 +838,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }) {
     return rust_api.buildVoteCommitmentsWithProgress(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       network: network,
       roundId: roundId,
       bundleIndex: bundleIndex,
@@ -851,14 +851,14 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<rust_voting.SignedVoteCommitmentsView> recoverVoteCommitment({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
   }) {
     return rust_api.recoverVoteCommitment(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       proposalId: proposalId,
@@ -948,7 +948,7 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<void> markVoteSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -956,7 +956,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }) {
     return rust_api.markVoteSubmitted(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       proposalId: proposalId,
@@ -967,7 +967,7 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<rust_voting.VoteConfirmation> confirmVoteSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -976,7 +976,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }) {
     return rust_api.confirmVoteSubmission(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       proposalId: proposalId,
@@ -988,7 +988,7 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<void> recordShareDelegation({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -998,7 +998,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }) {
     return rust_api.recordShareDelegation(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       proposalId: proposalId,
@@ -1011,7 +1011,7 @@ class FrbVotingRustApi implements VotingRustApi {
   @override
   Future<void> markShareConfirmed({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -1019,7 +1019,7 @@ class FrbVotingRustApi implements VotingRustApi {
   }) {
     return rust_api.markShareConfirmed(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       proposalId: proposalId,

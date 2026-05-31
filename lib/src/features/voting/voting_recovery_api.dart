@@ -9,20 +9,20 @@ import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 abstract interface class VotingRecoveryApi {
   Future<rust_voting.RoundRecoveryStateView> getRoundRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   });
 
   Future<rust_voting.RoundPlanView> getRoundPlan({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required List<int> proposalIds,
   });
 
   Future<void> setBallotIntent({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int proposalId,
     required int numOptions,
@@ -32,7 +32,7 @@ abstract interface class VotingRecoveryApi {
 
   Future<void> addSentServers({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -42,7 +42,7 @@ abstract interface class VotingRecoveryApi {
 
   Future<void> clearRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   });
 }
@@ -54,12 +54,12 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<rust_voting.RoundRecoveryStateView> getRoundRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) {
     return rust_voting.getRoundRecoveryState(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
     );
   }
@@ -67,13 +67,13 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<rust_voting.RoundPlanView> getRoundPlan({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required List<int> proposalIds,
   }) {
     return rust_voting.getRoundPlan(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       proposalIds: proposalIds,
     );
@@ -82,7 +82,7 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> setBallotIntent({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int proposalId,
     required int numOptions,
@@ -91,7 +91,7 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   }) {
     return rust_voting.setBallotIntent(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       proposalId: proposalId,
       numOptions: numOptions,
@@ -103,7 +103,7 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> addSentServers({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -112,7 +112,7 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   }) {
     return rust_voting.addSentServers(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       bundleIndex: bundleIndex,
       proposalId: proposalId,
@@ -124,12 +124,12 @@ class RustVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> clearRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) {
     return rust_voting.clearRecoveryState(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
     );
   }

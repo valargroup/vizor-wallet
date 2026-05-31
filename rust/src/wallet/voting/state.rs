@@ -1,4 +1,4 @@
-/// Opens the voting sidecar database for a wallet and binds it to `wallet_id`.
+/// Opens the voting sidecar database for a wallet and binds it to `account_uuid`.
 ///
 /// `db_path` is the main wallet database path; the voting DB is opened at the
 /// deterministic sidecar path returned by
@@ -10,9 +10,12 @@
 /// initialized.
 pub fn open_voting_db(
     db_path: &str,
-    wallet_id: &str,
+    account_uuid: &str,
 ) -> Result<zcash_voting::storage::VotingDb, String> {
-    zcash_voting::storage::VotingDb::open_wallet_sidecar(std::path::Path::new(db_path), wallet_id)
+    zcash_voting::storage::VotingDb::open_wallet_sidecar(
+        std::path::Path::new(db_path),
+        account_uuid,
+    )
         .map_err(|e| format!("Error opening voting database: {e}"))
 }
 

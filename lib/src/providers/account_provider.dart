@@ -474,7 +474,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     try {
       await rust_voting.resetVotingSessionState(
         dbPath: dbPath ?? await _getDbPath(),
-        walletId: accountUuid,
+        accountUuid: accountUuid,
         roundId: null,
       );
       log('AccountNotifier: reset voting process state for $accountUuid');

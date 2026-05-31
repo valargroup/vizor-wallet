@@ -12,8 +12,8 @@ import '../third_party/zcash_voting/vote.dart';
 import '../third_party/zcash_voting/wire.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bundle_policy`, `catch`, `require_len`, `seed_from_mnemonic`, `share_tracking_record`, `voting_network`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `build_vote_commitments_result`, `bundle_policy`, `catch`, `emit_signed_delegation_result`, `finalize_vote_commitments`, `prepare_delegation_bundle_params`, `require_len`, `resolve_delegation_prep_inputs`, `seed_from_mnemonic`, `share_tracking_record`, `voting_network`, `wallet_network`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`
 
 /// Returns the vote-chain delegation submission body as validated wire JSON.
 ///
@@ -66,8 +66,9 @@ Future<List<ShareSubmissionPlan>> planShareSubmissions({
 
 /// Return share-tracking action flags using `zcash_voting::share_policy`.
 ///
-/// Bit 0 means the share is ready for status polling. Bit 1 means it is overdue
-/// and should be retried against helpers that missed the initial submission.
+/// [`SHARE_TRACKING_FLAG_READY`] means the share is ready for status polling.
+/// [`SHARE_TRACKING_FLAG_OVERDUE`] means it is overdue and should be retried
+/// against helpers that missed the initial submission.
 Future<int> shareTrackingFlags({
   required ShareDelegationRecordView share,
   required BigInt nowSeconds,
@@ -257,9 +258,14 @@ Future<Uint8List> extractSpendAuthSignatureFromSignedPczt({
     );
 
 /// Persist a Keystone signature for one delegation bundle.
+///
+/// # Errors
+///
+/// Returns an error if signature lengths are invalid, opening the voting DB
+/// fails, or persisting the signature record fails.
 Future<void> storeKeystoneSignature({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required List<int> sig,
@@ -267,7 +273,7 @@ Future<void> storeKeystoneSignature({
   required List<int> rk,
 }) => RustLib.instance.api.crateApiVotingStoreKeystoneSignature(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   sig: sig,
@@ -276,13 +282,18 @@ Future<void> storeKeystoneSignature({
 );
 
 /// Load persisted Keystone signatures for one voting round.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails or signature rows cannot be
+/// loaded.
 Future<List<KeystoneSignatureRecord>> getKeystoneSignatures({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
 }) => RustLib.instance.api.crateApiVotingGetKeystoneSignatures(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
 );
 
@@ -319,31 +330,44 @@ buildProveDelegationPayloadWithKeystoneSignatureWithProgress({
       maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
 
+/// Record a submitted delegation transaction hash for one bundle.
+///
+/// Repeated calls are idempotent only for the same transaction hash.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, the bundle key is missing,
+/// or the stored hash conflicts with `tx_hash`.
 Future<void> markDelegationSubmitted({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required String txHash,
 }) => RustLib.instance.api.crateApiVotingMarkDelegationSubmitted(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   txHash: txHash,
 );
 
 /// Parse tx events and record a confirmed delegation submission.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, the event payload does not
+/// match the expected round/type shape, or confirmation state cannot be stored.
 Future<DelegationConfirmation> confirmDelegationSubmission({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required String txHash,
   required List<ApiTxEvent> events,
 }) => RustLib.instance.api.crateApiVotingConfirmDelegationSubmission(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   txHash: txHash,
@@ -355,12 +379,12 @@ Future<DelegationConfirmation> confirmDelegationSubmission({
 /// Returns the number of deleted rows.
 Future<int> deleteSkippedBundles({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int keepCount,
 }) => RustLib.instance.api.crateApiVotingDeleteSkippedBundles(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   keepCount: keepCount,
 );
@@ -368,16 +392,16 @@ Future<int> deleteSkippedBundles({
 /// Sync vote commitment tree state for a voting round.
 ///
 /// Returns the latest synced tree height. The underlying tree client is cached
-/// per `(db_path, wallet_id)` so later VAN witness calls can reuse the synced
+/// per `(db_path, account_uuid)` so later VAN witness calls can reuse the synced
 /// in-memory tree state.
 Future<int> syncVoteTree({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required String nodeUrl,
 }) => RustLib.instance.api.crateApiVotingSyncVoteTree(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   nodeUrl: nodeUrl,
 );
@@ -388,13 +412,13 @@ Future<int> syncVoteTree({
 /// callers must sync the same round before requesting the witness.
 Future<VanWitness> generateVanWitness({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required int anchorHeight,
 }) => RustLib.instance.api.crateApiVotingGenerateVanWitness(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   anchorHeight: anchorHeight,
@@ -408,24 +432,24 @@ Future<VanWitness> generateVanWitness({
 /// threads.
 Future<void> resetVotingSessionState({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   String? roundId,
 }) => RustLib.instance.api.crateApiVotingResetVotingSessionState(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
 );
 
 /// Recover a committed but unsubmitted vote from persisted local recovery data.
 Future<SignedVoteCommitmentsView> recoverVoteCommitment({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required int proposalId,
 }) => RustLib.instance.api.crateApiVotingRecoverVoteCommitment(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   proposalId: proposalId,
@@ -437,7 +461,7 @@ Future<SignedVoteCommitmentsView> recoverVoteCommitment({
 /// `SignedVoteCommitmentsView`.
 Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String network,
   required String roundId,
   required int bundleIndex,
@@ -446,7 +470,7 @@ Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
   required List<DraftVote> draftVotes,
 }) => RustLib.instance.api.crateApiVotingBuildVoteCommitmentsWithProgress(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   network: network,
   roundId: roundId,
   bundleIndex: bundleIndex,
@@ -458,24 +482,32 @@ Stream<ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
 /// Load the full recovery/share-tracking summary for one voting round.
 Future<RoundRecoveryStateView> getRoundRecoveryState({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
 }) => RustLib.instance.api.crateApiVotingGetRoundRecoveryState(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
 );
 
+/// Record a submitted cast-vote transaction hash for one bundle/proposal key.
+///
+/// Repeated calls are idempotent only for the same transaction hash.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, the vote key is missing, or
+/// the stored hash conflicts with `tx_hash`.
 Future<void> markVoteSubmitted({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required int proposalId,
   required String txHash,
 }) => RustLib.instance.api.crateApiVotingMarkVoteSubmitted(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   proposalId: proposalId,
@@ -483,9 +515,14 @@ Future<void> markVoteSubmitted({
 );
 
 /// Parse tx events and record a confirmed vote submission.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, the event payload does not
+/// match the expected round/type shape, or confirmation state cannot be stored.
 Future<VoteConfirmation> confirmVoteSubmission({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required int proposalId,
@@ -493,7 +530,7 @@ Future<VoteConfirmation> confirmVoteSubmission({
   required List<ApiTxEvent> events,
 }) => RustLib.instance.api.crateApiVotingConfirmVoteSubmission(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   proposalId: proposalId,
@@ -502,9 +539,14 @@ Future<VoteConfirmation> confirmVoteSubmission({
 );
 
 /// Record helper-server submission state for one encrypted vote share.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, the vote cannot be
+/// recovered, or the share record cannot be persisted.
 Future<void> recordShareDelegation({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required int proposalId,
@@ -513,7 +555,7 @@ Future<void> recordShareDelegation({
   required BigInt submitAt,
 }) => RustLib.instance.api.crateApiVotingRecordShareDelegation(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   proposalId: proposalId,
@@ -523,16 +565,21 @@ Future<void> recordShareDelegation({
 );
 
 /// Mark one delegated share as confirmed on-chain.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails, the vote cannot be
+/// recovered, or share confirmation cannot be persisted.
 Future<void> markShareConfirmed({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required int proposalId,
   required int shareIndex,
 }) => RustLib.instance.api.crateApiVotingMarkShareConfirmed(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   proposalId: proposalId,
@@ -540,9 +587,14 @@ Future<void> markShareConfirmed({
 );
 
 /// Merge additional helper-server URLs into one share delegation record.
+///
+/// # Errors
+///
+/// Returns an error if opening the voting DB fails or the share record cannot
+/// be updated.
 Future<void> addSentServers({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int bundleIndex,
   required int proposalId,
@@ -550,7 +602,7 @@ Future<void> addSentServers({
   required List<String> newUrls,
 }) => RustLib.instance.api.crateApiVotingAddSentServers(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   bundleIndex: bundleIndex,
   proposalId: proposalId,
@@ -564,11 +616,11 @@ Future<void> addSentServers({
 /// retry step.
 Future<void> clearRecoveryState({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
 }) => RustLib.instance.api.crateApiVotingClearRecoveryState(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
 );
 
@@ -576,12 +628,12 @@ Future<void> clearRecoveryState({
 /// ordered remaining work (`next_steps`) and which proposals are still open.
 Future<RoundPlanView> getRoundPlan({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required List<int> proposalIds,
 }) => RustLib.instance.api.crateApiVotingGetRoundPlan(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   proposalIds: proposalIds,
 );
@@ -591,7 +643,7 @@ Future<RoundPlanView> getRoundPlan({
 /// `num_options` is the proposal's declared option count.
 Future<void> setBallotIntent({
   required String dbPath,
-  required String walletId,
+  required String accountUuid,
   required String roundId,
   required int proposalId,
   required int numOptions,
@@ -599,7 +651,7 @@ Future<void> setBallotIntent({
   int? choice,
 }) => RustLib.instance.api.crateApiVotingSetBallotIntent(
   dbPath: dbPath,
-  walletId: walletId,
+  accountUuid: accountUuid,
   roundId: roundId,
   proposalId: proposalId,
   numOptions: numOptions,

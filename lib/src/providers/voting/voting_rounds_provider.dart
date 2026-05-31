@@ -131,7 +131,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
     final recovery = ref.read(votingRecoveryServiceProvider);
     final resumePlan = await recovery.loadResumePlan(
       dbPath: dbPath,
-      walletId: accountUuid,
+      accountUuid: accountUuid,
       roundId: round.roundId,
     );
     final proposalIds = await _proposalIdsForRound(api, round);
@@ -141,7 +141,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
       try {
         roundPlan = await recovery.loadRoundPlan(
           dbPath: dbPath,
-          walletId: accountUuid,
+          accountUuid: accountUuid,
           roundId: round.roundId,
           proposalIds: proposalIds,
         );

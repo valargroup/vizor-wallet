@@ -20,13 +20,13 @@ class VotingRecoveryService {
   /// proceed without durable intent and recovery planning.
   Future<rust_voting.RoundPlanView> loadRoundPlan({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required List<int> proposalIds,
   }) {
     return _api.getRoundPlan(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       proposalIds: proposalIds,
     );
@@ -35,7 +35,7 @@ class VotingRecoveryService {
   /// Persists the voter's ballot intent for one proposal before casting.
   Future<void> setBallotIntent({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int proposalId,
     required int numOptions,
@@ -44,7 +44,7 @@ class VotingRecoveryService {
   }) {
     return _api.setBallotIntent(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
       proposalId: proposalId,
       numOptions: numOptions,
@@ -56,12 +56,12 @@ class VotingRecoveryService {
   /// Loads the raw round recovery state and derives the next resume actions.
   Future<VotingResumePlan> loadResumePlan({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) async {
     final state = await _api.getRoundRecoveryState(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: roundId,
     );
 
@@ -181,13 +181,13 @@ class VotingRecoveryService {
   /// only the newly successful URLs for the durable share key.
   Future<void> addSentServersForShare({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required rust_voting.ShareDelegationRecordView share,
     required List<String> newUrls,
   }) {
     return _api.addSentServers(
       dbPath: dbPath,
-      walletId: walletId,
+      accountUuid: accountUuid,
       roundId: share.roundId,
       bundleIndex: share.bundleIndex,
       proposalId: share.proposalId,
