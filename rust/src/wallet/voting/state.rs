@@ -45,5 +45,4 @@ mod tests {
             .unwrap();
         assert_eq!(wallet_version, 8);
     }
-
 }
