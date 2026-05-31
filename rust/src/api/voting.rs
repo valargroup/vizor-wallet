@@ -262,11 +262,13 @@ pub fn derive_voting_hotkey(
 pub fn generate_voting_hotkey(network: String) -> Result<Vec<u8>, String> {
     catch(|| {
         let network = keys::parse_network(&network)?;
-        hotkey::generate_random_hotkey(network).map(|hotkey| {
-            // FRB returns owned bytes, so this copy cannot be zeroized by Rust
-            // after Dart receives it.
-            hotkey.expose_secret().to_vec()
-        })
+        zcash_voting::hotkey::generate_random_voting_hotkey(voting_network(network))
+            .map_err(|e| format!("Voting hotkey generation failed: {e}"))
+            .map(|hotkey| {
+                // FRB returns owned bytes, so this copy cannot be zeroized by Rust
+                // after Dart receives it.
+                hotkey.secret_seed().to_vec()
+            })
     })
 }
 
@@ -889,7 +891,11 @@ pub async fn build_vote_commitments_with_progress(
             }
         });
         let voting_db = state::open_voting_db(&db_path, &wallet_id)?;
-        let voting_hotkey = hotkey::voting_hotkey_from_secret(&hotkey_seed, network)?;
+        let voting_hotkey = zcash_voting::hotkey::voting_hotkey_from_seed(
+            hotkey_seed.expose_secret(),
+            voting_network(network),
+        )
+        .map_err(|e| format!("Voting hotkey reconstruction failed: {e}"))?;
 
         zcash_voting::vote::commit_batch(
             &voting_db,

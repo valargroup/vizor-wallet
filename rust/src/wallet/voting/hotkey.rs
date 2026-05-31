@@ -30,43 +30,12 @@ pub fn derive_hotkey(
 ) -> Result<SecretVec<u8>, String> {
     let hotkey_secret =
         derive_contextual_hotkey_seed(seed.expose_secret(), round_id, account_uuid, network)?;
-    voting_hotkey_from_secret(&hotkey_secret, network)?;
-    Ok(hotkey_secret)
-}
-
-/// Generates opaque voting hotkey bytes for hardware-account voting.
-///
-/// Hardware accounts do not expose wallet seed material to the app, so the
-/// voting hotkey is random app-owned material that gets persisted in secure
-/// storage and reused for the round.
-///
-/// # Errors
-///
-/// Returns an error if random hotkey material cannot be converted into the
-/// voting hotkey format.
-pub fn generate_random_hotkey(network: WalletNetwork) -> Result<SecretVec<u8>, String> {
-    zcash_voting::hotkey::generate_random_voting_hotkey(voting_network(network))
-        .map(|hotkey| SecretVec::new(hotkey.secret_seed().to_vec()))
-        .map_err(|e| format!("Voting hotkey generation failed: {e}"))
-}
-
-/// Reconstructs the voting hotkey for an already-generated secret seed.
-///
-/// This supports hardware voting, where the app stores only the per-round
-/// voting hotkey bytes and never has access to the Keystone account seed.
-///
-/// # Errors
-///
-/// Returns an error if `zcash_voting` rejects the stored hotkey seed material.
-pub fn voting_hotkey_from_secret(
-    hotkey_secret: &SecretVec<u8>,
-    network: WalletNetwork,
-) -> Result<zcash_voting::VotingHotkey, String> {
     zcash_voting::hotkey::voting_hotkey_from_seed(
         hotkey_secret.expose_secret(),
         voting_network(network),
     )
-    .map_err(|e| format!("Voting hotkey reconstruction failed: {e}"))
+    .map_err(|e| format!("Voting hotkey reconstruction failed: {e}"))?;
+    Ok(hotkey_secret)
 }
 
 fn derive_contextual_hotkey_seed(
@@ -168,45 +137,6 @@ mod tests {
                 .unwrap()
                 .expose_secret()
         );
-    }
-
-    #[test]
-    fn random_hotkey_returns_storable_secret_bytes() {
-        let first = generate_random_hotkey(WalletNetwork::Regtest).unwrap();
-        let second = generate_random_hotkey(WalletNetwork::Regtest).unwrap();
-
-        assert_eq!(first.expose_secret().len(), 64);
-        assert_eq!(second.expose_secret().len(), 64);
-        assert_ne!(first.expose_secret(), second.expose_secret());
-    }
-
-    #[test]
-    fn stored_hotkey_seed_reconstructs_typed_hotkey() {
-        let hotkey =
-            derive_hotkey(&test_seed(), ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
-
-        let reconstructed = voting_hotkey_from_secret(&hotkey, WalletNetwork::Regtest).unwrap();
-
-        assert_eq!(reconstructed.secret_seed(), hotkey.expose_secret());
-        assert_eq!(reconstructed.raw_orchard_address().len(), 43);
-    }
-
-    #[test]
-    fn hotkey_raw_orchard_address_is_deterministic_and_address_sized() {
-        let seed = test_seed();
-        let first = voting_hotkey_from_secret(
-            &derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap(),
-            WalletNetwork::Regtest,
-        )
-        .unwrap();
-        let second = voting_hotkey_from_secret(
-            &derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap(),
-            WalletNetwork::Regtest,
-        )
-        .unwrap();
-
-        assert_eq!(first.raw_orchard_address(), second.raw_orchard_address());
-        assert_eq!(first.raw_orchard_address().len(), 43);
     }
 
     #[test]
