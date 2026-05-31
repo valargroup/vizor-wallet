@@ -271,6 +271,10 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
     _cancelCompletionPoll();
     _replaceGuard(accountUuid: key.accountUuid, roundId: key.roundId);
     _retainSession(key);
+    final sessionNotifier = ref.read(
+      votingSubmissionSessionProvider(key).notifier,
+    );
+    sessionNotifier.clearVoteSubmissionProgressForJobStart();
     final generation = ++_nextGeneration;
     state = VotingSubmissionJobState(
       key: key,
@@ -377,12 +381,24 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
       final proposalOptionCounts = {
         for (final proposal in proposals) proposal.id: proposal.options.length,
       };
-      final draft = await ref
-          .read(votingDraftProvider(key).notifier)
-          .ensureLoaded();
+      final VotingDraftState draft;
+      try {
+        draft = await ref
+            .read(votingDraftProvider(key).notifier)
+            .ensureLoaded();
+      } catch (_) {
+        if (!_isCurrentJob(key: key, generation: generation)) return;
+        if (_canCompleteSessionAfterDraftLoadFailure(loadedSession)) {
+          _completeJob(key: key, generation: generation);
+          return;
+        }
+        rethrow;
+      }
       if (!_isCurrentJob(key: key, generation: generation)) return;
-      final userDraftVotes = draft.toDraftVotes(proposals);
-      final proposalIds = proposals.map((proposal) => proposal.id).toList();
+      if (_canCompleteSessionWithoutDraft(loadedSession, draft)) {
+        _completeJob(key: key, generation: generation);
+        return;
+      }
 
       await sessionNotifier.ensureWalletReadyForVoting();
       if (!_isCurrentJob(key: key, generation: generation)) return;
@@ -400,6 +416,14 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
       }
 
       final activeSession = afterWalletSync ?? loadedSession;
+      if (_canCompleteSessionWithoutDraft(activeSession, draft)) {
+        _completeJob(key: key, generation: generation);
+        return;
+      }
+      final userDraftVotes = _draftForSession(
+        draft,
+        activeSession,
+      ).toDraftVotes(proposals);
       final recoveredDraftVotes =
           userDraftVotes.isEmpty && _roundPlanHasNoOpenProposals(activeSession)
           ? _draftVotesFromRoundPlan(activeSession.roundPlan, proposals)
@@ -408,7 +432,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
           ? userDraftVotes
           : recoveredDraftVotes;
       final intentProposalIds = userDraftVotes.isNotEmpty
-          ? proposalIds
+          ? _proposalIdsForDraftIntents(activeSession, proposals)
           : const <int>[];
       final canRecoverWithoutDraft = _canRecoverWithoutDraft(activeSession);
       final canPollDelegationWithoutDraft = _canPollDelegationWithoutDraft(
@@ -670,6 +694,10 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
       _failFromSession(key: key, generation: generation, session: afterVotes!);
       return;
     }
+    if (_hasCompletedSubmission(afterVotes)) {
+      _completeJob(key: key, generation: generation);
+      return;
+    }
     await sessionNotifier.submitPendingShares();
     if (!_isCurrentJob(key: key, generation: generation)) return;
     final done = _sessionForJob(key);
@@ -842,6 +870,54 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
       roundPlan: session.roundPlan,
       resumePlan: session.resumePlan,
     );
+  }
+
+  bool _canCompleteSessionWithoutDraft(
+    VotingSessionState session,
+    VotingDraftState draft,
+  ) {
+    if (!_hasCompletedSubmission(session)) return false;
+    if (draft.isEmpty) return true;
+    final roundPlan = session.roundPlan;
+    if (roundPlan == null) return false;
+    final openProposalIds = roundPlan.openProposals.toSet();
+    return draft.choices.keys.every(
+      (proposalId) => !openProposalIds.contains(proposalId),
+    );
+  }
+
+  bool _canCompleteSessionAfterDraftLoadFailure(VotingSessionState session) {
+    return _hasCompletedSubmission(session) &&
+        _roundPlanHasNoOpenProposals(session);
+  }
+
+  VotingDraftState _draftForSession(
+    VotingDraftState draft,
+    VotingSessionState session,
+  ) {
+    final roundPlan = session.roundPlan;
+    if (roundPlan == null) return draft;
+    final openProposalIds = roundPlan.openProposals.toSet();
+    return VotingDraftState(
+      choices: {
+        for (final entry in draft.choices.entries)
+          if (openProposalIds.contains(entry.key)) entry.key: entry.value,
+      },
+    );
+  }
+
+  List<int> _proposalIdsForDraftIntents(
+    VotingSessionState session,
+    List<VotingProposalView> proposals,
+  ) {
+    final proposalIds = proposals.map((proposal) => proposal.id).toList();
+    final roundPlan = session.roundPlan;
+    if (roundPlan == null) return proposalIds;
+    final openProposalIds = roundPlan.openProposals.toSet();
+    return [
+      for (final proposalId in proposalIds)
+        if (openProposalIds.contains(proposalId)) proposalId,
+    ];
   }
 
   String _messageFromError(Object error) => friendlyVotingErrorMessage(error);
