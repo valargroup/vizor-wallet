@@ -2111,6 +2111,30 @@ mod tests {
     }
 
     #[test]
+    fn precompute_delegation_pir_rejects_invalid_network_before_network_io() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("voting.sqlite");
+        let err = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(precompute_delegation_pir(
+                db_path.to_str().unwrap().to_string(),
+                "http://127.0.0.1:1".to_string(),
+                "http://127.0.0.1:2".to_string(),
+                "bogus".to_string(),
+                test_api_round_params(),
+                "Demo".to_string(),
+                None,
+                "wallet-1".to_string(),
+                "mnemonic".to_string(),
+                0,
+                None,
+            ))
+            .unwrap_err();
+
+        assert!(err.contains("Unknown network"));
+    }
+
+    #[test]
     fn build_keystone_delegation_request_rejects_invalid_network_before_network_io() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
