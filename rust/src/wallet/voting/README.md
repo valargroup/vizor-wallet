@@ -1,328 +1,182 @@
-# Voting Recovery State Machine
+# Vizor Voting Integration (Rust)
 
-This module keeps `zcash_voting` storage as the durable source of truth. Vizor
-does not add parallel workflow tables. Instead, recovery phases are derived from
-the existing `bundles`, `votes`, and `share_delegations` rows.
+This module integrates the [`zcash_voting`](https://github.com/valargroup/zcash_voting)
+crate into Vizor. It owns the wallet-side concerns the crate intentionally leaves
+to the host app: seed handling and hotkey derivation, the voting sidecar
+database, delegation signing, and the Flutter Rust Bridge (FRB) surface that
+exposes the crate lifecycle to Dart.
 
-The state machine is artifact-scoped. Delegation bundles, vote commitments, and
-helper-server share delegations each move through their own lifecycle. The
-wallet-facing phase strings are defined by
-`zcash_voting::phases::WorkflowPhase::as_str` and exposed through recovery APIs.
+`zcash_voting` owns the protocol and the durable recovery state machine. Vizor
+adds no parallel workflow tables. All phases and recovery are derived from the
+crate's own `bundles`, `votes`, and `share_delegations` rows. For the canonical
+setup -> precompute -> delegate -> vote -> share lifecycle, the per-bundle phase
+definitions, and the restart planner, see the crate docs:
 
-## Account Invariants
+- Crate README: [`zcash_voting/zcash_voting/README.md`](https://github.com/valargroup/zcash_voting/blob/main/zcash_voting/README.md)
+- Reference usage: [`wallet-example/src`](https://github.com/valargroup/zcash_voting/tree/main/wallet-example/src)
+  (`example_delegation.rs`, `example_vote.rs`, `example_recovery.rs`)
+
+This document focuses on what Vizor's integration is responsible for.
+
+## Module Map
+
+| File | Responsibility |
+| --- | --- |
+| `state.rs` | Opens the voting sidecar DB via `VotingDb::open_wallet_sidecar` at the deterministic path next to the wallet DB. The voting schema is isolated from the wallet `user_version`. |
+| `hotkey.rs` | Derives scoped, opaque voting hotkey seed material from the wallet seed for software accounts. The derived secret is never persisted by Rust. |
+| `delegation.rs` | Prepares, proves, and signs delegation bundles (software and Keystone paths), forwarding `DelegationProgress` to callers. Wallet seed signing stays here. |
+| `../../api/voting.rs` | FRB boundary. Thin wrappers that open the sidecar DB and call crate lifecycle APIs (`delegate::*`, `vote::*`, `share::*`, `confirmation::*`, `session::*`, `precompute::*`). |
+
+## Account Invariants And Secret Boundaries
 
 Coinholder voting uses a crate-owned voting hotkey for delegation outputs and
-vote signing. Software accounts derive that hotkey from the active account seed,
-round, account UUID, and network. Hardware accounts generate and store a random
-per-round hotkey seed because the wallet seed is not available to the host app.
-Locked wallets and software accounts without a stored mnemonic must fail before
-proof or recovery work starts.
+vote signing.
+
+- Software accounts derive the hotkey seed from the active account seed, round,
+  account UUID, and network via `hotkey::derive_hotkey`, then hand it to
+  `zcash_voting::hotkey::voting_hotkey_from_seed`. The same tuple always yields
+  the same material; changing any member produces independent material.
+- Hardware accounts generate and store a random per-round hotkey seed because
+  the wallet seed is not available to the host app.
+- Locked wallets and software accounts without a stored mnemonic must fail
+  before any proof or recovery work starts.
+
+The wallet seed never leaves the wallet boundary. Delegation signing in
+`delegation.rs::sign_delegation_request` consumes a crate-provided
+`DelegationSigningRequest`, verifies the seed fingerprint, derives the account
+SpendAuth key, randomizes it with `alpha`, and returns only the detached
+signature plus sighash. The crate never receives root seed material.
+
+### Session Pinning
 
 A `votingSessionProvider(roundId)` instance is pinned to the active account UUID
 captured when the session is built. All later context reloads, recovery reads,
-delegation setup, vote-tree sync, vote submission, share recovery, and
-round-scoped cleanup must continue using that session account, even if the user
-switches accounts while the round screen is open. Do not re-read the active
-account inside individual session actions except through the session-pinned
-account helper.
+delegation setup, vote-tree sync, vote submission, and share recovery must
+continue to use that session account, even if the user switches accounts while
+the round screen is open. Do not re-read the active account inside individual
+session actions except through the session-pinned account helper.
 
-Durable voting state and process-local caches are account scoped. Any key or
-cleanup path that touches prepared delegation PCZTs, vote-tree sync state,
-hotkeys, recovery rows, or share-delegation history must include the wallet DB
-path plus the session account UUID where applicable. Account-wide lifecycle
-events such as account switch, account removal, wallet reset, or lock/sign-out
-invalidate process-local state for the abandoned account; they do not delete
-durable `zcash_voting` recovery rows.
+## Durable vs Process-Local State
 
-## State Diagram
+Two kinds of state exist, and they are both account scoped:
+
+- **Durable** state lives in the `zcash_voting` sidecar tables (delegation
+  bundles, signed artifacts, transaction hashes, VAN/VC positions, share
+  submission history). This is the recovery source of truth.
+- **Process-local** state is Rust memory and cached clients owned by the current
+  app process, including the crate-owned vote-tree client.
+
+Any durable key or process-local cache that touches prepared PCZTs, vote-tree
+sync state, hotkeys, recovery rows, or share-delegation history must include the
+wallet DB path plus the session account UUID where applicable.
+
+### Reset Semantics
+
+`reset_voting_session_state(db_path, account_uuid, round_id)` clears only
+process-local state. It does not delete durable recovery rows, signed artifacts,
+transaction hashes, or share history, and it does not abort in-flight proof or
+vote jobs already running on worker threads.
+
+- A non-empty `round_id` clears round-scoped caches only.
+- `None` or an empty `round_id` is an account-wide reset and additionally drops
+  the cached vote-tree client by calling
+  `zcash_voting::precompute::reset_vote_tree`.
+
+Vote-tree sync and reset are owned by the crate
+(`zcash_voting::precompute::{sync_vote_tree, reset_vote_tree}`); Vizor does not
+maintain its own tree-sync registry. The tree client is account/DB scoped, not
+round scoped, so a round-scoped reset must not drop it.
+
+Account-wide reset runs when switching away from the active account, removing an
+account, resetting the wallet, or locking/signing out. These lifecycle
+boundaries invalidate the owner of the process-local tree client but never
+delete durable `zcash_voting` recovery rows.
+
+## Lifecycle And Recovery
+
+Vizor calls the crate's stage-oriented APIs rather than writing storage rows
+directly. The mapping from FRB functions to crate APIs:
+
+| Stage | FRB entry (`api/voting.rs`) | Crate API |
+| --- | --- | --- |
+| Bundle setup | `setup_delegation_bundles` | `delegate::ensure_round_context`, `VotingDb::ensure_bundles_with_skipped_suffix_with_policy` |
+| Delegation prove/sign | `build_prove_and_sign_delegation_payload_with_progress`, Keystone variant | `delegate::{prepare_delegation_bundle, setup, prove, signing_request, signed_bundle, keystone_request}` |
+| Delegation submit/confirm | `mark_delegation_submitted`, `confirm_delegation_submission` | `VotingDb::mark_delegation_submitted`, `confirmation::confirm_delegation_submission` |
+| Vote commit | `build_vote_commitments_with_progress`, `recover_vote_commitment` | `vote::commit_batch`, `vote::recover_signed_commitments` |
+| Vote submit/confirm | `mark_vote_submitted`, `confirm_vote_submission` | `VotingDb::mark_vote_submitted`, `confirmation::confirm_vote_submission` |
+| Share submit/confirm | `record_share_delegation`, `mark_share_confirmed`, `add_sent_servers` | `vote::CommittedVote::{record_share, confirm_share}`, `share::add_sent_servers` |
+| Ballot intent / restart | `set_ballot_intent`, `get_round_plan`, `get_round_recovery_state` | `VotingDb::set_ballot_intent`, `session::resume_plan`, `recovery::round_snapshot` |
+
+The `confirmation::*` APIs parse chain `tx` events and atomically record tx
+hashes, VAN positions, and VC positions. Restart recovery is driven by
+`session::resume_plan`, which returns the ordered remaining `NextStep`s and the
+proposals still open. Vizor's Dart recovery code consumes the crate's phase
+strings; it does not derive its own phases.
 
 ```mermaid
 stateDiagram-v2
     state "Delegation Bundle" as Delegation {
-        [*] --> PreparedDelegation
-        PreparedDelegation --> SignedDelegation: signed delegation fields exist
-        SignedDelegation --> SubmittedDelegation: mark_delegation_submitted
-        SubmittedDelegation --> ConfirmedDelegation: mark_delegation_confirmed
-        ConfirmedDelegation --> [*]
+        [*] --> Prepared
+        Prepared --> Signed: prove + sign
+        Signed --> Submitted: mark_delegation_submitted
+        Submitted --> Confirmed: confirm_delegation_submission
+        Confirmed --> [*]
     }
-
     state "Vote Commitment" as Vote {
-        [*] --> PreparedVote
-        PreparedVote --> SignedVote: vote::commit stores recovery
-        SignedVote --> SubmittedVote: mark_vote_submitted
-        SubmittedVote --> ConfirmedVote: mark_vote_confirmed
-        ConfirmedVote --> [*]
+        [*] --> Committed
+        Committed --> Submitted2: mark_vote_submitted
+        Submitted2 --> Confirmed2: confirm_vote_submission
+        Confirmed2 --> [*]
     }
-
     state "Helper Share" as Share {
         [*] --> SubmittedShare
-        SubmittedShare --> ConfirmedShare: mark_share_confirmed
+        SubmittedShare --> ConfirmedShare: confirm_share
         ConfirmedShare --> [*]
     }
 ```
 
-## Phase Definitions
+### Helper Share Scheduling
 
-### Delegation Bundle
+Helper-share `submit_at` (the Unix-second reveal time sent to the helper server)
+is computed in Dart from round timing before calling `record_share_delegation`:
 
-Key: `(round_id, bundle_index)`
+- The last-moment buffer is 40% of the round duration from `ceremony_phase_start`
+  to `vote_end_time`, capped at six hours.
+- Before that buffer, each share samples a randomized `submit_at` uniformly in
+  `[now, vote_end_time - buffer)`.
+- Inside the buffer, the vote commitment uses single-share mode and shares use
+  `submit_at = 0` (immediate submission).
+- If round timing is missing or invalid, Vizor uses `submit_at = 0`.
 
-| Phase | Derived From | Resume Behavior |
-| --- | --- | --- |
-| `prepared` | `bundles` row exists with no `delegation_tx_hash` and no `van_leaf_position` | Build/prove and submit delegation. |
-| `signed` | signed delegation fields exist in `bundles`, but no `delegation_tx_hash` | Submit delegation transaction. |
-| `submitted_delegation` | `delegation_tx_hash` exists, but `van_leaf_position` is absent | Poll transaction confirmation and store VAN position. Do not resubmit. |
-| `confirmed` | both `delegation_tx_hash` and `van_leaf_position` exist | No delegation recovery work remains. |
+Retry/resubmission paths submit immediately (`submit_at = 0`); the original
+scheduled value remains part of the durable record for the first accepted
+submission. The canonical scheduling/retry/polling policy lives in the crate's
+`share_policy` module; Dart mirrors it via the `plan_share_submissions`,
+`share_tracking_flags`, and `next_share_tracking_delay_seconds` helpers exposed
+through `api/voting.rs`.
 
-### Vote Commitment
+## Wire Types And FRB Scanning
 
-Key: `(round_id, bundle_index, proposal_id)`
+`zcash_voting::wire` is the canonical owner of protocol wire JSON and wallet view
+DTOs (field names, `serde` renames, base64/hex shaping, JSON-safe integer
+bounds), for example `DelegationSubmissionWire`, `VoteCommitmentWire`,
+`VanWitness`, `DraftVote`, `SignedVoteCommitmentsView`, and `RoundPlanView`. See
+`zcash_voting::wire` for the full set.
 
-| Phase | Derived From | Resume Behavior |
-| --- | --- | --- |
-| `prepared` | `votes` row exists without `tx_hash` or commitment recovery data | Build and sign vote commitment. |
-| `signed` | `commitment_bundle_json` exists without submitted vote transaction state. | Submit cast-vote transaction. |
-| `submitted_vote` | `tx_hash` exists, but confirmation data is incomplete | Poll transaction confirmation and store vote confirmation data. Do not resubmit. |
-| `confirmed` | `tx_hash`, `vc_tree_position`, and `commitment_bundle_json` exist | No vote recovery work remains. |
+Vizor keeps no FRB-local `Api*Wire` mirrors for these types. FRB codegen scans
+the shared crate module directly via `flutter_rust_bridge.yaml`:
 
-### Helper Share Delegation
-
-Key: `(round_id, bundle_index, proposal_id, share_index)`
-
-| Phase | Derived From | Resume Behavior |
-| --- | --- | --- |
-| `submitted_share` | `share_delegations` row exists with `confirmed = false` | Retry/poll helper confirmation using stored sent-server history. |
-| `confirmed` | `share_delegations.confirmed = true` | No share recovery work remains. |
-
-## Transition Points
-
-### Bundle Setup And Reuse
-
-`VotingDb::ensure_bundles` owns initial bundle setup. If bundle rows already
-exist, it validates the
-current note selection using `zcash_voting::storage::queries::require_bundle_notes`
-before any PIR or proof work. A reused bundle must have the same note identity
-and shape as the current selected notes.
-
-Transition:
-
-```text
-no bundle rows --ensure_bundles--> prepared
-existing bundle rows --require_bundle_notes ok--> prepared/signed/submitted/confirmed as derived
-existing bundle rows --note mismatch--> error
+```yaml
+rust_input: crate::api,zcash_voting::wire
 ```
-
-### Delegation Submission
-
-`VotingDb::mark_delegation_submitted` is the only transition for recording a
-delegation transaction hash. It starts a SQLite transaction, checks any existing
-hash for same-data idempotency, stores `bundles.delegation_tx_hash`, and commits.
-
-Transition:
-
-```text
-signed --store delegation_tx_hash--> submitted_delegation
-submitted_delegation --same tx_hash--> submitted_delegation
-submitted_delegation --different tx_hash--> error
-```
-
-### Delegation Confirmation
-
-`VotingDb::mark_delegation_confirmed` atomically stores both
-`bundles.delegation_tx_hash` and `bundles.van_leaf_position`. It accepts repeated
-calls with the same tx hash and VAN position, but rejects conflicting data.
-
-Transition:
-
-```text
-submitted_delegation --store van_leaf_position--> confirmed
-confirmed --same tx_hash and same van_leaf_position--> confirmed
-confirmed --conflicting tx_hash or van_leaf_position--> error
-```
-
-### Vote Signing Recovery
-
-`vote::build_vote_commitments` calls `zcash_voting::vote::commit`, which builds
-the vote commitment, share payloads, signature, and crate-owned recovery JSON in
-one lifecycle API. A retry for the same vote key reuses the stored recovery
-bundle when the persisted vote identity still matches the requested draft.
-
-Transition:
-
-```text
-prepared --vote::commit ok--> signed
-signed --same draft retry--> signed
-submitted_vote --same draft retry--> submitted_vote
-submitted_vote --changed draft--> error
-sign_cast_vote error --> prepared
-```
-
-### Vote Submission
-
-`VotingDb::mark_vote_submitted` is the only transition for recording cast-vote
-submission. It stores `votes.tx_hash` in one SQLite transaction.
-
-Transition:
-
-```text
-signed --store tx_hash--> submitted_vote
-submitted_vote --same tx_hash--> submitted_vote
-submitted_vote --different tx_hash--> error
-```
-
-### Vote Confirmation
-
-`VotingDb::mark_vote_confirmed` stores:
-
-- `votes.tx_hash`
-- `bundles.van_leaf_position`
-- `votes.vc_tree_position`
-
-It is idempotent for repeated same-data confirmation and rejects conflicts.
-
-Transition:
-
-```text
-submitted_vote --store confirmation fields--> confirmed
-confirmed --same tx_hash, positions, and commitment JSON--> confirmed
-confirmed --conflicting tx_hash, position, or commitment JSON--> error
-```
-
-### Share Submission
-
-`zcash_voting::vote::CommittedVote::record_share` records helper-server share submission in
-`share_delegations`. It delegates share payload recovery and nullifier derivation
-to `zcash_voting::share::record`, so the app only supplies helper delivery
-state. The `submit_at` value stored with the row is the Unix-second reveal time
-sent to the helper server for that encrypted share.
-
-Dart computes `submit_at` from the round timing metadata before calling this
-Rust transition:
-
-- The last-moment buffer is `40%` of the round duration from
-  `ceremony_phase_start` to `vote_end_time`, capped at six hours.
-- Before that buffer starts, each share samples a randomized `submit_at`
-  uniformly in `[now, vote_end_time - buffer)`.
-- Inside the last-moment buffer, the vote commitment uses single-share mode and
-  shares use `submit_at = 0`, meaning immediate helper submission.
-- If round timing is missing or invalid, Vizor also uses `submit_at = 0` rather
-  than guessing a schedule.
-
-Recovery treats stored share rows as already accepted by at least one helper.
-Retry/resubmission paths may submit immediately with `submit_at = 0`; the
-original scheduled value remains part of the durable audit/recovery record for
-the first accepted submission.
-
-Dart mirrors the zodl iOS share tracker before calling the Rust transitions:
-helper status checks wait until `submit_at + 10s` for delayed shares or
-`created_at + 10s` for immediate shares, and missing-helper retries wait until
-the share is overdue by `max(30s, min(1h, remaining_window / 4))`. Retry bodies
-are immediate (`submit_at = 0`), but `record_share_delegation` keeps the
-original scheduled value unless a new helper acceptance is appended through the
-same durable share key.
-
-Transition:
-
-```text
-no share row --record share_delegation--> submitted_share
-submitted_share --same nullifier and updated sent_to_urls--> submitted_share
-submitted_share --different nullifier--> error
-```
-
-### Share Confirmation
-
-`zcash_voting::vote::CommittedVote::confirm_share` wraps the helper confirmation update in a SQLite
-transaction and marks `share_delegations.confirmed = true`.
-
-Transition:
-
-```text
-submitted_share --confirmed=true--> confirmed
-confirmed --mark confirmed again--> confirmed
-```
-
-## Process-Local Reset Behavior
-
-Durable recovery state lives in `zcash_voting` tables. Resetting process-local
-voting state must not delete recovery rows, signed artifacts, transaction hashes,
-or share submission history. It only clears Rust memory owned by the current app
-process.
-It does not cancel in-flight proof or vote jobs already running on worker
-threads.
-
-### VoteTreeSync Registry
-
-`tree_sync.rs` keeps `TREE_SYNC_REGISTRY`, keyed only by:
-
-```text
-(db_path, wallet_id)
-```
-
-`VoteTreeSync` is account/DB scoped, not round scoped. It may serve any voting
-round for the same wallet, so round-scoped cleanup must not drop it. There is no
-TTL eviction for this registry; clearing it on time alone would throw away useful
-cross-round tree state.
-
-Account-wide cleanup calls `reset_voting_session_state` with `round_id = None`
-or an empty round ID. This drops the cached `VoteTreeSync` for that wallet.
-
-Account-wide cleanup runs when:
-
-- switching away from the active account
-- removing an account
-- resetting the wallet
-- locking/signing out of the wallet
-
-The assumption is that account-wide lifecycle boundaries invalidate the owner of
-the process-local tree client. Reusing `VoteTreeSync` across rounds is expected;
-reusing it after the account, DB, or unlocked wallet session has been abandoned
-is not.
-
-## Resume Rules
-
-Dart recovery code consumes `zcash_voting::phases::WorkflowPhase` string values
-via `VotingWorkflowPhase` constants.
-
-- `submitted_delegation` resumes by polling the delegation transaction and
-  storing `van_leaf_position`.
-- `submitted_vote` resumes by polling the cast-vote transaction and storing vote
-  confirmation data.
-- `submitted_share` resumes helper confirmation/retry using stored
-  `sent_to_urls`.
-- `confirmed` artifacts are omitted from pending work.
-
-## Wire Types and FRB Scanning
-
-`zcash_voting::wire` remains the canonical owner of protocol wire JSON: field
-names, `serde` renames, base64/hex shaping, and JSON-safe integer bounds.
-Canonical wire structs now live directly in `zcash_voting::wire`:
-`DelegationSubmissionWire`, `VoteCommitmentWire`, `VoteShareWire`,
-`WireEncryptedShareJson`, and `VotingRoundParams`.
-Canonical crate-owned wallet view DTOs also live in `zcash_voting::wire`:
-`VotingNoteRefView`, `VotingNoteSelectionResultView`, `BundleSetupResultView`,
-`DelegationPirPrecomputeResultView`, `SignedDelegationPayloadView`,
-`KeystoneDelegationRequestView`, `KeystoneSignatureRecord`,
-`VanWitnessView`, `DraftVote`, `SignedVoteCommitmentView`,
-`SignedVoteCommitmentsView`, and `VoteRecord`.
-
-Vizor no longer keeps FRB-local `Api*Wire` mirrors in
-`rust/src/api/voting.rs`. Instead, FRB codegen scans the shared wire-type module
-directly via:
-
-`flutter_rust_bridge.yaml`
-
-`rust_input: crate::api,zcash_voting::wire`
 
 That scan emits Dart value classes under
-`lib/src/rust/third_party/zcash_voting/wire.dart`, and FRB generates the
-`SseEncode` / `SseDecode` glue in Vizor's generated bridge code. The
-`zcash_voting` crate itself stays framework-agnostic and does not depend on FRB.
+`lib/src/rust/third_party/zcash_voting/wire.dart` and generates the
+`SseEncode` / `SseDecode` glue in Vizor's bridge code. The `zcash_voting` crate
+stays framework-agnostic and does not depend on FRB.
 
-### Why `wire_codec` Is A Separate Module
-
-FRB third-party scanning still expects a struct-only module surface.
-Serialization helpers and conversions that pull richer crate internals
-(`VotingError`, payload transforms, etc.) now live in `zcash_voting::wire_codec`,
-while the DTO structs stay in `zcash_voting::wire` for scanning and strict
-consumption by Vizor. Call sites should import canonical structs from
+FRB third-party scanning expects a struct-only module surface, so the DTO structs
+stay in `zcash_voting::wire` while serialization helpers and conversions that
+pull richer crate internals (`VotingError`, payload transforms) live in
+`zcash_voting::wire_codec`. Call sites import canonical structs from
 `zcash_voting::wire::*`.
