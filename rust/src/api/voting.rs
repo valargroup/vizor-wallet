@@ -506,22 +506,36 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
+    let voting_network = voting_network(network);
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
     let seed = seed_from_mnemonic(mnemonic)?;
+    let round_id = round_params.vote_round_id.clone();
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &account_uuid, network)?;
+    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
+        zcash_voting::delegate::ResolveDelegationLwdParams {
+            lightwalletd_url: &lightwalletd_url,
+            network: voting_network,
+            round_params,
+            round_name: &round_name,
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let signed_result = delegation::build_prove_and_sign_delegation_payload(
         &db_path,
-        &lightwalletd_url,
         &pir_server_url,
-        network,
-        round_params,
-        &round_name,
-        session_json.as_deref(),
-        &account_uuid,
         &seed,
-        bundle_index,
-        bundle_policy,
+        zcash_voting::delegate::PrepareDelegationBundleParams {
+            lwd,
+            session_json: session_json.as_deref(),
+            account_uuid: &account_uuid,
+            network: voting_network,
+            hotkey_seed: hotkey_secret.expose_secret(),
+            bundle_index,
+            bundle_policy,
+        },
         move |event| {
             if progress_sink.add(event.into()).is_err() {
                 log::warn!("voting delegation: StreamSink closed, progress not delivered");
@@ -570,19 +584,31 @@ pub async fn build_keystone_delegation_request(
     max_real_notes_per_bundle: Option<u32>,
 ) -> Result<zcash_voting::wire::KeystoneSigningRequest, String> {
     let network = keys::parse_network(&network)?;
+    let voting_network = voting_network(network);
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
     let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
+    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
+        zcash_voting::delegate::ResolveDelegationLwdParams {
+            lightwalletd_url: &lightwalletd_url,
+            network: voting_network,
+            round_params,
+            round_name: &round_name,
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
     delegation::build_keystone_delegation_request(
         &db_path,
-        &lightwalletd_url,
-        network,
-        round_params,
-        &round_name,
-        session_json.as_deref(),
         &account_uuid,
-        &hotkey_secret,
-        bundle_index,
-        bundle_policy,
+        zcash_voting::delegate::PrepareDelegationBundleParams {
+            lwd,
+            session_json: session_json.as_deref(),
+            account_uuid: &account_uuid,
+            network: voting_network,
+            hotkey_seed: hotkey_secret.expose_secret(),
+            bundle_index,
+            bundle_policy,
+        },
     )
     .await
     .map(zcash_voting::wire::KeystoneSigningRequest::from)
@@ -661,24 +687,36 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
     let network = keys::parse_network(&network)?;
+    let voting_network = voting_network(network);
     let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
     let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
+    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
+        zcash_voting::delegate::ResolveDelegationLwdParams {
+            lightwalletd_url: &lightwalletd_url,
+            network: voting_network,
+            round_params,
+            round_name: &round_name,
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let signed_result = delegation::build_prove_delegation_payload_with_keystone_signature(
         &db_path,
-        &lightwalletd_url,
         &pir_server_url,
-        network,
-        round_params,
-        &round_name,
-        session_json.as_deref(),
         &account_uuid,
-        &hotkey_secret,
-        bundle_index,
+        zcash_voting::delegate::PrepareDelegationBundleParams {
+            lwd,
+            session_json: session_json.as_deref(),
+            account_uuid: &account_uuid,
+            network: voting_network,
+            hotkey_seed: hotkey_secret.expose_secret(),
+            bundle_index,
+            bundle_policy,
+        },
         &keystone_sig,
         &keystone_sighash,
-        bundle_policy,
         move |event| {
             if progress_sink.add(event.into()).is_err() {
                 log::warn!("voting delegation: StreamSink closed, progress not delivered");
