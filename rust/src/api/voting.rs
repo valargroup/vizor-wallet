@@ -8,7 +8,7 @@ use crate::frb_generated::StreamSink;
 use crate::wallet::{
     keys,
     voting::{
-        db as state, delegation, delegation::DelegationProgress, hotkey, network::voting_network,
+        db, delegation, delegation::DelegationProgress, hotkey, network::voting_network,
     },
 };
 use rand::{rngs::OsRng, RngCore};
@@ -168,6 +168,22 @@ pub fn plan_share_submissions(
     })
 }
 
+fn share_record(
+    share: zcash_voting::wire::ShareDelegationRecordView,
+) -> zcash_voting::ShareDelegationRecord {
+    zcash_voting::ShareDelegationRecord {
+        round_id: share.round_id,
+        bundle_index: share.bundle_index,
+        proposal_id: share.proposal_id,
+        share_index: share.share_index,
+        sent_to_urls: share.sent_to_urls,
+        nullifier: share.nullifier,
+        confirmed: share.confirmed,
+        submit_at: share.submit_at,
+        created_at: share.created_at,
+    }
+}
+
 /// Return share-tracking action flags using `zcash_voting::share_policy`.
 ///
 /// [`SHARE_TRACKING_FLAG_READY`] means the share is ready for status polling.
@@ -179,17 +195,7 @@ pub fn share_tracking_flags(
     vote_end_time_seconds: Option<u64>,
 ) -> Result<u32, String> {
     catch(|| {
-        let share = zcash_voting::ShareDelegationRecord {
-            round_id: share.round_id,
-            bundle_index: share.bundle_index,
-            proposal_id: share.proposal_id,
-            share_index: share.share_index,
-            sent_to_urls: share.sent_to_urls,
-            nullifier: share.nullifier,
-            confirmed: share.confirmed,
-            submit_at: share.submit_at,
-            created_at: share.created_at,
-        };
+        let share = share_record(share);
         let policy = zcash_voting::share::ShareTimingPolicy::default();
         let mut flags = 0u32;
         if zcash_voting::share::policy::is_share_ready_for_status_check(&share, now_seconds, policy)
@@ -221,17 +227,7 @@ pub fn next_share_tracking_delay_seconds(
     catch(|| {
         let shares = shares
             .into_iter()
-            .map(|share| zcash_voting::ShareDelegationRecord {
-                round_id: share.round_id,
-                bundle_index: share.bundle_index,
-                proposal_id: share.proposal_id,
-                share_index: share.share_index,
-                sent_to_urls: share.sent_to_urls,
-                nullifier: share.nullifier,
-                confirmed: share.confirmed,
-                submit_at: share.submit_at,
-                created_at: share.created_at,
-            })
+            .map(share_record)
             .collect::<Vec<_>>();
         Ok(zcash_voting::share::policy::next_tracking_delay_seconds(
             &shares,
@@ -527,7 +523,7 @@ pub async fn setup_delegation_bundles(
     ctx: ApiVotingRoundContext,
 ) -> Result<zcash_voting::wire::BundleLayout, String> {
     let bundle_policy = bundle_policy(ctx.max_real_notes_per_bundle)?;
-    let voting_db = state::open_voting_db(&ctx.db_path, &ctx.account_uuid)?;
+    let voting_db = db::open_voting_db(&ctx.db_path, &ctx.account_uuid)?;
     delegation::setup_delegation_bundles(
         &voting_db,
         &ctx.db_path,
@@ -719,7 +715,7 @@ pub fn store_keystone_signature(
         require_len(&sig, KEYSTONE_SIG_LEN, "sig")?;
         require_len(&sighash, KEYSTONE_SIGHASH_LEN, "sighash")?;
         require_len(&rk, KEYSTONE_RK_LEN, "rk")?;
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         db.store_keystone_signature(&round_id, bundle_index, &sig, &sighash, &rk)
             .map_err(|e| format!("store_keystone_signature failed: {e}"))
     })
@@ -737,7 +733,7 @@ pub fn get_keystone_signatures(
     round_id: String,
 ) -> Result<Vec<zcash_voting::wire::KeystoneSignatureRecord>, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         db.get_keystone_signatures(&round_id)
             .map_err(|e| format!("get_keystone_signatures failed: {e}"))
     })
@@ -814,7 +810,7 @@ pub fn mark_delegation_submitted(
     tx_hash: String,
 ) -> Result<(), String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         db.mark_delegation_submitted(&round_id, bundle_index, &tx_hash)
             .map_err(|e| e.to_string())
     })
@@ -835,7 +831,7 @@ pub fn confirm_delegation_submission(
     events: Vec<zcash_voting::wire::TxEvent>,
 ) -> Result<zcash_voting::wire::DelegationConfirmation, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::confirmation::confirm_delegation_submission(
             &db,
             &round_id,
@@ -857,7 +853,7 @@ pub fn delete_skipped_bundles(
     keep_count: u32,
 ) -> Result<u32, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         db.delete_skipped_bundles(&round_id, keep_count)
             .and_then(|deleted| {
                 u32::try_from(deleted).map_err(|_| zcash_voting::VotingError::Internal {
@@ -885,7 +881,7 @@ pub fn sync_vote_tree(
     node_url: String,
 ) -> Result<u32, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::precompute::sync_vote_tree(&db, &round_id, &node_url)
             .map_err(|e| format!("sync_vote_tree failed: {e}"))
     })
@@ -908,7 +904,7 @@ pub fn generate_van_witness(
     anchor_height: u32,
 ) -> Result<zcash_voting::wire::VanWitness, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         let bundle_count = db
             .get_bundle_count(&round_id)
             .map_err(|e| format!("get_bundle_count failed: {e}"))?;
@@ -933,7 +929,7 @@ pub fn reset_voting_session_state(
     catch(|| {
         let account_wide = round_id.as_deref().map(str::is_empty).unwrap_or(true);
         let tree_count = if account_wide {
-            let db = state::open_voting_db(&db_path, &account_uuid)?;
+            let db = db::open_voting_db(&db_path, &account_uuid)?;
             zcash_voting::precompute::reset_vote_tree(&db, "")
                 .map_err(|e| format!("clear_tree_sync_session failed: {e}"))?;
             1
@@ -965,7 +961,7 @@ pub fn recover_vote_commitment(
     proposal_id: u32,
 ) -> Result<zcash_voting::wire::SignedVoteCommitmentsView, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::vote::recover_signed_commitments(&db, &round_id, bundle_index, proposal_id)
             .map_err(|e| format!("vote commitment recovery failed: {e}"))
             .and_then(|commitments| {
@@ -994,7 +990,7 @@ where
     let hotkey_seed = secrecy::SecretVec::new(hotkey_seed);
     let commitment_result = tokio::task::spawn_blocking(move || {
         let reporter = zcash_voting::VoteCommitStageBridge::new(on_stage);
-        let voting_db = state::open_voting_db(&db_path, &account_uuid)?;
+        let voting_db = db::open_voting_db(&db_path, &account_uuid)?;
         let voting_hotkey = zcash_voting::hotkey::voting_hotkey_from_seed(
             hotkey_seed.expose_secret(),
             voting_network(network),
@@ -1064,7 +1060,7 @@ pub fn get_round_recovery_state(
     round_id: String,
 ) -> Result<zcash_voting::wire::RoundRecoveryStateView, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::recovery::round_snapshot(&db, &round_id)
             .map(zcash_voting::wire::RoundRecoveryStateView::from)
             .map_err(|e| format!("round_snapshot failed: {e}"))
@@ -1088,7 +1084,7 @@ pub fn mark_vote_submitted(
     tx_hash: String,
 ) -> Result<(), String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         db.mark_vote_submitted(&round_id, bundle_index, proposal_id, &tx_hash)
             .map_err(|e| e.to_string())
     })
@@ -1110,7 +1106,7 @@ pub fn confirm_vote_submission(
     events: Vec<zcash_voting::wire::TxEvent>,
 ) -> Result<zcash_voting::wire::VoteConfirmation, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::confirmation::confirm_vote_submission(
             &db,
             &round_id,
@@ -1141,7 +1137,7 @@ pub fn record_share_delegation(
     submit_at: u64,
 ) -> Result<(), String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::vote::CommittedVote::recover(&db, &round_id, bundle_index, proposal_id)
             .map_err(|e| format!("recover committed vote failed: {e}"))?
             .record_share(&db, share_index, &sent_to_urls, submit_at)
@@ -1165,7 +1161,7 @@ pub fn mark_share_confirmed(
     share_index: u32,
 ) -> Result<(), String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::vote::CommittedVote::recover(&db, &round_id, bundle_index, proposal_id)
             .map_err(|e| format!("recover committed vote failed: {e}"))?
             .confirm_share(&db, share_index)
@@ -1190,7 +1186,7 @@ pub fn add_sent_servers(
     new_urls: Vec<String>,
 ) -> Result<(), String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::share::add_sent_servers(
             &db,
             &round_id,
@@ -1213,7 +1209,7 @@ pub fn clear_recovery_state(
     round_id: String,
 ) -> Result<(), String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         zcash_voting::recovery::clear(&db, &round_id)
             .map_err(|e| format!("clear_recovery_state failed: {e}"))
     })
@@ -1228,7 +1224,7 @@ pub fn get_round_plan(
     proposal_ids: Vec<u32>,
 ) -> Result<zcash_voting::wire::RoundPlanView, String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         let plan = zcash_voting::session::resume_plan(&db, &round_id, &proposal_ids)
             .map_err(|e| format!("resume_plan failed: {e}"))?;
         zcash_voting::wire::RoundPlanView::try_from(plan).map_err(|e| e.to_string())
@@ -1248,7 +1244,7 @@ pub fn set_ballot_intent(
     choice: Option<u32>,
 ) -> Result<(), String> {
     catch(|| {
-        let db = state::open_voting_db(&db_path, &account_uuid)?;
+        let db = db::open_voting_db(&db_path, &account_uuid)?;
         let decision = if skipped {
             zcash_voting::session::Decision::Skipped
         } else {
@@ -1913,7 +1909,7 @@ mod tests {
     fn delete_skipped_bundles_api_is_bundle_indexed() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-api-bundles").unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), "wallet-api-bundles").unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
@@ -1952,7 +1948,7 @@ mod tests {
     fn generate_van_witness_api_happy_path_after_sync() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), "wallet-api-witness").unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), "wallet-api-witness").unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
@@ -1988,7 +1984,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let account_uuid = "wallet-api-round-reset";
-        let db = state::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
@@ -2025,7 +2021,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let account_uuid = "wallet-api-account-reset";
-        let db = state::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
@@ -2061,42 +2057,10 @@ mod tests {
     fn recover_vote_commitment_happy_path_returns_wire_commitment() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
-        let recovery_json = test_vote_recovery_json(0, 7, 1, 88);
-        let recovery = zcash_voting::vote::parse_recovery(&recovery_json).unwrap();
-        let commitment_bytes = serde_json::to_vec(&serde_json::json!({
-            "van_nullifier": hex::encode(recovery.van_nullifier),
-            "vote_authority_note_new": hex::encode(recovery.vote_authority_note_new),
-            "vote_commitment": hex::encode(recovery.vote_commitment),
-            "proof": hex::encode(recovery.proof),
-        }))
-        .unwrap();
-        zcash_voting::storage::queries::store_vote(
-            &db.conn(),
-            ROUND_ID,
-            TEST_ACCOUNT_UUID,
-            0,
-            7,
-            1,
-            &commitment_bytes,
-        )
-        .unwrap();
-        db.conn()
-            .execute(
-                "UPDATE votes SET commitment_bundle_json = :json
-                 WHERE round_id = :round_id AND wallet_id = :wallet_id
-                   AND bundle_index = :bundle_index AND proposal_id = :proposal_id",
-                rusqlite::named_params! {
-                    ":json": recovery_json,
-                    ":round_id": ROUND_ID,
-                    ":wallet_id": TEST_ACCOUNT_UUID,
-                    ":bundle_index": 0i64,
-                    ":proposal_id": 7i64,
-                },
-            )
-            .unwrap();
+        seed_recovery_vote(&db, TEST_ACCOUNT_UUID, 0, 7, 1, 88);
 
         let recovered = recover_vote_commitment(
             db_path.to_str().unwrap().to_string(),
@@ -2117,7 +2081,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let account_uuid = "wallet-api-recovery";
-        let db = state::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
@@ -2227,7 +2191,7 @@ mod tests {
     fn keystone_signature_round_trip_and_length_validation() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
 
@@ -2269,7 +2233,7 @@ mod tests {
     fn set_ballot_intent_persists_choice_and_skipped() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
 
         set_ballot_intent(
@@ -2310,7 +2274,7 @@ mod tests {
     fn round_plan_happy_path_returns_round_and_open_proposals() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
 
         let plan = get_round_plan(
@@ -2329,7 +2293,7 @@ mod tests {
     fn mark_delegation_submitted_updates_recovery_snapshot() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
 
@@ -2359,42 +2323,10 @@ mod tests {
     fn confirm_submission_apis_record_expected_confirmation_fields() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
-        let db = state::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
+        let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
         db.init_round(&test_api_round_params(), None).unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
-        let recovery_json = test_vote_recovery_json(0, 7, 1, 88);
-        let recovery = zcash_voting::vote::parse_recovery(&recovery_json).unwrap();
-        let commitment_bytes = serde_json::to_vec(&serde_json::json!({
-            "van_nullifier": hex::encode(recovery.van_nullifier),
-            "vote_authority_note_new": hex::encode(recovery.vote_authority_note_new),
-            "vote_commitment": hex::encode(recovery.vote_commitment),
-            "proof": hex::encode(recovery.proof),
-        }))
-        .unwrap();
-        zcash_voting::storage::queries::store_vote(
-            &db.conn(),
-            ROUND_ID,
-            TEST_ACCOUNT_UUID,
-            0,
-            7,
-            1,
-            &commitment_bytes,
-        )
-        .unwrap();
-        db.conn()
-            .execute(
-                "UPDATE votes SET commitment_bundle_json = :json
-                 WHERE round_id = :round_id AND wallet_id = :wallet_id
-                   AND bundle_index = :bundle_index AND proposal_id = :proposal_id",
-                rusqlite::named_params! {
-                    ":json": recovery_json,
-                    ":round_id": ROUND_ID,
-                    ":wallet_id": TEST_ACCOUNT_UUID,
-                    ":bundle_index": 0i64,
-                    ":proposal_id": 7i64,
-                },
-            )
-            .unwrap();
+        seed_recovery_vote(&db, TEST_ACCOUNT_UUID, 0, 7, 1, 88);
 
         let delegation = confirm_delegation_submission(
             db_path.to_str().unwrap().to_string(),
@@ -2509,6 +2441,50 @@ mod tests {
             share_comms: vec![[13u8; 32]],
         })
         .unwrap()
+    }
+
+    fn seed_recovery_vote(
+        db: &zcash_voting::storage::VotingDb,
+        account_uuid: &str,
+        bundle_index: u32,
+        proposal_id: u32,
+        vote_decision: u32,
+        vc_tree_position: u64,
+    ) {
+        let recovery_json =
+            test_vote_recovery_json(bundle_index, proposal_id, vote_decision, vc_tree_position);
+        let recovery = zcash_voting::vote::parse_recovery(&recovery_json).unwrap();
+        let commitment_bytes = serde_json::to_vec(&serde_json::json!({
+            "van_nullifier": hex::encode(recovery.van_nullifier),
+            "vote_authority_note_new": hex::encode(recovery.vote_authority_note_new),
+            "vote_commitment": hex::encode(recovery.vote_commitment),
+            "proof": hex::encode(recovery.proof),
+        }))
+        .unwrap();
+        zcash_voting::storage::queries::store_vote(
+            &db.conn(),
+            ROUND_ID,
+            account_uuid,
+            bundle_index,
+            proposal_id,
+            vote_decision,
+            &commitment_bytes,
+        )
+        .unwrap();
+        db.conn()
+            .execute(
+                "UPDATE votes SET commitment_bundle_json = :json
+                 WHERE round_id = :round_id AND wallet_id = :wallet_id
+                   AND bundle_index = :bundle_index AND proposal_id = :proposal_id",
+                rusqlite::named_params! {
+                    ":json": recovery_json,
+                    ":round_id": ROUND_ID,
+                    ":wallet_id": account_uuid,
+                    ":bundle_index": i64::from(bundle_index),
+                    ":proposal_id": i64::from(proposal_id),
+                },
+            )
+            .unwrap();
     }
 
     fn test_tree_state(height: u64) -> TreeState {
