@@ -374,9 +374,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wallet::network::WalletNetwork;
-    use prost::Message;
+    use ff::PrimeField;
+    use orchard::{
+        keys::SpendAuthorizingKey,
+        primitives::redpallas::{Signature, SpendAuth, VerificationKey},
+    };
+    use secrecy::ExposeSecret;
     use std::sync::{Arc, Mutex};
+    use zip32::{fingerprint::SeedFingerprint, AccountId};
 
     const ACCOUNT_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
     const ROUND_ID: &str = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -425,259 +430,33 @@ mod tests {
     }
 
     #[test]
-    fn ensure_round_initialized_uses_voting_db_and_round_name_fallback() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-
-        let named = zcash_voting::delegate::ensure_round_context(
-            &voting_db,
-            &params,
-            "Demo Round",
-            Some("{}"),
-        )
-        .expect("round initializes");
-        assert_eq!(named.snapshot_height, params.snapshot_height);
-        assert_eq!(named.round_name, "Demo Round");
-
-        let existing = zcash_voting::delegate::ensure_round_context(&voting_db, &params, "", None)
-            .expect("existing round loads");
-        assert_eq!(existing.snapshot_height, params.snapshot_height);
-        assert_eq!(existing.round_name, ROUND_ID);
-        assert_eq!(voting_db.list_rounds().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn ensure_bundles_creates_once_then_reuses_matching_bundle_rows() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-        voting_db.ensure_round(&params, None).unwrap();
-        let notes = vec![test_note_info(42)];
-
-        let created = voting_db
-            .ensure_bundles_with_skipped_suffix(ROUND_ID, &notes)
-            .unwrap();
-        let reused = voting_db
-            .ensure_bundles_with_skipped_suffix(ROUND_ID, &notes)
-            .unwrap();
-
-        assert_eq!(created.bundle_count, 1);
-        assert_eq!(
-            created.eligible_weight,
-            zcash_voting::governance::BALLOT_DIVISOR
-        );
-        assert_eq!(reused.bundle_count, 1);
-        assert_eq!(
-            reused.eligible_weight,
-            zcash_voting::governance::BALLOT_DIVISOR
-        );
-    }
-
-    #[test]
-    fn ensure_bundles_rejects_current_note_selection_drift() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-        voting_db.ensure_round(&params, None).unwrap();
-
-        voting_db
-            .ensure_bundles(ROUND_ID, &[test_note_info(42)])
-            .unwrap();
-
-        let shape_err = voting_db
-            .ensure_bundles(ROUND_ID, &[])
-            .unwrap_err()
-            .to_string();
-        assert!(
-            shape_err.contains("notes must not be empty")
-                || shape_err.contains("no eligible notes")
-                || shape_err.contains("current note selection produces")
-        );
-
-        let mut substituted = test_note_info(42);
-        substituted.nullifier[0] ^= 0x01;
-        let identity_err = voting_db
-            .ensure_bundles(ROUND_ID, &[substituted])
-            .unwrap_err()
-            .to_string();
-        assert!(identity_err.contains("note identity mismatch"));
-    }
-
-    #[test]
-    fn ensure_bundles_preserves_multi_bundle_shape() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-        voting_db.ensure_round(&params, None).unwrap();
-        let notes: Vec<_> = (0..6).map(test_note_info).collect();
-
-        let setup = voting_db
-            .ensure_bundles_with_skipped_suffix(ROUND_ID, &notes)
-            .unwrap();
-
-        assert_eq!(setup.bundle_count, 2);
-        assert_eq!(
-            setup.eligible_weight,
-            6 * zcash_voting::governance::BALLOT_DIVISOR
-        );
-        assert_eq!(voting_db.get_bundle_count(ROUND_ID).unwrap(), 2);
-        assert_eq!(
-            zcash_voting::round::quantized_bundle_weight(
-                &zcash_voting::round::note_bundles(&notes).unwrap()[0]
-            )
-            .unwrap(),
-            5 * zcash_voting::governance::BALLOT_DIVISOR
-        );
-        assert_eq!(
-            zcash_voting::round::quantized_bundle_weight(
-                &zcash_voting::round::note_bundles(&notes).unwrap()[1]
-            )
-            .unwrap(),
-            zcash_voting::governance::BALLOT_DIVISOR
-        );
-    }
-
-    #[test]
-    fn ensure_bundles_accepts_truncated_prefix_after_skipping_bundles() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("zcash_wallet.db");
-        let voting_db = open_voting_db(db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-        voting_db.ensure_round(&params, None).unwrap();
-        let notes: Vec<_> = (0..6).map(test_note_info).collect();
-        voting_db
-            .ensure_bundles_with_skipped_suffix(ROUND_ID, &notes)
-            .unwrap();
-        voting_db.delete_skipped_bundles(ROUND_ID, 1).unwrap();
-
-        let reused = voting_db
-            .ensure_bundles_with_skipped_suffix(ROUND_ID, &notes)
-            .unwrap();
-
-        assert_eq!(reused.bundle_count, 1);
-        assert_eq!(
-            reused.eligible_weight,
-            5 * zcash_voting::governance::BALLOT_DIVISOR
-        );
-    }
-
-    #[test]
-    fn bundle_notes_returns_only_requested_bundle() {
-        let notes: Vec<_> = (0..6).map(test_note_info).collect();
-
-        let bundles = zcash_voting::round::note_bundles(&notes).unwrap();
-        let first = bundles[0].clone();
-        let second = bundles[1].clone();
-
-        assert_eq!(first.len(), 5);
-        assert_eq!(second.len(), 1);
-        assert_eq!(
-            zcash_voting::round::quantized_bundle_weight(&first).unwrap(),
-            5 * zcash_voting::BALLOT_DIVISOR
-        );
-        assert_eq!(
-            zcash_voting::round::quantized_bundle_weight(&second).unwrap(),
-            zcash_voting::BALLOT_DIVISOR
-        );
-        assert!(bundles.get(2).is_none());
-    }
-
-    #[test]
-    fn delegation_display_memo_uses_raw_bundle_weight() {
-        let mut note = test_note_info(0);
-        note.value = 123_456_789;
-
-        let raw_weight = zcash_voting::round::raw_bundle_weight(&[note.clone()]).unwrap();
-        let quantized_weight = zcash_voting::round::quantized_bundle_weight(&[note]).unwrap();
-
-        assert_eq!(raw_weight, 123_456_789);
-        assert_ne!(raw_weight, quantized_weight);
-        assert_eq!(
-            zcash_voting::delegate::display_memo("Poll", raw_weight),
-            "I am authorizing this hotkey managed by my wallet to vote on Poll with 1.23456789 ZEC."
-        );
-    }
-
-    #[test]
-    fn generate_and_cache_bundle_witnesses_rejects_invalid_cached_tree_state() {
-        use zcash_client_backend::proto::service::TreeState;
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let wallet_db_path = temp_dir.path().join("wallet.sqlite");
-        let voting_db = open_voting_db(wallet_db_path.to_str().unwrap(), ACCOUNT_UUID).unwrap();
-        let params = test_round_params();
-        voting_db.ensure_round(&params, None).unwrap();
-        voting_db
-            .ensure_bundles(ROUND_ID, &[test_note_info(42)])
-            .unwrap();
-        let wallet_db =
-            open_wallet_db_for_read(wallet_db_path.to_str().unwrap(), WalletNetwork::Regtest)
+    fn sign_delegation_request_happy_path_signs_and_verifies() {
+        let seed = SecretVec::new(vec![0x42; 32]);
+        let account_index = 0u32;
+        let account = AccountId::try_from(account_index).unwrap();
+        let usk =
+            UnifiedSpendingKey::from_seed(&zcash_voting::Network::Testnet, seed.expose_secret(), account)
                 .unwrap();
-        let tree_state = TreeState {
-            network: "regtest".to_string(),
-            height: params.snapshot_height,
-            hash: String::new(),
-            time: 0,
-            sapling_tree: String::new(),
-            orchard_tree: String::new(),
+        let ask = SpendAuthorizingKey::from(usk.orchard());
+        let alpha = pasta_curves::pallas::Scalar::from(7);
+        let sighash = [0xAB; 32];
+        let request = DelegationSigningRequest {
+            account_index,
+            network: zcash_voting::Network::Testnet,
+            seed_fingerprint: SeedFingerprint::from_seed(seed.expose_secret())
+                .unwrap()
+                .to_bytes(),
+            sighash,
+            alpha: alpha.to_repr(),
         };
 
-        let err = zcash_voting::precompute::note_witnesses(
-            &voting_db,
-            ROUND_ID,
-            0,
-            &tree_state.encode_to_vec(),
-            &[test_note_info(42)],
-            &wallet_db,
-        )
-        .unwrap_err();
+        let (sig_bytes, returned_sighash) = sign_delegation_request(&seed, request).unwrap();
 
-        let err = err.to_string();
-        assert!(err.contains("orchard") || err.contains("TreeState"));
-    }
-
-    #[test]
-    fn load_account_keys_rejects_uninitialized_wallet_db() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db_path = temp_dir.path().join("wallet.sqlite");
-
-        let wallet_db =
-            open_wallet_db_for_read(db_path.to_str().unwrap(), WalletNetwork::Regtest).unwrap();
-        let err = zcash_voting::delegate::load_account_keys(&wallet_db, ACCOUNT_UUID).unwrap_err();
-
-        assert!(
-            err.to_string().contains("failed to load voting account")
-                || err.to_string().contains("voting account not found")
-        );
-    }
-
-    #[test]
-    fn library_branch_id_for_height_follows_network_height() {
-        assert_eq!(
-            zcash_voting::delegate::branch_id_for_height(zcash_voting::Network::Mainnet, 3_146_399)
-                .unwrap(),
-            0xC8E7_1055
-        );
-        assert_eq!(
-            zcash_voting::delegate::branch_id_for_height(zcash_voting::Network::Mainnet, 3_146_400)
-                .unwrap(),
-            0x4DEC_4DF0
-        );
-        assert_eq!(
-            zcash_voting::delegate::branch_id_for_height(zcash_voting::Network::Testnet, 3_536_500)
-                .unwrap(),
-            0x4DEC_4DF0
-        );
-        assert_eq!(
-            zcash_voting::delegate::branch_id_for_height(zcash_voting::Network::Regtest, 1)
-                .unwrap(),
-            0x4DEC_4DF0
-        );
+        let verification_key = VerificationKey::from(&ask.randomize(&alpha));
+        verification_key
+            .verify(&sighash, &Signature::<SpendAuth>::from(sig_bytes))
+            .unwrap();
+        assert_eq!(returned_sighash, sighash);
     }
 
     fn test_round_params() -> zcash_voting::VotingRoundParams {

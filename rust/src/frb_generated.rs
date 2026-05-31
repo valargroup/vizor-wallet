@@ -150,7 +150,7 @@ fn wire__crate__api__voting__add_sent_servers_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_proposal_id = <u32>::sse_decode(&mut deserializer);
@@ -161,7 +161,7 @@ fn wire__crate__api__voting__add_sent_servers_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::add_sent_servers(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_proposal_id,
@@ -309,7 +309,7 @@ fn wire__crate__api__voting__build_vote_commitments_with_progress_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_network = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
@@ -327,7 +327,7 @@ fn wire__crate__api__voting__build_vote_commitments_with_progress_impl(
                     (move || async move {
                         let output_ok = crate::api::voting::build_vote_commitments_with_progress(
                             api_db_path,
-                            api_wallet_id,
+                            api_account_uuid,
                             api_network,
                             api_round_id,
                             api_bundle_index,
@@ -399,14 +399,14 @@ fn wire__crate__api__voting__clear_recovery_state_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::clear_recovery_state(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                     )?;
                     Ok(output_ok)
@@ -438,7 +438,7 @@ fn wire__crate__api__voting__confirm_delegation_submission_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_tx_hash = <String>::sse_decode(&mut deserializer);
@@ -448,7 +448,7 @@ fn wire__crate__api__voting__confirm_delegation_submission_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::confirm_delegation_submission(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_tx_hash,
@@ -483,7 +483,7 @@ fn wire__crate__api__voting__confirm_vote_submission_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_proposal_id = <u32>::sse_decode(&mut deserializer);
@@ -494,7 +494,7 @@ fn wire__crate__api__voting__confirm_vote_submission_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::confirm_vote_submission(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_proposal_id,
@@ -972,7 +972,7 @@ fn wire__crate__api__voting__delete_skipped_bundles_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_keep_count = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -980,7 +980,7 @@ fn wire__crate__api__voting__delete_skipped_bundles_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::delete_skipped_bundles(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_keep_count,
                     )?;
@@ -1604,7 +1604,7 @@ fn wire__crate__api__voting__generate_van_witness_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_anchor_height = <u32>::sse_decode(&mut deserializer);
@@ -1613,7 +1613,7 @@ fn wire__crate__api__voting__generate_van_witness_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::generate_van_witness(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_anchor_height,
@@ -1821,14 +1821,14 @@ fn wire__crate__api__voting__get_keystone_signatures_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::get_keystone_signatures(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                     )?;
                     Ok(output_ok)
@@ -2004,7 +2004,7 @@ fn wire__crate__api__voting__get_round_plan_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_proposal_ids = <Vec<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -2012,7 +2012,7 @@ fn wire__crate__api__voting__get_round_plan_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::get_round_plan(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_proposal_ids,
                     )?;
@@ -2045,14 +2045,14 @@ fn wire__crate__api__voting__get_round_recovery_state_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::get_round_recovery_state(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                     )?;
                     Ok(output_ok)
@@ -2656,7 +2656,7 @@ fn wire__crate__api__voting__mark_delegation_submitted_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_tx_hash = <String>::sse_decode(&mut deserializer);
@@ -2665,7 +2665,7 @@ fn wire__crate__api__voting__mark_delegation_submitted_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::mark_delegation_submitted(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_tx_hash,
@@ -2699,7 +2699,7 @@ fn wire__crate__api__voting__mark_share_confirmed_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_proposal_id = <u32>::sse_decode(&mut deserializer);
@@ -2709,7 +2709,7 @@ fn wire__crate__api__voting__mark_share_confirmed_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::mark_share_confirmed(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_proposal_id,
@@ -2744,7 +2744,7 @@ fn wire__crate__api__voting__mark_vote_submitted_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_proposal_id = <u32>::sse_decode(&mut deserializer);
@@ -2754,7 +2754,7 @@ fn wire__crate__api__voting__mark_vote_submitted_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::mark_vote_submitted(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_proposal_id,
@@ -3055,7 +3055,7 @@ fn wire__crate__api__voting__record_share_delegation_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_proposal_id = <u32>::sse_decode(&mut deserializer);
@@ -3067,7 +3067,7 @@ fn wire__crate__api__voting__record_share_delegation_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::record_share_delegation(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_proposal_id,
@@ -3104,7 +3104,7 @@ fn wire__crate__api__voting__recover_vote_commitment_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_proposal_id = <u32>::sse_decode(&mut deserializer);
@@ -3113,7 +3113,7 @@ fn wire__crate__api__voting__recover_vote_commitment_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::recover_vote_commitment(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_proposal_id,
@@ -3254,14 +3254,14 @@ fn wire__crate__api__voting__reset_voting_session_state_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::reset_voting_session_state(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                     )?;
                     Ok(output_ok)
@@ -3425,7 +3425,7 @@ fn wire__crate__api__voting__set_ballot_intent_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_proposal_id = <u32>::sse_decode(&mut deserializer);
             let api_num_options = <u32>::sse_decode(&mut deserializer);
@@ -3436,7 +3436,7 @@ fn wire__crate__api__voting__set_ballot_intent_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::set_ballot_intent(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_proposal_id,
                         api_num_options,
@@ -3847,7 +3847,7 @@ fn wire__crate__api__voting__store_keystone_signature_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_bundle_index = <u32>::sse_decode(&mut deserializer);
             let api_sig = <Vec<u8>>::sse_decode(&mut deserializer);
@@ -3858,7 +3858,7 @@ fn wire__crate__api__voting__store_keystone_signature_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::store_keystone_signature(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_bundle_index,
                         api_sig,
@@ -3929,7 +3929,7 @@ fn wire__crate__api__voting__sync_vote_tree_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_db_path = <String>::sse_decode(&mut deserializer);
-            let api_wallet_id = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
             let api_node_url = <String>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -3937,7 +3937,7 @@ fn wire__crate__api__voting__sync_vote_tree_impl(
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::voting::sync_vote_tree(
                         api_db_path,
-                        api_wallet_id,
+                        api_account_uuid,
                         api_round_id,
                         api_node_url,
                     )?;

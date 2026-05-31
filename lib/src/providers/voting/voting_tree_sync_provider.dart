@@ -56,7 +56,7 @@ class VotingTreePreSyncService {
       final future = _runPreSync(
         key: key,
         dbPath: dbPath,
-        walletId: accountUuid,
+        accountUuid: accountUuid,
         roundId: roundId,
         nodeUrl: config.apiBaseUrl.toString(),
       );
@@ -73,7 +73,7 @@ class VotingTreePreSyncService {
   Future<void> _runPreSync({
     required String key,
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required String nodeUrl,
   }) async {
@@ -84,7 +84,7 @@ class VotingTreePreSyncService {
           .read(votingRustApiProvider)
           .syncVoteTree(
             dbPath: dbPath,
-            walletId: walletId,
+            accountUuid: accountUuid,
             roundId: roundId,
             nodeUrl: nodeUrl,
           );

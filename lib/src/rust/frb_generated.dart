@@ -105,7 +105,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingAddSentServers({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -160,7 +160,7 @@ abstract class RustLibApi extends BaseApi {
 
   Stream<ApiVoteCommitEvent> crateApiVotingBuildVoteCommitmentsWithProgress({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String network,
     required String roundId,
     required int bundleIndex,
@@ -173,13 +173,13 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingClearRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   });
 
   Future<DelegationConfirmation> crateApiVotingConfirmDelegationSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -188,7 +188,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<VoteConfirmation> crateApiVotingConfirmVoteSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -260,7 +260,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<int> crateApiVotingDeleteSkippedBundles({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int keepCount,
   });
@@ -361,7 +361,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<VanWitness> crateApiVotingGenerateVanWitness({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int anchorHeight,
@@ -392,7 +392,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<List<KeystoneSignatureRecord>> crateApiVotingGetKeystoneSignatures({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   });
 
@@ -418,14 +418,14 @@ abstract class RustLibApi extends BaseApi {
 
   Future<RoundPlanView> crateApiVotingGetRoundPlan({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required List<int> proposalIds,
   });
 
   Future<RoundRecoveryStateView> crateApiVotingGetRoundRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   });
 
@@ -509,7 +509,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingMarkDelegationSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -517,7 +517,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingMarkShareConfirmed({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -526,7 +526,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingMarkVoteSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -585,7 +585,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingRecordShareDelegation({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -596,7 +596,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<SignedVoteCommitmentsView> crateApiVotingRecoverVoteCommitment({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -618,7 +618,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingResetVotingSessionState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     String? roundId,
   });
 
@@ -651,7 +651,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingSetBallotIntent({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int proposalId,
     required int numOptions,
@@ -719,7 +719,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiVotingStoreKeystoneSignature({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required List<int> sig,
@@ -734,7 +734,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<int> crateApiVotingSyncVoteTree({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required String nodeUrl,
   });
@@ -857,7 +857,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiVotingAddSentServers({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -869,7 +869,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_u_32(proposalId, serializer);
@@ -889,7 +889,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         constMeta: kCrateApiVotingAddSentServersConstMeta,
         argValues: [
           dbPath,
-          walletId,
+          accountUuid,
           roundId,
           bundleIndex,
           proposalId,
@@ -906,7 +906,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "add_sent_servers",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "proposalId",
@@ -1180,7 +1180,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Stream<ApiVoteCommitEvent> crateApiVotingBuildVoteCommitmentsWithProgress({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String network,
     required String roundId,
     required int bundleIndex,
@@ -1195,7 +1195,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
             sse_encode_String(dbPath, serializer);
-            sse_encode_String(walletId, serializer);
+            sse_encode_String(accountUuid, serializer);
             sse_encode_String(network, serializer);
             sse_encode_String(roundId, serializer);
             sse_encode_u_32(bundleIndex, serializer);
@@ -1217,7 +1217,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           constMeta: kCrateApiVotingBuildVoteCommitmentsWithProgressConstMeta,
           argValues: [
             dbPath,
-            walletId,
+            accountUuid,
             network,
             roundId,
             bundleIndex,
@@ -1238,7 +1238,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "build_vote_commitments_with_progress",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "network",
           "roundId",
           "bundleIndex",
@@ -1274,7 +1274,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiVotingClearRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) {
     return handler.executeNormal(
@@ -1282,7 +1282,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -1296,7 +1296,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingClearRecoveryStateConstMeta,
-        argValues: [dbPath, walletId, roundId],
+        argValues: [dbPath, accountUuid, roundId],
         apiImpl: this,
       ),
     );
@@ -1305,13 +1305,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingClearRecoveryStateConstMeta =>
       const TaskConstMeta(
         debugName: "clear_recovery_state",
-        argNames: ["dbPath", "walletId", "roundId"],
+        argNames: ["dbPath", "accountUuid", "roundId"],
       );
 
   @override
   Future<DelegationConfirmation> crateApiVotingConfirmDelegationSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -1322,7 +1322,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_String(txHash, serializer);
@@ -1339,7 +1339,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingConfirmDelegationSubmissionConstMeta,
-        argValues: [dbPath, walletId, roundId, bundleIndex, txHash, events],
+        argValues: [dbPath, accountUuid, roundId, bundleIndex, txHash, events],
         apiImpl: this,
       ),
     );
@@ -1350,7 +1350,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "confirm_delegation_submission",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "txHash",
@@ -1361,7 +1361,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<VoteConfirmation> crateApiVotingConfirmVoteSubmission({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -1373,7 +1373,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_u_32(proposalId, serializer);
@@ -1393,7 +1393,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         constMeta: kCrateApiVotingConfirmVoteSubmissionConstMeta,
         argValues: [
           dbPath,
-          walletId,
+          accountUuid,
           roundId,
           bundleIndex,
           proposalId,
@@ -1410,7 +1410,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "confirm_vote_submission",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "proposalId",
@@ -1850,7 +1850,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<int> crateApiVotingDeleteSkippedBundles({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int keepCount,
   }) {
@@ -1859,7 +1859,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(keepCount, serializer);
           pdeCallFfi(
@@ -1874,7 +1874,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingDeleteSkippedBundlesConstMeta,
-        argValues: [dbPath, walletId, roundId, keepCount],
+        argValues: [dbPath, accountUuid, roundId, keepCount],
         apiImpl: this,
       ),
     );
@@ -1883,7 +1883,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingDeleteSkippedBundlesConstMeta =>
       const TaskConstMeta(
         debugName: "delete_skipped_bundles",
-        argNames: ["dbPath", "walletId", "roundId", "keepCount"],
+        argNames: ["dbPath", "accountUuid", "roundId", "keepCount"],
       );
 
   @override
@@ -2512,7 +2512,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<VanWitness> crateApiVotingGenerateVanWitness({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int anchorHeight,
@@ -2522,7 +2522,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_u_32(anchorHeight, serializer);
@@ -2538,7 +2538,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingGenerateVanWitnessConstMeta,
-        argValues: [dbPath, walletId, roundId, bundleIndex, anchorHeight],
+        argValues: [dbPath, accountUuid, roundId, bundleIndex, anchorHeight],
         apiImpl: this,
       ),
     );
@@ -2549,7 +2549,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "generate_van_witness",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "anchorHeight",
@@ -2722,7 +2722,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<List<KeystoneSignatureRecord>> crateApiVotingGetKeystoneSignatures({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) {
     return handler.executeNormal(
@@ -2730,7 +2730,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -2744,7 +2744,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingGetKeystoneSignaturesConstMeta,
-        argValues: [dbPath, walletId, roundId],
+        argValues: [dbPath, accountUuid, roundId],
         apiImpl: this,
       ),
     );
@@ -2753,7 +2753,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingGetKeystoneSignaturesConstMeta =>
       const TaskConstMeta(
         debugName: "get_keystone_signatures",
-        argNames: ["dbPath", "walletId", "roundId"],
+        argNames: ["dbPath", "accountUuid", "roundId"],
       );
 
   @override
@@ -2899,7 +2899,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<RoundPlanView> crateApiVotingGetRoundPlan({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required List<int> proposalIds,
   }) {
@@ -2908,7 +2908,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_list_prim_u_32_loose(proposalIds, serializer);
           pdeCallFfi(
@@ -2923,7 +2923,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingGetRoundPlanConstMeta,
-        argValues: [dbPath, walletId, roundId, proposalIds],
+        argValues: [dbPath, accountUuid, roundId, proposalIds],
         apiImpl: this,
       ),
     );
@@ -2931,13 +2931,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiVotingGetRoundPlanConstMeta => const TaskConstMeta(
     debugName: "get_round_plan",
-    argNames: ["dbPath", "walletId", "roundId", "proposalIds"],
+    argNames: ["dbPath", "accountUuid", "roundId", "proposalIds"],
   );
 
   @override
   Future<RoundRecoveryStateView> crateApiVotingGetRoundRecoveryState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
   }) {
     return handler.executeNormal(
@@ -2945,7 +2945,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -2959,7 +2959,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingGetRoundRecoveryStateConstMeta,
-        argValues: [dbPath, walletId, roundId],
+        argValues: [dbPath, accountUuid, roundId],
         apiImpl: this,
       ),
     );
@@ -2968,7 +2968,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingGetRoundRecoveryStateConstMeta =>
       const TaskConstMeta(
         debugName: "get_round_recovery_state",
-        argNames: ["dbPath", "walletId", "roundId"],
+        argNames: ["dbPath", "accountUuid", "roundId"],
       );
 
   @override
@@ -3511,7 +3511,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiVotingMarkDelegationSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required String txHash,
@@ -3521,7 +3521,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_String(txHash, serializer);
@@ -3537,7 +3537,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingMarkDelegationSubmittedConstMeta,
-        argValues: [dbPath, walletId, roundId, bundleIndex, txHash],
+        argValues: [dbPath, accountUuid, roundId, bundleIndex, txHash],
         apiImpl: this,
       ),
     );
@@ -3546,13 +3546,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingMarkDelegationSubmittedConstMeta =>
       const TaskConstMeta(
         debugName: "mark_delegation_submitted",
-        argNames: ["dbPath", "walletId", "roundId", "bundleIndex", "txHash"],
+        argNames: ["dbPath", "accountUuid", "roundId", "bundleIndex", "txHash"],
       );
 
   @override
   Future<void> crateApiVotingMarkShareConfirmed({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -3563,7 +3563,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_u_32(proposalId, serializer);
@@ -3582,7 +3582,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         constMeta: kCrateApiVotingMarkShareConfirmedConstMeta,
         argValues: [
           dbPath,
-          walletId,
+          accountUuid,
           roundId,
           bundleIndex,
           proposalId,
@@ -3598,7 +3598,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "mark_share_confirmed",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "proposalId",
@@ -3609,7 +3609,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiVotingMarkVoteSubmitted({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -3620,7 +3620,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_u_32(proposalId, serializer);
@@ -3637,7 +3637,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingMarkVoteSubmittedConstMeta,
-        argValues: [dbPath, walletId, roundId, bundleIndex, proposalId, txHash],
+        argValues: [
+          dbPath,
+          accountUuid,
+          roundId,
+          bundleIndex,
+          proposalId,
+          txHash,
+        ],
         apiImpl: this,
       ),
     );
@@ -3648,7 +3655,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "mark_vote_submitted",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "proposalId",
@@ -3968,7 +3975,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiVotingRecordShareDelegation({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -3981,7 +3988,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_u_32(proposalId, serializer);
@@ -4002,7 +4009,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         constMeta: kCrateApiVotingRecordShareDelegationConstMeta,
         argValues: [
           dbPath,
-          walletId,
+          accountUuid,
           roundId,
           bundleIndex,
           proposalId,
@@ -4020,7 +4027,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "record_share_delegation",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "proposalId",
@@ -4033,7 +4040,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<SignedVoteCommitmentsView> crateApiVotingRecoverVoteCommitment({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required int proposalId,
@@ -4043,7 +4050,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_u_32(proposalId, serializer);
@@ -4059,7 +4066,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingRecoverVoteCommitmentConstMeta,
-        argValues: [dbPath, walletId, roundId, bundleIndex, proposalId],
+        argValues: [dbPath, accountUuid, roundId, bundleIndex, proposalId],
         apiImpl: this,
       ),
     );
@@ -4070,7 +4077,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "recover_vote_commitment",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "proposalId",
@@ -4188,7 +4195,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiVotingResetVotingSessionState({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     String? roundId,
   }) {
     return handler.executeNormal(
@@ -4196,7 +4203,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_opt_String(roundId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -4210,7 +4217,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingResetVotingSessionStateConstMeta,
-        argValues: [dbPath, walletId, roundId],
+        argValues: [dbPath, accountUuid, roundId],
         apiImpl: this,
       ),
     );
@@ -4219,7 +4226,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingResetVotingSessionStateConstMeta =>
       const TaskConstMeta(
         debugName: "reset_voting_session_state",
-        argNames: ["dbPath", "walletId", "roundId"],
+        argNames: ["dbPath", "accountUuid", "roundId"],
       );
 
   @override
@@ -4376,7 +4383,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiVotingSetBallotIntent({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int proposalId,
     required int numOptions,
@@ -4388,7 +4395,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(proposalId, serializer);
           sse_encode_u_32(numOptions, serializer);
@@ -4408,7 +4415,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         constMeta: kCrateApiVotingSetBallotIntentConstMeta,
         argValues: [
           dbPath,
-          walletId,
+          accountUuid,
           roundId,
           proposalId,
           numOptions,
@@ -4425,7 +4432,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "set_ballot_intent",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "proposalId",
           "numOptions",
@@ -4814,7 +4821,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiVotingStoreKeystoneSignature({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required int bundleIndex,
     required List<int> sig,
@@ -4826,7 +4833,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_u_32(bundleIndex, serializer);
           sse_encode_list_prim_u_8_loose(sig, serializer);
@@ -4844,7 +4851,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingStoreKeystoneSignatureConstMeta,
-        argValues: [dbPath, walletId, roundId, bundleIndex, sig, sighash, rk],
+        argValues: [
+          dbPath,
+          accountUuid,
+          roundId,
+          bundleIndex,
+          sig,
+          sighash,
+          rk,
+        ],
         apiImpl: this,
       ),
     );
@@ -4855,7 +4870,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "store_keystone_signature",
         argNames: [
           "dbPath",
-          "walletId",
+          "accountUuid",
           "roundId",
           "bundleIndex",
           "sig",
@@ -4902,7 +4917,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<int> crateApiVotingSyncVoteTree({
     required String dbPath,
-    required String walletId,
+    required String accountUuid,
     required String roundId,
     required String nodeUrl,
   }) {
@@ -4911,7 +4926,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(dbPath, serializer);
-          sse_encode_String(walletId, serializer);
+          sse_encode_String(accountUuid, serializer);
           sse_encode_String(roundId, serializer);
           sse_encode_String(nodeUrl, serializer);
           pdeCallFfi(
@@ -4926,7 +4941,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingSyncVoteTreeConstMeta,
-        argValues: [dbPath, walletId, roundId, nodeUrl],
+        argValues: [dbPath, accountUuid, roundId, nodeUrl],
         apiImpl: this,
       ),
     );
@@ -4934,7 +4949,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiVotingSyncVoteTreeConstMeta => const TaskConstMeta(
     debugName: "sync_vote_tree",
-    argNames: ["dbPath", "walletId", "roundId", "nodeUrl"],
+    argNames: ["dbPath", "accountUuid", "roundId", "nodeUrl"],
   );
 
   @override

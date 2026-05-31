@@ -486,7 +486,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       );
       await rust.storeKeystoneSignature(
         dbPath: context.dbPath,
-        walletId: context.accountUuid,
+        accountUuid: context.accountUuid,
         roundId: context.round.roundId,
         bundleIndex: request.bundleIndex,
         sig: signature,
@@ -547,7 +547,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           .read(votingRustApiProvider)
           .deleteSkippedBundles(
             dbPath: context.dbPath,
-            walletId: context.accountUuid,
+            accountUuid: context.accountUuid,
             roundId: context.round.roundId,
             keepCount: signedPrefixCount,
           );
@@ -799,7 +799,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               .read(votingRecoveryServiceProvider)
               .setBallotIntent(
                 dbPath: context.dbPath,
-                walletId: context.accountUuid,
+                accountUuid: context.accountUuid,
                 roundId: context.round.roundId,
                 proposalId: proposalId,
                 numOptions: numOptions,
@@ -836,7 +836,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         }
         await rust.confirmVoteSubmission(
           dbPath: context.dbPath,
-          walletId: context.accountUuid,
+          accountUuid: context.accountUuid,
           roundId: context.round.roundId,
           bundleIndex: key.bundleIndex,
           proposalId: key.proposalId,
@@ -928,7 +928,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         );
         final commitments = await rust.recoverVoteCommitment(
           dbPath: context.dbPath,
-          walletId: context.accountUuid,
+          accountUuid: context.accountUuid,
           roundId: context.round.roundId,
           bundleIndex: key.bundleIndex,
           proposalId: key.proposalId,
@@ -1046,7 +1046,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               .read(votingRustApiProvider)
               .syncVoteTree(
                 dbPath: context.dbPath,
-                walletId: context.accountUuid,
+                accountUuid: context.accountUuid,
                 roundId: context.round.roundId,
                 nodeUrl: context.config.apiBaseUrl.toString(),
               );
@@ -1067,7 +1067,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
               .read(votingRustApiProvider)
               .generateVanWitness(
                 dbPath: context.dbPath,
-                walletId: context.accountUuid,
+                accountUuid: context.accountUuid,
                 roundId: context.round.roundId,
                 bundleIndex: bundleIndex,
                 anchorHeight: anchorHeight,
@@ -1102,7 +1102,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                   .read(votingRustApiProvider)
                   .buildVoteCommitmentsWithProgress(
                     dbPath: context.dbPath,
-                    walletId: context.accountUuid,
+                    accountUuid: context.accountUuid,
                     network: context.network,
                     roundId: context.round.roundId,
                     bundleIndex: bundleIndex,
@@ -1422,7 +1422,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
         await rust.recordShareDelegation(
           dbPath: context.dbPath,
-          walletId: context.accountUuid,
+          accountUuid: context.accountUuid,
           roundId: context.round.roundId,
           bundleIndex: commitments.bundleIndex,
           proposalId: share.proposalId,
@@ -1545,7 +1545,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       }
       await rust.markVoteSubmitted(
         dbPath: context.dbPath,
-        walletId: context.accountUuid,
+        accountUuid: context.accountUuid,
         roundId: context.round.roundId,
         bundleIndex: commitments.bundleIndex,
         proposalId: commitment.proposalId,
@@ -1568,7 +1568,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
 
       final voteConfirmation = await rust.confirmVoteSubmission(
         dbPath: context.dbPath,
-        walletId: context.accountUuid,
+        accountUuid: context.accountUuid,
         roundId: context.round.roundId,
         bundleIndex: commitments.bundleIndex,
         proposalId: commitment.proposalId,
@@ -1592,7 +1592,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         .read(votingRustApiProvider)
         .getKeystoneSignatures(
           dbPath: context.dbPath,
-          walletId: context.accountUuid,
+          accountUuid: context.accountUuid,
           roundId: context.round.roundId,
         );
     return {for (final record in records) record.bundleIndex: record};
@@ -1635,7 +1635,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       }
       await rust.confirmDelegationSubmission(
         dbPath: context.dbPath,
-        walletId: context.accountUuid,
+        accountUuid: context.accountUuid,
         roundId: context.round.roundId,
         bundleIndex: bundleIndex,
         txHash: txHash,
@@ -1683,7 +1683,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     }
     await rust.markDelegationSubmitted(
       dbPath: context.dbPath,
-      walletId: context.accountUuid,
+      accountUuid: context.accountUuid,
       roundId: context.round.roundId,
       bundleIndex: bundleIndex,
       txHash: result.txHash,
@@ -1709,7 +1709,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     }
     final delegationConfirmation = await rust.confirmDelegationSubmission(
       dbPath: context.dbPath,
-      walletId: context.accountUuid,
+      accountUuid: context.accountUuid,
       roundId: context.round.roundId,
       bundleIndex: bundleIndex,
       txHash: result.txHash,
@@ -1813,7 +1813,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           if (confirmed) {
             await rust.markShareConfirmed(
               dbPath: context.dbPath,
-              walletId: context.accountUuid,
+              accountUuid: context.accountUuid,
               roundId: share.roundId,
               bundleIndex: share.bundleIndex,
               proposalId: share.proposalId,
@@ -1839,7 +1839,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                 .read(votingRecoveryServiceProvider)
                 .addSentServersForShare(
                   dbPath: context.dbPath,
-                  walletId: context.accountUuid,
+                  accountUuid: context.accountUuid,
                   share: share,
                   newUrls: newUrls,
                 );
@@ -2420,7 +2420,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         .read(votingRecoveryServiceProvider)
         .loadResumePlan(
           dbPath: dbPath,
-          walletId: accountUuid,
+          accountUuid: accountUuid,
           roundId: round.roundId,
         );
     // Build a temporary context without roundPlan to derive proposalIds.
@@ -2430,7 +2430,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         .read(votingRecoveryServiceProvider)
         .loadRoundPlan(
           dbPath: dbPath,
-          walletId: accountUuid,
+          accountUuid: accountUuid,
           roundId: round.roundId,
           proposalIds: proposalIds,
         );
@@ -2479,7 +2479,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         .read(votingRecoveryServiceProvider)
         .loadResumePlan(
           dbPath: context.dbPath,
-          walletId: context.accountUuid,
+          accountUuid: context.accountUuid,
           roundId: context.round.roundId,
         );
   }
@@ -2493,7 +2493,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         .read(votingRecoveryServiceProvider)
         .loadRoundPlan(
           dbPath: context.dbPath,
-          walletId: context.accountUuid,
+          accountUuid: context.accountUuid,
           roundId: context.round.roundId,
           proposalIds: proposals.map((p) => p.id).toList(),
         );
@@ -2729,7 +2729,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     try {
       await rust.resetVotingSessionState(
         dbPath: context.dbPath,
-        walletId: context.accountUuid,
+        accountUuid: context.accountUuid,
         roundId: context.round.roundId,
       );
       debugPrint(
