@@ -5,7 +5,7 @@ use secrecy::{ExposeSecret, SecretVec};
 use zcash_keys::keys::UnifiedSpendingKey;
 use zip32::{fingerprint::SeedFingerprint, AccountId};
 
-use crate::api::voting::voting_network;
+use crate::api::voting::{voting_network, wallet_network};
 use crate::wallet::{keys, network::WalletNetwork, sync::open_wallet_db_for_read};
 
 use super::{hotkey::derive_hotkey, state::open_voting_db};
@@ -199,10 +199,7 @@ where
         .map_err(|e| format!("Invalid voting round params: {e}"))?;
     on_progress(DelegationProgress::SelectingNotes);
     let voting_db = open_voting_db(db_path, account_uuid)?;
-    let wallet_db = open_wallet_db_for_read(
-        db_path,
-        wallet_network_for_voting_network(prepare_params.network),
-    )?;
+    let wallet_db = open_wallet_db_for_read(db_path, wallet_network(prepare_params.network))?;
 
     let prepared_bundle = zcash_voting::delegate::prepare_delegation_bundle(
         &voting_db,
@@ -241,14 +238,6 @@ where
 
     on_progress(DelegationProgress::PayloadReady);
     Ok(signed_bundle)
-}
-
-fn wallet_network_for_voting_network(network: zcash_voting::Network) -> WalletNetwork {
-    match network {
-        zcash_voting::Network::Mainnet => WalletNetwork::Main,
-        zcash_voting::Network::Testnet => WalletNetwork::Test,
-        zcash_voting::Network::Regtest => WalletNetwork::Regtest,
-    }
 }
 
 fn sign_delegation_request(
@@ -297,7 +286,7 @@ pub async fn build_keystone_delegation_request(
     let voting_db = open_voting_db(db_path, account_uuid)?;
     let wallet_db = open_wallet_db_for_read(
         db_path,
-        wallet_network_for_voting_network(prepare_params.network),
+        wallet_network(prepare_params.network),
     )?;
     let prepared = zcash_voting::delegate::prepare_delegation_bundle(
         &voting_db,
@@ -339,7 +328,7 @@ where
     let voting_db = open_voting_db(db_path, account_uuid)?;
     let wallet_db = open_wallet_db_for_read(
         db_path,
-        wallet_network_for_voting_network(prepare_params.network),
+        wallet_network(prepare_params.network),
     )?;
     let prepared_bundle = zcash_voting::delegate::prepare_delegation_bundle(
         &voting_db,

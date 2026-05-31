@@ -61,6 +61,63 @@ fn seed_from_mnemonic(mnemonic: String) -> Result<secrecy::SecretVec<u8>, String
     keys::mnemonic_bytes_to_seed(mnemonic.as_slice())
 }
 
+/// Resolve reusable delegation setup inputs shared by API entrypoints.
+///
+/// This keeps network parsing, bundle policy selection, and lightwalletd round
+/// input fetching in one place so callers only handle flow-specific logic.
+async fn resolve_delegation_prep_inputs(
+    network: &str,
+    lightwalletd_url: &str,
+    round_params: zcash_voting::wire::VotingRoundParams,
+    round_name: &str,
+    max_real_notes_per_bundle: Option<u32>,
+) -> Result<
+    (
+        WalletNetwork,
+        zcash_voting::Network,
+        BundlePolicy,
+        zcash_voting::delegate::DelegationLwdInputs,
+    ),
+    String,
+> {
+    let wallet_network = keys::parse_network(network)?;
+    let voting_network = voting_network(wallet_network);
+    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
+    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
+        zcash_voting::delegate::ResolveDelegationLwdParams {
+            lightwalletd_url,
+            network: voting_network,
+            round_params,
+            round_name,
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok((wallet_network, voting_network, bundle_policy, lwd))
+}
+
+/// Build the common `PrepareDelegationBundleParams` shape for wallet-layer
+/// delegation helpers from API-owned inputs.
+fn prepare_delegation_bundle_params<'a>(
+    lwd: zcash_voting::delegate::DelegationLwdInputs,
+    session_json: Option<&'a str>,
+    account_uuid: &'a str,
+    network: zcash_voting::Network,
+    hotkey_seed: &'a [u8],
+    bundle_index: u32,
+    bundle_policy: BundlePolicy,
+) -> zcash_voting::delegate::PrepareDelegationBundleParams<'a> {
+    zcash_voting::delegate::PrepareDelegationBundleParams {
+        lwd,
+        session_json,
+        account_uuid,
+        network,
+        hotkey_seed,
+        bundle_index,
+        bundle_policy,
+    }
+}
+
 impl From<ApiTxEventAttribute> for zcash_voting::confirmation::TxEventAttribute {
     fn from(attribute: ApiTxEventAttribute) -> Self {
         Self {
@@ -505,37 +562,33 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
     max_real_notes_per_bundle: Option<u32>,
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
-    let network = keys::parse_network(&network)?;
-    let voting_network = voting_network(network);
-    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let seed = seed_from_mnemonic(mnemonic)?;
-    let round_id = round_params.vote_round_id.clone();
-    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &account_uuid, network)?;
-    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
-        zcash_voting::delegate::ResolveDelegationLwdParams {
-            lightwalletd_url: &lightwalletd_url,
-            network: voting_network,
-            round_params,
-            round_name: &round_name,
-        },
+    let (wallet_network, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
+        &network,
+        &lightwalletd_url,
+        round_params,
+        &round_name,
+        max_real_notes_per_bundle,
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
+    let seed = seed_from_mnemonic(mnemonic)?;
+    let round_id = lwd.round_params.vote_round_id.clone();
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, &account_uuid, wallet_network)?;
+    let prepare_params = prepare_delegation_bundle_params(
+        lwd,
+        session_json.as_deref(),
+        &account_uuid,
+        voting_network,
+        hotkey_secret.expose_secret(),
+        bundle_index,
+        bundle_policy,
+    );
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let signed_result = delegation::build_prove_and_sign_delegation_payload(
         &db_path,
         &pir_server_url,
         &seed,
-        zcash_voting::delegate::PrepareDelegationBundleParams {
-            lwd,
-            session_json: session_json.as_deref(),
-            account_uuid: &account_uuid,
-            network: voting_network,
-            hotkey_seed: hotkey_secret.expose_secret(),
-            bundle_index,
-            bundle_policy,
-        },
+        prepare_params,
         move |event| {
             if progress_sink.add(event.into()).is_err() {
                 log::warn!("voting delegation: StreamSink closed, progress not delivered");
@@ -583,32 +636,28 @@ pub async fn build_keystone_delegation_request(
     bundle_index: u32,
     max_real_notes_per_bundle: Option<u32>,
 ) -> Result<zcash_voting::wire::KeystoneSigningRequest, String> {
-    let network = keys::parse_network(&network)?;
-    let voting_network = voting_network(network);
-    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
-    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
-        zcash_voting::delegate::ResolveDelegationLwdParams {
-            lightwalletd_url: &lightwalletd_url,
-            network: voting_network,
-            round_params,
-            round_name: &round_name,
-        },
+    let (_, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
+        &network,
+        &lightwalletd_url,
+        round_params,
+        &round_name,
+        max_real_notes_per_bundle,
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
+    let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
+    let prepare_params = prepare_delegation_bundle_params(
+        lwd,
+        session_json.as_deref(),
+        &account_uuid,
+        voting_network,
+        hotkey_secret.expose_secret(),
+        bundle_index,
+        bundle_policy,
+    );
     delegation::build_keystone_delegation_request(
         &db_path,
         &account_uuid,
-        zcash_voting::delegate::PrepareDelegationBundleParams {
-            lwd,
-            session_json: session_json.as_deref(),
-            account_uuid: &account_uuid,
-            network: voting_network,
-            hotkey_seed: hotkey_secret.expose_secret(),
-            bundle_index,
-            bundle_policy,
-        },
+        prepare_params,
     )
     .await
     .map(zcash_voting::wire::KeystoneSigningRequest::from)
@@ -686,35 +735,31 @@ pub async fn build_prove_delegation_payload_with_keystone_signature_with_progres
     max_real_notes_per_bundle: Option<u32>,
     sink: StreamSink<ApiDelegationProofEvent>,
 ) -> Result<(), String> {
-    let network = keys::parse_network(&network)?;
-    let voting_network = voting_network(network);
-    let bundle_policy = bundle_policy(max_real_notes_per_bundle)?;
-    let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
-    let lwd = zcash_voting::delegate::gather_delegation_lwd_inputs(
-        zcash_voting::delegate::ResolveDelegationLwdParams {
-            lightwalletd_url: &lightwalletd_url,
-            network: voting_network,
-            round_params,
-            round_name: &round_name,
-        },
+    let (_, voting_network, bundle_policy, lwd) = resolve_delegation_prep_inputs(
+        &network,
+        &lightwalletd_url,
+        round_params,
+        &round_name,
+        max_real_notes_per_bundle,
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
+    let hotkey_secret = secrecy::SecretVec::new(hotkey_seed);
+    let prepare_params = prepare_delegation_bundle_params(
+        lwd,
+        session_json.as_deref(),
+        &account_uuid,
+        voting_network,
+        hotkey_secret.expose_secret(),
+        bundle_index,
+        bundle_policy,
+    );
     let sink = Arc::new(sink);
     let progress_sink = sink.clone();
     let signed_result = delegation::build_prove_delegation_payload_with_keystone_signature(
         &db_path,
         &pir_server_url,
         &account_uuid,
-        zcash_voting::delegate::PrepareDelegationBundleParams {
-            lwd,
-            session_json: session_json.as_deref(),
-            account_uuid: &account_uuid,
-            network: voting_network,
-            hotkey_seed: hotkey_secret.expose_secret(),
-            bundle_index,
-            bundle_policy,
-        },
+        prepare_params,
         &keystone_sig,
         &keystone_sighash,
         move |event| {
@@ -1186,8 +1231,7 @@ pub(crate) fn voting_network(network: WalletNetwork) -> zcash_voting::Network {
     }
 }
 
-#[cfg(test)]
-fn wallet_network(network: zcash_voting::Network) -> WalletNetwork {
+pub(crate) fn wallet_network(network: zcash_voting::Network) -> WalletNetwork {
     match network {
         zcash_voting::Network::Mainnet => WalletNetwork::Main,
         zcash_voting::Network::Testnet => WalletNetwork::Test,
