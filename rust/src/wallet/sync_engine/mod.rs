@@ -45,9 +45,9 @@ pub(crate) mod mempool;
 use enhance::run_enhancement;
 pub(crate) use error::SyncError;
 use error::{RecoveryStrategy, MAX_REWINDS_PER_RUN};
-use lwd::{download_blocks, download_subtree_roots, get_tree_state};
+use lwd::{download_blocks, download_subtree_roots};
 pub(crate) use lwd::{
-    get_latest_block, get_transaction, open_lwd_channel, send_transaction,
+    get_latest_block, get_transaction, get_tree_state, open_lwd_channel, send_transaction,
     send_transaction_with_status,
 };
 

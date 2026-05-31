@@ -216,7 +216,7 @@ pub fn add_proofs_to_pczt(
     Ok(prover.finish().serialize())
 }
 
-/// Redact information from a PCZT that the signer role doesn't need
+/// Redact information from a PCZT that the signer role does not need
 /// (witnesses, proprietary metadata). Produces the bytes to send to
 /// the hardware wallet for signing.
 pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -449,4 +449,19 @@ pub async fn extract_and_broadcast_pczt(
     }
 
     Ok(ExtractAndBroadcastPcztResult::broadcasted(txid.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redact_pczt_for_signer_rejects_invalid_pczt_bytes() {
+        let err = redact_pczt_for_signer(&[0xFF, 0x00]).unwrap_err();
+
+        assert!(
+            err.contains("Parse PCZT"),
+            "expected PCZT parse error, got: {err}"
+        );
+    }
 }
