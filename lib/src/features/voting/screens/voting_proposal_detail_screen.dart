@@ -17,7 +17,6 @@ import '../../../providers/account_provider.dart';
 import '../../../providers/voting/voting_session_provider.dart';
 import '../../../providers/voting/voting_tree_sync_provider.dart';
 import '../../../providers/voting/voting_state.dart';
-import '../../../rust/api/wallet.dart' as rust_wallet;
 import '../../../rust/third_party/zcash_voting/wire.dart' as rust_wire;
 import '../voting_choice_style.dart';
 import '../voting_flow_models.dart';
@@ -221,17 +220,12 @@ class _VotingProposalDetailScreenState
           .read(accountProvider.notifier)
           .getMnemonicForAccount(accountUuid);
       if (mnemonic == null || mnemonic.isEmpty) return;
-      final seedBytes = await rust_wallet.deriveSeed(mnemonic: mnemonic);
-      try {
-        await ref
-            .read(votingSessionProvider(widget.roundId).notifier)
-            .precomputeDelegationPir(
-              accountUuid: accountUuid,
-              seedBytes: seedBytes,
-            );
-      } finally {
-        seedBytes.fillRange(0, seedBytes.length, 0);
-      }
+      await ref
+          .read(votingSessionProvider(widget.roundId).notifier)
+          .precomputeDelegationPir(
+            accountUuid: accountUuid,
+            mnemonic: mnemonic,
+          );
     } catch (e) {
       debugPrint('[zcash] Voting: delegation PIR precompute skipped: $e');
     }

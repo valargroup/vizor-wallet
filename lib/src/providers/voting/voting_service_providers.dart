@@ -285,7 +285,7 @@ abstract interface class VotingRustApi {
     required String roundName,
     String? sessionJson,
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   });
@@ -300,7 +300,7 @@ abstract interface class VotingRustApi {
     required String roundName,
     String? sessionJson,
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   });
@@ -511,7 +511,7 @@ abstract interface class VotingRustApi {
   });
 
   Future<List<int>> deriveHotkey({
-    required List<int> seedBytes,
+    required String mnemonic,
     required String roundId,
     required String accountUuid,
     required String network,
@@ -556,7 +556,7 @@ class FrbVotingRustApi implements VotingRustApi {
     required String roundName,
     String? sessionJson,
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   }) {
@@ -569,7 +569,7 @@ class FrbVotingRustApi implements VotingRustApi {
       roundName: roundName,
       sessionJson: sessionJson,
       accountUuid: accountUuid,
-      seedBytes: seedBytes,
+      mnemonic: mnemonic,
       bundleIndex: bundleIndex,
       maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
@@ -586,7 +586,7 @@ class FrbVotingRustApi implements VotingRustApi {
     required String roundName,
     String? sessionJson,
     required String accountUuid,
-    required List<int> seedBytes,
+    required String mnemonic,
     required int bundleIndex,
     int? maxRealNotesPerBundle,
   }) {
@@ -599,7 +599,7 @@ class FrbVotingRustApi implements VotingRustApi {
       roundName: roundName,
       sessionJson: sessionJson,
       accountUuid: accountUuid,
-      seedBytes: seedBytes,
+      mnemonic: mnemonic,
       bundleIndex: bundleIndex,
       maxRealNotesPerBundle: maxRealNotesPerBundle,
     );
@@ -1029,13 +1029,13 @@ class FrbVotingRustApi implements VotingRustApi {
 
   @override
   Future<List<int>> deriveHotkey({
-    required List<int> seedBytes,
+    required String mnemonic,
     required String roundId,
     required String accountUuid,
     required String network,
   }) {
     return rust_api.deriveVotingHotkey(
-      seedBytes: seedBytes,
+      mnemonic: mnemonic,
       roundId: roundId,
       accountUuid: accountUuid,
       network: network,
