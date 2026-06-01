@@ -1706,6 +1706,78 @@ void main() {
     },
   );
 
+  test(
+    'vote commitments do not submit after active account changes during proof',
+    () async {
+      final proofGate = Completer<void>();
+      final rust = FakeVotingRustApi(
+        emitCommitments: true,
+        voteCommitmentGate: proofGate,
+      );
+      final http = FakeVotingHttpClient(responses: votingHttpResponses());
+      final recoveryApi = FakeVotingRecoveryApi(
+        state: recoveryState(
+          bundleCount: 1,
+          delegationTxHashes: [
+            rust_frb_types.DelegationRecoveryView(
+              bundleIndex: 0,
+              phase: VotingWorkflowPhase.submittedDelegation,
+              txHash: 'delegation-0',
+              vanLeafPosition: null,
+            ),
+          ],
+        ),
+      );
+      final activeAccountProvider =
+          NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+            _ActiveVotingAccountNotifier.new,
+          );
+      final container = _sessionContainer(
+        http: http,
+        rust: rust,
+        recoveryApi: recoveryApi,
+        activeAccountUuidListenable: activeAccountProvider,
+      );
+      final subscription = container.listen(
+        votingSessionProvider(kRoundId),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      final voting = container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .castVotes(
+            draftVotes: [
+              rust_wire.DraftVote(
+                proposalId: 7,
+                choice: 1,
+                numOptions: 2,
+                vcTreePosition: BigInt.zero,
+                singleShare: false,
+              ),
+            ],
+          );
+      await rust.voteCommitmentStarted.future;
+
+      container.read(activeAccountProvider.notifier).set('account-2');
+      final switched = await container.read(
+        votingSessionProvider(kRoundId).future,
+      );
+      expect(switched.accountUuid, 'account-2');
+
+      proofGate.complete();
+      await voting;
+
+      expect(_postRequestCount(http, '/shielded-vote/v1/cast-vote'), 0);
+      expect(_postRequestCount(http, '/shielded-vote/v1/shares'), 0);
+      expect(rust.storedVoteTxHashes, isEmpty);
+      expect(rust.recordedShares, isEmpty);
+      expect(container.read(votingSessionProvider(kRoundId)).hasError, isFalse);
+    },
+  );
+
   test('draft choices are isolated by pinned voting account', () async {
     final activeAccount = _MutableActiveAccount('account-1');
     final container = _sessionContainer(activeAccountUuid: activeAccount.call);
@@ -4203,6 +4275,7 @@ class FakeVotingRustApi implements VotingRustApi {
     this.delegationStreamError,
     this.delegationProofGate,
     this.keystoneDelegationProofGate,
+    this.voteCommitmentGate,
     this.onDeleteSkippedBundles,
   });
 
@@ -4217,6 +4290,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final Object? delegationStreamError;
   final Completer<void>? delegationProofGate;
   final Completer<void>? keystoneDelegationProofGate;
+  final Completer<void>? voteCommitmentGate;
   final void Function(int keepCount)? onDeleteSkippedBundles;
   int setupCalls = 0;
   int _activeSetups = 0;
@@ -4237,6 +4311,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final setupStarted = Completer<void>();
   final delegationProofStarted = Completer<void>();
   final keystoneDelegationProofStarted = Completer<void>();
+  final voteCommitmentStarted = Completer<void>();
   final precomputeStarted = Completer<void>();
   final precomputeFinished = Completer<void>();
   final resetVotingSessionStateCalls = <String>[];
@@ -4599,6 +4674,10 @@ class FakeVotingRustApi implements VotingRustApi {
     required List<rust_wire.DraftVote> draftVotes,
   }) async* {
     voteCommitBundleCalls.add(bundleIndex);
+    if (!voteCommitmentStarted.isCompleted) {
+      voteCommitmentStarted.complete();
+    }
+    await voteCommitmentGate?.future;
     for (final draft in draftVotes) {
       voteCommitmentKeys.add('$bundleIndex:${draft.proposalId}');
       operationLog.add('build_vote:$bundleIndex:${draft.proposalId}');
