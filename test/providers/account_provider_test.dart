@@ -131,6 +131,40 @@ void main() {
     expect(container.read(votingSubmissionGuardProvider), [first, second]);
     expect(notifier.guardForAccount('account-2'), same(second));
   });
+
+  test('voting submission guard keeps nested acquisitions active', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final notifier = container.read(votingSubmissionGuardProvider.notifier);
+    final first = notifier.acquire(
+      accountUuid: 'account-1',
+      roundId: 'round-1',
+    );
+    final second = notifier.acquire(
+      accountUuid: 'account-1',
+      roundId: 'round-1',
+    );
+
+    expect(first.token, isNot(second.token));
+    expect(container.read(votingSubmissionGuardProvider), [first, second]);
+
+    notifier.release(first);
+
+    expect(
+      notifier.isGuarded(accountUuid: 'account-1', roundId: 'round-1'),
+      isTrue,
+    );
+    expect(container.read(votingSubmissionGuardProvider), [second]);
+
+    notifier.release(second);
+
+    expect(
+      notifier.isGuarded(accountUuid: 'account-1', roundId: 'round-1'),
+      isFalse,
+    );
+    expect(container.read(votingSubmissionGuardProvider), isEmpty);
+  });
 }
 
 AppBootstrapState _bootstrapWithAccounts() {

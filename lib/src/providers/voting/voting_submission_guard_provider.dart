@@ -50,16 +50,13 @@ class VotingSubmissionGuardNotifier
 
   /// Registers a guarded submission for an account/round pair.
   ///
-  /// Re-acquiring the same pair returns the existing guard so nested callers can
-  /// share one lifecycle token.
+  /// Every acquisition gets its own release token, even for the same
+  /// account/round pair, so nested or overlapping callers keep destructive
+  /// wallet changes blocked until the last caller releases its token.
   VotingSubmissionGuard acquire({
     required String accountUuid,
     required String roundId,
   }) {
-    final existing = guardFor(accountUuid: accountUuid, roundId: roundId);
-    if (existing != null) {
-      return existing;
-    }
     final guard = VotingSubmissionGuard(
       token: _nextToken++,
       accountUuid: accountUuid,
