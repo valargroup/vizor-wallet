@@ -35,7 +35,7 @@ Coinholder voting uses a crate-owned voting hotkey for delegation outputs and
 vote signing.
 
 - Software accounts derive the hotkey seed from the active account seed, round,
-  ZIP-32 account index, and network via `hotkey::derive_hotkey`, then hand it to
+  account UUID, and network via `hotkey::derive_hotkey`, then hand it to
   `zcash_voting::hotkey::voting_hotkey_from_seed`. The same tuple always yields
   the same material; changing any member produces independent material.
 - Hardware accounts generate and store a random per-round hotkey seed because

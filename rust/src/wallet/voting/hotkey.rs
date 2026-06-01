@@ -17,7 +17,7 @@ const HOTKEY_MIN_WALLET_SEED_LEN: usize = 32;
 /// Derives opaque voting hotkey bytes for a wallet account in a voting round.
 ///
 /// `seed` is the platform-owned wallet seed material, while `round_id`,
-/// `account_index`, and `network` are the voting context. The same tuple always
+/// `account_uuid`, and `network` are the voting context. The same tuple always
 /// returns the same hotkey bytes; changing any tuple member produces
 /// independent material.
 ///
@@ -30,11 +30,11 @@ const HOTKEY_MIN_WALLET_SEED_LEN: usize = 32;
 pub fn derive_hotkey(
     seed: &SecretVec<u8>,
     round_id: &str,
-    account_index: u32,
+    account_uuid: &str,
     network: WalletNetwork,
 ) -> Result<SecretVec<u8>, String> {
     let hotkey_secret =
-        derive_contextual_hotkey_seed(seed.expose_secret(), round_id, account_index, network)?;
+        derive_contextual_hotkey_seed(seed.expose_secret(), round_id, account_uuid, network)?;
     zcash_voting::hotkey::voting_hotkey_from_seed(
         hotkey_secret.expose_secret(),
         voting_network(network),
@@ -63,8 +63,8 @@ pub fn validated_hotkey_seed(
 
 /// Derives deterministic, round-scoped hotkey seed material from wallet context.
 ///
-/// The returned seed is bound to the wallet seed, round ID, ZIP-32 account
-/// index, and network. It is suitable only after reconstruction succeeds through
+/// The returned seed is bound to the wallet seed, round ID, account UUID, and
+/// network. It is suitable only after reconstruction succeeds through
 /// `validated_hotkey_seed` or the caller's equivalent validation.
 ///
 /// # Errors
@@ -74,7 +74,7 @@ pub fn validated_hotkey_seed(
 fn derive_contextual_hotkey_seed(
     seed: &[u8],
     round_id: &str,
-    account_index: u32,
+    account_uuid: &str,
     network: WalletNetwork,
 ) -> Result<SecretVec<u8>, String> {
     if seed.len() < HOTKEY_MIN_WALLET_SEED_LEN {
@@ -89,7 +89,7 @@ fn derive_contextual_hotkey_seed(
     material.extend_from_slice(HOTKEY_CONTEXT_PREFIX);
     append_context_part(&mut material, seed)?;
     append_context_part(&mut material, round_id.as_bytes())?;
-    append_context_part(&mut material, &account_index.to_be_bytes())?;
+    append_context_part(&mut material, account_uuid.as_bytes())?;
     append_context_part(&mut material, network_tag(network))?;
 
     let hash = Params::new()
@@ -120,8 +120,8 @@ fn network_tag(network: WalletNetwork) -> &'static [u8] {
 mod tests {
     use super::*;
 
-    const ACCOUNT_INDEX: u32 = 0;
-    const OTHER_ACCOUNT_INDEX: u32 = 1;
+    const ACCOUNT_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
+    const OTHER_ACCOUNT_UUID: &str = "550e8400-e29b-41d4-a716-446655440001";
     const ROUND_ID: &str = "round-1";
     const OTHER_ROUND_ID: &str = "round-2";
 
@@ -133,11 +133,11 @@ mod tests {
     fn hotkey_determinism() {
         let seed = test_seed();
         let expected =
-            derive_hotkey(&seed, ROUND_ID, ACCOUNT_INDEX, WalletNetwork::Regtest).unwrap();
+            derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
 
         for _ in 0..100 {
             assert_eq!(
-                derive_hotkey(&seed, ROUND_ID, ACCOUNT_INDEX, WalletNetwork::Regtest)
+                derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest)
                     .unwrap()
                     .expose_secret(),
                 expected.expose_secret()
@@ -150,10 +150,10 @@ mod tests {
         let seed = test_seed();
 
         assert_ne!(
-            derive_hotkey(&seed, ROUND_ID, ACCOUNT_INDEX, WalletNetwork::Regtest)
+            derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest)
                 .unwrap()
                 .expose_secret(),
-            derive_hotkey(&seed, OTHER_ROUND_ID, ACCOUNT_INDEX, WalletNetwork::Regtest)
+            derive_hotkey(&seed, OTHER_ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest)
                 .unwrap()
                 .expose_secret()
         );
@@ -164,22 +164,22 @@ mod tests {
         let seed = test_seed();
 
         assert_ne!(
-            derive_hotkey(&seed, ROUND_ID, ACCOUNT_INDEX, WalletNetwork::Regtest)
+            derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest)
                 .unwrap()
                 .expose_secret(),
-            derive_hotkey(&seed, ROUND_ID, OTHER_ACCOUNT_INDEX, WalletNetwork::Regtest)
+            derive_hotkey(&seed, ROUND_ID, OTHER_ACCOUNT_UUID, WalletNetwork::Regtest)
                 .unwrap()
                 .expose_secret()
         );
     }
 
     #[test]
-    fn local_hotkey_seed_matches_reference_vector() {
+    fn local_hotkey_seed_matches_legacy_vector() {
         let seed = test_seed();
-        let local = derive_hotkey(&seed, ROUND_ID, ACCOUNT_INDEX, WalletNetwork::Regtest).unwrap();
+        let local = derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
         let expected = hex::decode(
-            "910d43c8430510ae0367504d587d966bfd6a2b0891a11efc1fb660931ca954af\
-             f2f6dd68dd0c5ec9b5a463a07b43ae00a33685a9945e281b7026abed42c96a9d",
+            "20e3dada1183f1ef8c797348fd543c7e8f63d9f776ec84183f66845ee2a0b0ec\
+             0a6efc9c803785bb8f07106428e71e1f65066e40052b15844813a1de82f65c7c",
         )
         .unwrap();
 
@@ -189,9 +189,8 @@ mod tests {
     #[test]
     fn hotkey_is_bound_to_network() {
         let seed = test_seed();
-        let regtest =
-            derive_hotkey(&seed, ROUND_ID, ACCOUNT_INDEX, WalletNetwork::Regtest).unwrap();
-        let mainnet = derive_hotkey(&seed, ROUND_ID, ACCOUNT_INDEX, WalletNetwork::Main).unwrap();
+        let regtest = derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Regtest).unwrap();
+        let mainnet = derive_hotkey(&seed, ROUND_ID, ACCOUNT_UUID, WalletNetwork::Main).unwrap();
 
         assert_ne!(regtest.expose_secret(), mainnet.expose_secret());
     }
