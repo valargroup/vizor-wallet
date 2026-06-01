@@ -1546,6 +1546,61 @@ void main() {
     );
   });
 
+  test('software vote-only submission skips delegation preparation', () async {
+    final rust = FakeVotingRustApi(emitCommitments: true);
+    final roundStatus = roundStatusJson(roundId: kRoundId)
+      ..['proposals'] = [
+        {
+          'id': 7,
+          'title': 'Question',
+          'options': [
+            {'index': 0, 'label': 'No'},
+            {'index': 1, 'label': 'Yes'},
+          ],
+        },
+      ];
+    final http = FakeVotingHttpClient(
+      responses: votingHttpResponses(roundStatus: roundStatus),
+    );
+    final draftPersistence = FakeVotingDraftPersistence();
+    const key = VotingSessionKey(roundId: kRoundId, accountUuid: 'account-1');
+    await draftPersistence.save(
+      key,
+      const VotingDraftState(choices: {7: 1}),
+    );
+    final recoveryApi = FakeVotingRecoveryApi(
+      state: recoveryState(
+        bundleCount: 1,
+        delegationWorkflows: [
+          rust_frb_types.DelegationRecoveryView(
+            bundleIndex: 0,
+            phase: VotingWorkflowPhase.confirmed,
+            txHash: 'delegation-0',
+            vanLeafPosition: 0,
+          ),
+        ],
+      ),
+    );
+    final container = _sessionContainer(
+      http: http,
+      rust: rust,
+      recoveryApi: recoveryApi,
+      draftPersistence: draftPersistence,
+    );
+    addTearDown(container.dispose);
+
+    final startedKey = await container
+        .read(votingSubmissionJobsProvider.notifier)
+        .start(kRoundId);
+    expect(startedKey, key);
+    await _waitForVoteCommitmentKey(rust, '0:7');
+
+    expect(rust.setupCalls, 0);
+    expect(rust.delegationBundleCalls, isEmpty);
+    expect(_postRequestCount(http, '/shielded-vote/v1/delegate-vote'), 0);
+    expect(_postRequestCount(http, '/shielded-vote/v1/cast-vote'), 1);
+  });
+
   test('Keystone signing starts after active account reload', () async {
     final rust = FakeVotingRustApi();
     final activeAccountProvider =
@@ -3582,6 +3637,20 @@ Future<VotingSessionState> _waitForJobSessionPhase(
     'Timed out waiting for voting submission job session phase $phase. '
     'Last phase: '
     '${container.read(votingSubmissionJobSessionProvider(key)).value?.phase}',
+  );
+}
+
+Future<void> _waitForVoteCommitmentKey(
+  FakeVotingRustApi rust,
+  String expectedKey,
+) async {
+  for (var i = 0; i < 100; i++) {
+    if (rust.voteCommitmentKeys.contains(expectedKey)) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail(
+    'Timed out waiting for vote commitment $expectedKey. '
+    'Saw ${rust.voteCommitmentKeys}.',
   );
 }
 

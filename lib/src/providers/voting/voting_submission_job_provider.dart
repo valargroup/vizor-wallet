@@ -447,36 +447,37 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
         return;
       }
 
-      if (draftVotes.isNotEmpty || needsDelegation) {
-        if (activeSession.isHardwareAccount) {
-          if (needsDelegation) {
-            _storePendingKeystoneState(
-              key: key,
-              generation: generation,
-              draftVotes: draftVotes,
-              intentProposalIds: intentProposalIds,
-              proposalOptionCounts: proposalOptionCounts,
-              pendingRecoveryWithoutDraft:
-                  canRecoverWithoutDraft || canPollDelegationWithoutDraft,
-            );
-            await _submitAfterKeystoneSignatures(
-              sessionNotifier,
-              key: key,
-              generation: generation,
-            );
-          } else {
-            await _submitVotesAndShares(
-              sessionNotifier,
-              key: key,
-              generation: generation,
-              draftVotes: draftVotes,
-              intentProposalIds: intentProposalIds,
-              proposalOptionCounts: proposalOptionCounts,
-              initialSession: activeSession,
-            );
-          }
-          return;
+      if (activeSession.isHardwareAccount &&
+          (draftVotes.isNotEmpty || needsDelegation)) {
+        if (needsDelegation) {
+          _storePendingKeystoneState(
+            key: key,
+            generation: generation,
+            draftVotes: draftVotes,
+            intentProposalIds: intentProposalIds,
+            proposalOptionCounts: proposalOptionCounts,
+            pendingRecoveryWithoutDraft:
+                canRecoverWithoutDraft || canPollDelegationWithoutDraft,
+          );
+          await _submitAfterKeystoneSignatures(
+            sessionNotifier,
+            key: key,
+            generation: generation,
+          );
+        } else {
+          await _submitVotesAndShares(
+            sessionNotifier,
+            key: key,
+            generation: generation,
+            draftVotes: draftVotes,
+            intentProposalIds: intentProposalIds,
+            proposalOptionCounts: proposalOptionCounts,
+            initialSession: activeSession,
+          );
         }
+        return;
+      }
+      if (needsDelegation) {
         final mnemonic = await ref
             .read(accountProvider.notifier)
             .getMnemonicForAccount(key.accountUuid);
@@ -888,9 +889,9 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
 
   bool _sessionNeedsDelegation(VotingSessionState? session) {
     if (session == null) return false;
-    final roundPlan = session.roundPlan;
-    if (_planNeedsDelegation(roundPlan)) return true;
-    return roundPlan != null && roundPlanNeedsDraftSetup(roundPlan);
+    if (_planNeedsDelegation(session.roundPlan)) return true;
+    return session.resumePlan?.pendingDelegationBundleIndexes.isNotEmpty ??
+        false;
   }
 
   bool _sessionNeedsDelegationSubmission(VotingSessionState? session) {
