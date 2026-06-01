@@ -53,7 +53,7 @@ abstract final class AppBackResolver {
     '/settings/change-password': 'Change password',
     '/settings/endpoint': 'Endpoint',
     '/onboarding/keystone': 'Connect Keystone',
-    '/voting': 'Voting',
+    '/voting': 'Vote',
     '/voting/poll/:roundId': 'Poll',
     '/voting/poll/:roundId/review': 'Review',
     '/voting/poll/:roundId/status': 'Status',

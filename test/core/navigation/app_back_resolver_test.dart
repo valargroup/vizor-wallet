@@ -86,7 +86,7 @@ void main() {
     await tester.tap(find.text('Open Poll'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Voting'), findsOneWidget);
+    expect(find.text('Vote'), findsOneWidget);
 
     await tester.tap(find.text('Open Voting Review'));
     await tester.pumpAndSettle();
