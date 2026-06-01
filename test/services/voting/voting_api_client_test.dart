@@ -9,13 +9,17 @@ void main() {
   const encodedRoundId = 'El5UdfZTsHTV9MNnMIUmlfNWQWwrbDBCUWqRLlv/3RE=';
   const hexRoundId =
       '125e5475f653b074d5f4c36730852695f356416c2b6c3042516a912e5bffdd11';
+  const otherHexRoundId =
+      'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
   test('composes vote-sdk URLs under shielded-vote v1', () async {
     final http = FakeVotingHttpClient(
       responses: {
-        '/shielded-vote/v1/rounds': [
-          {'vote_round_id': encodedRoundId, 'status': 'active'},
-        ],
+        '/shielded-vote/v1/rounds': {
+          'rounds': [
+            {'vote_round_id': encodedRoundId, 'status': 'active'},
+          ],
+        },
         '/shielded-vote/v1/round/$hexRoundId': {
           'round': {'vote_round_id': encodedRoundId, 'status': 'open'},
         },
@@ -29,9 +33,9 @@ void main() {
           'code': 0,
           'log': '',
         },
-        'https://helper.example/shielded-vote/v1/shares': {'status': 'ok'},
+        'https://helper.example/shielded-vote/v1/shares': {'status': 'queued'},
         'https://helper.example/shielded-vote/v1/share-status/$hexRoundId/share-1':
-            {'share_id': 'share-1', 'status': 'pending'},
+            {'status': 'pending'},
       },
     );
     final client = VotingApiClient(
@@ -104,14 +108,23 @@ void main() {
         baseUrl: Uri.parse('https://voting.valargroup.org'),
         httpClient: FakeVotingHttpClient(
           responses: {
-            '/shielded-vote/v1/rounds/active': jsonResponse(
-              {},
-              statusCode: 404,
-            ),
+            '/shielded-vote/v1/rounds/active': {'round': null},
           },
         ),
       );
       await expectLater(missing.getActiveRoundStatus(), completion(isNull));
+
+      final notFound = VotingApiClient(
+        baseUrl: Uri.parse('https://voting.valargroup.org'),
+        httpClient: FakeVotingHttpClient(
+          responses: {
+            '/shielded-vote/v1/rounds/active': jsonResponse({
+              'error': 'not found',
+            }, statusCode: 404),
+          },
+        ),
+      );
+      await expectLater(notFound.getActiveRoundStatus(), completion(isNull));
     },
   );
 
@@ -149,9 +162,11 @@ void main() {
     () async {
       final http = FakeVotingHttpClient(
         responses: {
-          '/shielded-vote/v1/rounds': [
-            {'vote_round_id': encodedRoundId, 'status': 'active'},
-          ],
+          '/shielded-vote/v1/rounds': {
+            'rounds': [
+              {'vote_round_id': encodedRoundId, 'status': 'active'},
+            ],
+          },
           '/shielded-vote/v1/round/$hexRoundId': {
             'round': {'vote_round_id': encodedRoundId, 'status': 'active'},
           },
@@ -185,14 +200,16 @@ void main() {
   test('preserves numeric round status codes as strings', () async {
     final http = FakeVotingHttpClient(
       responses: {
-        '/shielded-vote/v1/rounds': [
-          {
-            'vote_round_id': encodedRoundId,
-            'title': 'Closed poll',
-            'status': 3,
-          },
-          {'vote_round_id': hexRoundId, 'title': 'Active poll', 'status': 1},
-        ],
+        '/shielded-vote/v1/rounds': {
+          'rounds': [
+            {
+              'vote_round_id': encodedRoundId,
+              'title': 'Closed poll',
+              'status': 3,
+            },
+            {'vote_round_id': hexRoundId, 'title': 'Active poll', 'status': 1},
+          ],
+        },
       },
     );
     final client = VotingApiClient(
@@ -253,6 +270,22 @@ void main() {
     await expectLater(client.listRounds(), completion(isEmpty));
   });
 
+  test('list rounds rejects historical bare list responses', () async {
+    final http = FakeVotingHttpClient(
+      responses: {
+        '/shielded-vote/v1/rounds': [
+          {'vote_round_id': encodedRoundId, 'status': 'active'},
+        ],
+      },
+    );
+    final client = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: http,
+    );
+
+    await expectLater(client.listRounds(), throwsA(isA<FormatException>()));
+  });
+
   test('list rounds rejects nonempty objects without rounds', () async {
     final http = FakeVotingHttpClient(
       responses: {
@@ -270,7 +303,7 @@ void main() {
         isA<FormatException>().having(
           (error) => error.message,
           'message',
-          'listRounds expected a JSON list or rounds field',
+          'listRounds expected a rounds field',
         ),
       ),
     );
@@ -279,9 +312,11 @@ void main() {
   test('list rounds rejects summaries without a routeable round id', () async {
     final http = FakeVotingHttpClient(
       responses: {
-        '/shielded-vote/v1/rounds': [
-          {'title': 'Poll', 'status': 'active'},
-        ],
+        '/shielded-vote/v1/rounds': {
+          'rounds': [
+            {'title': 'Poll', 'status': 'active'},
+          ],
+        },
       },
     );
     final client = VotingApiClient(
@@ -321,6 +356,74 @@ void main() {
     expect(http.requests, isEmpty);
   });
 
+  test('rejects round-scoped responses with mismatched round ids', () async {
+    final statusClient = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          '/shielded-vote/v1/round/$hexRoundId': {
+            'round': {'vote_round_id': otherHexRoundId, 'status': 'active'},
+          },
+        },
+      ),
+    );
+    await expectLater(
+      statusClient.getRoundStatus(hexRoundId),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'getRoundStatus response round id mismatch',
+        ),
+      ),
+    );
+
+    final tallyClient = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          '/shielded-vote/v1/tally-results/$hexRoundId': {
+            'results': [
+              {'vote_round_id': otherHexRoundId},
+            ],
+          },
+        },
+      ),
+    );
+    await expectLater(
+      tallyClient.getRoundTally(hexRoundId),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'getRoundTally response round id mismatch',
+        ),
+      ),
+    );
+
+    final proposalTallyClient = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          '/shielded-vote/v1/tally/$hexRoundId/2': {
+            'vote_round_id': otherHexRoundId,
+            'tally': {'0': 'ciphertext'},
+          },
+        },
+      ),
+    );
+    await expectLater(
+      proposalTallyClient.getProposalTally(hexRoundId, 2),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'getProposalTally response round id mismatch',
+        ),
+      ),
+    );
+  });
+
   test('fetches transaction confirmation events', () async {
     final http = FakeVotingHttpClient(
       responses: {
@@ -348,6 +451,28 @@ void main() {
 
     expect(confirmation?.height, 12);
     expect(confirmation?.event('delegate_vote')?.attribute('leaf_index'), '3');
+  });
+
+  test('rejects malformed transaction confirmation bodies', () async {
+    final client = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          '/shielded-vote/v1/tx/delegation-tx': {'events': const []},
+        },
+      ),
+    );
+
+    await expectLater(
+      client.getTxConfirmation('delegation-tx'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required int: height',
+        ),
+      ),
+    );
   });
 
   test('retries transient broadcast errors', () async {
@@ -451,7 +576,7 @@ void main() {
   test('share request payloads preserve service JSON field names', () async {
     final http = FakeVotingHttpClient(
       responses: {
-        'https://helper.example/shielded-vote/v1/shares': {'status': 'ok'},
+        'https://helper.example/shielded-vote/v1/shares': {'status': 'queued'},
       },
     );
     final client = VotingApiClient(
@@ -459,16 +584,83 @@ void main() {
       httpClient: http,
     );
 
-    await client.submitShare(
+    final result = await client.submitShare(
       roundId: encodedRoundId,
       serverUrl: Uri.parse('https://helper.example'),
       share: {'share_index': 7, 'vote_round_id': 'bad-override'},
     );
 
+    expect(result.status, 'queued');
     expect(http.requests.single.body, {
       'share_index': 7,
       'vote_round_id': hexRoundId,
     });
     expect(http.requests.single.timeout, const Duration(seconds: 5));
+  });
+
+  test('helper responses require known status values', () async {
+    final acceptedClient = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          'https://helper.example/shielded-vote/v1/shares': {
+            'status': 'duplicate',
+          },
+          'https://helper.example/shielded-vote/v1/share-status/$hexRoundId/share-1':
+              {'status': 'confirmed'},
+        },
+      ),
+    );
+
+    final submitted = await acceptedClient.submitShare(
+      roundId: hexRoundId,
+      serverUrl: Uri.parse('https://helper.example'),
+      share: {'share_index': 0},
+    );
+    final status = await acceptedClient.getShareStatus(
+      roundId: hexRoundId,
+      serverUrl: Uri.parse('https://helper.example'),
+      shareId: 'share-1',
+    );
+
+    expect(submitted.status, 'duplicate');
+    expect(status.status, 'confirmed');
+
+    final rejectedSubmitClient = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          'https://helper.example/shielded-vote/v1/shares': {
+            'status': 'accepted',
+          },
+        },
+      ),
+    );
+    await expectLater(
+      rejectedSubmitClient.submitShare(
+        roundId: hexRoundId,
+        serverUrl: Uri.parse('https://helper.example'),
+        share: {'share_index': 0},
+      ),
+      throwsA(isA<FormatException>()),
+    );
+
+    final rejectedStatusClient = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          'https://helper.example/shielded-vote/v1/share-status/$hexRoundId/share-1':
+              {'status': 'unknown'},
+        },
+      ),
+    );
+    await expectLater(
+      rejectedStatusClient.getShareStatus(
+        roundId: hexRoundId,
+        serverUrl: Uri.parse('https://helper.example'),
+        shareId: 'share-1',
+      ),
+      throwsA(isA<FormatException>()),
+    );
   });
 }

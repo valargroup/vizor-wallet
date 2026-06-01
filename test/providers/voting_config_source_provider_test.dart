@@ -18,6 +18,7 @@ void main() {
           '''
         [
           {"id":"a","name":" Alpha ","sourceUrl":"$sourceA"},
+          {"id":42,"name":"Wrong type","sourceUrl":"$sourceB"},
           {"id":"","name":"Missing id","sourceUrl":"$sourceB"},
           {"id":"bad","name":"Bad","sourceUrl":"http://voting.example/static.json"}
         ]
@@ -33,6 +34,30 @@ void main() {
     expect(state.savedSources, hasLength(1));
     expect(state.savedSources.single.name, 'Alpha');
   });
+
+  test(
+    'invalid stored source falls back to default and clears override',
+    () async {
+      final store = FakeVotingConfigSourceStore(
+        sourceUrl: 'http://voting.example/static.json',
+        savedSourcesJson:
+            '''
+        [
+          {"id":"a","name":"Alpha","sourceUrl":"$sourceA"}
+        ]
+      ''',
+      );
+      final container = _container(store);
+      addTearDown(container.dispose);
+
+      final state = await container.read(votingConfigSourceProvider.future);
+
+      expect(state.sourceUrl, kDefaultStaticVotingConfigSource);
+      expect(state.isDefault, isTrue);
+      expect(state.savedSources.single.id, 'a');
+      expect(store.sourceUrl, isNull);
+    },
+  );
 
   test('save source persists the source and makes it active', () async {
     final store = FakeVotingConfigSourceStore();

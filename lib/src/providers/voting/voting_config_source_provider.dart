@@ -25,11 +25,11 @@ class SavedVotingConfigSource {
   final String name;
   final String sourceUrl;
 
-  factory SavedVotingConfigSource.fromJson(Map<String, dynamic> json) {
+  factory SavedVotingConfigSource.fromJson(Map<dynamic, dynamic> json) {
     return SavedVotingConfigSource(
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      sourceUrl: json['sourceUrl'] as String? ?? '',
+      id: _stringJsonField(json, 'id'),
+      name: _stringJsonField(json, 'name'),
+      sourceUrl: _stringJsonField(json, 'sourceUrl'),
     );
   }
 
@@ -165,6 +165,14 @@ class VotingConfigSourceNotifier
         savedSources: savedSources,
       );
     }
+    try {
+      StaticVotingConfigSource.parse(trimmed);
+    } on StaticVotingConfigSourceMalformed {
+      await store.resetSourceUrl();
+      return VotingConfigSourceState.defaultSource().copyWith(
+        savedSources: savedSources,
+      );
+    }
     return VotingConfigSourceState(
       sourceUrl: trimmed,
       isDefault: false,
@@ -284,7 +292,7 @@ List<SavedVotingConfigSource> _decodeSavedSources(String? raw) {
 
   final sources = <SavedVotingConfigSource>[];
   for (final item in decoded) {
-    if (item is! Map<String, dynamic>) continue;
+    if (item is! Map) continue;
     final source = SavedVotingConfigSource.fromJson(item);
     if (source.id.isEmpty ||
         source.name.trim().isEmpty ||
@@ -305,6 +313,11 @@ List<SavedVotingConfigSource> _decodeSavedSources(String? raw) {
     );
   }
   return sources;
+}
+
+String _stringJsonField(Map<dynamic, dynamic> json, String key) {
+  final value = json[key];
+  return value is String ? value : '';
 }
 
 String _encodeSavedSources(List<SavedVotingConfigSource> sources) {

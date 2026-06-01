@@ -37,28 +37,20 @@ class VotingApiClient {
 
   /// Lists rounds from the vote server.
   ///
-  /// The backend has returned both a bare list and `{ "rounds": [...] }` during
-  /// development, so this accepts both shapes while still rejecting anything
-  /// that does not contain a list of round objects.
+  /// Current vote-sdk returns `{ "rounds": [...] }`. An empty `{}` is accepted
+  /// because proto3 JSON omits empty repeated fields.
   Future<List<VotingRoundSummary>> listRounds() async {
     final decoded = await _getJson(_endpoint(['rounds']));
-    final values = decoded is List
-        ? decoded
-        : decoded is Map
-        ? decoded['rounds']
-        : null;
+    final object = _objectFromValue(decoded);
+    final values = object['rounds'];
     if (values == null) {
       // vote-sdk proto3 JSON omits empty repeated fields, so a chain with no
       // stored rounds returns `{}` rather than `{"rounds":[]}`.
-      if (decoded is Map && decoded.isEmpty) return const [];
-      throw const FormatException(
-        'listRounds expected a JSON list or rounds field',
-      );
+      if (object.isEmpty) return const [];
+      throw const FormatException('listRounds expected a rounds field');
     }
     if (values is! List) {
-      throw const FormatException(
-        'listRounds expected a JSON list or rounds field',
-      );
+      throw const FormatException('listRounds expected a rounds list');
     }
     return values
         .map(_objectFromValue)
@@ -74,16 +66,27 @@ class VotingApiClient {
     _throwIfNotSuccess(uri, response);
     final decoded = jsonDecode(response.bodyText);
     final object = _objectFromValue(decoded);
-    if (object['round'] == null) return null;
-    return VotingRoundStatus.fromJson(_unwrapNestedObject(object, 'round'));
+    if (!object.containsKey('round')) {
+      throw const FormatException('getActiveRoundStatus expected round field');
+    }
+    final round = object['round'];
+    if (round == null) return null;
+    return VotingRoundStatus.fromJson(_objectFromValue(round));
   }
 
   /// Fetches one round and unwraps the ZODL-style `{ "round": ... }` envelope.
   Future<VotingRoundStatus> getRoundStatus(String roundId) async {
-    final decoded = await _getJson(
-      _endpoint(['round', normalizeVotingRoundId(roundId)]),
+    final normalizedRoundId = normalizeVotingRoundId(roundId);
+    final decoded = await _getJson(_endpoint(['round', normalizedRoundId]));
+    final status = VotingRoundStatus.fromJson(
+      _unwrapNestedObject(decoded, 'round'),
     );
-    return VotingRoundStatus.fromJson(_unwrapNestedObject(decoded, 'round'));
+    _requireMatchingRoundId(
+      actual: status.roundId,
+      expected: normalizedRoundId,
+      context: 'getRoundStatus',
+    );
+    return status;
   }
 
   Future<VotingRoundTally> getRoundTally(String roundId) async {
@@ -91,8 +94,10 @@ class VotingApiClient {
     final decoded = await _getJson(
       _endpoint(['tally-results', normalizedRoundId]),
     );
+    final object = _objectFromValue(decoded);
+    _validateTallyResultsEnvelope(object, expectedRoundId: normalizedRoundId);
     return VotingRoundTally.fromJson(
-      _objectFromValue(decoded),
+      object,
       fallbackRoundId: normalizedRoundId,
     );
   }
@@ -105,10 +110,16 @@ class VotingApiClient {
     final decoded = await _getJson(
       _endpoint(['tally', normalizedRoundId, proposalId.toString()]),
     );
-    return VotingRoundTally.fromJson(
+    final tally = VotingRoundTally.fromJson(
       _objectFromValue(decoded),
       fallbackRoundId: normalizedRoundId,
     );
+    _requireMatchingRoundId(
+      actual: tally.roundId,
+      expected: normalizedRoundId,
+      context: 'getProposalTally',
+    );
+    return tally;
   }
 
   Future<VotingTxResult> submitDelegation({
@@ -296,4 +307,38 @@ Map<String, dynamic> _unwrapNestedObject(Object? value, String key) {
   final object = _objectFromValue(value);
   final nested = object[key];
   return nested == null ? object : _objectFromValue(nested);
+}
+
+void _validateTallyResultsEnvelope(
+  Map<String, dynamic> object, {
+  required String expectedRoundId,
+}) {
+  final results = object['results'];
+  if (results == null) {
+    if (object.isEmpty) return;
+    throw const FormatException('getRoundTally expected results field');
+  }
+  if (results is! List) {
+    throw const FormatException('getRoundTally expected results list');
+  }
+  for (final value in results) {
+    final result = _objectFromValue(value);
+    final roundId = VotingRoundTally.fromJson(result).roundId;
+    if (roundId.isEmpty) continue;
+    _requireMatchingRoundId(
+      actual: roundId,
+      expected: expectedRoundId,
+      context: 'getRoundTally',
+    );
+  }
+}
+
+void _requireMatchingRoundId({
+  required String actual,
+  required String expected,
+  required String context,
+}) {
+  if (actual != expected) {
+    throw FormatException('$context response round id mismatch');
+  }
 }

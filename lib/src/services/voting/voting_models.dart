@@ -52,7 +52,13 @@ class StaticVotingConfig {
         'trusted_keys must contain at least one entry',
       );
     }
+    final keyIds = <String>{};
     for (final key in trustedKeys) {
+      if (!keyIds.add(key.keyId)) {
+        throw VotingConfigDecodeException(
+          'trusted_keys contains duplicate key_id: ${key.keyId}',
+        );
+      }
       if (key.alg != algEd25519) {
         throw VotingConfigDecodeException(
           'trusted_keys[${key.keyId}].alg unsupported: ${key.alg}',
@@ -64,6 +70,10 @@ class StaticVotingConfig {
         );
       }
     }
+  }
+
+  static void validateDynamicConfigUrl(Uri uri) {
+    _validateDynamicConfigUrl(uri);
   }
 }
 
@@ -179,12 +189,14 @@ class VotingConfig {
     for (final endpoint in pirEndpoints) {
       endpoint.validate(fieldName: 'pir_endpoints');
     }
-    for (final roundId in rounds.keys) {
+    for (final entry in rounds.entries) {
+      final roundId = entry.key;
       if (!_isLowercaseHexRoundId(roundId)) {
         throw VotingConfigDecodeException(
           'rounds key must be 64 lowercase hex characters: $roundId',
         );
       }
+      entry.value.validate(roundId: roundId);
     }
     supportedVersions.validate();
   }
@@ -235,8 +247,8 @@ class VotingTxConfirmation {
 
   factory VotingTxConfirmation.fromJson(Map<String, dynamic> json) {
     return VotingTxConfirmation(
-      height: _optionalIntFromJson(json, const ['height']) ?? 0,
-      code: _optionalIntFromJson(json, const ['code']) ?? 0,
+      height: _intFromJson(json, const ['height']),
+      code: _intFromJson(json, const ['code']),
       log: _optionalStringFromJson(json, const ['log']) ?? '',
       events: _optionalListFromJson(json, const ['events'])
           .map(_objectFromValue)
@@ -388,6 +400,8 @@ class VotingSupportedVersions {
 /// This model preserves the signed fields. The config resolution layer is
 /// responsible for verifying the signatures before higher layers trust them.
 class VotingRoundEntry {
+  static const supportedAuthVersion = 1;
+
   final int authVersion;
   final List<int> eaPk;
   final List<VotingRoundSignature> signatures;
@@ -407,6 +421,27 @@ class VotingRoundEntry {
           .map(VotingRoundSignature.fromJson)
           .toList(growable: false),
     );
+  }
+
+  void validate({required String roundId}) {
+    if (authVersion != supportedAuthVersion) {
+      throw VotingConfigDecodeException(
+        'rounds[$roundId].auth_version unsupported: $authVersion',
+      );
+    }
+    if (eaPk.length != 32) {
+      throw VotingConfigDecodeException(
+        'rounds[$roundId].ea_pk must decode to 32 bytes',
+      );
+    }
+    if (signatures.isEmpty) {
+      throw VotingConfigDecodeException(
+        'rounds[$roundId].signatures must contain at least one entry',
+      );
+    }
+    for (final signature in signatures) {
+      signature.validate(roundId: roundId);
+    }
   }
 }
 
@@ -428,6 +463,19 @@ class VotingRoundSignature {
       alg: _stringFromJson(json, const ['alg']),
       sig: _bytesFromJson(json, const ['sig']),
     );
+  }
+
+  void validate({required String roundId}) {
+    if (alg != StaticVotingConfig.algEd25519) {
+      throw VotingConfigDecodeException(
+        'rounds[$roundId].signatures[$keyId].alg unsupported: $alg',
+      );
+    }
+    if (sig.length != 64) {
+      throw VotingConfigDecodeException(
+        'rounds[$roundId].signatures[$keyId].sig must decode to 64 bytes',
+      );
+    }
   }
 }
 
@@ -497,8 +545,8 @@ class VotingRoundStatus {
 
   factory VotingRoundStatus.fromJson(Map<String, dynamic> json) {
     return VotingRoundStatus(
-      roundId: _optionalRoundIdFromJson(json) ?? '',
-      status: _optionalStringFromJson(json, const ['status', 'phase']) ?? '',
+      roundId: _roundIdFromJson(json),
+      status: _stringFromJson(json, const ['status', 'phase']),
       rawJson: Map.unmodifiable(json),
     );
   }
@@ -524,19 +572,23 @@ class VotingRoundTally {
 
 /// Response from a helper-server share submission.
 class VotingShareSubmissionResult {
-  final String shareId;
+  static const _acceptedStatuses = {'queued', 'duplicate'};
+
+  final String status;
   final Map<String, dynamic> rawJson;
 
   const VotingShareSubmissionResult({
-    required this.shareId,
+    required this.status,
     required this.rawJson,
   });
 
   factory VotingShareSubmissionResult.fromJson(Map<String, dynamic> json) {
+    final status = _stringFromJson(json, const ['status']);
+    if (!_acceptedStatuses.contains(status)) {
+      throw FormatException('Unexpected helper share submit status: $status');
+    }
     return VotingShareSubmissionResult(
-      shareId:
-          _optionalStringFromJson(json, const ['shareId', 'share_id', 'id']) ??
-          '',
+      status: status,
       rawJson: Map.unmodifiable(json),
     );
   }
@@ -544,24 +596,19 @@ class VotingShareSubmissionResult {
 
 /// Confirmation status for one helper-server share.
 class VotingShareStatus {
-  final String shareId;
+  static const _acceptedStatuses = {'pending', 'confirmed'};
+
   final String status;
   final Map<String, dynamic> rawJson;
 
-  const VotingShareStatus({
-    required this.shareId,
-    required this.status,
-    required this.rawJson,
-  });
+  const VotingShareStatus({required this.status, required this.rawJson});
 
   factory VotingShareStatus.fromJson(Map<String, dynamic> json) {
-    return VotingShareStatus(
-      shareId:
-          _optionalStringFromJson(json, const ['shareId', 'share_id', 'id']) ??
-          '',
-      status: _optionalStringFromJson(json, const ['status']) ?? '',
-      rawJson: Map.unmodifiable(json),
-    );
+    final status = _stringFromJson(json, const ['status']);
+    if (!_acceptedStatuses.contains(status)) {
+      throw FormatException('Unexpected helper share status: $status');
+    }
+    return VotingShareStatus(status: status, rawJson: Map.unmodifiable(json));
   }
 }
 
@@ -792,11 +839,11 @@ List<Object?> _optionalListFromJson(
 
 List<int> _bytesFromJson(Map<String, dynamic> json, List<String> keys) {
   final value = _stringFromJson(json, keys);
-  final hex = value.startsWith('0x') ? value.substring(2) : value;
-  if (hex.length.isEven && RegExp(r'^[0-9a-fA-F]+$').hasMatch(hex)) {
-    return hexToBytes(hex);
+  try {
+    return base64Decode(value);
+  } on FormatException catch (error) {
+    throw FormatException('${keys.first} must be base64: ${error.message}');
   }
-  return base64Decode(value);
 }
 
 Map<String, dynamic> _objectFromValue(Object? value) {

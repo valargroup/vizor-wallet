@@ -34,7 +34,7 @@ class FakeVotingHttpClient implements VotingHttpClient {
         ? configured.next()
         : configured;
     if (response == null) {
-      return jsonResponse({'ok': true});
+      throw StateError('No fake voting HTTP response configured for $uri');
     }
     if (response is Exception) {
       throw response;

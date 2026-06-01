@@ -257,6 +257,17 @@ void main() {
     }
   });
 
+  test('loadDynamicConfig validates direct dynamic config URLs', () async {
+    final loader = VotingConfigLoader(httpClient: FakeVotingHttpClient());
+
+    await expectLater(
+      loader.loadDynamicConfig(
+        Uri.parse('http://voting.example/dynamic-voting-config.json'),
+      ),
+      throwsA(isA<VotingConfigDecodeException>()),
+    );
+  });
+
   test('static config allows localhost dynamic config during regtest', () {
     final json = Map<String, dynamic>.of(staticConfigJson())
       ..['dynamic_config_url'] =
@@ -264,6 +275,18 @@ void main() {
     final config = StaticVotingConfig.fromJson(json);
 
     expect(config.validate, returnsNormally);
+  });
+
+  test('static config rejects duplicate trusted key ids', () {
+    final key = Map<String, dynamic>.of(
+      (staticConfigJson()['trusted_keys'] as List).single
+          as Map<String, dynamic>,
+    );
+    final json = Map<String, dynamic>.of(staticConfigJson())
+      ..['trusted_keys'] = [key, Map<String, dynamic>.of(key)];
+    final config = StaticVotingConfig.fromJson(json);
+
+    expect(config.validate, throwsA(isA<VotingConfigDecodeException>()));
   });
 
   test('dynamic config rejects missing required rounds registry', () async {
@@ -283,6 +306,44 @@ void main() {
     );
 
     expect(loader.load(), throwsA(isA<VotingConfigDecodeException>()));
+  });
+
+  test('dynamic config validates signed round metadata', () {
+    void expectInvalidRound(Map<String, dynamic> roundJson, Matcher matcher) {
+      final dynamicJson = Map<String, dynamic>.of(dynamicConfigJson())
+        ..['rounds'] = {_roundId: roundJson};
+
+      expect(() => VotingConfig.fromJson(dynamicJson).validate(), matcher);
+    }
+
+    expectInvalidRound(
+      roundConfigJson(authVersion: 2),
+      throwsA(isA<VotingConfigDecodeException>()),
+    );
+    expectInvalidRound(
+      roundConfigJson(eaPk: _b64(2, 31)),
+      throwsA(isA<VotingConfigDecodeException>()),
+    );
+    expectInvalidRound(
+      roundConfigJson(signatures: const []),
+      throwsA(isA<VotingConfigDecodeException>()),
+    );
+    expectInvalidRound(
+      roundConfigJson(
+        signatures: [
+          {'key_id': 'demo', 'alg': 'ed25519', 'sig': _b64(3, 63)},
+        ],
+      ),
+      throwsA(isA<VotingConfigDecodeException>()),
+    );
+    expectInvalidRound(
+      roundConfigJson(
+        signatures: [
+          {'key_id': 'demo', 'alg': 'unknown', 'sig': _b64(3, 64)},
+        ],
+      ),
+      throwsA(isA<VotingConfigDecodeException>()),
+    );
   });
 
   test('config parsing rejects fractional integer fields', () {
@@ -314,16 +375,14 @@ void main() {
   });
 }
 
+const _roundId =
+    '0000000000000000000000000000000000000000000000000000000000000001';
+
 Map<String, dynamic> staticConfigJson() => {
   'static_config_version': 1,
   'dynamic_config_url': 'https://voting.example/dynamic-voting-config.json',
   'trusted_keys': [
-    {
-      'key_id': 'demo',
-      'alg': 'ed25519',
-      'pubkey':
-          '0101010101010101010101010101010101010101010101010101010101010101',
-    },
+    {'key_id': 'demo', 'alg': 'ed25519', 'pubkey': _b64(1, 32)},
   ],
 };
 
@@ -345,19 +404,22 @@ Map<String, dynamic> dynamicConfigJson({
     'tally': 'v0',
     'vote_server': voteServerVersion,
   },
-  'rounds': {
-    '0000000000000000000000000000000000000000000000000000000000000001': {
-      'auth_version': 1,
-      'ea_pk':
-          '0202020202020202020202020202020202020202020202020202020202020202',
-      'signatures': [
-        {
-          'key_id': 'demo',
-          'alg': 'ed25519',
-          'sig':
-              '0303030303030303030303030303030303030303030303030303030303030303',
-        },
-      ],
-    },
-  },
+  'rounds': {_roundId: roundConfigJson()},
 };
+
+Map<String, dynamic> roundConfigJson({
+  int authVersion = 1,
+  String? eaPk,
+  List<Map<String, String>>? signatures,
+}) => {
+  'auth_version': authVersion,
+  'ea_pk': eaPk ?? _b64(2, 32),
+  'signatures':
+      signatures ??
+      [
+        {'key_id': 'demo', 'alg': 'ed25519', 'sig': _b64(3, 64)},
+      ],
+};
+
+String _b64(int byte, int length) =>
+    base64Encode(List<int>.filled(length, byte));

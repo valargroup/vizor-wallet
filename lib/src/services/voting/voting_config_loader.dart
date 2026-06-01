@@ -154,6 +154,7 @@ class VotingConfigLoader {
   /// could make the wallet submit to the wrong service or authenticate the wrong
   /// round, so malformed or unavailable config remains an explicit error.
   Future<VotingConfig> loadDynamicConfig(Uri dynamicConfigUrl) async {
+    StaticVotingConfig.validateDynamicConfigUrl(dynamicConfigUrl);
     final response = await _httpClient.get(dynamicConfigUrl, timeout: _timeout);
     if (response.statusCode != 200) {
       throw VotingHttpException(
