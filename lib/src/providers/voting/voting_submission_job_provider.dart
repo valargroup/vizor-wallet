@@ -15,6 +15,8 @@ import 'voting_service_providers.dart';
 import 'voting_state.dart';
 import 'voting_submission_guard_provider.dart';
 
+final _pendingVcTreePosition = BigInt.zero;
+
 enum VotingSubmissionJobStatus {
   idle,
   running,
@@ -381,7 +383,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
           .read(votingDraftProvider(key).notifier)
           .ensureLoaded();
       if (!_isCurrentJob(key: key, generation: generation)) return;
-      final userDraftVotes = draft.toDraftVotes(proposals);
+      final userDraftVotes = _draftVotesFromChoices(draft, proposals);
       final proposalIds = proposals.map((proposal) => proposal.id).toList();
 
       await sessionNotifier.ensureWalletReadyForVoting();
@@ -944,14 +946,43 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
     return [
       for (final proposal in proposals)
         if (choicesByProposal[proposal.id] != null)
-          rust_wire.DraftVote(
+          _draftVoteForCommitmentBuild(
             proposalId: proposal.id,
             choice: choicesByProposal[proposal.id]!,
             numOptions: proposal.options.length,
-            vcTreePosition: BigInt.zero,
-            singleShare: false,
           ),
     ];
+  }
+
+  List<rust_wire.DraftVote> _draftVotesFromChoices(
+    VotingDraftState draft,
+    List<VotingProposalView> proposals,
+  ) {
+    return [
+      for (final proposal in proposals)
+        if (draft.choices[proposal.id] != null)
+          _draftVoteForCommitmentBuild(
+            proposalId: proposal.id,
+            choice: draft.choices[proposal.id]!,
+            numOptions: proposal.options.length,
+          ),
+    ];
+  }
+
+  rust_wire.DraftVote _draftVoteForCommitmentBuild({
+    required int proposalId,
+    required int choice,
+    required int numOptions,
+  }) {
+    // The cast-vote TX returns the real VC tree position after confirmation.
+    // Share submission must late-bind that confirmed position before wire JSON.
+    return rust_wire.DraftVote(
+      proposalId: proposalId,
+      choice: choice,
+      numOptions: numOptions,
+      vcTreePosition: _pendingVcTreePosition,
+      singleShare: false,
+    );
   }
 }
 

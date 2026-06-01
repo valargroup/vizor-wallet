@@ -188,8 +188,7 @@ void main() {
     () async {
       final http = FakeVotingHttpClient(
         responses: {
-          'https://voting.example/static-voting-config.json':
-              staticConfigJson(),
+          'https://voting.example/static-voting-config.json': staticConfigJson(),
           'https://voting.example/dynamic-voting-config.json':
               dynamicConfigJson(),
           '/shielded-vote/v1/rounds': {
@@ -293,7 +292,8 @@ void main() {
     () async {
       final http = FakeVotingHttpClient(
         responses: {
-          'https://voting.example/static-voting-config.json': staticConfigJson(),
+          'https://voting.example/static-voting-config.json':
+              staticConfigJson(),
           'https://voting.example/dynamic-voting-config.json':
               dynamicConfigJson(),
           '/shielded-vote/v1/rounds': {
@@ -1796,35 +1796,16 @@ void main() {
       await container
           .read(votingSessionProvider(kRoundId).notifier)
           .castVotes(
-            draftVotes: loadedDraft.toDraftVotes([
-              VotingProposalView(
-                id: 7,
-                title: 'One',
-                description: '',
-                options: [
-                  VotingOptionView(index: 0, label: 'No'),
-                  VotingOptionView(index: 1, label: 'Yes'),
-                ],
-              ),
-              VotingProposalView(
-                id: 8,
-                title: 'Two',
-                description: '',
-                options: [
-                  VotingOptionView(index: 0, label: 'No'),
-                  VotingOptionView(index: 1, label: 'Yes'),
-                ],
-              ),
-              VotingProposalView(
-                id: 9,
-                title: 'Three',
-                description: '',
-                options: [
-                  VotingOptionView(index: 0, label: 'No'),
-                  VotingOptionView(index: 1, label: 'Yes'),
-                ],
-              ),
-            ]),
+            draftVotes: [
+              for (final entry in loadedDraft.choices.entries)
+                rust_wire.DraftVote(
+                  proposalId: entry.key,
+                  choice: entry.value,
+                  numOptions: 2,
+                  vcTreePosition: BigInt.zero,
+                  singleShare: false,
+                ),
+            ],
           );
 
       expect(rust.voteCommitmentKeys, ['0:8', '1:8', '0:9', '1:9']);

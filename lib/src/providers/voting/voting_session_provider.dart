@@ -1329,6 +1329,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
                 .toList(growable: false);
       if (shares.isEmpty) continue;
       final vcTreePosition = vcTreePositions[commitment.proposalId];
+      if (vcTreePosition == null) {
+        throw StateError(
+          'Missing confirmed vote tree position for submitted shares '
+          'bundle=${commitments.bundleIndex} proposal=${commitment.proposalId}.',
+        );
+      }
       final plans = await rust.planShareSubmissions(
         shareCount: shares.length,
         serverUrls: serverUrls,
