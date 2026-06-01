@@ -166,6 +166,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
   }) async {
     final accountUuid = await accountUuidLoader.call();
     if (accountUuid == null) {
+      _clearSessionAccount(reason: 'active-account-cleared');
       if (!throwIfMissing) return;
       throw StateError('No active account for voting session.');
     }
@@ -192,6 +193,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     _currentContext = null;
     _delegationPirPrecomputes.clear();
     _shareTrackingTimer?.cancel();
+    _shareTrackingTimer = null;
     if (!hadSessionAccount || _isDisposed) return;
 
     final generation = _sessionGeneration;
@@ -223,6 +225,36 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         return;
       }
       state = AsyncError(error, stackTrace);
+    }
+  }
+
+  void _clearSessionAccount({required String reason}) {
+    final hadSessionAccount = _sessionAccountUuid != null;
+    final previousContext = _currentContext;
+    if (previousContext != null &&
+        !_activeSubmissionOwnsContext(previousContext)) {
+      unawaited(
+        _resetVotingSessionState(
+          rust: ref.read(votingRustApiProvider),
+          context: previousContext,
+          reason: reason,
+        ),
+      );
+    }
+    if (hadSessionAccount) {
+      _advanceSessionGeneration();
+    }
+    _sessionAccountUuid = null;
+    _sessionIsHardwareAccount = null;
+    _currentContext = null;
+    _delegationPirPrecomputes.clear();
+    _shareTrackingTimer?.cancel();
+    _shareTrackingTimer = null;
+    if (!_isDisposed && hadSessionAccount) {
+      state = AsyncError(
+        StateError('No active account for voting session.'),
+        StackTrace.current,
+      );
     }
   }
 

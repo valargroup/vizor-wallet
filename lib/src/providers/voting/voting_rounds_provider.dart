@@ -20,27 +20,55 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
   static const defaultPollInterval = Duration(seconds: 10);
 
   Timer? _pollTimer;
+  bool _pollingRequested = false;
+  Duration _pollInterval = defaultPollInterval;
   bool _refreshInFlight = false;
+  int _loadGeneration = 0;
 
   @override
   Future<List<VotingRoundView>> build() async {
-    ref.onDispose(stopPolling);
+    final generation = ++_loadGeneration;
+    ref.onDispose(() {
+      _loadGeneration++;
+      _refreshInFlight = false;
+      _cancelPollTimer();
+    });
     ref.watch(votingActiveAccountUuidProvider);
-    return _load();
+    if (_pollingRequested) {
+      _startPollTimer(_pollInterval);
+    }
+    return _load(generation: generation);
   }
 
   void startPolling({Duration interval = defaultPollInterval}) {
-    if (_pollTimer != null) return;
-    _pollTimer = Timer.periodic(interval, (_) => refresh());
+    _pollingRequested = true;
+    if (_pollInterval != interval) {
+      _cancelPollTimer();
+      _pollInterval = interval;
+    }
+    _startPollTimer(interval);
     unawaited(refresh());
   }
 
   void stopPolling() {
+    _pollingRequested = false;
+    _pollInterval = defaultPollInterval;
+    _cancelPollTimer();
+  }
+
+  void _startPollTimer(Duration interval) {
+    if (_pollTimer != null) return;
+    _pollTimer = Timer.periodic(interval, (_) => refresh());
+  }
+
+  void _cancelPollTimer() {
     _pollTimer?.cancel();
     _pollTimer = null;
   }
 
   Future<void> refresh() async {
+    final generation = _loadGeneration;
+    if (!_isCurrentLoad(generation)) return;
     if (_refreshInFlight || state.isLoading) return;
     _refreshInFlight = true;
     final previous = state.value;
@@ -48,8 +76,11 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
       state = const AsyncLoading<List<VotingRoundView>>();
     }
     try {
-      state = AsyncData(await _load());
+      final rounds = await _load(generation: generation);
+      if (!_isCurrentLoad(generation)) return;
+      state = AsyncData(rounds);
     } catch (error, stackTrace) {
+      if (!_isCurrentLoad(generation)) return;
       if (previous == null) {
         state = AsyncError(error, stackTrace);
       } else {
@@ -59,18 +90,32 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
         );
       }
     } finally {
-      _refreshInFlight = false;
+      if (generation == _loadGeneration) {
+        _refreshInFlight = false;
+      }
     }
   }
 
-  Future<List<VotingRoundView>> _load() async {
+  bool _isCurrentLoad(int generation) {
+    return ref.mounted && generation == _loadGeneration;
+  }
+
+  Future<List<VotingRoundView>> _load({required int generation}) async {
     final config = await ref.read(votingConfigProvider.future);
+    if (!_isCurrentLoad(generation)) return const [];
     final api = ref.read(votingApiClientProvider(config.apiBaseUrl));
     final endorser = ref.read(votingEndorserClientProvider(config.apiBaseUrl));
 
     final rounds = await api.listRounds();
+    if (!_isCurrentLoad(generation)) return const [];
     final endorsedIds = await endorser.getEndorsedSet();
-    final recoveryStates = await _roundListRecoveryStates(rounds, api: api);
+    if (!_isCurrentLoad(generation)) return const [];
+    final recoveryStates = await _roundListRecoveryStates(
+      rounds,
+      api: api,
+      generation: generation,
+    );
+    if (!_isCurrentLoad(generation)) return const [];
     return [
       for (final round in rounds)
         VotingRoundView.fromSummary(
@@ -85,16 +130,20 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
   Future<Map<String, _RoundListRecoveryState>> _roundListRecoveryStates(
     Iterable<VotingRoundSummary> rounds, {
     required VotingApiClient api,
+    required int generation,
   }) async {
     final String accountUuid;
     final String dbPath;
     try {
+      if (!_isCurrentLoad(generation)) return const {};
       final activeAccountUuid = await ref
           .read(votingActiveAccountUuidProvider)
           .call();
+      if (!_isCurrentLoad(generation)) return const {};
       if (activeAccountUuid == null) return const {};
       accountUuid = activeAccountUuid;
       dbPath = await ref.read(votingWalletDbPathProvider).call();
+      if (!_isCurrentLoad(generation)) return const {};
     } catch (error) {
       debugPrint('[zcash] Voting: skipped poll-state lookup: $error');
       return const {};
@@ -107,6 +156,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
           dbPath: dbPath,
           accountUuid: accountUuid,
           round: round,
+          generation: generation,
         );
         if (recoveryState.voted || recoveryState.inProgress) {
           states[round.roundId] = recoveryState;
@@ -127,9 +177,16 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
     required VotingRoundSummary round,
     required String dbPath,
     required String accountUuid,
+    required int generation,
   }) async {
+    if (!_isCurrentLoad(generation)) {
+      return const _RoundListRecoveryState(voted: false, inProgress: false);
+    }
     final recovery = ref.read(votingRecoveryServiceProvider);
     final proposalIds = await _proposalIdsForRound(api, round);
+    if (!_isCurrentLoad(generation)) {
+      return const _RoundListRecoveryState(voted: false, inProgress: false);
+    }
     rust_voting.RoundPlanView? roundPlan;
     if (proposalIds.isNotEmpty) {
       try {

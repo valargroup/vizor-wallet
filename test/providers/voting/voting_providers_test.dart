@@ -413,6 +413,112 @@ void main() {
     expect(refreshed.value, first);
   });
 
+  test('rounds polling restarts after active account rebuild', () async {
+    final activeAccountProvider =
+        NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+          _ActiveVotingAccountNotifier.new,
+        );
+    final http = FakeVotingHttpClient(
+      responses: {
+        'https://voting.example/static-voting-config.json': staticConfigJson(),
+        'https://voting.example/dynamic-voting-config.json':
+            dynamicConfigJson(),
+        '/shielded-vote/v1/rounds': {
+          'rounds': [
+            {
+              'vote_round_id': kRoundId,
+              'title': 'Poll',
+              'status': 'active',
+              'proposals': [
+                {
+                  'id': 7,
+                  'title': 'Question',
+                  'options': [
+                    {'index': 0, 'label': 'Yes'},
+                    {'index': 1, 'label': 'No'},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        '/shielded-vote/v1/endorsed-rounds/zodl': {
+          'vote_round_ids': [kRoundId],
+        },
+      },
+    );
+    final container = _sessionContainer(
+      http: http,
+      activeAccountUuidListenable: activeAccountProvider,
+    );
+    final subscription = container.listen(votingRoundsProvider, (_, _) {});
+    addTearDown(subscription.close);
+    addTearDown(container.dispose);
+
+    await container.read(votingRoundsProvider.future);
+    final initialRequestCount = _roundListRequestCount(http);
+    container
+        .read(votingRoundsProvider.notifier)
+        .startPolling(interval: const Duration(milliseconds: 5));
+    await _waitForRoundListRequestCount(http, initialRequestCount + 1);
+
+    container.read(activeAccountProvider.notifier).set('account-2');
+    await container.read(votingRoundsProvider.future);
+    final afterRebuildRequestCount = _roundListRequestCount(http);
+    await _waitForRoundListRequestCount(http, afterRebuildRequestCount + 1);
+
+    container.read(votingRoundsProvider.notifier).stopPolling();
+  });
+
+  test(
+    'rounds refresh ignores stale result after active account rebuild',
+    () async {
+      final activeAccountProvider =
+          NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+            _ActiveVotingAccountNotifier.new,
+          );
+      final http = _GatedRoundListHttpClient(
+        responses: {
+          'https://voting.example/static-voting-config.json':
+              staticConfigJson(),
+          'https://voting.example/dynamic-voting-config.json':
+              dynamicConfigJson(),
+          '/shielded-vote/v1/endorsed-rounds/zodl': {
+            'vote_round_ids': [kRoundId],
+          },
+        },
+      );
+      final container = _sessionContainer(
+        http: http,
+        activeAccountUuidListenable: activeAccountProvider,
+      );
+      final subscription = container.listen(votingRoundsProvider, (_, _) {});
+      addTearDown(subscription.close);
+      addTearDown(container.dispose);
+
+      final initial = await container.read(votingRoundsProvider.future);
+      expect(initial.single.title, 'Initial');
+      container
+          .read(votingRoundsProvider.notifier)
+          .startPolling(interval: const Duration(seconds: 30));
+      await http.secondRoundListStarted.future;
+
+      container.read(activeAccountProvider.notifier).set('account-2');
+      final rebuilt = await container.read(votingRoundsProvider.future);
+      expect(rebuilt.single.title, 'Fresh account');
+
+      http.releaseSecondRoundList.complete();
+      await http.staleRoundListReturned.future;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        container.read(votingRoundsProvider).value?.single.title,
+        'Fresh account',
+      );
+      container.read(votingRoundsProvider.notifier).stopPolling();
+    },
+  );
+
   test('round details normalize base64 vote_round_id to hex', () {
     final details = VotingRoundDetails.fromStatus(
       VotingRoundStatus.fromJson(
@@ -1254,6 +1360,53 @@ void main() {
     );
     expect(rust.resetVotingSessionStateCalls, contains('account-1:$kRoundId'));
   });
+
+  test(
+    'session clears cached account when active account disappears',
+    () async {
+      final rust = FakeVotingRustApi();
+      final recoveryApi = FakeVotingRecoveryApi(state: recoveryState());
+      final activeAccountProvider =
+          NotifierProvider<_ActiveVotingAccountNotifier, String?>(
+            _ActiveVotingAccountNotifier.new,
+          );
+      final container = _sessionContainer(
+        rust: rust,
+        recoveryApi: recoveryApi,
+        activeAccountUuidListenable: activeAccountProvider,
+      );
+      final subscription = container.listen(
+        votingSessionProvider(kRoundId),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      addTearDown(container.dispose);
+
+      final first = await container.read(
+        votingSessionProvider(kRoundId).future,
+      );
+      expect(first.accountUuid, 'account-1');
+      final loadedWalletIds = List<String>.of(recoveryApi.walletIds);
+
+      container.read(activeAccountProvider.notifier).set(null);
+      await _waitForSessionError(container, kRoundId);
+      await container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .prepareDelegation();
+
+      expect(container.read(votingSessionProvider(kRoundId)).hasValue, isTrue);
+      expect(
+        container.read(votingSessionProvider(kRoundId)).value?.phase,
+        VotingSessionPhase.error,
+      );
+      expect(rust.setupCalls, 0);
+      expect(recoveryApi.walletIds, loadedWalletIds);
+      expect(
+        rust.resetVotingSessionStateCalls,
+        contains('account-1:$kRoundId'),
+      );
+    },
+  );
 
   test('submission job stays pinned after active account changes', () async {
     final readiness = _GatedVotingWalletSyncReadinessChecker();
@@ -3316,6 +3469,94 @@ Future<VotingSessionState> _waitForJobSessionPhase(
     '${container.read(votingSubmissionJobSessionProvider(key)).value?.phase}',
   );
 }
+
+Future<AsyncValue<VotingSessionState>> _waitForSessionError(
+  ProviderContainer container,
+  String roundId,
+) async {
+  for (var i = 0; i < 100; i++) {
+    final state = container.read(votingSessionProvider(roundId));
+    if (state.hasError) return state;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail(
+    'Timed out waiting for voting session error. '
+    'Last state: ${container.read(votingSessionProvider(roundId))}',
+  );
+}
+
+Future<void> _waitForRoundListRequestCount(
+  FakeVotingHttpClient http,
+  int minimum,
+) async {
+  for (var i = 0; i < 100; i++) {
+    if (_roundListRequestCount(http) >= minimum) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail(
+    'Timed out waiting for $minimum round-list request(s). '
+    'Saw ${_roundListRequestCount(http)}.',
+  );
+}
+
+int _roundListRequestCount(FakeVotingHttpClient http) {
+  return http.requests
+      .where(
+        (request) =>
+            request.method == 'GET' &&
+            request.uri.path == '/shielded-vote/v1/rounds',
+      )
+      .length;
+}
+
+class _GatedRoundListHttpClient extends FakeVotingHttpClient {
+  _GatedRoundListHttpClient({required super.responses});
+
+  final secondRoundListStarted = Completer<void>();
+  final releaseSecondRoundList = Completer<void>();
+  final staleRoundListReturned = Completer<void>();
+  var _roundListCalls = 0;
+
+  @override
+  Future<VotingHttpResponse> get(Uri uri, {Duration? timeout}) async {
+    if (uri.path != '/shielded-vote/v1/rounds') {
+      return super.get(uri, timeout: timeout);
+    }
+
+    requests.add(FakeVotingHttpRequest('GET', uri, timeout: timeout));
+    _roundListCalls++;
+    if (_roundListCalls == 2) {
+      secondRoundListStarted.complete();
+      await releaseSecondRoundList.future;
+      staleRoundListReturned.complete();
+      return jsonResponse(_roundListResponse('Stale refresh'));
+    }
+    if (_roundListCalls >= 3) {
+      return jsonResponse(_roundListResponse('Fresh account'));
+    }
+    return jsonResponse(_roundListResponse('Initial'));
+  }
+}
+
+Map<String, dynamic> _roundListResponse(String title) => {
+  'rounds': [
+    {
+      'vote_round_id': kRoundId,
+      'title': title,
+      'status': 'active',
+      'proposals': [
+        {
+          'id': 7,
+          'title': 'Question',
+          'options': [
+            {'index': 0, 'label': 'Yes'},
+            {'index': 1, 'label': 'No'},
+          ],
+        },
+      ],
+    },
+  ],
+};
 
 Map<String, dynamic> _postBody(FakeVotingHttpClient http, String path) {
   final request = http.requests.singleWhere(
