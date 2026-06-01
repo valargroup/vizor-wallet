@@ -81,6 +81,15 @@ pub struct ApiVotingRoundContext {
     pub max_real_notes_per_bundle: Option<u32>,
 }
 
+/// Parsed fields from a Keystone-signed voting PCZT.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParsedSignedVotingPczt {
+    /// ZIP-244 sighash extracted from the signed PCZT.
+    pub sighash: Vec<u8>,
+    /// Orchard SpendAuth signature extracted from the signed PCZT.
+    pub spend_auth_sig: Vec<u8>,
+}
+
 /// Returns the vote-chain delegation submission body as validated wire JSON.
 ///
 /// Binary fields are base64-encoded here so Dart does not duplicate protocol
@@ -666,31 +675,29 @@ pub async fn build_keystone_delegation_request(
         .await
 }
 
-/// Extract the ZIP-244 sighash from PCZT bytes.
+/// Parse the fields Dart needs from a Keystone-signed voting PCZT.
 ///
 /// # Errors
 ///
-/// Returns an error if `pczt_bytes` cannot be decoded or does not contain a
-/// spend authorization sighash.
-pub fn extract_pczt_sighash(pczt_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
-    catch(|| {
-        zcash_voting::delegate::pczt_sighash(&pczt_bytes)
-            .map(|sighash| sighash.to_vec())
-            .map_err(|e| format!("extract_pczt_sighash failed: {e}"))
-    })
-}
-
-/// Extract a Keystone SpendAuth signature from signed PCZT bytes.
-pub fn extract_spend_auth_signature_from_signed_pczt(
+/// Returns an error if the signed PCZT cannot be decoded, does not contain a
+/// spend authorization sighash, or does not contain a SpendAuth signature for
+/// the expected action.
+pub fn parse_signed_voting_pczt(
     signed_pczt_bytes: Vec<u8>,
     action_index: u32,
-) -> Result<Vec<u8>, String> {
+) -> Result<ParsedSignedVotingPczt, String> {
     catch(|| {
         let action_index =
             usize::try_from(action_index).map_err(|_| "action_index does not fit in usize")?;
-        zcash_voting::delegate::spend_auth_signature(&signed_pczt_bytes, action_index)
-            .map(|sig| sig.to_vec())
-            .map_err(|e| format!("extract_spend_auth_sig failed: {e}"))
+        let sighash = zcash_voting::delegate::pczt_sighash(&signed_pczt_bytes)
+            .map_err(|e| format!("extract_pczt_sighash failed: {e}"))?;
+        let spend_auth_sig =
+            zcash_voting::delegate::spend_auth_signature(&signed_pczt_bytes, action_index)
+                .map_err(|e| format!("extract_spend_auth_sig failed: {e}"))?;
+        Ok(ParsedSignedVotingPczt {
+            sighash: sighash.to_vec(),
+            spend_auth_sig: spend_auth_sig.to_vec(),
+        })
     })
 }
 
