@@ -142,7 +142,7 @@ pub(crate) async fn get_latest_block(
 
 /// Return the note commitment tree state for a block with a bounded
 /// response wait.
-pub(super) async fn get_tree_state(
+pub(crate) async fn get_tree_state(
     client: &mut CompactTxStreamerClient<Channel>,
     height: u64,
 ) -> Result<TreeState, SyncError> {

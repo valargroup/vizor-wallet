@@ -475,7 +475,6 @@ class MainFlutterWindow: NSWindow {
 
   private var fullscreenTitleObservers: [NSObjectProtocol] = []
   private var fullscreenTitleTransitionGeneration = 0
-
   deinit {
     for observer in fullscreenTitleObservers {
       NotificationCenter.default.removeObserver(observer)

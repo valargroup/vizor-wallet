@@ -19,3 +19,7 @@ Future<String> getWalletDbPath() async {
   final dbName = await getWalletDbName();
   return '${dir.path}${Platform.pathSeparator}$dbName';
 }
+
+String votingDbPathForWalletDbPath(String walletDbPath) {
+  return '$walletDbPath.voting';
+}

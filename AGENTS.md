@@ -53,6 +53,33 @@ read `release_notes/README.md` and create `release_notes/vX.Y.Z.md`.
 
 Removes the app from the booted iOS simulator including Keychain data. This is necessary when testing wallet creation/import because the mnemonic is stored in iOS Keychain via `flutter_secure_storage`, which persists even after a normal app uninstall.
 
+### macOS local testing
+
+Vizor desktop testing should use the macOS app build unless the user explicitly
+asks for iPhone, iPad, or simulator testing. Do not open or inspect Vizor by app
+name alone because `/Applications/Vizor.app` may be an installed app with a
+different bundle ID and stale code. Open the exact local build path instead, for
+example:
+
+```bash
+APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/Build/Products/Debug/Vizor.app' -print | sort -r | head -n 1)
+open "$APP"
+```
+
+When using Computer Use, pass the full `.app` path and verify the reported
+bundle ID matches the local build, not the installed app. If multiple Vizor
+windows are open, close or ignore the stale windows and target the full local
+build path.
+
+Local unsigned macOS debug builds can show `Secure storage is locked` with
+`errSecMissingEntitlement` (`-34018`) when `flutter_secure_storage` uses the
+macOS data protection keychain. For local testing only, use a local bundle ID
+and set macOS secure storage to the regular keychain
+(`usesDataProtectionKeychain: false`). With `flutter_secure_storage_darwin`
+0.2.0, verify that the native plugin receives that option because the Dart
+package emits `usesDataProtectionKeychain` while the native plugin may read
+`useDataProtectionKeyChain`.
+
 ### scripts/figma-export.js
 
 Exports a single Figma node as a rendered, composited image (PNG / JPG / SVG / PDF) via the Figma REST API. Reach for this instead of the Figma MCP `use_figma` + `exportAsync` path whenever you need the bytes on disk as an asset. The MCP export route returns base64 through a 20 KB-truncated tool output, forcing a multi-call chunk reassembly; the REST endpoint renders server-side and returns a single signed URL, so one HTTP call produces the file.
@@ -410,6 +437,36 @@ Separate `BGContinuedProcessingTask` (`com.zcash.zcashWallet.txtrack`) polls lig
 - Post-send: `refreshAfterSend()` for immediate pending TX display
 - Friendly error messages via `_friendlyError()` pattern matching
 
+### Coinholder Polling
+
+Coinholder polling is macOS-first and software-account only. Hardware accounts
+must hide the live entry point and show a Keystone/hardware-coming-soon hint.
+
+- Rust voting modules live under `rust/src/wallet/voting/`. Keep FRB API
+  functions in `rust/src/api/voting.rs` thin: Dart may orchestrate, but Rust
+  should continue to own wallet DB access, `zcash_voting` calls, note selection,
+  delegation, vote commitments, vote-tree sync, and recovery helpers.
+- `WalletNetwork::voting_id()` is the single source for the vote network ID
+  mapping: testnet/regtest = `0`, mainnet = `1`. Do not duplicate this mapping
+  in Dart.
+- `zcash_voting::storage::VotingDb` owns local voting workflow state. Do not add
+  a Vizor-specific `voting_round_state` table or parallel recovery schema.
+- Durable state is bundle-indexed. Preserve explicit `bundle_index` in
+  delegation tx hashes, vote records, commitment bundles, share delegation rows,
+  progress maps, and recovery UI.
+- PIR endpoint resolution must fail closed unless the endpoint's `/root.height`
+  equals the round snapshot height exactly.
+- REST, config, endorser, and PIR endpoint selection live in Dart. Rust should
+  only perform crypto, wallet queries, `zcash_voting` storage/recovery, and the
+  Rust-native vote-tree/PIR work supplied by `zcash_voting`.
+- Voting hotkeys are secret material. Store them encrypted in
+  `AppSecureStore` under `zcash_account_voting_hotkey_{accountUuid}_{roundId}`;
+  rotate them with mnemonic payloads and delete them on account removal.
+- Share payload JSON should stay compatible with Swift `VotingTypes.swift`
+  snake_case names (`shares_hash`, `proposal_id`, `enc_share`, `all_enc_shares`,
+  `share_comms`, etc.). Use `zcash_voting` helpers for share nullifiers rather
+  than recomputing them in Dart.
+
 ### Hardware Wallet (Keystone) Send Flow
 
 Hardware send uses a **three-PCZT pipeline** that matches the
@@ -645,7 +702,7 @@ Important desktop design rule:
 
 ## Crate Versions
 
-Constrained in `rust/Cargo.toml` and resolved in `rust/Cargo.lock`. Key crates: `zcash_client_backend` 0.22.0, `zcash_client_sqlite` 0.20.2, `orchard` 0.13.1, `sapling-crypto` 0.7.0. These must stay compatible — check librustzcash releases before bumping.
+Constrained in `rust/Cargo.toml` and resolved in `rust/Cargo.lock`. Key crates: `zcash_client_backend` 0.22.0, `zcash_client_sqlite` 0.20.2, `zcash_keys` 0.13, `pczt` 0.6, `zcash_primitives` 0.27, `orchard` 0.13.1, and `sapling-crypto` 0.7.0. These must stay compatible — check librustzcash releases before bumping. Voting integration requires the `orchard` `unstable-voting-circuits` feature so it can use `zcash_voting` without local `[patch.crates-io]` overrides.
 
 `tonic` 0.14 with `tls-ring` + `tls-webpki-roots` features for gRPC TLS. `rustls` 0.23+ requires explicit crypto provider — `tls-ring` provides this.
 
