@@ -401,6 +401,28 @@ void main() {
       ),
     );
 
+    final tallyEnvelopeClient = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          '/shielded-vote/v1/tally-results/$hexRoundId': {
+            'vote_round_id': otherHexRoundId,
+            'results': [],
+          },
+        },
+      ),
+    );
+    await expectLater(
+      tallyEnvelopeClient.getRoundTally(hexRoundId),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'getRoundTally response round id mismatch',
+        ),
+      ),
+    );
+
     final proposalTallyClient = VotingApiClient(
       baseUrl: Uri.parse('https://voting.valargroup.org'),
       httpClient: FakeVotingHttpClient(

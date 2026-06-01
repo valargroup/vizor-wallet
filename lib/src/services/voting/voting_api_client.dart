@@ -313,6 +313,15 @@ void _validateTallyResultsEnvelope(
   Map<String, dynamic> object, {
   required String expectedRoundId,
 }) {
+  final envelopeRoundId = VotingRoundTally.fromJson(object).roundId;
+  if (envelopeRoundId.isNotEmpty) {
+    _requireMatchingRoundId(
+      actual: envelopeRoundId,
+      expected: expectedRoundId,
+      context: 'getRoundTally',
+    );
+  }
+
   final results = object['results'];
   if (results == null) {
     if (object.isEmpty) return;
