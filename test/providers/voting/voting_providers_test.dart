@@ -188,7 +188,8 @@ void main() {
     () async {
       final http = FakeVotingHttpClient(
         responses: {
-          'https://voting.example/static-voting-config.json': staticConfigJson(),
+          'https://voting.example/static-voting-config.json':
+              staticConfigJson(),
           'https://voting.example/dynamic-voting-config.json':
               dynamicConfigJson(),
           '/shielded-vote/v1/rounds': {
@@ -199,9 +200,12 @@ void main() {
                 'status': 'active',
                 'proposals': [
                   {
-                    'proposal_id': 7,
+                    'id': 7,
                     'title': 'Question',
-                    'options': ['Yes', 'No'],
+                    'options': [
+                      {'index': 0, 'label': 'Yes'},
+                      {'index': 1, 'label': 'No'},
+                    ],
                   },
                 ],
               },
@@ -324,9 +328,12 @@ void main() {
       final roundStatusWithProposals = roundStatusJson(roundId: kRoundId)
         ..['proposals'] = [
           {
-            'proposal_id': 7,
+            'id': 7,
             'title': 'Question',
-            'options': ['Yes', 'No'],
+            'options': [
+              {'index': 0, 'label': 'Yes'},
+              {'index': 1, 'label': 'No'},
+            ],
           },
         ];
       final http = FakeVotingHttpClient(
