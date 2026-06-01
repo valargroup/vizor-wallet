@@ -108,20 +108,17 @@ class _VotingProposalDetailScreenState
               );
             }
             if (completedVote != null) {
-              return Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: _VotedPollContent(
-                  roundTitle: round.title.isEmpty
-                      ? 'Coinholder poll'
-                      : round.title,
-                  snapshotHeight: round.snapshotHeight,
-                  description: _roundDescription(round.rawJson),
-                  votingPowerZatoshi: state.eligibleWeightZatoshi,
-                  votingPowerPreparing: _votingPowerPreparationInFlight,
-                  votedAt: completedVote.votedAt,
-                  proposals: proposals,
-                  choicesByProposalId: completedVote.choicesByProposalId,
-                ),
+              return _VotedPollContent(
+                roundTitle: round.title.isEmpty
+                    ? 'Coinholder poll'
+                    : round.title,
+                snapshotHeight: round.snapshotHeight,
+                description: _roundDescription(round.rawJson),
+                votingPowerZatoshi: state.eligibleWeightZatoshi,
+                votingPowerPreparing: _votingPowerPreparationInFlight,
+                votedAt: completedVote.votedAt,
+                proposals: proposals,
+                choicesByProposalId: completedVote.choicesByProposalId,
               );
             }
             final pendingVote = _PendingVoteRecovery.fromPlan(state.roundPlan);
@@ -692,15 +689,29 @@ class _VotedPollContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Align(alignment: Alignment.centerLeft, child: AppRouteBackLink()),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.md,
+            AppSpacing.md,
+            0,
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: AppRouteBackLink(),
+          ),
+        ),
         const SizedBox(height: AppSpacing.s),
-        _VotedPollHeader(
-          title: roundTitle,
-          snapshotHeight: snapshotHeight,
-          description: description,
-          votingPowerZatoshi: votingPowerZatoshi,
-          votingPowerPreparing: votingPowerPreparing,
-          votedAt: votedAt,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: _VotedPollHeader(
+            title: roundTitle,
+            snapshotHeight: snapshotHeight,
+            description: description,
+            votingPowerZatoshi: votingPowerZatoshi,
+            votingPowerPreparing: votingPowerPreparing,
+            votedAt: votedAt,
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
         Expanded(
@@ -711,6 +722,12 @@ class _VotedPollContent extends StatelessWidget {
                 )
               : VotingPaneListView.separated(
                   maxWidth: 560,
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    0,
+                    AppSpacing.md,
+                    AppSpacing.md,
+                  ),
                   itemCount: proposals.length,
                   separatorBuilder: (_, _) =>
                       const SizedBox(height: AppSpacing.s),

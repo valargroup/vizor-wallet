@@ -38,15 +38,23 @@ class VotingResultsScreen extends ConsumerWidget {
     return AppDesktopShell(
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: AppRouteBackLink(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                0,
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: AppRouteBackLink(),
+              ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: AppSpacing.s),
             Expanded(
               child: tally.when(
                 skipLoadingOnRefresh: false,
@@ -68,7 +76,7 @@ class VotingResultsScreen extends ConsumerWidget {
                   }
                   return VotingPaneScrollView(
                     maxWidth: 720,
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    scrollPadding: const EdgeInsets.only(bottom: AppSpacing.md),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [

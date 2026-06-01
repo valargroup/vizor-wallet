@@ -65,12 +65,14 @@ class VotingPaneScrollView extends StatefulWidget {
     required this.maxWidth,
     required this.child,
     this.padding = EdgeInsets.zero,
+    this.scrollPadding = EdgeInsets.zero,
     super.key,
   });
 
   final double maxWidth;
   final Widget child;
   final EdgeInsets padding;
+  final EdgeInsets scrollPadding;
 
   @override
   State<VotingPaneScrollView> createState() => _VotingPaneScrollViewState();
@@ -92,6 +94,7 @@ class _VotingPaneScrollViewState extends State<VotingPaneScrollView> {
       child: SingleChildScrollView(
         controller: _controller,
         primary: false,
+        padding: widget.scrollPadding,
         child: _centeredTrack(
           maxWidth: widget.maxWidth,
           padding: widget.padding,

@@ -182,79 +182,75 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         padding: EdgeInsets.zero,
         child: SensitivePrivacyOverlay(
           sensitiveContentVisible: true,
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: session.when(
-              skipLoadingOnRefresh: false,
-              loading: () {
-                if (startError != null) {
-                  return _StatusContent(
-                    phase: VotingSessionPhase.error,
-                    errorMessage: startError,
-                    onRetry: _retry,
-                  );
-                }
-                if (job?.status == VotingSubmissionJobStatus.error &&
-                    job?.key?.roundId == widget.roundId) {
-                  return _StatusContent(
-                    phase: VotingSessionPhase.error,
-                    errorMessage: job?.errorMessage,
-                    onRetry: _retry,
-                    onClear: _clearError,
-                  );
-                }
-                return const Center(child: CircularProgressIndicator());
-              },
-              error: (error, _) => _StatusContent(
-                phase: VotingSessionPhase.error,
-                errorMessage: job?.errorMessage ?? _messageFromError(error),
+          child: session.when(
+            skipLoadingOnRefresh: false,
+            loading: () {
+              if (startError != null) {
+                return _StatusContent(
+                  phase: VotingSessionPhase.error,
+                  errorMessage: startError,
+                  onRetry: _retry,
+                );
+              }
+              if (job?.status == VotingSubmissionJobStatus.error &&
+                  job?.key?.roundId == widget.roundId) {
+                return _StatusContent(
+                  phase: VotingSessionPhase.error,
+                  errorMessage: job?.errorMessage,
+                  onRetry: _retry,
+                  onClear: _clearError,
+                );
+              }
+              return const Center(child: CircularProgressIndicator());
+            },
+            error: (error, _) => _StatusContent(
+              phase: VotingSessionPhase.error,
+              errorMessage: job?.errorMessage ?? _messageFromError(error),
+              onRetry: _retry,
+              onClear: job?.status == VotingSubmissionJobStatus.error
+                  ? _clearError
+                  : null,
+            ),
+            data: (state) {
+              final localError = job?.errorMessage;
+              final completedSubmission =
+                  job?.status == VotingSubmissionJobStatus.complete ||
+                  _hasCompletedSubmission(state);
+              final phase = job?.status != VotingSubmissionJobStatus.error
+                  ? _displayPhase(
+                      state.phase,
+                      completedSubmission: completedSubmission,
+                    )
+                  : VotingSessionPhase.error;
+              return _StatusContent(
+                phase: phase,
+                voteSubmissionDetail: _voteSubmissionDetail(state),
+                voteSubmissionProgress: _voteSubmissionProgress(
+                  state,
+                  completedSubmission: completedSubmission,
+                ),
+                delegationProgress: _delegationProgress(state),
+                completedSubmission: completedSubmission,
+                softwareAccountRequired: job?.softwareAccountRequired ?? false,
+                isHardwareAccount: state.isHardwareAccount,
+                keystoneSigningRequest: state.keystoneSigningRequest,
+                canSkipRemainingKeystoneBundles:
+                    state.canSkipRemainingKeystoneBundles,
+                keystoneUrParts: job?.keystoneUrParts ?? const [],
+                keystoneQrError: job?.keystoneQrError,
+                keystoneScanError: state.keystoneScanError,
+                walletScannedHeight: state.walletScannedHeight,
+                walletSnapshotHeight: state.walletSnapshotHeight,
+                walletChainTipHeight: state.walletChainTipHeight,
+                errorMessage: _sessionErrorMessage(state, localError),
                 onRetry: _retry,
                 onClear: job?.status == VotingSubmissionJobStatus.error
                     ? _clearError
                     : null,
-              ),
-              data: (state) {
-                final localError = job?.errorMessage;
-                final completedSubmission =
-                    job?.status == VotingSubmissionJobStatus.complete ||
-                    _hasCompletedSubmission(state);
-                final phase = job?.status != VotingSubmissionJobStatus.error
-                    ? _displayPhase(
-                        state.phase,
-                        completedSubmission: completedSubmission,
-                      )
-                    : VotingSessionPhase.error;
-                return _StatusContent(
-                  phase: phase,
-                  voteSubmissionDetail: _voteSubmissionDetail(state),
-                  voteSubmissionProgress: _voteSubmissionProgress(
-                    state,
-                    completedSubmission: completedSubmission,
-                  ),
-                  delegationProgress: _delegationProgress(state),
-                  completedSubmission: completedSubmission,
-                  softwareAccountRequired:
-                      job?.softwareAccountRequired ?? false,
-                  isHardwareAccount: state.isHardwareAccount,
-                  keystoneSigningRequest: state.keystoneSigningRequest,
-                  canSkipRemainingKeystoneBundles:
-                      state.canSkipRemainingKeystoneBundles,
-                  keystoneUrParts: job?.keystoneUrParts ?? const [],
-                  keystoneQrError: job?.keystoneQrError,
-                  keystoneScanError: state.keystoneScanError,
-                  walletScannedHeight: state.walletScannedHeight,
-                  walletSnapshotHeight: state.walletSnapshotHeight,
-                  walletChainTipHeight: state.walletChainTipHeight,
-                  errorMessage: _sessionErrorMessage(state, localError),
-                  onRetry: _retry,
-                  onClear: job?.status == VotingSubmissionJobStatus.error
-                      ? _clearError
-                      : null,
-                  onScanKeystone: _scanKeystoneSignature,
-                  onSkipKeystoneBundles: _skipRemainingKeystoneBundles,
-                );
-              },
-            ),
+                onScanKeystone: _scanKeystoneSignature,
+                onSkipKeystoneBundles: _skipRemainingKeystoneBundles,
+              );
+            },
           ),
         ),
       ),
