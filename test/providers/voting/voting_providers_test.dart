@@ -76,6 +76,54 @@ void main() {
     );
   });
 
+  test('config provider ignores stale refresh after source changes', () async {
+    const firstSource = 'https://voting-a.example/static-voting-config.json';
+    const secondSource = 'https://voting-b.example/static-voting-config.json';
+    final store = FakeVotingConfigSourceStore(sourceUrl: firstSource);
+    final loads = _GatedVotingConfigLoads({
+      firstSource: _configForVoteServer('https://voting-a.example'),
+      secondSource: _configForVoteServer('https://voting-b.example'),
+    });
+    final container = ProviderContainer(
+      overrides: [
+        votingConfigSourceStoreProvider.overrideWithValue(store),
+        votingConfigLoaderProvider.overrideWith((ref) {
+          final source =
+              ref.watch(votingConfigSourceProvider).value?.sourceUrl ??
+              kDefaultStaticVotingConfigSource;
+          return _GatedVotingConfigLoader(loads, source);
+        }),
+        votingActiveAccountUuidProvider.overrideWithValue(() async => null),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final first = await container.read(votingConfigProvider.future);
+    expect(first.apiBaseUrl, Uri.parse('https://voting-a.example'));
+
+    final staleGate = loads.gateNext(firstSource);
+    final staleRefresh = container
+        .read(votingConfigProvider.notifier)
+        .refresh();
+    await loads.waitForLoadCount(firstSource, 2);
+
+    await container
+        .read(votingConfigSourceProvider.notifier)
+        .setCustom(secondSource);
+    await container.read(votingConfigProvider.notifier).refresh();
+    expect(
+      container.read(votingConfigProvider).value?.apiBaseUrl,
+      Uri.parse('https://voting-b.example'),
+    );
+
+    staleGate.complete();
+    await staleRefresh;
+    expect(
+      container.read(votingConfigProvider).value?.apiBaseUrl,
+      Uri.parse('https://voting-b.example'),
+    );
+  });
+
   test('config source provider persists named saved sources', () async {
     final store = FakeVotingConfigSourceStore();
     final container = _container(
@@ -1564,10 +1612,7 @@ void main() {
     );
     final draftPersistence = FakeVotingDraftPersistence();
     const key = VotingSessionKey(roundId: kRoundId, accountUuid: 'account-1');
-    await draftPersistence.save(
-      key,
-      const VotingDraftState(choices: {7: 1}),
-    );
+    await draftPersistence.save(key, const VotingDraftState(choices: {7: 1}));
     final recoveryApi = FakeVotingRecoveryApi(
       state: recoveryState(
         bundleCount: 1,
@@ -3720,6 +3765,67 @@ class _GatedRoundListHttpClient extends FakeVotingHttpClient {
     }
     return jsonResponse(_roundListResponse('Initial'));
   }
+}
+
+class _GatedVotingConfigLoads {
+  _GatedVotingConfigLoads(this._configs);
+
+  final Map<String, VotingConfig> _configs;
+  final Map<String, int> _loadCounts = {};
+  final Map<String, List<Completer<void>>> _gates = {};
+
+  Completer<void> gateNext(String sourceUrl) {
+    final gate = Completer<void>();
+    (_gates[sourceUrl] ??= []).add(gate);
+    return gate;
+  }
+
+  Future<VotingConfig> load(String sourceUrl) async {
+    _loadCounts[sourceUrl] = (_loadCounts[sourceUrl] ?? 0) + 1;
+    final gates = _gates[sourceUrl];
+    if (gates != null && gates.isNotEmpty) {
+      await gates.removeAt(0).future;
+    }
+    final config = _configs[sourceUrl];
+    if (config == null) {
+      throw StateError('No fake voting config for $sourceUrl');
+    }
+    return config;
+  }
+
+  Future<void> waitForLoadCount(String sourceUrl, int expected) async {
+    for (var i = 0; i < 100; i++) {
+      if ((_loadCounts[sourceUrl] ?? 0) >= expected) return;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    fail(
+      'Timed out waiting for config load $sourceUrl count $expected. '
+      'Saw ${_loadCounts[sourceUrl] ?? 0}.',
+    );
+  }
+}
+
+class _GatedVotingConfigLoader extends VotingConfigLoader {
+  _GatedVotingConfigLoader(this._loads, this._sourceUrl)
+    : super(httpClient: FakeVotingHttpClient());
+
+  final _GatedVotingConfigLoads _loads;
+  final String _sourceUrl;
+
+  @override
+  Future<VotingConfig> load() {
+    return _loads.load(_sourceUrl);
+  }
+}
+
+VotingConfig _configForVoteServer(String url) {
+  return VotingConfig.fromJson(
+    dynamicConfigJson(
+      voteServers: [
+        {'url': url, 'label': 'primary'},
+      ],
+    ),
+  )..validate();
 }
 
 Map<String, dynamic> _roundListResponse(String title) => {
