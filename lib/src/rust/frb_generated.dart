@@ -252,7 +252,6 @@ abstract class RustLibApi extends BaseApi {
   Future<Uint8List> crateApiVotingDeriveVotingHotkey({
     required String mnemonic,
     required String roundId,
-    required String accountUuid,
     required String network,
   });
 
@@ -1786,7 +1785,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<Uint8List> crateApiVotingDeriveVotingHotkey({
     required String mnemonic,
     required String roundId,
-    required String accountUuid,
     required String network,
   }) {
     return handler.executeNormal(
@@ -1795,7 +1793,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(mnemonic, serializer);
           sse_encode_String(roundId, serializer);
-          sse_encode_String(accountUuid, serializer);
           sse_encode_String(network, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -1809,7 +1806,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiVotingDeriveVotingHotkeyConstMeta,
-        argValues: [mnemonic, roundId, accountUuid, network],
+        argValues: [mnemonic, roundId, network],
         apiImpl: this,
       ),
     );
@@ -1818,7 +1815,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiVotingDeriveVotingHotkeyConstMeta =>
       const TaskConstMeta(
         debugName: "derive_voting_hotkey",
-        argNames: ["mnemonic", "roundId", "accountUuid", "network"],
+        argNames: ["mnemonic", "roundId", "network"],
       );
 
   @override

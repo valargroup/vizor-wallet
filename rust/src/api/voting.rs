@@ -294,14 +294,13 @@ pub fn recovered_vote_share_wire_json(
 pub fn derive_voting_hotkey(
     mnemonic: String,
     round_id: String,
-    account_uuid: String,
     network: String,
 ) -> Result<Vec<u8>, String> {
     catch(|| {
-        // Parse network and derive deterministic account/round-scoped hotkey.
+        // Parse network and derive deterministic round-scoped hotkey.
         let network = keys::parse_network(&network)?;
         let seed = seed_from_mnemonic(mnemonic)?;
-        hotkey::derive_hotkey(&seed, &round_id, &account_uuid, network).map(|hotkey| {
+        hotkey::derive_hotkey(&seed, &round_id, network).map(|hotkey| {
             // FRB returns owned bytes, so this copy cannot be zeroized by Rust
             // after Dart receives it.
             hotkey.expose_secret().to_vec()
@@ -597,8 +596,7 @@ pub async fn precompute_delegation_pir(
     // Derive wallet seed and round-scoped delegation hotkey from the mnemonic.
     let seed = seed_from_mnemonic(mnemonic)?;
     let round_id = ctx.round_params.vote_round_id.clone();
-    let hotkey_secret =
-        hotkey::derive_hotkey(&seed, &round_id, &ctx.account_uuid, wallet_network)?;
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, wallet_network)?;
 
     // Fetch lightwalletd-backed round inputs used for delegation bundle prep.
     let lwd = resolve_delegation_lwd_inputs(
@@ -649,8 +647,7 @@ pub async fn build_prove_and_sign_delegation_payload_with_progress(
         delegation_static_inputs(&ctx.network, ctx.max_real_notes_per_bundle)?;
     let seed = seed_from_mnemonic(mnemonic)?;
     let round_id = ctx.round_params.vote_round_id.clone();
-    let hotkey_secret =
-        hotkey::derive_hotkey(&seed, &round_id, &ctx.account_uuid, wallet_network)?;
+    let hotkey_secret = hotkey::derive_hotkey(&seed, &round_id, wallet_network)?;
 
     // Resolve lightwalletd inputs and assemble delegation prepare parameters.
     let lwd = resolve_delegation_lwd_inputs(
@@ -1414,14 +1411,12 @@ mod tests {
         let hotkey_a = derive_voting_hotkey(
             TEST_MNEMONIC.to_string(),
             ROUND_ID.to_string(),
-            TEST_ACCOUNT_UUID.to_string(),
             "regtest".to_string(),
         )
         .unwrap();
         let hotkey_b = derive_voting_hotkey(
             TEST_MNEMONIC.to_string(),
             ROUND_ID.to_string(),
-            TEST_ACCOUNT_UUID.to_string(),
             "regtest".to_string(),
         )
         .unwrap();
@@ -1430,9 +1425,7 @@ mod tests {
         assert_eq!(hotkey_a.len(), 64);
 
         let seed = seed_from_mnemonic(TEST_MNEMONIC.to_string()).unwrap();
-        let expected =
-            hotkey::derive_hotkey(&seed, ROUND_ID, TEST_ACCOUNT_UUID, WalletNetwork::Regtest)
-                .unwrap();
+        let expected = hotkey::derive_hotkey(&seed, ROUND_ID, WalletNetwork::Regtest).unwrap();
         assert_eq!(hotkey_a, expected.expose_secret().to_vec());
     }
 

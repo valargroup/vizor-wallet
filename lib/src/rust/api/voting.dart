@@ -125,12 +125,10 @@ Future<String> recoveredVoteShareWireJson({
 Future<Uint8List> deriveVotingHotkey({
   required String mnemonic,
   required String roundId,
-  required String accountUuid,
   required String network,
 }) => RustLib.instance.api.crateApiVotingDeriveVotingHotkey(
   mnemonic: mnemonic,
   roundId: roundId,
-  accountUuid: accountUuid,
   network: network,
 );
 

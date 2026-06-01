@@ -1023,7 +1023,6 @@ fn wire__crate__api__voting__derive_voting_hotkey_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_mnemonic = <String>::sse_decode(&mut deserializer);
             let api_round_id = <String>::sse_decode(&mut deserializer);
-            let api_account_uuid = <String>::sse_decode(&mut deserializer);
             let api_network = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
@@ -1031,7 +1030,6 @@ fn wire__crate__api__voting__derive_voting_hotkey_impl(
                     let output_ok = crate::api::voting::derive_voting_hotkey(
                         api_mnemonic,
                         api_round_id,
-                        api_account_uuid,
                         api_network,
                     )?;
                     Ok(output_ok)
