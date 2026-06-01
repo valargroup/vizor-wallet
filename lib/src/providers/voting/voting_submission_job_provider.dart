@@ -694,7 +694,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
       _failFromSession(key: key, generation: generation, session: done!);
       return;
     }
-    if (!_hasCompletedSubmission(done)) {
+    if (!_canCompleteSubmission(done)) {
       _scheduleCompletionPoll(key: key, generation: generation);
       return;
     }
@@ -842,7 +842,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
         _failFromSession(key: key, generation: generation, session: session!);
         return;
       }
-      if (_hasCompletedSubmission(session)) {
+      if (_canCompleteSubmission(session)) {
         _completeJob(key: key, generation: generation);
       }
     });
@@ -853,9 +853,10 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
     _completionPollTimer = null;
   }
 
-  bool _hasCompletedSubmission(VotingSessionState? session) {
+  bool _canCompleteSubmission(VotingSessionState? session) {
     if (session == null) return false;
-    return hasCompletedVoteForDisplay(session.roundPlan);
+    return hasCompletedVoteForDisplay(session.roundPlan) &&
+        !_hasRemainingVoteOrShareWork(session);
   }
 
   bool _completeJobIfSubmissionDone({
@@ -863,7 +864,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
     required int generation,
     required VotingSessionState? session,
   }) {
-    if (!_hasCompletedSubmission(session)) return false;
+    if (!_canCompleteSubmission(session)) return false;
     _completeJob(key: key, generation: generation);
     return true;
   }
@@ -893,6 +894,20 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
     return roundPlan != null && roundPlan.openProposals.isEmpty;
   }
 
+  bool _hasRemainingVoteOrShareWork(VotingSessionState session) {
+    final roundPlan = session.roundPlan;
+    if (roundPlan != null) {
+      for (final step in roundPlan.nextSteps) {
+        if (_stepCanRecoverWithoutDraft(step)) return true;
+      }
+    }
+    final resumePlan = session.resumePlan;
+    return resumePlan != null &&
+        (resumePlan.pendingVoteSubmissionKeys.isNotEmpty ||
+            resumePlan.submittedVoteConfirmationKeys.isNotEmpty ||
+            resumePlan.unconfirmedShareDelegations.isNotEmpty);
+  }
+
   bool _canPollDelegationWithoutDraft(VotingSessionState session) {
     final roundPlan = session.roundPlan;
     if (roundPlan != null) {
@@ -919,9 +934,11 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
   bool _sessionNeedsDelegation(VotingSessionState? session) {
     if (session == null) return false;
     if (_planNeedsDelegation(session.roundPlan)) return true;
-    final plan = session.resumePlan;
-    return (plan?.pendingDelegationBundleIndexes.isNotEmpty ?? false) ||
-        (plan?.submittedDelegationBundleIndexes.isNotEmpty ?? false);
+    if (session.roundPlan != null) {
+      return _canPollDelegationWithoutDraft(session);
+    }
+    return session.resumePlan?.submittedDelegationBundleIndexes.isNotEmpty ??
+        false;
   }
 
   bool _sessionNeedsDelegationSubmission(VotingSessionState? session) {
