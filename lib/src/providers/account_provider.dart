@@ -14,11 +14,13 @@ import '../core/profile_pictures.dart';
 import '../core/storage/app_secure_store.dart';
 import '../core/storage/wallet_paths.dart';
 import '../features/swap/providers/swap_activity_store.dart';
+import '../rust/api/voting.dart' as rust_voting;
 import '../rust/api/wallet.dart' as rust_wallet;
 import 'account_models.dart';
 import 'app_security_provider.dart';
 import 'rpc_endpoint_failover_provider.dart';
 import 'rpc_endpoint_provider.dart';
+import 'voting/voting_submission_guard_provider.dart';
 
 export 'account_models.dart';
 
@@ -340,7 +342,12 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   }
 
   /// Remove an account from the wallet.
+  ///
+  /// Destructive account changes are blocked while any vote submission is in
+  /// progress. Once removal is allowed, voting state and hotkeys for that
+  /// account are cleared with the wallet account data.
   Future<void> removeAccount(String uuid) async {
+    ref.read(votingSubmissionGuardProvider.notifier).throwIfActive();
     final prev = state.value ?? const AccountState();
     final targetIndex = prev.accounts.indexWhere((a) => a.uuid == uuid);
     if (targetIndex < 0) {
@@ -363,6 +370,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
     final dbPath = await _getDbPath();
     final network = await _getNetwork();
+    await _resetVotingProcessStateForAccount(uuid, dbPath: dbPath);
     final rustDeleteWatch = Stopwatch()..start();
     await rust_wallet.deleteAccount(
       dbPath: dbPath,
@@ -383,6 +391,11 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
           .read(swapActivityStoreProvider)
           .deleteForAccount(accountUuid: uuid);
     } catch (_) {}
+    try {
+      await _storage.deleteVotingHotkeysForAccount(uuid);
+    } catch (e, st) {
+      log('removeAccount: failed to delete voting hotkeys for $uuid: $e\n$st');
+    }
 
     final updated = [
       for (var i = 0; i < remaining.length; i++)
@@ -418,8 +431,15 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   }
 
   /// Delete all wallet data (DB + keychain). Caller must stop sync first.
+  ///
+  /// This also clears voting state held in this process for every account
+  /// before the wallet DB and voting sidecar DB are deleted.
   Future<void> resetWallet() async {
+    ref.read(votingSubmissionGuardProvider.notifier).throwIfActive();
     final dbPath = await _getDbPath();
+    for (final account in state.value?.accounts ?? const <AccountInfo>[]) {
+      await _resetVotingProcessStateForAccount(account.uuid, dbPath: dbPath);
+    }
     await _deleteExistingDb(dbPath);
     await _storage.deleteAll();
     ref.read(appSecurityProvider.notifier).reset();
@@ -436,6 +456,30 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       ),
     );
     log('AccountNotifier: cleared in-memory address state for lock');
+  }
+
+  /// Clear process-local voting caches for an account being removed/reset.
+  ///
+  /// This is best-effort cleanup for destructive lifecycle boundaries where
+  /// account-scoped Rust state should not outlive the deleted wallet data.
+  /// Failures are logged and do not block wallet/account mutations.
+  Future<void> _resetVotingProcessStateForAccount(
+    String accountUuid, {
+    String? dbPath,
+  }) async {
+    try {
+      await rust_voting.resetVotingSessionState(
+        dbPath: dbPath ?? await _getDbPath(),
+        accountUuid: accountUuid,
+        roundId: null,
+      );
+      log('AccountNotifier: reset voting process state for $accountUuid');
+    } catch (e, st) {
+      log(
+        'AccountNotifier: failed to reset voting process state for '
+        '$accountUuid: $e\n$st',
+      );
+    }
   }
 
   Future<void> restoreAfterUnlock() async {
