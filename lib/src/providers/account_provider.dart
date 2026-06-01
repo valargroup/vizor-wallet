@@ -279,6 +279,15 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
   /// Switch active account.
   Future<void> switchAccount(String uuid) async {
+    final previousActiveUuid = state.value?.activeAccountUuid;
+    if (previousActiveUuid != null && previousActiveUuid != uuid) {
+      final guardedSubmission = ref
+          .read(votingSubmissionGuardProvider.notifier)
+          .guardForAccount(previousActiveUuid);
+      if (guardedSubmission == null) {
+        await _resetVotingProcessStateForAccount(previousActiveUuid);
+      }
+    }
     await _storage.writeString(_activeAccountKey, uuid);
 
     String? address;
@@ -449,6 +458,11 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
 
   void clearSensitiveStateForLock() {
     final prev = state.value ?? const AccountState();
+    final activeAccountUuid = prev.activeAccountUuid;
+    if (activeAccountUuid != null) {
+      // Do not delay routing to unlock while best-effort process cleanup runs.
+      unawaited(_resetVotingProcessStateForAccount(activeAccountUuid));
+    }
     state = AsyncData(
       AccountState(
         accounts: prev.accounts,
@@ -458,11 +472,11 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     log('AccountNotifier: cleared in-memory address state for lock');
   }
 
-  /// Clear process-local voting caches for an account being removed/reset.
+  /// Clear process-local voting caches scoped to an account.
   ///
-  /// This is best-effort cleanup for destructive lifecycle boundaries where
-  /// account-scoped Rust state should not outlive the deleted wallet data.
-  /// Failures are logged and do not block wallet/account mutations.
+  /// This is best-effort cleanup for lifecycle boundaries where account-scoped
+  /// Rust state must not outlive the account/session. Failures are logged and do
+  /// not block wallet/account mutations.
   Future<void> _resetVotingProcessStateForAccount(
     String accountUuid, {
     String? dbPath,
