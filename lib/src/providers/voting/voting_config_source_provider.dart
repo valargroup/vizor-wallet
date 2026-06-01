@@ -9,6 +9,11 @@ import '../../services/voting/voting_config_loader.dart';
 const _votingConfigSourceKey = 'zcash_voting_config_source_url';
 const _votingConfigSavedSourcesKey = 'zcash_voting_config_saved_sources';
 
+/// User-saved static config source shown in voting settings.
+///
+/// The source URL is the hash-pinned static config URL, not the fetched dynamic
+/// config URL. Loading still goes through [VotingConfigLoader] validation before
+/// any voting services use it.
 class SavedVotingConfigSource {
   const SavedVotingConfigSource({
     required this.id,
@@ -43,6 +48,10 @@ class SavedVotingConfigSource {
   }
 }
 
+/// Selected static voting config source plus the saved source list.
+///
+/// [isDefault] tracks whether the active source is the bundled default. Saved
+/// sources are retained when the user resets the active source back to default.
 class VotingConfigSourceState {
   const VotingConfigSourceState({
     required this.sourceUrl,
@@ -77,15 +86,25 @@ class VotingConfigSourceState {
   }
 }
 
+/// Persistence boundary for the active voting config source.
+///
+/// Config source URLs are not wallet secrets, but they are kept behind this
+/// interface so tests can exercise source switching without touching secure
+/// storage.
 abstract interface class VotingConfigSourceStore {
+  /// Reads the active static config source URL override, or null for default.
   Future<String?> readSourceUrl();
 
+  /// Persists the active static config source URL override.
   Future<void> writeSourceUrl(String sourceUrl);
 
+  /// Clears the active override so the bundled source is used.
   Future<void> resetSourceUrl();
 
+  /// Reads the serialized saved source list.
   Future<String?> readSavedSourcesJson();
 
+  /// Persists the serialized saved source list.
   Future<void> writeSavedSourcesJson(String savedSourcesJson);
 }
 
@@ -126,6 +145,11 @@ class AppSecureStoreVotingConfigSourceStore implements VotingConfigSourceStore {
   }
 }
 
+/// Owns user selection of the static voting config source.
+///
+/// Every public mutation validates the source URL before persisting it. The
+/// provider never fetches config itself. It only decides which
+/// [StaticVotingConfigSource] the loader should use.
 class VotingConfigSourceNotifier
     extends AsyncNotifier<VotingConfigSourceState> {
   @override
@@ -148,6 +172,7 @@ class VotingConfigSourceNotifier
     );
   }
 
+  /// Selects a custom source URL without adding it to saved sources.
   Future<void> setCustom(String sourceUrl) async {
     final trimmed = sourceUrl.trim();
     StaticVotingConfigSource.parse(trimmed);
@@ -156,6 +181,7 @@ class VotingConfigSourceNotifier
     state = AsyncData(previous.copyWith(sourceUrl: trimmed, isDefault: false));
   }
 
+  /// Uses the bundled default source while preserving saved custom sources.
   Future<void> resetDefault() async {
     await ref.read(votingConfigSourceStoreProvider).resetSourceUrl();
     final previous = state.value ?? VotingConfigSourceState.defaultSource();
@@ -166,6 +192,7 @@ class VotingConfigSourceNotifier
     );
   }
 
+  /// Creates or updates a named saved source and makes it active.
   Future<void> saveSource({
     String? id,
     required String name,
@@ -206,6 +233,11 @@ class VotingConfigSourceNotifier
     );
   }
 
+  /// Deletes a saved source.
+  ///
+  /// If the deleted source is currently active, the active source falls back to
+  /// the bundled default so the provider never points at an unsaved custom entry
+  /// that the user just removed.
   Future<void> deleteSavedSource(String id) async {
     final previous = state.value ?? VotingConfigSourceState.defaultSource();
     SavedVotingConfigSource? target;

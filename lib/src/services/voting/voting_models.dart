@@ -5,7 +5,8 @@ import '../../core/formatting/hex_codec.dart';
 /// Hash-pinned trust anchor fetched before the mutable service config.
 ///
 /// This config should be small and stable: it tells the app where to fetch the
-/// dynamic config and which signing keys are allowed to authenticate rounds.
+/// dynamic config and carries the signing keys used by config resolution code
+/// that validates signed round entries.
 class StaticVotingConfig {
   static const supportedVersion = 1;
   static const algEd25519 = 'ed25519';
@@ -45,6 +46,7 @@ class StaticVotingConfig {
         'unsupported static_config_version $staticConfigVersion',
       );
     }
+    _validateDynamicConfigUrl(dynamicConfigUrl);
     if (trustedKeys.isEmpty) {
       throw const VotingConfigDecodeException(
         'trusted_keys must contain at least one entry',
@@ -65,7 +67,11 @@ class StaticVotingConfig {
   }
 }
 
-/// Public key allowed to sign dynamic round entries.
+/// Public key advertised for signed dynamic round entries.
+///
+/// This model layer only parses and validates the key shape. Signature
+/// verification belongs in the config resolution layer that consumes these
+/// fields.
 class TrustedVotingKey {
   final String keyId;
   final String alg;
@@ -91,10 +97,10 @@ class TrustedVotingKey {
 
 /// Dynamic voting service configuration.
 ///
-/// This is the network-fetched registry for vote servers, PIR endpoints,
-/// protocol versions, and authenticated round metadata. Missing required fields
-/// are treated as decode failures so the app does not continue with partial
-/// service state.
+/// This is the network fetched registry for vote servers, PIR endpoints,
+/// protocol versions, and signed round metadata. Missing required fields are
+/// treated as decode failures so the app does not continue with partial service
+/// state.
 class VotingConfig {
   static const supportedVersion = 1;
 
@@ -184,6 +190,10 @@ class VotingConfig {
   }
 }
 
+/// Result returned by chain-facing submit endpoints.
+///
+/// A 2xx or accepted deterministic rejection can both carry this shape. Callers
+/// must check [code] before treating [txHash] as a submitted transaction.
 class VotingTxResult {
   final String txHash;
   final int code;
@@ -204,6 +214,7 @@ class VotingTxResult {
   }
 }
 
+/// Confirmation query result for a submitted voting transaction.
 class VotingTxConfirmation {
   final int height;
   final int code;
@@ -237,6 +248,7 @@ class VotingTxConfirmation {
   }
 }
 
+/// Event emitted by the vote chain for a confirmed voting transaction.
 class VotingTxEvent {
   final String type;
   final List<VotingTxEventAttribute> attributes;
@@ -261,6 +273,7 @@ class VotingTxEvent {
   }
 }
 
+/// Key/value attribute attached to a voting transaction event.
 class VotingTxEventAttribute {
   final String key;
   final String value;
@@ -681,11 +694,38 @@ String _roundIdFromJson(Map<String, dynamic> json) {
 }
 
 String? _optionalRoundIdFromJson(Map<String, dynamic> json) {
-  final voteRoundId = _optionalStringFromJson(json, const ['vote_round_id']);
-  if (voteRoundId != null && voteRoundId.isNotEmpty) {
-    return _normalizeRoundId(voteRoundId);
+  final value = _optionalStringFromJson(json, const ['vote_round_id']);
+  final raw = value?.trim();
+  return raw == null || raw.isEmpty ? null : _normalizeRoundId(raw);
+}
+
+void _validateDynamicConfigUrl(Uri uri) {
+  if (!uri.hasScheme || uri.host.isEmpty) {
+    throw VotingConfigDecodeException(
+      'dynamic_config_url must be an absolute HTTP(S) URL: $uri',
+    );
   }
-  return _optionalStringFromJson(json, const ['roundId', 'round_id', 'id']);
+  final scheme = uri.scheme.toLowerCase();
+  if (scheme != 'https' && scheme != 'http') {
+    throw VotingConfigDecodeException(
+      'dynamic_config_url has unsupported scheme "$scheme": $uri',
+    );
+  }
+  if (scheme == 'http' && !_allowsPlainHttp(uri.host)) {
+    throw VotingConfigDecodeException(
+      'dynamic_config_url must use HTTPS except for localhost/regtest: $uri',
+    );
+  }
+  if (uri.userInfo.isNotEmpty) {
+    throw VotingConfigDecodeException(
+      'dynamic_config_url must not include user info: $uri',
+    );
+  }
+  if (uri.hasFragment) {
+    throw VotingConfigDecodeException(
+      'dynamic_config_url must not include a fragment: $uri',
+    );
+  }
 }
 
 String _normalizeRoundId(String value) {

@@ -235,6 +235,35 @@ void main() {
     },
   );
 
+  test('static config rejects unsafe dynamic config URLs', () {
+    for (final dynamicConfigUrl in [
+      'ftp://voting.example/dynamic-voting-config.json',
+      'http://voting.example/dynamic-voting-config.json',
+      'https://user@voting.example/dynamic-voting-config.json',
+      'https://voting.example/dynamic-voting-config.json#fragment',
+      '/dynamic-voting-config.json',
+    ]) {
+      final json = Map<String, dynamic>.of(staticConfigJson())
+        ..['dynamic_config_url'] = dynamicConfigUrl;
+      final config = StaticVotingConfig.fromJson(json);
+
+      expect(
+        config.validate,
+        throwsA(isA<VotingConfigDecodeException>()),
+        reason: dynamicConfigUrl,
+      );
+    }
+  });
+
+  test('static config allows localhost dynamic config during regtest', () {
+    final json = Map<String, dynamic>.of(staticConfigJson())
+      ..['dynamic_config_url'] =
+          'http://localhost:8080/dynamic-voting-config.json';
+    final config = StaticVotingConfig.fromJson(json);
+
+    expect(config.validate, returnsNormally);
+  });
+
   test('dynamic config rejects missing required rounds registry', () async {
     final staticSource = StaticVotingConfigSource.parse(
       'https://voting.example/static-voting-config.json',

@@ -1,3 +1,10 @@
+/// Tracks helper servers that repeatedly fail during share submission/recovery.
+///
+/// This is a local ordering hint, not a hard block list. When at least one
+/// helper is healthy, failing helpers are moved to the end of the candidate
+/// list for a short cooldown. When every helper is degraded, all helpers remain
+/// candidates so voting recovery can still make progress if the whole helper
+/// set is flaky.
 class VotingHelperHealthTracker {
   VotingHelperHealthTracker({
     this.failureThreshold = 3,
@@ -11,6 +18,11 @@ class VotingHelperHealthTracker {
   final DateTime Function() _now;
   final Map<String, _VotingHelperState> _states = {};
 
+  /// Returns helper URLs ordered by current health.
+  ///
+  /// The returned list preserves caller order within healthy and degraded
+  /// groups. It does not remove degraded helpers unless at least one healthy
+  /// helper is available.
   List<String> candidateServers(Iterable<String> serverUrls) {
     final urls = serverUrls.toList(growable: false);
     if (urls.isEmpty) return const [];
@@ -29,10 +41,12 @@ class VotingHelperHealthTracker {
     return available.isEmpty ? urls : [...available, ...unavailable];
   }
 
+  /// Clears any degraded state for a helper after a successful response.
   void recordSuccess(String serverUrl) {
     _states.remove(serverUrl);
   }
 
+  /// Records one helper failure and opens its cooldown after the threshold.
   void recordFailure(String serverUrl) {
     final state = _states.putIfAbsent(serverUrl, _VotingHelperState.new);
     state.consecutiveFailures += 1;

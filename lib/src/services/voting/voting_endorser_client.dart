@@ -1,12 +1,13 @@
 import 'dart:convert';
 
 import 'voting_http.dart';
+import 'voting_models.dart';
 
-/// Reads an optional off-chain endorsed-round set.
+/// Reads an optional off-chain endorsed round set.
 ///
-/// Endorsements are a UX signal, not the source of round authenticity. Network,
+/// Endorsements are a UX signal, not the source of round validity. Network,
 /// HTTP, and parsing failures therefore soft-fail to an empty set so the app can
-/// still show authenticated rounds as unendorsed instead of hiding voting.
+/// still show valid rounds without endorsement badges instead of hiding voting.
 class VotingEndorserClient {
   VotingEndorserClient({
     required Uri endorsedSetUrl,
@@ -20,7 +21,7 @@ class VotingEndorserClient {
   final VotingHttpClient _httpClient;
   final Duration _timeout;
 
-  /// Returns lowercase round ids when available, or an empty set on failure.
+  /// Returns normalized round ids when available, or an empty set on failure.
   Future<Set<String>> getEndorsedSet() async {
     try {
       final response = await _httpClient.get(
@@ -38,17 +39,8 @@ class VotingEndorserClient {
 
   static Set<String> _parseEndorsedSet(Object? decoded) {
     final values = switch (decoded) {
-      List() => decoded,
-      Map<String, dynamic>() =>
-        decoded['endorsed_round_ids'] ??
-            decoded['endorsedRoundIds'] ??
-            decoded['endorsedRounds'] ??
-            decoded['rounds'],
-      Map() =>
-        decoded['endorsed_round_ids'] ??
-            decoded['endorsedRoundIds'] ??
-            decoded['endorsedRounds'] ??
-            decoded['rounds'],
+      Map<String, dynamic>() => decoded['vote_round_ids'],
+      Map() => decoded['vote_round_ids'],
       _ => null,
     };
     if (values is! List) {
@@ -56,18 +48,8 @@ class VotingEndorserClient {
     }
 
     return values
-        .map((value) {
-          if (value is String) return value;
-          if (value is Map<String, dynamic>) {
-            return value['round_id'] ?? value['roundId'] ?? value['id'];
-          }
-          if (value is Map) {
-            return value['round_id'] ?? value['roundId'] ?? value['id'];
-          }
-          return null;
-        })
-        .whereType<Object>()
-        .map((value) => value.toString())
+        .whereType<String>()
+        .map(normalizeVotingRoundId)
         .where((value) => value.isNotEmpty)
         .toSet();
   }
