@@ -14,6 +14,7 @@ import '../../../providers/voting/voting_session_provider.dart';
 import '../../../providers/voting/voting_state.dart';
 import '../voting_choice_style.dart';
 import '../voting_flow_models.dart';
+import '../widgets/voting_pane_scroll_area.dart';
 
 const int _ballotDivisorZatoshi = 12500000;
 
@@ -65,54 +66,48 @@ class VotingResultsScreen extends ConsumerWidget {
                   if (_isTallying(result.rawJson)) {
                     return const _Message('Results pending...');
                   }
-                  return Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: ListView(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                        children: [
-                          _ResultsHeader(
-                            title: _roundTitle(round),
-                            snapshotHeight: round.snapshotHeight,
-                            description: _roundDescription(round) ?? '',
+                  return VotingPaneScrollView(
+                    maxWidth: 720,
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _ResultsHeader(
+                          title: _roundTitle(round),
+                          snapshotHeight: round.snapshotHeight,
+                          description: _roundDescription(round) ?? '',
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          'Results',
+                          style: AppTypography.headlineSmall.copyWith(
+                            color: context.colors.text.accent,
                           ),
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            'Results',
-                            style: AppTypography.headlineSmall.copyWith(
-                              color: context.colors.text.accent,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.s),
-                          if (proposals.isEmpty)
-                            const _Message('No proposals in this round.')
-                          else
-                            for (
-                              var index = 0;
-                              index < proposals.length;
-                              index++
-                            )
-                              Padding(
-                                padding: EdgeInsets.only(
-                                  bottom: index == proposals.length - 1
-                                      ? 0
-                                      : AppSpacing.s,
+                        ),
+                        const SizedBox(height: AppSpacing.s),
+                        if (proposals.isEmpty)
+                          const _Message('No proposals in this round.')
+                        else
+                          for (var index = 0; index < proposals.length; index++)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                bottom: index == proposals.length - 1
+                                    ? 0
+                                    : AppSpacing.s,
+                              ),
+                              child: _ResultCard(
+                                proposal: proposals[index],
+                                tally: _proposalTally(
+                                  result.rawJson,
+                                  proposals[index].id,
                                 ),
-                                child: _ResultCard(
-                                  proposal: proposals[index],
-                                  tally: _proposalTally(
-                                    result.rawJson,
-                                    proposals[index].id,
-                                  ),
-                                  selectedChoice: _selectedChoiceForProposal(
-                                    session.value,
-                                    proposals[index].id,
-                                  ),
+                                selectedChoice: _selectedChoiceForProposal(
+                                  session.value,
+                                  proposals[index].id,
                                 ),
                               ),
-                        ],
-                      ),
+                            ),
+                      ],
                     ),
                   );
                 },

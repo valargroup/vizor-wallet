@@ -19,6 +19,7 @@ import '../../../providers/voting/voting_tree_sync_provider.dart';
 import '../voting_poll_ordering.dart';
 import '../voting_routes.dart';
 import '../widgets/voting_config_settings_panel.dart';
+import '../widgets/voting_pane_scroll_area.dart';
 
 class VotingPollsScreen extends ConsumerStatefulWidget {
   const VotingPollsScreen({super.key});
@@ -85,29 +86,24 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
                       }
                       final sortedItems = sortVotingRoundsForPollList(items);
                       _preSyncVisibleRoundTrees(sortedItems);
-                      return Align(
-                        alignment: Alignment.topCenter,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 560),
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.md,
-                              AppSpacing.sm,
-                              AppSpacing.md,
-                              40,
-                            ),
-                            itemCount: sortedItems.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: AppSpacing.base),
-                            itemBuilder: (context, index) {
-                              final round = sortedItems[index];
-                              return _PollCard(
-                                round: round,
-                                onAction: () => _openRoundAction(round),
-                              );
-                            },
-                          ),
+                      return VotingPaneListView.separated(
+                        maxWidth: 560,
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.md,
+                          AppSpacing.sm,
+                          AppSpacing.md,
+                          40,
                         ),
+                        itemCount: sortedItems.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(height: AppSpacing.base),
+                        itemBuilder: (context, index) {
+                          final round = sortedItems[index];
+                          return _PollCard(
+                            round: round,
+                            onAction: () => _openRoundAction(round),
+                          );
+                        },
                       );
                     },
                   ),
@@ -349,15 +345,6 @@ class _PollCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            Text(
-              'Poll description',
-              style: AppTypography.bodyMediumStrong.copyWith(
-                color: colors.text.secondary,
-                height: 20 / 14,
-                letterSpacing: 0,
-              ),
-            ),
-            const SizedBox(height: 2),
             Text(
               description.isEmpty ? round.roundId : description,
               maxLines: 4,

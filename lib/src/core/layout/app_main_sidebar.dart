@@ -147,7 +147,7 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
                     key: const ValueKey('sidebar_voting_button'),
-                    label: 'Voting',
+                    label: 'Vote',
                     iconName: AppIcons.scroll,
                     active: _matches('/voting'),
                     onTap: _matches('/voting')

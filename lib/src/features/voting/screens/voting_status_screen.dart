@@ -19,6 +19,7 @@ import '../voting_flow_models.dart';
 import '../voting_formatters.dart';
 import '../voting_resume_plan.dart';
 import '../voting_routes.dart';
+import '../widgets/voting_pane_scroll_area.dart';
 
 class VotingStatusScreen extends ConsumerStatefulWidget {
   const VotingStatusScreen({
@@ -487,127 +488,107 @@ class _StatusContent extends StatelessWidget {
         final minHeight = constraints.hasBoundedHeight
             ? constraints.maxHeight
             : 0.0;
-        return Scrollbar(
-          child: SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: minHeight),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.md,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Submitting votes',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.displaySmall.copyWith(
-                            color: context.colors.text.accent,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          "Don't close the window. Generating zero-knowledge proofs can take a while; closing now may lose in-flight proof work.",
-                          textAlign: TextAlign.center,
-                          style: AppTypography.bodyMedium.copyWith(
-                            color: context.colors.text.secondary,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        if (phase ==
-                            VotingSessionPhase.waitingForWalletSync) ...[
-                          _WalletSyncProgressText(
-                            scannedHeight: walletScannedHeight,
-                            snapshotHeight: walletSnapshotHeight,
-                            chainTipHeight: walletChainTipHeight,
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                        ],
-                        if (isHardwareAccount &&
-                            phase == VotingSessionPhase.keystoneSigning &&
-                            keystoneSigningRequest != null) ...[
-                          _KeystoneSigningPanel(
-                            request: keystoneSigningRequest!,
-                            urParts: keystoneUrParts,
-                            qrError: keystoneQrError,
-                            scanError: keystoneScanError,
-                            canSkipRemainingBundles:
-                                canSkipRemainingKeystoneBundles,
-                            onScan: onScanKeystone,
-                            onSkipRemainingBundles: onSkipKeystoneBundles,
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                        ],
-                        if (isHardwareAccount)
-                          _StepRow(
-                            label: 'Signing with Keystone',
-                            active: phase == VotingSessionPhase.keystoneSigning,
-                            complete: _after(
-                              VotingSessionPhase.keystoneSigning,
-                            ),
-                          ),
-                        _StepRow(
-                          label: 'Delegating voting authority',
-                          active: phase == VotingSessionPhase.delegating,
-                          complete: _after(VotingSessionPhase.delegating),
-                          progressValue: delegationProgress,
-                        ),
-                        _StepRow(
-                          label: 'Casting votes and submitting shares',
-                          active:
-                              !voteStepComplete &&
-                              (phase == VotingSessionPhase.syncingVoteTree ||
-                                  phase == VotingSessionPhase.castingVotes ||
-                                  phase == VotingSessionPhase.submittingShares),
-                          complete: voteStepComplete,
-                          detail: voteStepComplete
-                              ? null
-                              : voteSubmissionDetail,
-                          progressValue: voteStepComplete
-                              ? null
-                              : voteSubmissionProgress,
-                        ),
-                        if (phase == VotingSessionPhase.error) ...[
-                          const SizedBox(height: AppSpacing.sm),
-                          Text(
-                            errorMessage ?? 'Voting failed.',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.bodyMedium.copyWith(
-                              color: context.colors.text.destructive,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Wrap(
-                            alignment: WrapAlignment.center,
-                            spacing: AppSpacing.xs,
-                            runSpacing: AppSpacing.xs,
-                            children: [
-                              if (onClear != null)
-                                AppButton(
-                                  key: const ValueKey(
-                                    'voting_status_clear_submission_error',
-                                  ),
-                                  onPressed: onClear,
-                                  variant: AppButtonVariant.secondary,
-                                  child: const Text('Clear'),
-                                ),
-                              AppButton(
-                                onPressed: onRetry,
-                                variant: AppButtonVariant.primary,
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+        return VotingPaneCenteredScrollView(
+          maxWidth: 560,
+          minHeight: minHeight,
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Submitting votes',
+                textAlign: TextAlign.center,
+                style: AppTypography.displaySmall.copyWith(
+                  color: context.colors.text.accent,
                 ),
               ),
-            ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                "Don't close the window. Generating zero-knowledge proofs can take a while; closing now may lose in-flight proof work.",
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyMedium.copyWith(
+                  color: context.colors.text.secondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (phase == VotingSessionPhase.waitingForWalletSync) ...[
+                _WalletSyncProgressText(
+                  scannedHeight: walletScannedHeight,
+                  snapshotHeight: walletSnapshotHeight,
+                  chainTipHeight: walletChainTipHeight,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+              if (isHardwareAccount &&
+                  phase == VotingSessionPhase.keystoneSigning &&
+                  keystoneSigningRequest != null) ...[
+                _KeystoneSigningPanel(
+                  request: keystoneSigningRequest!,
+                  urParts: keystoneUrParts,
+                  qrError: keystoneQrError,
+                  scanError: keystoneScanError,
+                  canSkipRemainingBundles: canSkipRemainingKeystoneBundles,
+                  onScan: onScanKeystone,
+                  onSkipRemainingBundles: onSkipKeystoneBundles,
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
+              if (isHardwareAccount)
+                _StepRow(
+                  label: 'Signing with Keystone',
+                  active: phase == VotingSessionPhase.keystoneSigning,
+                  complete: _after(VotingSessionPhase.keystoneSigning),
+                ),
+              _StepRow(
+                label: 'Delegating voting authority',
+                active: phase == VotingSessionPhase.delegating,
+                complete: _after(VotingSessionPhase.delegating),
+                progressValue: delegationProgress,
+              ),
+              _StepRow(
+                label: 'Casting votes and submitting shares',
+                active:
+                    !voteStepComplete &&
+                    (phase == VotingSessionPhase.syncingVoteTree ||
+                        phase == VotingSessionPhase.castingVotes ||
+                        phase == VotingSessionPhase.submittingShares),
+                complete: voteStepComplete,
+                detail: voteStepComplete ? null : voteSubmissionDetail,
+                progressValue: voteStepComplete ? null : voteSubmissionProgress,
+              ),
+              if (phase == VotingSessionPhase.error) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  errorMessage ?? 'Voting failed.',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: context.colors.text.destructive,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    if (onClear != null)
+                      AppButton(
+                        key: const ValueKey(
+                          'voting_status_clear_submission_error',
+                        ),
+                        onPressed: onClear,
+                        variant: AppButtonVariant.secondary,
+                        child: const Text('Clear'),
+                      ),
+                    AppButton(
+                      onPressed: onRetry,
+                      variant: AppButtonVariant.primary,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ),
         );
       },

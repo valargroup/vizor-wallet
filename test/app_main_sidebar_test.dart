@@ -56,18 +56,18 @@ void main() {
     expect(find.text('Send'), findsNothing);
     expect(find.text('Receive'), findsNothing);
     expect(find.byKey(const ValueKey('sidebar_voting_button')), findsOneWidget);
-    expect(find.text('Voting'), findsOneWidget);
+    expect(find.text('Vote'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('sidebar_address_book_button')),
       findsOneWidget,
     );
   });
 
-  testWidgets('sidebar Voting item opens the voting route', (tester) async {
+  testWidgets('sidebar Vote item opens the voting route', (tester) async {
     await tester.pumpWidget(_sidebarHarness(SyncState()));
     await tester.pump();
 
-    await tester.tap(find.text('Voting'));
+    await tester.tap(find.text('Vote'));
     await tester.pumpAndSettle();
 
     expect(find.text('voting'), findsOneWidget);
@@ -94,7 +94,7 @@ void main() {
     final positions = [
       tester.getTopLeft(find.text('Home')).dy,
       tester.getTopLeft(find.text('Swap')).dy,
-      tester.getTopLeft(find.text('Voting')).dy,
+      tester.getTopLeft(find.text('Vote')).dy,
       tester.getTopLeft(find.text('Address book')).dy,
       tester.getTopLeft(find.text('Activity')).dy,
     ];

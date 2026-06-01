@@ -22,6 +22,7 @@ import '../voting_flow_models.dart';
 import '../voting_formatters.dart';
 import '../voting_resume_plan.dart';
 import '../voting_routes.dart';
+import '../widgets/voting_pane_scroll_area.dart';
 
 class VotingProposalDetailScreen extends ConsumerStatefulWidget {
   const VotingProposalDetailScreen({super.key, required this.roundId});
@@ -314,64 +315,59 @@ class _ActivePollContentState extends State<_ActivePollContent> {
         ),
         const SizedBox(height: AppSpacing.s),
         Expanded(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: widget.proposals.isEmpty
-                  ? const _Message(
-                      title: 'No proposals',
-                      message: 'This poll does not contain any proposals.',
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.md,
-                        AppSpacing.sm,
-                        AppSpacing.md,
-                        AppSpacing.md,
-                      ),
-                      itemCount: widget.proposals.length + 2,
-                      separatorBuilder: (_, index) {
-                        final afterSummary = index == 0;
-                        final beforeAction = index == widget.proposals.length;
-                        return SizedBox(
-                          height: afterSummary || beforeAction
-                              ? AppSpacing.md
-                              : AppSpacing.xs,
-                        );
-                      },
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return _PollSummary(
-                            title: widget.title,
-                            snapshotHeight: widget.snapshotHeight,
-                            description: widget.description,
-                            endDate: widget.endDate,
-                            votingPowerZatoshi: widget.votingPowerZatoshi,
-                            votingPowerPreparing: widget.votingPowerPreparing,
-                            expanded: _descriptionExpanded,
-                            onToggleDescription: () => setState(() {
-                              _descriptionExpanded = !_descriptionExpanded;
-                            }),
-                          );
-                        }
-                        if (index == widget.proposals.length + 1) {
-                          return _ReviewAnswersButton(
-                            enabled: !widget.draft.isEmpty,
-                            onPressed: _handleBottomActionPressed,
-                          );
-                        }
-                        final proposal = widget.proposals[index - 1];
-                        return _ProposalCard(
-                          proposal: proposal,
-                          selectedChoice: widget.draft.choices[proposal.id],
-                          onChoice: (choice) =>
-                              widget.onChoice(proposal.id, choice),
-                        );
-                      },
-                    ),
-            ),
-          ),
+          child: widget.proposals.isEmpty
+              ? const _Message(
+                  title: 'No proposals',
+                  message: 'This poll does not contain any proposals.',
+                )
+              : VotingPaneListView.separated(
+                  maxWidth: 560,
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.md,
+                    AppSpacing.md,
+                  ),
+                  itemCount: widget.proposals.length + 2,
+                  separatorBuilder: (_, index) {
+                    final afterSummary = index == 0;
+                    final beforeAction = index == widget.proposals.length;
+                    return SizedBox(
+                      height: afterSummary || beforeAction
+                          ? AppSpacing.md
+                          : AppSpacing.xs,
+                    );
+                  },
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return _PollSummary(
+                        title: widget.title,
+                        snapshotHeight: widget.snapshotHeight,
+                        description: widget.description,
+                        endDate: widget.endDate,
+                        votingPowerZatoshi: widget.votingPowerZatoshi,
+                        votingPowerPreparing: widget.votingPowerPreparing,
+                        expanded: _descriptionExpanded,
+                        onToggleDescription: () => setState(() {
+                          _descriptionExpanded = !_descriptionExpanded;
+                        }),
+                      );
+                    }
+                    if (index == widget.proposals.length + 1) {
+                      return _ReviewAnswersButton(
+                        enabled: !widget.draft.isEmpty,
+                        onPressed: _handleBottomActionPressed,
+                      );
+                    }
+                    final proposal = widget.proposals[index - 1];
+                    return _ProposalCard(
+                      proposal: proposal,
+                      selectedChoice: widget.draft.choices[proposal.id],
+                      onChoice: (choice) =>
+                          widget.onChoice(proposal.id, choice),
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -713,7 +709,8 @@ class _VotedPollContent extends StatelessWidget {
                   title: 'No proposals',
                   message: 'This poll does not contain any proposals.',
                 )
-              : ListView.separated(
+              : VotingPaneListView.separated(
+                  maxWidth: 560,
                   itemCount: proposals.length,
                   separatorBuilder: (_, _) =>
                       const SizedBox(height: AppSpacing.s),
