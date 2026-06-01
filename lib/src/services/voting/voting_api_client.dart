@@ -79,7 +79,7 @@ class VotingApiClient {
     final normalizedRoundId = normalizeVotingRoundId(roundId);
     final decoded = await _getJson(_endpoint(['round', normalizedRoundId]));
     final status = VotingRoundStatus.fromJson(
-      _unwrapNestedObject(decoded, 'round'),
+      _requiredNestedObject(decoded, 'round'),
     );
     _requireMatchingRoundId(
       actual: status.roundId,
@@ -122,6 +122,11 @@ class VotingApiClient {
     return tally;
   }
 
+  /// Broadcasts a delegation transaction to the vote chain.
+  ///
+  /// Deterministic vote-chain rejections are returned as [VotingTxResult] when
+  /// the service responds with HTTP 422. Transient gateway or network failures
+  /// are retried according to [_broadcastRetryDelays].
   Future<VotingTxResult> submitDelegation({
     required Map<String, dynamic> submission,
   }) async {
@@ -135,6 +140,11 @@ class VotingApiClient {
     return VotingTxResult.fromJson(_objectFromValue(decoded));
   }
 
+  /// Broadcasts a vote commitment transaction to the vote chain.
+  ///
+  /// Deterministic vote-chain rejections are returned as [VotingTxResult] when
+  /// the service responds with HTTP 422. Transient gateway or network failures
+  /// are retried according to [_broadcastRetryDelays].
   Future<VotingTxResult> submitVoteCommitment({
     required Map<String, dynamic> commitment,
   }) async {
@@ -303,10 +313,13 @@ Map<String, dynamic> _objectFromValue(Object? value) {
   throw const FormatException('Expected JSON object');
 }
 
-Map<String, dynamic> _unwrapNestedObject(Object? value, String key) {
+Map<String, dynamic> _requiredNestedObject(Object? value, String key) {
   final object = _objectFromValue(value);
   final nested = object[key];
-  return nested == null ? object : _objectFromValue(nested);
+  if (nested == null) {
+    throw FormatException('Expected $key field');
+  }
+  return _objectFromValue(nested);
 }
 
 void _validateTallyResultsEnvelope(

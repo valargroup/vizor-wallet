@@ -356,6 +356,31 @@ void main() {
     expect(http.requests, isEmpty);
   });
 
+  test('round status requires the live vote-sdk round envelope', () async {
+    final client = VotingApiClient(
+      baseUrl: Uri.parse('https://voting.valargroup.org'),
+      httpClient: FakeVotingHttpClient(
+        responses: {
+          '/shielded-vote/v1/round/$hexRoundId': {
+            'vote_round_id': hexRoundId,
+            'status': 'active',
+          },
+        },
+      ),
+    );
+
+    await expectLater(
+      client.getRoundStatus(hexRoundId),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Expected round field',
+        ),
+      ),
+    );
+  });
+
   test('rejects round-scoped responses with mismatched round ids', () async {
     final statusClient = VotingApiClient(
       baseUrl: Uri.parse('https://voting.valargroup.org'),
@@ -450,7 +475,7 @@ void main() {
     final http = FakeVotingHttpClient(
       responses: {
         '/shielded-vote/v1/tx/delegation-tx': {
-          'height': 12,
+          'height': '12',
           'code': 0,
           'log': '',
           'events': [

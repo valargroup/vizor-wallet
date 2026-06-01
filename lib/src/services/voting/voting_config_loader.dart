@@ -123,6 +123,8 @@ class VotingConfigLoader {
   /// Fetches the static trust anchor first, then follows its dynamic config URL.
   Future<VotingConfig> load() async {
     final staticConfig = await loadStaticConfig();
+    // TODO: Thread staticConfig.trustedKeys into the config resolution layer, or
+    // return both configs together, before signed round metadata is trusted.
     return loadDynamicConfig(staticConfig.dynamicConfigUrl);
   }
 

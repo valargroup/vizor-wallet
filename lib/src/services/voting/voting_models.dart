@@ -23,20 +23,14 @@ class StaticVotingConfig {
 
   factory StaticVotingConfig.fromJson(Map<String, dynamic> json) {
     return StaticVotingConfig(
-      staticConfigVersion: _intFromJson(json, const [
-        'static_config_version',
-        'staticConfigVersion',
-      ]),
+      staticConfigVersion: _intFromJson(json, const ['static_config_version']),
       dynamicConfigUrl: _requiredUriFromJson(json, const [
         'dynamic_config_url',
-        'dynamicConfigURL',
-        'dynamicConfigUrl',
       ]),
-      trustedKeys:
-          _requiredListFromJson(json, const ['trusted_keys', 'trustedKeys'])
-              .map(_objectFromValue)
-              .map(TrustedVotingKey.fromJson)
-              .toList(growable: false),
+      trustedKeys: _requiredListFromJson(json, const ['trusted_keys'])
+          .map(_objectFromValue)
+          .map(TrustedVotingKey.fromJson)
+          .toList(growable: false),
     );
   }
 
@@ -97,7 +91,7 @@ class TrustedVotingKey {
 
   factory TrustedVotingKey.fromJson(Map<String, dynamic> json) {
     return TrustedVotingKey(
-      keyId: _stringFromJson(json, const ['key_id', 'keyId']),
+      keyId: _stringFromJson(json, const ['key_id']),
       alg: _stringFromJson(json, const ['alg']),
       pubkey: _bytesFromJson(json, const ['pubkey']),
       notes: _optionalStringFromJson(json, const ['notes']),
@@ -133,26 +127,18 @@ class VotingConfig {
       _requiredValueFromJson(json, const ['rounds']),
     );
     return VotingConfig(
-      configVersion: _intFromJson(json, const [
-        'config_version',
-        'configVersion',
-      ]),
-      voteServers:
-          _requiredListFromJson(json, const ['vote_servers', 'voteServers'])
-              .map(_objectFromValue)
-              .map(VotingServiceEndpoint.fromJson)
-              .toList(growable: false),
-      pirEndpoints:
-          _requiredListFromJson(json, const ['pir_endpoints', 'pirEndpoints'])
-              .map(_objectFromValue)
-              .map(VotingServiceEndpoint.fromJson)
-              .toList(growable: false),
+      configVersion: _intFromJson(json, const ['config_version']),
+      voteServers: _requiredListFromJson(json, const ['vote_servers'])
+          .map(_objectFromValue)
+          .map(VotingServiceEndpoint.fromJson)
+          .toList(growable: false),
+      pirEndpoints: _requiredListFromJson(json, const ['pir_endpoints'])
+          .map(_objectFromValue)
+          .map(VotingServiceEndpoint.fromJson)
+          .toList(growable: false),
       supportedVersions: VotingSupportedVersions.fromJson(
         _objectFromValue(
-          _requiredValueFromJson(json, const [
-            'supported_versions',
-            'supportedVersions',
-          ]),
+          _requiredValueFromJson(json, const ['supported_versions']),
         ),
       ),
       rounds: roundMap.map(
@@ -355,15 +341,9 @@ class VotingSupportedVersions {
       pirVersions: _requiredListFromJson(json, const [
         'pir',
       ]).map((value) => value.toString()).toList(growable: false),
-      voteProtocolVersion: _stringFromJson(json, const [
-        'vote_protocol',
-        'voteProtocol',
-      ]),
+      voteProtocolVersion: _stringFromJson(json, const ['vote_protocol']),
       tallyVersion: _stringFromJson(json, const ['tally']),
-      voteServerVersion: _stringFromJson(json, const [
-        'vote_server',
-        'voteServer',
-      ]),
+      voteServerVersion: _stringFromJson(json, const ['vote_server']),
     );
   }
 
@@ -414,8 +394,8 @@ class VotingRoundEntry {
 
   factory VotingRoundEntry.fromJson(Map<String, dynamic> json) {
     return VotingRoundEntry(
-      authVersion: _intFromJson(json, const ['auth_version', 'authVersion']),
-      eaPk: _bytesFromJson(json, const ['ea_pk', 'eaPk']),
+      authVersion: _intFromJson(json, const ['auth_version']),
+      eaPk: _bytesFromJson(json, const ['ea_pk']),
       signatures: (_listFromJson(json, const ['signatures']) ?? const [])
           .map(_objectFromValue)
           .map(VotingRoundSignature.fromJson)
@@ -459,7 +439,7 @@ class VotingRoundSignature {
 
   factory VotingRoundSignature.fromJson(Map<String, dynamic> json) {
     return VotingRoundSignature(
-      keyId: _stringFromJson(json, const ['key_id', 'keyId']),
+      keyId: _stringFromJson(json, const ['key_id']),
       alg: _stringFromJson(json, const ['alg']),
       sig: _bytesFromJson(json, const ['sig']),
     );
@@ -612,6 +592,10 @@ class VotingShareStatus {
   }
 }
 
+/// Normalizes a vote round id to the lowercase hex form used in service routes.
+///
+/// Accepts either 64 hex characters or a 32-byte base64 string. Throws a
+/// [FormatException] when the input is not one of those encodings.
 String normalizeVotingRoundId(String value) => _normalizeRoundId(value);
 
 /// HTTP status error that preserves the response body for diagnostics.
@@ -721,7 +705,6 @@ bool _allowsPlainHttp(String host) {
       lower.endsWith('.localhost') ||
       lower == '127.0.0.1' ||
       lower == '::1' ||
-      lower == '0.0.0.0' ||
       lower == 'regtest' ||
       lower.endsWith('.regtest');
 }

@@ -120,6 +120,7 @@ void main() {
     for (final endpoint in [
       'ftp://voting.example',
       'http://voting.example',
+      'http://0.0.0.0:8080',
       'https://user@voting.example',
       'https://voting.example?x=1',
       'https://voting.example/#frag',
@@ -241,6 +242,7 @@ void main() {
     for (final dynamicConfigUrl in [
       'ftp://voting.example/dynamic-voting-config.json',
       'http://voting.example/dynamic-voting-config.json',
+      'http://0.0.0.0:8080/dynamic-voting-config.json',
       'https://user@voting.example/dynamic-voting-config.json',
       'https://voting.example/dynamic-voting-config.json#fragment',
       '/dynamic-voting-config.json',
@@ -287,6 +289,264 @@ void main() {
     final config = StaticVotingConfig.fromJson(json);
 
     expect(config.validate, throwsA(isA<VotingConfigDecodeException>()));
+  });
+
+  test('config parsing rejects obsolete camelCase field aliases', () {
+    final allCamelStaticJson = {
+      'staticConfigVersion': 1,
+      'dynamicConfigUrl': 'https://voting.example/dynamic-voting-config.json',
+      'trustedKeys': [
+        {'keyId': 'demo', 'alg': 'ed25519', 'pubkey': _b64(1, 32)},
+      ],
+    };
+    expect(
+      () => StaticVotingConfig.fromJson(allCamelStaticJson),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required int: static_config_version',
+        ),
+      ),
+    );
+
+    final dynamicUrlAlias = Map<String, dynamic>.of(staticConfigJson())
+      ..remove('dynamic_config_url')
+      ..['dynamicConfigUrl'] =
+          'https://voting.example/dynamic-voting-config.json';
+    expect(
+      () => StaticVotingConfig.fromJson(dynamicUrlAlias),
+      throwsA(
+        isA<VotingConfigDecodeException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required URI: dynamic_config_url',
+        ),
+      ),
+    );
+
+    final dynamicUrlUpperAlias = Map<String, dynamic>.of(staticConfigJson())
+      ..remove('dynamic_config_url')
+      ..['dynamicConfigURL'] =
+          'https://voting.example/dynamic-voting-config.json';
+    expect(
+      () => StaticVotingConfig.fromJson(dynamicUrlUpperAlias),
+      throwsA(
+        isA<VotingConfigDecodeException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required URI: dynamic_config_url',
+        ),
+      ),
+    );
+
+    final trustedKeysAlias = Map<String, dynamic>.of(staticConfigJson())
+      ..remove('trusted_keys')
+      ..['trustedKeys'] = [
+        {'key_id': 'demo', 'alg': 'ed25519', 'pubkey': _b64(1, 32)},
+      ];
+    expect(
+      () => StaticVotingConfig.fromJson(trustedKeysAlias),
+      throwsA(
+        isA<VotingConfigDecodeException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required field: trusted_keys',
+        ),
+      ),
+    );
+
+    final trustedKeyIdAlias = Map<String, dynamic>.of(staticConfigJson())
+      ..['trusted_keys'] = [
+        {'keyId': 'demo', 'alg': 'ed25519', 'pubkey': _b64(1, 32)},
+      ];
+    expect(
+      () => StaticVotingConfig.fromJson(trustedKeyIdAlias),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required string: key_id',
+        ),
+      ),
+    );
+
+    final allCamelDynamicJson = {
+      'configVersion': 1,
+      'voteServers': [
+        {'url': 'https://voting.example'},
+      ],
+      'pirEndpoints': [
+        {'url': 'https://pir.example'},
+      ],
+      'supportedVersions': {
+        'pir': ['v0'],
+        'voteProtocol': 'v0',
+        'tally': 'v0',
+        'voteServer': 'v1',
+      },
+      'rounds': {_roundId: roundConfigJson()},
+    };
+    expect(
+      () => VotingConfig.fromJson(allCamelDynamicJson),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required int: config_version',
+        ),
+      ),
+    );
+
+    final voteServersAlias = Map<String, dynamic>.of(dynamicConfigJson())
+      ..remove('vote_servers')
+      ..['voteServers'] = [
+        {'url': 'https://voting.example'},
+      ];
+    expect(
+      () => VotingConfig.fromJson(voteServersAlias),
+      throwsA(
+        isA<VotingConfigDecodeException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required field: vote_servers',
+        ),
+      ),
+    );
+
+    final pirEndpointsAlias = Map<String, dynamic>.of(dynamicConfigJson())
+      ..remove('pir_endpoints')
+      ..['pirEndpoints'] = [
+        {'url': 'https://pir.example'},
+      ];
+    expect(
+      () => VotingConfig.fromJson(pirEndpointsAlias),
+      throwsA(
+        isA<VotingConfigDecodeException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required field: pir_endpoints',
+        ),
+      ),
+    );
+
+    final supportedVersionsAlias = Map<String, dynamic>.of(dynamicConfigJson())
+      ..remove('supported_versions')
+      ..['supportedVersions'] = {
+        'pir': ['v0'],
+        'vote_protocol': 'v0',
+        'tally': 'v0',
+        'vote_server': 'v1',
+      };
+    expect(
+      () => VotingConfig.fromJson(supportedVersionsAlias),
+      throwsA(
+        isA<VotingConfigDecodeException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required field: supported_versions',
+        ),
+      ),
+    );
+
+    final versionFieldAliases = Map<String, dynamic>.of(dynamicConfigJson())
+      ..['supported_versions'] = {
+        'pir': ['v0'],
+        'voteProtocol': 'v0',
+        'tally': 'v0',
+        'voteServer': 'v1',
+      };
+    expect(
+      () => VotingConfig.fromJson(versionFieldAliases),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required string: vote_protocol',
+        ),
+      ),
+    );
+
+    final voteServerAlias = Map<String, dynamic>.of(dynamicConfigJson())
+      ..['supported_versions'] = {
+        'pir': ['v0'],
+        'vote_protocol': 'v0',
+        'tally': 'v0',
+        'voteServer': 'v1',
+      };
+    expect(
+      () => VotingConfig.fromJson(voteServerAlias),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required string: vote_server',
+        ),
+      ),
+    );
+
+    final roundFieldAliases = Map<String, dynamic>.of(dynamicConfigJson())
+      ..['rounds'] = {
+        _roundId: {
+          'authVersion': 1,
+          'eaPk': _b64(2, 32),
+          'signatures': [
+            {'keyId': 'demo', 'alg': 'ed25519', 'sig': _b64(3, 64)},
+          ],
+        },
+      };
+    expect(
+      () => VotingConfig.fromJson(roundFieldAliases),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required int: auth_version',
+        ),
+      ),
+    );
+
+    final roundEaPkAlias = Map<String, dynamic>.of(dynamicConfigJson())
+      ..['rounds'] = {
+        _roundId: {
+          'auth_version': 1,
+          'eaPk': _b64(2, 32),
+          'signatures': [
+            {'key_id': 'demo', 'alg': 'ed25519', 'sig': _b64(3, 64)},
+          ],
+        },
+      };
+    expect(
+      () => VotingConfig.fromJson(roundEaPkAlias),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required string: ea_pk',
+        ),
+      ),
+    );
+
+    final signatureKeyIdAlias = Map<String, dynamic>.of(dynamicConfigJson())
+      ..['rounds'] = {
+        _roundId: {
+          'auth_version': 1,
+          'ea_pk': _b64(2, 32),
+          'signatures': [
+            {'keyId': 'demo', 'alg': 'ed25519', 'sig': _b64(3, 64)},
+          ],
+        },
+      };
+    expect(
+      () => VotingConfig.fromJson(signatureKeyIdAlias),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Missing required string: key_id',
+        ),
+      ),
+    );
   });
 
   test('dynamic config rejects missing required rounds registry', () async {
