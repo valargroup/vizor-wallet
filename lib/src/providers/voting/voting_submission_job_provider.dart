@@ -871,13 +871,18 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
 
   bool _canPollDelegationWithoutDraft(VotingSessionState session) {
     final roundPlan = session.roundPlan;
-    if (roundPlan == null) return false;
-    var hasSubmittedDelegation = false;
-    for (final step in roundPlan.nextSteps) {
-      if (step.kind == 'delegate') return false;
-      if (step.kind == 'poll_delegation') hasSubmittedDelegation = true;
+    if (roundPlan != null) {
+      var hasSubmittedDelegation = false;
+      for (final step in roundPlan.nextSteps) {
+        if (step.kind == 'delegate') return false;
+        if (step.kind == 'poll_delegation') hasSubmittedDelegation = true;
+      }
+      if (hasSubmittedDelegation) return true;
     }
-    return hasSubmittedDelegation;
+    final resumePlan = session.resumePlan;
+    return resumePlan != null &&
+        resumePlan.submittedDelegationBundleIndexes.isNotEmpty &&
+        resumePlan.pendingDelegationBundleIndexes.isEmpty;
   }
 
   bool _stepCanRecoverWithoutDraft(rust_wire.NextStepView step) {
@@ -890,8 +895,9 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
   bool _sessionNeedsDelegation(VotingSessionState? session) {
     if (session == null) return false;
     if (_planNeedsDelegation(session.roundPlan)) return true;
-    return session.resumePlan?.pendingDelegationBundleIndexes.isNotEmpty ??
-        false;
+    final plan = session.resumePlan;
+    return (plan?.pendingDelegationBundleIndexes.isNotEmpty ?? false) ||
+        (plan?.submittedDelegationBundleIndexes.isNotEmpty ?? false);
   }
 
   bool _sessionNeedsDelegationSubmission(VotingSessionState? session) {
