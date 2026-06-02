@@ -6,6 +6,7 @@ import '../../features/voting/voting_resume_plan.dart';
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import '../../services/voting/voting_api_client.dart';
 import '../../services/voting/voting_models.dart';
+import '../../services/voting/resolved_voting_config_extensions.dart';
 import 'voting_config_provider.dart';
 import 'voting_service_providers.dart';
 import 'voting_state.dart';
