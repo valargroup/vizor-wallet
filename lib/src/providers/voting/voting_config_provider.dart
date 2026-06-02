@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../rust/api/voting_config.dart';
 import '../../rust/third_party/zcash_voting/config.dart';
-import '../../services/voting/voting_retry.dart';
+import '../../services/voting/voting_models.dart';
 import 'voting_config_source_provider.dart';
 import 'voting_rounds_provider.dart';
 import 'voting_service_providers.dart';
@@ -10,15 +13,44 @@ import 'voting_session_provider.dart';
 import 'voting_submission_guard_provider.dart';
 import 'voting_tree_sync_provider.dart';
 
+class VotingConfigRefreshFailure {
+  const VotingConfigRefreshFailure({
+    required this.error,
+    required this.stackTrace,
+  });
+
+  final Object error;
+  final StackTrace stackTrace;
+}
+
+class VotingConfigRefreshFailureNotifier
+    extends Notifier<VotingConfigRefreshFailure?> {
+  @override
+  VotingConfigRefreshFailure? build() => null;
+
+  void clear() {
+    state = null;
+  }
+
+  void record({required Object error, required StackTrace stackTrace}) {
+    state = VotingConfigRefreshFailure(error: error, stackTrace: stackTrace);
+  }
+}
+
+/// Side channel for the most recent refresh failure while keeping last-good
+/// config data available during transient outages.
+final votingConfigRefreshFailureProvider =
+    NotifierProvider<
+      VotingConfigRefreshFailureNotifier,
+      VotingConfigRefreshFailure?
+    >(VotingConfigRefreshFailureNotifier.new);
+
 /// Resolves the active dynamic voting configuration for the current source.
 ///
-/// Errors remain explicit `AsyncError`s because voting must fail closed when
-/// service discovery is unavailable or malformed.
+/// Initial resolution failures remain explicit `AsyncError`s so voting fails
+/// closed. Refresh failures keep the last-good config for retryable transport
+/// issues and expose the error via [votingConfigRefreshFailureProvider].
 class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
-  static const _configRetryDelays = <Duration>[
-    Duration(milliseconds: 300),
-    Duration(seconds: 1),
-  ];
   int _loadGeneration = 0;
   ResolvedVotingConfig? _previousResolvedConfig;
 
@@ -66,6 +98,12 @@ class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
       state = AsyncData(config);
     } catch (error, stackTrace) {
       if (!_isCurrentLoad(generation)) return;
+      _recordRefreshFailure(error: error, stackTrace: stackTrace);
+      final lastGoodConfig = _previousResolvedConfig;
+      if (_isRetryableRefreshError(error) && lastGoodConfig != null) {
+        state = AsyncData(lastGoodConfig);
+        return;
+      }
       state = AsyncError(error, stackTrace);
     }
   }
@@ -79,7 +117,7 @@ class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
   /// Returning `null` signals this generation became stale while resolving.
   Future<ResolvedVotingConfig?> _loadAndCommit(int generation) async {
     await ref.read(votingConfigSourceProvider.future);
-    final resolution = await _withConfigRetry(
+    final resolution = await _loadWithConfigRetry(
       () => ref
           .read(votingConfigLoaderProvider)
           .load(previous: _previousResolvedConfig),
@@ -91,7 +129,21 @@ class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
   ResolvedVotingConfig _commitResolution(VotingConfigResolution resolution) {
     _applySwitch(resolution.switchKind);
     _previousResolvedConfig = resolution.config;
+    _clearRefreshFailure();
     return resolution.config;
+  }
+
+  void _clearRefreshFailure() {
+    ref.read(votingConfigRefreshFailureProvider.notifier).clear();
+  }
+
+  void _recordRefreshFailure({
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
+    ref
+        .read(votingConfigRefreshFailureProvider.notifier)
+        .record(error: error, stackTrace: stackTrace);
   }
 
   /// Applies the Rust-computed switch plan to dependent voting state.
@@ -132,12 +184,36 @@ class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
     ref.invalidate(votingTreePreSyncProvider);
   }
 
-  Future<T> _withConfigRetry<T>(Future<T> Function() operation) async {
-    return retryVotingOperation(
-      operation: operation,
-      delays: _configRetryDelays,
-      label: 'config load',
-    );
+  Future<T> _loadWithConfigRetry<T>(Future<T> Function() operation) async {
+    const delays = <Duration>[
+      Duration(milliseconds: 200),
+      Duration(milliseconds: 600),
+    ];
+    Object? lastError;
+    for (var attempt = 0; attempt <= delays.length; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        if (attempt == delays.length || !_isRetryableRefreshError(error)) {
+          rethrow;
+        }
+        await Future<void>.delayed(delays[attempt]);
+      }
+    }
+    throw StateError('Config retry exhausted unexpectedly: $lastError');
+  }
+
+  bool _isRetryableRefreshError(Object error) {
+    if (error is TimeoutException ||
+        error is SocketException ||
+        error is HttpException) {
+      return true;
+    }
+    if (error is VotingHttpException) {
+      return error.statusCode == 502 || error.statusCode == 503;
+    }
+    return false;
   }
 }
 
