@@ -469,7 +469,7 @@ bool _isTallying(Map<String, dynamic> json) {
 
 String _roundTitle(VotingRoundDetails round) {
   final title = round.title.trim();
-  return title.isEmpty ? 'Poll Results' : title;
+  return title.isEmpty ? 'Poll results' : title;
 }
 
 String? _roundDescription(VotingRoundDetails round) {

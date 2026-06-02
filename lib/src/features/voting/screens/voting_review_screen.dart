@@ -113,7 +113,7 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Review Your Answers',
+                                  'Review your answers',
                                   textAlign: TextAlign.center,
                                   style: AppTypography.displaySmall.copyWith(
                                     color: context.colors.text.accent,
@@ -145,7 +145,7 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
                                           ),
                                     variant: AppButtonVariant.primary,
                                     minWidth: 240,
-                                    child: const Text('Confirm & Submit'),
+                                    child: const Text('Confirm & submit'),
                                   ),
                                 ),
                               ],

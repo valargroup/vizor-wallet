@@ -123,7 +123,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Submitting Votes'), findsNothing);
+    expect(find.text('Submitting votes'), findsNothing);
   });
 
   testWidgets('status screen reports empty draft as retryable error', (
@@ -278,9 +278,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await _pumpUntilFound(tester, find.text('Submission Not Complete'));
+    await _pumpUntilFound(tester, find.text('Submission not complete'));
 
-    expect(find.text('Submission Confirmed!'), findsNothing);
+    expect(find.text('Submission confirmed!'), findsNothing);
     expect(
       find.text('This account has not completed submission for this poll.'),
       findsOneWidget,
@@ -1156,14 +1156,14 @@ void main() {
     await tester.tap(find.text('Continue to Review'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review Your Answers'), findsOneWidget);
-    expect(find.text('Confirm & Submit'), findsOneWidget);
+    expect(find.text('Review your answers'), findsOneWidget);
+    expect(find.text('Confirm & submit'), findsOneWidget);
     expect(find.text('First proposal'), findsOneWidget);
     expect(find.text('Yes'), findsOneWidget);
     expect(find.text('Second proposal'), findsOneWidget);
     expect(find.text('Skipped'), findsOneWidget);
 
-    await tester.tap(find.text('Confirm & Submit'));
+    await tester.tap(find.text('Confirm & submit'));
     await tester.pumpAndSettle();
 
     expect(find.text('status account: account-1'), findsOneWidget);
@@ -1217,8 +1217,8 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(SingleChildScrollView), findsWidgets);
 
-    await tester.scrollUntilVisible(find.text('Confirm & Submit'), 300);
-    expect(find.text('Confirm & Submit'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Confirm & submit'), 300);
+    expect(find.text('Confirm & submit'), findsOneWidget);
   });
 
   testWidgets('pending vote continue keeps the session account', (
@@ -1370,7 +1370,7 @@ void main() {
 
     expect(starts, [staleKey, currentKey]);
     expect(find.text('stale key selected'), findsNothing);
-    expect(find.text('Submitting Votes'), findsOneWidget);
+    expect(find.text('Submitting votes'), findsOneWidget);
   });
 
   testWidgets('status screen navigates after successful submission', (

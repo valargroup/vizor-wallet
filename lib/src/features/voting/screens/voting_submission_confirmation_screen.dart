@@ -45,19 +45,19 @@ class VotingSubmissionConfirmationScreen extends ConsumerWidget {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => _ConfirmationScaffold(
                 confirmed: false,
-                title: 'Submission Not Complete',
-                pollTitle: 'Coinholder Poll',
+                title: 'Submission not complete',
+                pollTitle: 'Coinholder poll',
                 message: "Couldn't load submission details: $error",
                 votingPower: 'Not available',
               ),
               data: (state) {
                 final pollTitle = state.round?.title.isNotEmpty == true
                     ? state.round!.title
-                    : 'Coinholder Poll';
+                    : 'Coinholder poll';
                 if (!hasCompletedVoteForDisplay(state.roundPlan)) {
                   return _ConfirmationScaffold(
                     confirmed: false,
-                    title: 'Submission Not Complete',
+                    title: 'Submission not complete',
                     pollTitle: pollTitle,
                     message:
                         'This account has not completed submission for this poll.',
@@ -66,7 +66,7 @@ class VotingSubmissionConfirmationScreen extends ConsumerWidget {
                 }
                 return _ConfirmationScaffold(
                   confirmed: true,
-                  title: 'Submission Confirmed!',
+                  title: 'Submission confirmed!',
                   pollTitle: pollTitle,
                   message:
                       'Your vote was successfully published and cannot be changed.',

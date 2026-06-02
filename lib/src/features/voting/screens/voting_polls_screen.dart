@@ -70,7 +70,7 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
                     error: (error, _) => _VotingMessage(
                       title: "Couldn't load polls",
                       message: error.toString(),
-                      actionLabel: 'Try Again',
+                      actionLabel: 'Try again',
                       onAction: () =>
                           ref.read(votingRoundsProvider.notifier).refresh(),
                     ),
@@ -156,11 +156,28 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
 
   void _openRoundAction(VotingRoundView round) {
     final state = _pollCardState(round);
-    if (state == _PollCardState.tallying || state == _PollCardState.closed) {
-      context.push(votingResultsRoute(round.roundId));
-      return;
-    }
-    context.push(votingPollRoute(round.roundId));
+    final route =
+        state == _PollCardState.tallying || state == _PollCardState.closed
+        ? votingResultsRoute(round.roundId)
+        : votingPollRoute(round.roundId);
+    _pushRoundRoute(route);
+  }
+
+  void _pushRoundRoute(String route) {
+    final VotingRoundsNotifier notifier =
+        _roundsNotifier ?? ref.read(votingRoundsProvider.notifier);
+    _roundsNotifier = notifier;
+    notifier.stopPolling();
+    unawaited(
+      context.push(route).whenComplete(() {
+        if (!mounted) return;
+        final VotingRoundsNotifier notifier =
+            _roundsNotifier ?? ref.read(votingRoundsProvider.notifier);
+        _roundsNotifier = notifier;
+        notifier.startPolling();
+        _preSyncLoadedRounds();
+      }),
+    );
   }
 
   void _openSettings() {
@@ -199,7 +216,7 @@ class _VotingTopBar extends StatelessWidget {
             ),
           ),
           Text(
-            'COINHOLDER POLLING',
+            'Coinholder polling',
             textAlign: TextAlign.center,
             style: AppTypography.headlineSmall.copyWith(
               color: context.colors.text.accent,
@@ -400,7 +417,7 @@ class _PollCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
-              'Poll Description',
+              'Poll description',
               style: AppTypography.bodyMediumStrong.copyWith(
                 color: colors.text.secondary,
                 height: 20 / 14,
@@ -548,7 +565,7 @@ String? _roundDateLabel(Map<String, dynamic> json, _PollCardState state) {
 
 String _statusLabel(_PollCardState state) {
   return switch (state) {
-    _PollCardState.inProgress => 'In Progress',
+    _PollCardState.inProgress => 'In progress',
     _PollCardState.active => 'Active',
     _PollCardState.voted => 'Voted',
     _PollCardState.tallying => 'Tallying',
@@ -596,9 +613,9 @@ Color _statusText(_PollCardState state) {
 String _actionLabel(_PollCardState state) {
   return switch (state) {
     _PollCardState.inProgress => 'Resume',
-    _PollCardState.active => 'Enter Poll',
+    _PollCardState.active => 'Enter poll',
     _PollCardState.voted => 'Review',
-    _PollCardState.tallying || _PollCardState.closed => 'View Results',
+    _PollCardState.tallying || _PollCardState.closed => 'View results',
   };
 }
 

@@ -98,7 +98,7 @@ class _VotingProposalDetailScreenState
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _PendingVoteContent(
                   roundTitle: round.title.isEmpty
-                      ? 'Coinholder Poll'
+                      ? 'Coinholder poll'
                       : round.title,
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
@@ -112,7 +112,7 @@ class _VotingProposalDetailScreenState
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _VotedPollContent(
                   roundTitle: round.title.isEmpty
-                      ? 'Coinholder Poll'
+                      ? 'Coinholder poll'
                       : round.title,
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
@@ -130,7 +130,7 @@ class _VotingProposalDetailScreenState
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _PendingVoteContent(
                   roundTitle: round.title.isEmpty
-                      ? 'Coinholder Poll'
+                      ? 'Coinholder poll'
                       : round.title,
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
@@ -142,7 +142,7 @@ class _VotingProposalDetailScreenState
             _maybePrecomputeDelegationPir(state);
             return _ActivePollContent(
               roundId: roundId,
-              title: round.title.isEmpty ? 'Coinholder Poll' : round.title,
+              title: round.title.isEmpty ? 'Coinholder poll' : round.title,
               snapshotHeight: round.snapshotHeight,
               description: _roundDescription(round.rawJson),
               endDate: _roundEndDate(round.rawJson),
@@ -264,7 +264,7 @@ class _VotingTopBar extends StatelessWidget {
         children: [
           const Positioned(left: AppSpacing.md, child: _VotingBackButton()),
           Text(
-            'COINHOLDER POLLING',
+            'Coinholder polling',
             textAlign: TextAlign.center,
             style: AppTypography.headlineSmall.copyWith(
               color: context.colors.text.accent,

@@ -522,7 +522,7 @@ class _StatusContent extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Submitting Votes',
+                          'Submitting votes',
                           textAlign: TextAlign.center,
                           style: AppTypography.displaySmall.copyWith(
                             color: context.colors.text.accent,

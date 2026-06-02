@@ -368,7 +368,7 @@ class _VotingConfigSettingsPanelState
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           _SourceCard(
-                            title: 'Coinholder Poll',
+                            title: 'Coinholder poll',
                             sourceUrl: kDefaultStaticVotingConfigSource,
                             isDefault: true,
                             selected: source.isDefault,
@@ -614,7 +614,7 @@ class _EditorCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              isEditing ? 'Edit Custom Source' : 'Add Custom Source',
+              isEditing ? 'Edit custom source' : 'Add custom source',
               style: AppTypography.headlineSmall.copyWith(
                 color: colors.text.accent,
               ),
@@ -640,7 +640,7 @@ class _EditorCard extends StatelessWidget {
             SizedBox(
               height: urlMessage == null ? 66 : 82,
               child: AppTextField(
-                label: 'Static Config URL',
+                label: 'Static config URL',
                 controller: urlController,
                 trailingSlotWidth: 40,
                 inputHorizontalPadding: AppSpacing.s,
@@ -756,7 +756,7 @@ class _PanelHeader extends StatelessWidget {
         children: [
           Center(
             child: Text(
-              'Voting Config',
+              'Voting config',
               style: AppTypography.headlineMedium.copyWith(
                 color: colors.text.accent,
               ),
