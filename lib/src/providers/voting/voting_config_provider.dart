@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../rust/api/voting_config.dart';
 import '../../rust/third_party/zcash_voting/config.dart';
 import '../../services/voting/voting_models.dart';
+import '../../services/voting/voting_retry.dart';
 import 'voting_config_source_provider.dart';
 import 'voting_rounds_provider.dart';
 import 'voting_service_providers.dart';
@@ -205,15 +204,7 @@ class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
   }
 
   bool _isRetryableRefreshError(Object error) {
-    if (error is TimeoutException ||
-        error is SocketException ||
-        error is HttpException) {
-      return true;
-    }
-    if (error is VotingHttpException) {
-      return error.statusCode == 502 || error.statusCode == 503;
-    }
-    return false;
+    return isRetryableVotingError(error);
   }
 }
 
