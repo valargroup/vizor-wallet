@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
@@ -56,6 +57,79 @@ void main() {
     await container.read(votingConfigProvider.notifier).refresh();
     expect(loader.previousByCall, [null, initial.config, refreshedOnce.config]);
     expect(container.read(votingConfigProvider).value, refreshedTwice.config);
+    expect(container.read(votingConfigRefreshFailureProvider), isNull);
+  });
+
+  test(
+    'refresh keeps last-good config on transient failure and records side channel',
+    () async {
+      final initial = _resolution(
+        'initial',
+        rust_config.ConfigSwitchKind.initialLoad,
+      );
+      final recovered = _resolution(
+        'recovered',
+        rust_config.ConfigSwitchKind.sameChainServiceUpdate,
+      );
+      final loader = _RecordingVotingConfigLoader([
+        initial,
+        TimeoutException('refresh timeout 1'),
+        TimeoutException('refresh timeout 2'),
+        TimeoutException('refresh timeout 3'),
+        recovered,
+      ]);
+      final container = ProviderContainer(
+        overrides: [
+          votingConfigSourceStoreProvider.overrideWithValue(
+            _InMemorySourceStore(),
+          ),
+          votingConfigLoaderProvider.overrideWithValue(loader),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(votingConfigProvider.future);
+      expect(container.read(votingConfigProvider).value, initial.config);
+
+      await container.read(votingConfigProvider.notifier).refresh();
+      final failure = container.read(votingConfigRefreshFailureProvider);
+      expect(failure, isNotNull);
+      expect(failure!.error, isA<TimeoutException>());
+      expect(container.read(votingConfigProvider).hasError, isFalse);
+      expect(container.read(votingConfigProvider).value, initial.config);
+
+      await container.read(votingConfigProvider.notifier).refresh();
+      expect(container.read(votingConfigProvider).value, recovered.config);
+      expect(container.read(votingConfigRefreshFailureProvider), isNull);
+    },
+  );
+
+  test('refresh keeps explicit AsyncError on non-retryable failure', () async {
+    final initial = _resolution(
+      'initial',
+      rust_config.ConfigSwitchKind.initialLoad,
+    );
+    final fatal = StateError('bad config payload');
+    final loader = _RecordingVotingConfigLoader([initial, fatal]);
+    final container = ProviderContainer(
+      overrides: [
+        votingConfigSourceStoreProvider.overrideWithValue(
+          _InMemorySourceStore(),
+        ),
+        votingConfigLoaderProvider.overrideWithValue(loader),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(votingConfigProvider.future);
+    await container.read(votingConfigProvider.notifier).refresh();
+
+    final state = container.read(votingConfigProvider);
+    final failure = container.read(votingConfigRefreshFailureProvider);
+    expect(state.hasError, isTrue);
+    expect(state.error, same(fatal));
+    expect(failure, isNotNull);
+    expect(failure!.error, same(fatal));
   });
 }
 
@@ -86,15 +160,14 @@ class _InMemorySourceStore implements VotingConfigSourceStore {
 }
 
 class _RecordingVotingConfigLoader extends VotingConfigLoader {
-  _RecordingVotingConfigLoader(
-    Iterable<rust_config_api.VotingConfigResolution> configs,
-  ) : _configs = Queue.of(configs),
+  _RecordingVotingConfigLoader(Iterable<Object> responses)
+    : _responses = Queue.of(responses),
       super(
         httpClient: const _NoopVotingHttpClient(),
         sourceUrl: kDefaultStaticVotingConfigSource,
       );
 
-  final Queue<rust_config_api.VotingConfigResolution> _configs;
+  final Queue<Object> _responses;
   final List<rust_config.ResolvedVotingConfig?> previousByCall = [];
 
   @override
@@ -102,10 +175,14 @@ class _RecordingVotingConfigLoader extends VotingConfigLoader {
     rust_config.ResolvedVotingConfig? previous,
   }) async {
     previousByCall.add(previous);
-    if (_configs.isEmpty) {
+    if (_responses.isEmpty) {
       throw StateError('No config responses queued.');
     }
-    return _configs.removeFirst();
+    final next = _responses.removeFirst();
+    if (next is rust_config_api.VotingConfigResolution) return next;
+    if (next is Error) throw next;
+    if (next is Exception) throw next;
+    throw StateError('Unsupported queued loader response: $next');
   }
 }
 
