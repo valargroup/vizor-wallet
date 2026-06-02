@@ -806,7 +806,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       );
       var plan = context.resumePlan;
       var roundPlan = context.roundPlan;
-      final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+      final api = ref.read(votingApiClientProvider(context.config.apiServers));
       final rust = ref.read(votingRustApiProvider);
       final effectiveDraftVotes = VotingShareTimingPolicy.applyLastMomentMode(
         draftVotes,
@@ -1383,7 +1383,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     required int totalQuestions,
     required double? voteSubmissionProgress,
   }) async {
-    final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+    final api = ref.read(votingApiClientProvider(context.config.apiServers));
     final rust = ref.read(votingRustApiProvider);
     final helperHealth = ref.read(votingHelperHealthTrackerProvider);
     final serverUrls = context.config.voteServers
@@ -1596,7 +1596,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     _VotingSessionContext context,
     rust_wire.SignedVoteCommitmentsView commitments,
   ) async {
-    final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+    final api = ref.read(votingApiClientProvider(context.config.apiServers));
     final rust = ref.read(votingRustApiProvider);
     final vcTreePositions = <int, BigInt>{};
     for (final commitment in commitments.commitments) {
@@ -1686,7 +1686,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     required rust_wire.RoundPlanView? roundPlan,
     required Map<int, VotingSessionProgress> progress,
   }) async {
-    final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+    final api = ref.read(votingApiClientProvider(context.config.apiServers));
     final rust = ref.read(votingRustApiProvider);
     final completedBundleIndexes = <int>{};
     final submittedDelegationsByBundle = <int, String>{};
@@ -1749,7 +1749,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     required int bundleIndex,
     required rust_wire.SignedDelegationPayloadView submission,
   }) async {
-    final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+    final api = ref.read(votingApiClientProvider(context.config.apiServers));
     final rust = ref.read(votingRustApiProvider);
     final submitTimer = Stopwatch()..start();
     debugPrint(
@@ -1867,7 +1867,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         ),
       );
 
-      final api = ref.read(votingApiClientProvider(context.config.apiBaseUrl));
+      final api = ref.read(votingApiClientProvider(context.config.apiServers));
       final rust = ref.read(votingRustApiProvider);
       final helperHealth = ref.read(votingHelperHealthTrackerProvider);
       final configuredServerUrls = context.config.voteServers
@@ -2475,7 +2475,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     checkAction();
     final config = await ref.read(votingConfigProvider.future);
     config.assertRoundAuthenticated(roundId);
-    final api = ref.read(votingApiClientProvider(config.apiBaseUrl));
+    final api = ref.read(votingApiClientProvider(config.apiServers));
     final round = VotingRoundDetails.fromStatus(
       await api.getRoundStatus(roundId),
     );

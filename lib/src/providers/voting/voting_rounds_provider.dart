@@ -68,7 +68,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
 
   Future<List<VotingRoundView>> _load() async {
     final config = await ref.read(votingConfigProvider.future);
-    final api = ref.read(votingApiClientProvider(config.apiBaseUrl));
+    final api = ref.read(votingApiClientProvider(config.apiServers));
 
     final rounds = await api.listRounds();
     final authenticatedRoundIds = config.authenticatedRounds

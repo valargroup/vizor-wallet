@@ -46,7 +46,8 @@ class VotingTreePreSyncService {
         return;
       }
       final dbPath = await _ref.read(votingWalletDbPathProvider).call();
-      final key = '$dbPath|$accountUuid|${config.apiBaseUrl}|$roundId';
+      final primaryApiServer = config.apiServers.primary;
+      final key = '$dbPath|$accountUuid|$primaryApiServer|$roundId';
       if (_completed.contains(key)) return;
       final existing = _inFlight[key];
       if (existing != null) {
@@ -59,7 +60,7 @@ class VotingTreePreSyncService {
         dbPath: dbPath,
         accountUuid: accountUuid,
         roundId: roundId,
-        nodeUrl: config.apiBaseUrl.toString(),
+        nodeUrl: primaryApiServer.toString(),
       );
       _inFlight[key] = future;
       await future;
