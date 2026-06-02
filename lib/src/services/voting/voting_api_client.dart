@@ -91,11 +91,10 @@ class VotingApiClient {
 
   /// Fetches the currently active round, returning null when the chain has none.
   Future<VotingRoundStatus?> getActiveRoundStatus() async {
-    late final Uri requestUri;
     final response = await _withVoteServerFailover(
       policy: _readRetryPolicy,
       operation: (baseUrl) {
-        requestUri = _endpoint(['rounds', 'active'], baseUrl: baseUrl);
+        final requestUri = _endpoint(['rounds', 'active'], baseUrl: baseUrl);
         return _runRequestWithRetry(
           retryPolicy: _readRetryPolicy,
           operation: () async {
@@ -226,11 +225,10 @@ class VotingApiClient {
   }
 
   Future<VotingTxConfirmation?> getTxConfirmation(String txHash) async {
-    late final Uri requestUri;
     final response = await _withVoteServerFailover(
       policy: _readRetryPolicy,
       operation: (baseUrl) {
-        requestUri = _endpoint(['tx', txHash], baseUrl: baseUrl);
+        final requestUri = _endpoint(['tx', txHash], baseUrl: baseUrl);
         return _runRequestWithRetry(
           retryPolicy: _readRetryPolicy,
           operation: () async {
@@ -244,7 +242,6 @@ class VotingApiClient {
       },
     );
     if (response.statusCode == 404) return null;
-    _throwIfNotSuccess(requestUri, response, allowStatusCodes: const {422});
     return VotingTxConfirmation.fromJson(
       _objectFromValue(jsonDecode(response.bodyText)),
     );

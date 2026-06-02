@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'voting_http.dart';
+import 'voting_models.dart';
 import 'voting_retry.dart';
 
 /// Probe outcome for one configured PIR endpoint.
@@ -142,10 +143,24 @@ class PirSnapshotResolver {
     required int expectedSnapshotHeight,
   }) async {
     try {
+      final rootUri = _rootUri(endpoint);
       final response = await withVotingRetry(
         policy: _retryPolicy,
         delay: _delay,
-        operation: () => _httpClient.get(_rootUri(endpoint), timeout: _timeout),
+        operation: () async {
+          final response = await _httpClient.get(rootUri, timeout: _timeout);
+          if (response.statusCode != 200) {
+            final error = VotingHttpException(
+              uri: rootUri,
+              statusCode: response.statusCode,
+              body: response.bodyText,
+            );
+            if (isRetryableVotingError(error)) {
+              throw error;
+            }
+          }
+          return response;
+        },
       );
       if (response.statusCode != 200) {
         return PirSnapshotEndpointDiagnostic(
@@ -189,6 +204,13 @@ class PirSnapshotResolver {
         endpoint: endpoint,
         status: PirSnapshotEndpointStatus.matched,
         reportedHeight: height,
+      );
+    } on VotingHttpException catch (e) {
+      return PirSnapshotEndpointDiagnostic(
+        endpoint: endpoint,
+        status: PirSnapshotEndpointStatus.nonSuccessStatus,
+        httpStatusCode: e.statusCode,
+        message: e.body,
       );
     } on FormatException catch (e) {
       return PirSnapshotEndpointDiagnostic(
