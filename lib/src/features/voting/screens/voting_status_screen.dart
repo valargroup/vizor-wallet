@@ -131,22 +131,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Use signed bundles only?'),
-          content: const Text(
-            'Vizor will submit with the Keystone bundle signatures already collected and skip the remaining unsigned bundles. This lowers voting power for this poll.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Keep signing'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Use signed bundles'),
-            ),
-          ],
-        );
+        return const _SkipSignedBundlesDialog();
       },
     );
     if (!mounted || _selectedJobKey() != key) return;
@@ -460,6 +445,83 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         ),
       );
     });
+  }
+}
+
+class _SkipSignedBundlesDialog extends StatelessWidget {
+  const _SkipSignedBundlesDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadii.medium),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 20,
+                    color: colors.text.warning,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      'Use signed bundles only?',
+                      style: AppTypography.bodyMediumStrong.copyWith(
+                        color: colors.text.accent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Vizor can submit now using only signatures already scanned from Keystone.',
+                style: AppTypography.bodyMedium.copyWith(
+                  color: colors.text.secondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Unsigned bundles are skipped, which lowers voting power for this poll.',
+                style: AppTypography.bodySmall.copyWith(
+                  color: colors.text.warning,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  AppButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    variant: AppButtonVariant.secondary,
+                    child: const Text('Keep signing'),
+                  ),
+                  AppButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    variant: AppButtonVariant.primary,
+                    child: const Text('Use signed bundles'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
