@@ -59,10 +59,8 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
   Future<List<VotingRoundView>> _load() async {
     final config = await ref.read(votingConfigProvider.future);
     final api = ref.read(votingApiClientProvider(config.apiBaseUrl));
-    final endorser = ref.read(votingEndorserClientProvider(config.apiBaseUrl));
 
     final rounds = await api.listRounds();
-    final endorsedIds = await endorser.getEndorsedSet();
     final authenticatedRoundIds = config.authenticatedRounds
         .map((round) => round.roundId)
         .toSet();
@@ -81,7 +79,6 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
       for (final round in filteredRounds)
         VotingRoundView.fromSummary(
           round,
-          endorsed: endorsedIds.contains(round.roundId),
           voted: recoveryStates[round.roundId]?.voted ?? false,
           inProgress: recoveryStates[round.roundId]?.inProgress ?? false,
         ),

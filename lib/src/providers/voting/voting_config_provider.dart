@@ -124,7 +124,6 @@ class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
 
   void _invalidateEndpointState() {
     ref.invalidate(votingApiClientProvider);
-    ref.invalidate(votingEndorserClientProvider);
     ref.invalidate(votingHelperHealthTrackerProvider);
     ref.invalidate(votingPirResolverProvider);
     ref.invalidate(votingTreePreSyncProvider);
