@@ -38,6 +38,7 @@ class _VotingProposalDetailScreenState
     extends ConsumerState<VotingProposalDetailScreen> {
   bool _votingPowerPreparationStarted = false;
   bool _votingPowerPreparationInFlight = false;
+  String? _votingPowerPreparationKey;
   String? _delegationPirPrecomputeKey;
 
   @override
@@ -46,6 +47,7 @@ class _VotingProposalDetailScreenState
     if (oldWidget.roundId != widget.roundId) {
       _votingPowerPreparationStarted = false;
       _votingPowerPreparationInFlight = false;
+      _votingPowerPreparationKey = null;
       _delegationPirPrecomputeKey = null;
     }
   }
@@ -101,21 +103,25 @@ class _VotingProposalDetailScreenState
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
                   roundId: roundId,
+                  accountUuid: accountUuid,
                 ),
               );
             }
             if (completedVote != null) {
-              return _VotedPollContent(
-                roundTitle: round.title.isEmpty
-                    ? 'Coinholder poll'
-                    : round.title,
-                snapshotHeight: round.snapshotHeight,
-                description: _roundDescription(round.rawJson),
-                votingPowerZatoshi: state.eligibleWeightZatoshi,
-                votingPowerPreparing: _votingPowerPreparationInFlight,
-                votedAt: completedVote.votedAt,
-                proposals: proposals,
-                choicesByProposalId: completedVote.choicesByProposalId,
+              return Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: _VotedPollContent(
+                  roundTitle: round.title.isEmpty
+                      ? 'Coinholder poll'
+                      : round.title,
+                  snapshotHeight: round.snapshotHeight,
+                  description: _roundDescription(round.rawJson),
+                  votingPowerZatoshi: state.eligibleWeightZatoshi,
+                  votingPowerPreparing: _votingPowerPreparationInFlight,
+                  votedAt: completedVote.votedAt,
+                  proposals: proposals,
+                  choicesByProposalId: completedVote.choicesByProposalId,
+                ),
               );
             }
             final pendingVote = _PendingVoteRecovery.fromPlan(state.roundPlan);
@@ -129,6 +135,7 @@ class _VotingProposalDetailScreenState
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
                   roundId: roundId,
+                  accountUuid: accountUuid,
                 ),
               );
             }
@@ -163,6 +170,13 @@ class _VotingProposalDetailScreenState
   }
 
   void _maybePrepareVotingPower(VotingSessionState state) {
+    final preparationKey = '${widget.roundId}|${state.accountUuid ?? ''}';
+    if (_votingPowerPreparationKey != preparationKey) {
+      _votingPowerPreparationKey = preparationKey;
+      _votingPowerPreparationStarted = false;
+      _votingPowerPreparationInFlight = false;
+    }
+
     if (_votingPowerPreparationStarted ||
         state.eligibleWeightZatoshi != null ||
         !_shouldPrepareVotingPower(state)) {
@@ -748,12 +762,14 @@ class _PendingVoteContent extends StatelessWidget {
     required this.snapshotHeight,
     required this.description,
     required this.roundId,
+    required this.accountUuid,
   });
 
   final String roundTitle;
   final int snapshotHeight;
   final String description;
   final String roundId;
+  final String? accountUuid;
 
   @override
   Widget build(BuildContext context) {
@@ -824,7 +840,9 @@ class _PendingVoteContent extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   AppButton(
-                    onPressed: () => context.go(votingStatusRoute(roundId)),
+                    onPressed: () => context.go(
+                      votingStatusRoute(roundId, accountUuid: accountUuid),
+                    ),
                     variant: AppButtonVariant.primary,
                     child: const Text('Continue voting'),
                   ),

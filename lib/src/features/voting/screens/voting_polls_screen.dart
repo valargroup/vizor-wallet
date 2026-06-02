@@ -153,11 +153,28 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
 
   void _openRoundAction(VotingRoundView round) {
     final state = _pollCardState(round);
-    if (state == _PollCardState.tallying || state == _PollCardState.closed) {
-      context.push(votingResultsRoute(round.roundId));
-      return;
-    }
-    context.push(votingPollRoute(round.roundId));
+    final route =
+        state == _PollCardState.tallying || state == _PollCardState.closed
+        ? votingResultsRoute(round.roundId)
+        : votingPollRoute(round.roundId);
+    _pushRoundRoute(route);
+  }
+
+  void _pushRoundRoute(String route) {
+    final VotingRoundsNotifier notifier =
+        _roundsNotifier ?? ref.read(votingRoundsProvider.notifier);
+    _roundsNotifier = notifier;
+    notifier.stopPolling();
+    unawaited(
+      context.push(route).whenComplete(() {
+        if (!mounted) return;
+        final VotingRoundsNotifier notifier =
+            _roundsNotifier ?? ref.read(votingRoundsProvider.notifier);
+        _roundsNotifier = notifier;
+        notifier.startPolling();
+        _preSyncLoadedRounds();
+      }),
+    );
   }
 
   void _openSettings() {

@@ -202,6 +202,7 @@ void main() {
     final container = _statusContainer(
       accountOverride: _MnemonicAccountNotifier.new,
       rust: _IneligibleVotingRustApi(),
+      hotkeyStore: const _FakeVotingHotkeyStore([9, 9, 9]),
     );
     addTearDown(container.dispose);
     container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
@@ -233,6 +234,7 @@ void main() {
     final container = _statusContainer(
       accountOverride: _MnemonicAccountNotifier.new,
       rust: _IneligibleVotingRustApi(),
+      hotkeyStore: const _FakeVotingHotkeyStore([9, 9, 9]),
     );
     addTearDown(container.dispose);
     container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
@@ -277,7 +279,7 @@ void main() {
     await tester.pumpAndSettle();
     await _pumpUntilFound(tester, find.text('Submission not complete'));
 
-    expect(find.text('Submission confirmed'), findsNothing);
+    expect(find.text('Submission confirmed!'), findsNothing);
     expect(
       find.text('This account has not completed submission for this poll.'),
       findsOneWidget,
@@ -570,12 +572,12 @@ void main() {
     );
     final recoveryApi = _MutableVotingRecoveryApi()
       ..state = _recoveryState(
-        delegationTxHashes: [
+        delegationWorkflows: const [
           rust_frb_types.DelegationRecoveryView(
             bundleIndex: 0,
-            phase: VotingWorkflowPhase.submittedDelegation,
+            phase: VotingWorkflowPhase.confirmed,
             txHash: 'delegation-0',
-            vanLeafPosition: null,
+            vanLeafPosition: 0,
           ),
         ],
         shareDelegations: [share],
@@ -647,12 +649,12 @@ void main() {
     );
     final recoveryApi = _MutableVotingRecoveryApi()
       ..state = _recoveryState(
-        delegationTxHashes: [
+        delegationWorkflows: const [
           rust_frb_types.DelegationRecoveryView(
             bundleIndex: 0,
-            phase: VotingWorkflowPhase.submittedDelegation,
+            phase: VotingWorkflowPhase.confirmed,
             txHash: 'delegation-0',
-            vanLeafPosition: null,
+            vanLeafPosition: 0,
           ),
         ],
         shareDelegations: [share],
@@ -745,12 +747,12 @@ void main() {
     );
     final recoveryApi = _MutableVotingRecoveryApi()
       ..state = _recoveryState(
-        delegationTxHashes: [
+        delegationWorkflows: const [
           rust_frb_types.DelegationRecoveryView(
             bundleIndex: 0,
-            phase: VotingWorkflowPhase.submittedDelegation,
+            phase: VotingWorkflowPhase.confirmed,
             txHash: 'delegation-0',
-            vanLeafPosition: null,
+            vanLeafPosition: 0,
           ),
         ],
       )
@@ -1106,6 +1108,118 @@ void main() {
     expect(find.textContaining("Couldn't load results"), findsNothing);
   });
 
+  testWidgets('results screen refreshes pending tally responses', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final round = _roundStatusJson()..['status'] = 'tallying';
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round}
+        ..['/shielded-vote/v1/tally-results/$_roundId'] =
+            SequentialVotingHttpResponses([
+              {
+                'vote_round_id': _roundId,
+                'status': 'pending',
+                'results': const [],
+              },
+              {
+                'vote_round_id': _roundId,
+                'results': [
+                  {'proposal_id': 1, 'vote_decision': 0, 'total_value': 8},
+                ],
+              },
+            ]),
+    );
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _resultsHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Results pending...'), findsOneWidget);
+    expect(_tallyRequestCount(http), 1);
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Results pending...'), findsNothing);
+    expect(find.text('First proposal'), findsOneWidget);
+    expect(find.text('1.00 ZEC'), findsOneWidget);
+    expect(_tallyRequestCount(http), greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('results screen treats not-ready tally errors as pending', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final round = _roundStatusJson()..['status'] = '2';
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round}
+        ..['/shielded-vote/v1/tally-results/$_roundId'] = jsonResponse({
+          'error': 'tally not ready',
+        }, statusCode: 404),
+    );
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _resultsHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Results pending...'), findsOneWidget);
+    expect(find.textContaining("Couldn't load results"), findsNothing);
+  });
+
+  testWidgets('results screen surfaces non-pending tally errors', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final round = _roundStatusJson()..['status'] = 'tallying';
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round}
+        ..['/shielded-vote/v1/tally-results/$_roundId'] = jsonResponse({
+          'error': 'server unavailable',
+        }, statusCode: 500),
+    );
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _resultsHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Results pending...'), findsNothing);
+    expect(find.textContaining("Couldn't load results"), findsOneWidget);
+  });
+
   testWidgets('reviewing partial votes warns and marks skipped rows', (
     tester,
   ) async {
@@ -1154,11 +1268,220 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Review your answers'), findsOneWidget);
-    expect(find.text('Confirm and submit'), findsOneWidget);
+    expect(find.text('Confirm & submit'), findsOneWidget);
     expect(find.text('First proposal'), findsOneWidget);
     expect(find.text('Yes'), findsOneWidget);
     expect(find.text('Second proposal'), findsOneWidget);
     expect(find.text('Skipped'), findsOneWidget);
+
+    await tester.tap(find.text('Confirm & submit'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('status account: account-1'), findsOneWidget);
+  });
+
+  testWidgets('review screen scrolls long ballots without overflowing', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 520));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final round = _roundStatusJson()
+      ..['proposals'] = [
+        for (var i = 1; i <= 15; i++)
+          _proposalJson(i, 'Long proposal title number $i', [
+            'A very long answer label that must not overflow the review row $i',
+            'No',
+          ]),
+      ];
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round},
+    );
+    final recoveryApi = _MutableVotingRecoveryApi();
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _NoMnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
+    );
+    addTearDown(container.dispose);
+    final draftNotifier = container.read(
+      votingDraftProvider(_draftKey).notifier,
+    );
+    for (var i = 1; i <= 15; i++) {
+      draftNotifier.setChoice(i, 0);
+    }
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _proposalHarness(
+          initialLocation: '/voting/poll/$_roundId/review',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SingleChildScrollView), findsWidgets);
+
+    await tester.scrollUntilVisible(find.text('Confirm & submit'), 300);
+    expect(find.text('Confirm & submit'), findsOneWidget);
+  });
+
+  testWidgets('pending vote continue keeps the session account', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final recoveryApi = _MutableVotingRecoveryApi()
+      ..roundPlan = apiRoundPlan(
+        roundId: _roundId,
+        pendingRecovery: true,
+        nextSteps: const [
+          rust_wire.NextStepView(
+            kind: 'cast_vote',
+            bundleIndex: 0,
+            proposalId: 1,
+            choice: 0,
+            shareIndex: 0,
+          ),
+        ],
+        openProposals: Uint32List(0),
+        allDecided: false,
+      );
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _proposalHarness(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue voting'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('status account: account-1'), findsOneWidget);
+  });
+
+  testWidgets('status screen ignores stale start results after route change', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1512, 982));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    const staleKey = VotingSessionKey(
+      roundId: 'round-a',
+      accountUuid: 'account-a',
+    );
+    const currentKey = VotingSessionKey(
+      roundId: 'round-b',
+      accountUuid: 'account-b',
+    );
+    final firstStart = Completer<VotingSessionKey?>();
+    final secondStart = Completer<VotingSessionKey?>();
+    final starts = <VotingSessionKey>[];
+    late final GoRouter router;
+    final container = _statusContainer(
+      accountOverride: _MnemonicAccountNotifier.new,
+      overrides: [
+        votingSubmissionJobsProvider.overrideWith(
+          () => _ControlledVotingSubmissionJobsNotifier(
+            starts: starts,
+            completions: [firstStart, secondStart],
+          ),
+        ),
+        votingSubmissionJobProvider(staleKey).overrideWith(
+          () => _StaticVotingSubmissionJobNotifier(
+            staleKey,
+            const VotingSubmissionJobState(
+              key: staleKey,
+              status: VotingSubmissionJobStatus.error,
+              generation: 1,
+              errorMessage: 'stale key selected',
+            ),
+          ),
+        ),
+        votingSubmissionJobProvider(currentKey).overrideWith(
+          () => _StaticVotingSubmissionJobNotifier(
+            currentKey,
+            const VotingSubmissionJobState(
+              key: currentKey,
+              status: VotingSubmissionJobStatus.running,
+              generation: 1,
+            ),
+          ),
+        ),
+        votingSubmissionJobSessionProvider(staleKey).overrideWithValue(
+          AsyncValue.data(
+            VotingSessionState(
+              roundId: 'round-a',
+              accountUuid: 'account-a',
+              phase: VotingSessionPhase.error,
+            ),
+          ),
+        ),
+        votingSubmissionJobSessionProvider(currentKey).overrideWithValue(
+          AsyncValue.data(
+            VotingSessionState(
+              roundId: 'round-b',
+              accountUuid: 'account-b',
+              phase: VotingSessionPhase.submittingShares,
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    router = GoRouter(
+      initialLocation: '/voting/poll/round-a/status?account=account-a',
+      routes: [
+        GoRoute(
+          path: '/voting/poll/:roundId/status',
+          builder: (_, state) => VotingStatusScreen(
+            roundId: state.pathParameters['roundId']!,
+            accountUuid: state.uri.queryParameters['account'],
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          routerConfig: router,
+          builder: (_, child) =>
+              AppTheme(data: AppThemeData.light, child: child!),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    router.go('/voting/poll/round-b/status?account=account-b');
+    await tester.pump();
+    firstStart.complete(staleKey);
+    secondStart.complete(currentKey);
+    await tester.pump();
+
+    expect(starts, [staleKey, currentKey]);
+    expect(find.text('stale key selected'), findsNothing);
+    expect(find.text('Submitting votes'), findsOneWidget);
   });
 
   testWidgets('status screen navigates after successful submission', (
@@ -1577,6 +1900,7 @@ Future<void> _pumpUntilFound(
     await tester.pump(const Duration(milliseconds: 100));
     if (finder.evaluate().isNotEmpty) return;
   }
+  expect(finder, findsWidgets, reason: 'Timed out waiting for $finder.');
 }
 
 ProviderContainer _statusContainer({
@@ -1695,9 +2019,9 @@ Widget _statusHarness({
   );
 }
 
-Widget _proposalHarness() {
+Widget _proposalHarness({String? initialLocation}) {
   final router = GoRouter(
-    initialLocation: '/voting/poll/$_roundId',
+    initialLocation: initialLocation ?? '/voting/poll/$_roundId',
     routes: [
       GoRoute(
         path: '/voting/poll/:roundId',
@@ -1709,6 +2033,12 @@ Widget _proposalHarness() {
         path: '/voting/poll/:roundId/review',
         builder: (_, state) =>
             VotingReviewScreen(roundId: state.pathParameters['roundId']!),
+      ),
+      GoRoute(
+        path: '/voting/poll/:roundId/status',
+        builder: (_, state) => Text(
+          'status account: ${state.uri.queryParameters['account'] ?? ''}',
+        ),
       ),
       GoRoute(path: '/home', builder: (_, _) => const Text('home route')),
       GoRoute(path: '/send', builder: (_, _) => const Text('send route')),
@@ -1841,6 +2171,12 @@ Map<String, Object> _votingHttpResponses() => {
   'https://voting.example/dynamic-voting-config.json': _dynamicConfigJson(),
   '/shielded-vote/v1/round/$_roundId': {'round': _roundStatusJson()},
 };
+
+int _tallyRequestCount(FakeVotingHttpClient http) {
+  return http.requests
+      .where((request) => request.uri.path.endsWith('/tally-results/$_roundId'))
+      .length;
+}
 
 const _roundId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -2042,6 +2378,30 @@ class _StaticVotingSubmissionJobsNotifier extends VotingSubmissionJobsNotifier {
   VotingSubmissionJobsState build() => _initial;
 }
 
+class _ControlledVotingSubmissionJobsNotifier
+    extends VotingSubmissionJobsNotifier {
+  _ControlledVotingSubmissionJobsNotifier({
+    required this.starts,
+    required this.completions,
+  });
+
+  final List<VotingSessionKey> starts;
+  final List<Completer<VotingSessionKey?>> completions;
+
+  @override
+  VotingSubmissionJobsState build() => const VotingSubmissionJobsState();
+
+  @override
+  Future<VotingSessionKey?> start(String roundId, {String? accountUuid}) {
+    final key = VotingSessionKey(
+      roundId: roundId,
+      accountUuid: accountUuid ?? 'resolved-account',
+    );
+    starts.add(key);
+    return completions[starts.length - 1].future;
+  }
+}
+
 class _FakeVotingRecoveryApi implements VotingRecoveryApi {
   @override
   Future<void> addSentServers({
@@ -2153,6 +2513,15 @@ class _NoopVotingRustApi implements VotingRustApi {
   }) async {}
 
   @override
+  Future<List<int>> deriveHotkey({
+    required String mnemonic,
+    required String roundId,
+    required String network,
+  }) async {
+    return [9, 9, 9];
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -2165,11 +2534,20 @@ class _FailingVotingPowerRustApi extends _NoopVotingRustApi {
   }
 }
 
-class _IneligibleVotingRustApi extends _NoopVotingRustApi {
+class _IneligibleVotingRustApi extends _VotingStatusRustApi {
+  _IneligibleVotingRustApi() : super(_MutableVotingRecoveryApi());
+
   @override
-  Future<rust_round.BundleLayout> setupDelegationBundles({
-    required rust_api.ApiVotingRoundContext ctx,
-  }) async {
+  Stream<rust_api.ApiVoteCommitEvent> buildVoteCommitmentsWithProgress({
+    required String dbPath,
+    required String accountUuid,
+    required String network,
+    required String roundId,
+    required int bundleIndex,
+    required List<int> hotkeySeed,
+    required rust_vote.VanWitness vanWitness,
+    required List<rust_wire.DraftVote> draftVotes,
+  }) async* {
     throw Exception(
       'Invalid input: no spendable voting notes at snapshot height 3359740',
     );
