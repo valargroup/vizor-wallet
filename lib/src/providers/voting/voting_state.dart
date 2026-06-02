@@ -11,15 +11,10 @@ import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_models.dart';
 
 /// Poll-list row consumed by the upcoming voting screens.
-///
-/// Endorsement is deliberately modeled separately from round authenticity:
-/// authenticated-but-not-endorsed rounds remain visible with [unverified] set.
 class VotingRoundView {
   final String roundId;
   final String title;
   final String status;
-  final bool endorsed;
-  final bool unverified;
   final bool voted;
   final bool inProgress;
   final Map<String, dynamic> rawJson;
@@ -28,8 +23,6 @@ class VotingRoundView {
     required this.roundId,
     required this.title,
     required this.status,
-    this.endorsed = false,
-    this.unverified = false,
     this.voted = false,
     this.inProgress = false,
     this.rawJson = const {},
@@ -37,7 +30,6 @@ class VotingRoundView {
 
   factory VotingRoundView.fromSummary(
     VotingRoundSummary summary, {
-    required bool endorsed,
     bool voted = false,
     bool inProgress = false,
   }) {
@@ -45,8 +37,6 @@ class VotingRoundView {
       roundId: summary.roundId,
       title: summary.title,
       status: summary.status,
-      endorsed: endorsed,
-      unverified: !endorsed,
       voted: voted,
       inProgress: inProgress,
       rawJson: summary.rawJson,
@@ -54,8 +44,6 @@ class VotingRoundView {
   }
 
   VotingRoundView copyWith({
-    bool? endorsed,
-    bool? unverified,
     bool? voted,
     bool? inProgress,
   }) {
@@ -63,8 +51,6 @@ class VotingRoundView {
       roundId: roundId,
       title: title,
       status: status,
-      endorsed: endorsed ?? this.endorsed,
-      unverified: unverified ?? this.unverified,
       voted: voted ?? this.voted,
       inProgress: inProgress ?? this.inProgress,
       rawJson: rawJson,

@@ -21,7 +21,6 @@ import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import '../../services/voting/pir_snapshot_resolver.dart';
 import '../../services/voting/voting_api_client.dart';
 import '../../services/voting/voting_config_loader.dart';
-import '../../services/voting/voting_endorser_client.dart';
 import '../../services/voting/voting_helper_health_tracker.dart';
 import '../../services/voting/voting_http.dart';
 import 'voting_config_source_provider.dart';
@@ -60,19 +59,6 @@ final votingHelperHealthTrackerProvider = Provider<VotingHelperHealthTracker>((
 ) {
   return VotingHelperHealthTracker();
 });
-
-/// Optional off-chain endorser source for poll-list badges.
-final votingEndorserClientProvider = Provider.family<VotingEndorserClient, Uri>(
-  (ref, baseUrl) {
-    return VotingEndorserClient(
-      endorsedSetUrl: _shieldedVoteUri(baseUrl, const [
-        'endorsed-rounds',
-        'zodl',
-      ]),
-      httpClient: ref.watch(votingHttpClientProvider),
-    );
-  },
-);
 
 /// Resolves PIR endpoints before proof generation.
 final votingPirResolverProvider = Provider<PirSnapshotResolver>((ref) {
@@ -936,11 +922,3 @@ class FrbVotingRustApi implements VotingRustApi {
   }
 }
 
-Uri _shieldedVoteUri(Uri baseUrl, List<String> pathSegments) {
-  final baseSegments = baseUrl.pathSegments
-      .where((segment) => segment.isNotEmpty)
-      .toList();
-  return baseUrl.replace(
-    pathSegments: [...baseSegments, 'shielded-vote', 'v1', ...pathSegments],
-  );
-}
