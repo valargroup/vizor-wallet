@@ -1519,23 +1519,26 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     required int proposalId,
   }) async {
     final nodeUrls = context.config.apiServers.all;
+    final rust = ref.read(votingRustApiProvider);
     Object? lastError;
     for (var attempt = 0; attempt < nodeUrls.length; attempt++) {
       final nodeUrl = nodeUrls[attempt];
       try {
-        return await ref
-            .read(votingRustApiProvider)
-            .syncVoteTree(
-              dbPath: context.dbPath,
-              accountUuid: context.accountUuid,
-              roundId: context.round.roundId,
-              nodeUrl: nodeUrl.toString(),
-            );
+        return await rust.syncVoteTree(
+          dbPath: context.dbPath,
+          accountUuid: context.accountUuid,
+          roundId: context.round.roundId,
+          nodeUrl: nodeUrl.toString(),
+        );
       } catch (error) {
         lastError = error;
         if (attempt == nodeUrls.length - 1) {
           rethrow;
         }
+        await rust.resetVotingSessionState(
+          dbPath: context.dbPath,
+          accountUuid: context.accountUuid,
+        );
         debugPrint(
           '[zcash] Voting: vote tree sync retrying failover '
           'round=${context.round.roundId} bundle=$bundleIndex '

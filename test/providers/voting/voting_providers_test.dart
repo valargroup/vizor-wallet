@@ -3686,6 +3686,7 @@ void main() {
       'https://voting.example',
       'https://voting-failover.example',
     ]);
+    expect(rust.resetVotingSessionStateCalls, ['account-1:*']);
   });
 
   test('vote commitments submit shares and record recovery rows', () async {
