@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
 import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
+import 'package:zcash_wallet/src/core/widgets/app_button.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_proposal_detail_screen.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_polls_screen.dart';
 import 'package:zcash_wallet/src/features/voting/screens/voting_review_screen.dart';
@@ -1273,12 +1274,21 @@ void main() {
       await tester.binding.setSurfaceSize(null);
     });
 
+    const optionDescription =
+        'Mint option explanation for detail screens only.';
     final round = _roundStatusJson()
       ..['status'] = 'closed'
       ..['summary'] = 'Completed poll'
       ..['proposals'] = [
         _proposalJson(1, 'First proposal', ['Yes', 'No']),
-        _proposalJson(2, 'Second proposal', ['Mint', 'Burn']),
+        {
+          'id': 2,
+          'title': 'Second proposal',
+          'options': [
+            {'index': 0, 'label': 'Mint', 'description': optionDescription},
+            {'index': 1, 'label': 'Burn'},
+          ],
+        },
       ];
     final http = FakeVotingHttpClient(
       responses: _votingHttpResponses()
@@ -1328,6 +1338,7 @@ void main() {
     expect(find.text('Voted: Yes'), findsOneWidget);
     expect(find.text('Second proposal'), findsOneWidget);
     expect(find.text('Mint'), findsOneWidget);
+    expect(find.text(optionDescription), findsNothing);
     expect(find.text('0.13 ZEC'), findsOneWidget);
     expect(find.text('Burn'), findsOneWidget);
     expect(find.text('0.00 ZEC'), findsOneWidget);
@@ -1574,6 +1585,71 @@ void main() {
     expect(find.text('status account: account-1'), findsOneWidget);
   });
 
+  testWidgets('review uses short option label without option description', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final longDescription =
+        'Keep the existing halving schedule for new ZEC. Only fees and '
+        'donated funds are smoothed and reissued.';
+    final round = _roundStatusJson()
+      ..['proposals'] = [
+        {
+          'id': 1,
+          'title': 'NSM issuance smoothing',
+          'description': 'Question about the NSM issuance smoothing policy.',
+          'options': [
+            {
+              'index': 0,
+              'label': 'Preserve halvings',
+              'description': longDescription,
+            },
+            {
+              'index': 1,
+              'label': 'Smooth issuance curve',
+              'description': 'Replace halvings with a gradual issuance curve.',
+            },
+          ],
+        },
+      ];
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round},
+    );
+    final recoveryApi = _MutableVotingRecoveryApi();
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _NoMnemonicAccountNotifier.new,
+      recoveryApi: recoveryApi,
+      rust: _VotingStatusRustApi(recoveryApi),
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _proposalHarness(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Preserve halvings'), findsOneWidget);
+    expect(find.text(longDescription), findsOneWidget);
+
+    await tester.tap(find.text('Preserve halvings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review answers'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Review your answers'), findsOneWidget);
+    expect(find.text('Preserve halvings'), findsOneWidget);
+    expect(find.text(longDescription), findsNothing);
+  });
+
   testWidgets('review screen scrolls long ballots without overflowing', (
     tester,
   ) async {
@@ -1622,8 +1698,35 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(SingleChildScrollView), findsWidgets);
 
-    await tester.scrollUntilVisible(find.text('Confirm & submit'), 300);
-    expect(find.text('Confirm & submit'), findsOneWidget);
+    final submitButtonLabel = find.text('Confirm & submit');
+    final submitButton = find.ancestor(
+      of: submitButtonLabel,
+      matching: find.byType(AppButton),
+    );
+    final reviewScrollView = find
+        .descendant(
+          of: find.byType(VotingReviewScreen),
+          matching: find.byType(SingleChildScrollView),
+        )
+        .first;
+    expect(submitButtonLabel, findsOneWidget);
+    expect(submitButton, findsOneWidget);
+    expect(tester.getBottomLeft(submitButton).dy, lessThanOrEqualTo(520));
+    expect(
+      tester.getBottomLeft(reviewScrollView).dy,
+      lessThanOrEqualTo(tester.getTopLeft(submitButton).dy),
+    );
+
+    await tester.drag(reviewScrollView, const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    expect(submitButtonLabel, findsOneWidget);
+    expect(submitButton, findsOneWidget);
+    expect(tester.getBottomLeft(submitButton).dy, lessThanOrEqualTo(520));
+    expect(
+      tester.getBottomLeft(reviewScrollView).dy,
+      lessThanOrEqualTo(tester.getTopLeft(submitButton).dy),
+    );
   });
 
   testWidgets('pending vote continue keeps the session account', (
