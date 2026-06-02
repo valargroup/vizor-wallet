@@ -4,6 +4,7 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
+import '../third_party/zcash_voting/config.dart';
 import '../third_party/zcash_voting/delegate.dart';
 import '../third_party/zcash_voting/round.dart';
 import '../third_party/zcash_voting/share_policy.dart';
@@ -13,7 +14,7 @@ import '../third_party/zcash_voting/wire.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `build_vote_commitments_result`, `catch`, `emit_signed_delegation_result`, `emit_signed_vote_result`, `log_sink_closed`, `parse_tx_events_json`, `require_len`, `share_record`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
 
 /// Returns the vote-chain delegation submission body as validated wire JSON.
 ///
@@ -69,6 +70,45 @@ Future<List<ShareSubmissionPlan>> planShareSubmissions({
   singleShare: singleShare,
 );
 
+/// Build round params from server metadata while binding trusted `ea_pk`.
+///
+/// Trust model for the per-round parameters:
+///
+/// - `ea_pk` (the encryption-authority key votes are encrypted to) is the only
+///   field that cannot be independently re-derived by the wallet, so it is
+///   always sourced from the authenticated dynamic config and never from the
+///   vote server's round response. This call ignores any server-supplied
+///   `ea_pk` and substitutes the authenticated value for `round_id`.
+/// - `snapshot_height` and `nc_root` are accepted from the server here but are
+///   re-verified downstream against the wallet's own lightwalletd-synced
+///   Orchard commitment tree: `zcash_voting`'s witness generation
+///   (`validate_cached_tree_state_for_round`) requires the synced frontier
+///   height and root to match these exactly, so a wrong value fails closed
+///   before any vote material is produced.
+/// - `nullifier_imt_root` is accepted from the server here but is used
+///   downstream as the expected root that PIR nullifier proofs are verified
+///   against; a wrong root makes proof verification fail closed rather than
+///   enabling a forged non-membership claim.
+///
+/// In other words, every server-supplied field other than `ea_pk` is
+/// cross-checked against an independent source (lightwalletd or PIR proofs)
+/// downstream, and `ea_pk` is pinned to authenticated config here. A
+/// compromised or stale endpoint therefore cannot steer voting to the wrong
+/// authority or roots without being rejected.
+Future<VotingRoundParams> trustedVotingRoundParamsFromConfig({
+  required ResolvedVotingConfig resolvedConfig,
+  required String roundId,
+  required BigInt snapshotHeight,
+  required List<int> ncRoot,
+  required List<int> nullifierImtRoot,
+}) => RustLib.instance.api.crateApiVotingTrustedVotingRoundParamsFromConfig(
+  resolvedConfig: resolvedConfig,
+  roundId: roundId,
+  snapshotHeight: snapshotHeight,
+  ncRoot: ncRoot,
+  nullifierImtRoot: nullifierImtRoot,
+);
+
 /// Return share-tracking action flags using `zcash_voting::share_policy`.
 ///
 /// [`SHARE_TRACKING_FLAG_READY`] means the share is ready for status polling.
@@ -112,11 +152,10 @@ Future<String> recoveredVoteShareWireJson({
   submitAt: submitAt,
 );
 
-/// Generate opaque voting hotkey bytes for a local voting account.
+/// Generate opaque voting hotkey bytes for a hardware account.
 ///
-/// Vizor v2 uses the same random app-owned hotkey model for software and
-/// Keystone accounts. The app persists this random per-round hotkey in secure
-/// storage and reuses it for delegation setup and vote commitment signing.
+/// Wallets persist this random hotkey in secure storage and reuse it for
+/// delegation and vote commitment signing.
 ///
 /// # Errors
 ///
@@ -144,8 +183,8 @@ Future<BundleLayout> setupDelegationBundles({
 ///
 /// # Errors
 ///
-/// Returns an error if round input resolution, hotkey validation, bundle
-/// preparation, or PIR precompute fails.
+/// Returns an error if round input resolution, mnemonic-to-seed derivation,
+/// hotkey derivation, bundle preparation, or PIR precompute fails.
 Future<DelegationPirPrecomputeResultView> precomputeDelegationPir({
   required ApiVotingRoundContext ctx,
   required String pirServerUrl,
@@ -623,6 +662,39 @@ Future<void> setBallotIntent({
   choice: choice,
 );
 
+/// Authenticate the static voting config bytes and surface the dynamic URL.
+///
+/// The wallet fetches the static trust anchor with its own transport and passes
+/// the bytes here. Rust verifies the hash pin and decodes the static config,
+/// returning the `dynamic_config_url` the wallet must fetch next before calling
+/// [`resolve_voting_config`]. Config errors are returned as a flat string.
+Future<String> resolveStaticVotingConfig({
+  required String source,
+  required List<int> staticBytes,
+}) => RustLib.instance.api.crateApiVotingResolveStaticVotingConfig(
+  source: source,
+  staticBytes: staticBytes,
+);
+
+/// Resolve and authenticate voting config from wallet-fetched bytes.
+///
+/// The wallet owns transport: it fetches the static bytes, calls
+/// [`resolve_static_voting_config`] to learn the dynamic URL, fetches the
+/// dynamic bytes, then passes both blobs here. Rust authenticates them and
+/// computes the config-switch classification against `previous`. Config errors
+/// are returned as a flat string; transport failures never reach this layer.
+Future<VotingConfigResolution> resolveVotingConfig({
+  required String source,
+  required List<int> staticBytes,
+  required List<int> dynamicBytes,
+  ResolvedVotingConfig? previous,
+}) => RustLib.instance.api.crateApiVotingResolveVotingConfig(
+  source: source,
+  staticBytes: staticBytes,
+  dynamicBytes: dynamicBytes,
+  previous: previous,
+);
+
 /// Progress event emitted while building, proving, and signing a delegation payload.
 ///
 /// A terminal `"result"` event carries `signed_delegation_payload`; earlier
@@ -767,4 +839,25 @@ class ParsedSignedVotingPczt {
           runtimeType == other.runtimeType &&
           sighash == other.sighash &&
           spendAuthSig == other.spendAuthSig;
+}
+
+class VotingConfigResolution {
+  final ResolvedVotingConfig config;
+  final ConfigSwitchKind switchKind;
+
+  const VotingConfigResolution({
+    required this.config,
+    required this.switchKind,
+  });
+
+  @override
+  int get hashCode => config.hashCode ^ switchKind.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VotingConfigResolution &&
+          runtimeType == other.runtimeType &&
+          config == other.config &&
+          switchKind == other.switchKind;
 }

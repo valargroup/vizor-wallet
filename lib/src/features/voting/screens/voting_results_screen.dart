@@ -15,6 +15,7 @@ import '../../../providers/voting/voting_service_providers.dart';
 import '../../../providers/voting/voting_session_provider.dart';
 import '../../../providers/voting/voting_state.dart';
 import '../../../services/voting/voting_models.dart';
+import '../../../services/voting/resolved_voting_config_extensions.dart';
 import '../voting_choice_style.dart';
 import '../voting_flow_models.dart';
 import '../voting_poll_ordering.dart';
@@ -28,6 +29,7 @@ final _roundTallyProvider = FutureProvider.autoDispose.family((
   String roundId,
 ) async {
   final config = await ref.watch(votingConfigProvider.future);
+  config.assertRoundAuthenticated(roundId);
   return ref
       .read(votingApiClientProvider(config.apiBaseUrl))
       .getRoundTally(roundId);

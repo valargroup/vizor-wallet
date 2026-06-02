@@ -29,7 +29,11 @@ import 'package:zcash_wallet/src/providers/voting/voting_submission_job_provider
 import 'package:zcash_wallet/src/providers/voting/voting_state.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 import 'package:zcash_wallet/src/rust/api/voting.dart' as rust_api;
+import 'package:zcash_wallet/src/rust/api/voting_config.dart'
+    as rust_config_api;
 import 'package:zcash_wallet/src/rust/frb_generated.dart';
+import 'package:zcash_wallet/src/rust/third_party/zcash_voting/config.dart'
+    as rust_config;
 import 'package:zcash_wallet/src/rust/third_party/zcash_voting/delegate.dart'
     as rust_delegate;
 import 'package:zcash_wallet/src/rust/third_party/zcash_voting/round.dart'
@@ -58,7 +62,7 @@ void main() {
 
   tearDownAll(RustLib.dispose);
 
-  testWidgets('status screen submits vote-only path without mnemonic', (
+  testWidgets('status screen requires software account without mnemonic', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1512, 982));
@@ -106,11 +110,10 @@ void main() {
       UncontrolledProviderScope(container: container, child: _statusHarness()),
     );
     await tester.pumpAndSettle();
-    await _pumpUntilFound(tester, find.text('submission confirmed route'));
+    await _pumpUntilFound(tester, find.text('Software account required'));
 
-    expect(find.text('submission confirmed route'), findsOneWidget);
-    expect(find.text('Software account required'), findsNothing);
-    expect(find.text('Submitting votes'), findsNothing);
+    expect(find.text('Software account required'), findsOneWidget);
+    expect(find.text('submission confirmed route'), findsNothing);
   });
 
   testWidgets('status screen reports empty draft as retryable error', (
@@ -1208,6 +1211,39 @@ void main() {
     expect(find.textContaining("Couldn't load results"), findsOneWidget);
   });
 
+  testWidgets('results screen rejects unauthenticated round ids', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final http = FakeVotingHttpClient(responses: _votingHttpResponses());
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _resultsHarness(
+          initialLocation: '/voting/poll/$_unauthenticatedRoundId/results',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining("Couldn't load results"), findsOneWidget);
+    expect(
+      find.textContaining('not authenticated by voting config'),
+      findsOneWidget,
+    );
+    expect(_tallyRequestCount(http, _unauthenticatedRoundId), 0);
+  });
+
   testWidgets('reviewing partial votes warns and marks skipped rows', (
     tester,
   ) async {
@@ -1920,9 +1956,54 @@ ProviderContainer _statusContainer({
       votingConfigLoaderProvider.overrideWithValue(
         VotingConfigLoader(
           httpClient: effectiveHttp,
-          staticConfigSource: StaticVotingConfigSource.parse(
-            'https://voting.example/static-voting-config.json',
-          ),
+          sourceUrl: 'https://voting.example/static-voting-config.json',
+          resolveStaticVotingConfig: ({
+            required String source,
+            required List<int> staticBytes,
+          }) async {
+            return 'https://voting.example/dynamic-voting-config.json';
+          },
+          resolveVotingConfig: ({
+            required String source,
+            required List<int> staticBytes,
+            required List<int> dynamicBytes,
+            rust_config.ResolvedVotingConfig? previous,
+          }) async {
+            return rust_config_api.VotingConfigResolution(
+              config: rust_config.ResolvedVotingConfig(
+                sourceFingerprint: 'test-source-fingerprint',
+                trustedKeyFingerprint: 'test-trusted-key-fingerprint',
+                dynamicConfigFingerprint: 'test-dynamic-config-fingerprint',
+                voteServers: [
+                  rust_config.ServiceEndpoint(
+                    url: 'https://voting.example',
+                    label: 'vote-primary',
+                  ),
+                ],
+                pirEndpoints: [
+                  rust_config.ServiceEndpoint(
+                    url: 'https://pir.example',
+                    label: 'pir-primary',
+                  ),
+                ],
+                supportedVersions: rust_config.SupportedVersions(
+                  pir: ['2.0'],
+                  voteProtocol: '2.0',
+                  tally: '2.0',
+                  voteServer: '2.0',
+                ),
+                authenticatedRounds: [
+                  rust_config.AuthenticatedRound(
+                    roundId: _roundId,
+                    eaPk: Uint8List.fromList([1, 2, 3]),
+                  ),
+                ],
+                skippedRoundIds: [],
+                conditions: [],
+              ),
+              switchKind: rust_config.ConfigSwitchKind.initialLoad,
+            );
+          },
         ),
       ),
       votingWalletDbPathProvider.overrideWithValue(() async => 'wallet.db'),
@@ -2079,9 +2160,9 @@ Widget _submissionHarness() {
   );
 }
 
-Widget _resultsHarness() {
+Widget _resultsHarness({String? initialLocation}) {
   final router = GoRouter(
-    initialLocation: '/voting/poll/$_roundId/results',
+    initialLocation: initialLocation ?? '/voting/poll/$_roundId/results',
     routes: [
       GoRoute(
         path: '/voting/poll/:roundId/results',
@@ -2158,20 +2239,69 @@ Map<String, Object> _votingHttpResponses() => {
   'https://voting.example/static-voting-config.json': _staticConfigJson(),
   'https://voting.example/dynamic-voting-config.json': _dynamicConfigJson(),
   '/shielded-vote/v1/round/$_roundId': {'round': _roundStatusJson()},
+  '/shielded-vote/v1/delegate-vote': {
+    'tx_hash': 'delegation-tx',
+    'code': 0,
+    'log': '',
+  },
+  '/shielded-vote/v1/tx/delegation-tx': {
+    'height': 11,
+    'code': 0,
+    'log': '',
+    'events': [
+      {
+        'type': 'delegate_vote',
+        'attributes': [
+          {'key': 'leaf_index', 'value': '1'},
+          {'key': 'vote_round_id', 'value': _roundId},
+        ],
+      },
+    ],
+  },
+  '/shielded-vote/v1/cast-vote': {
+    'tx_hash': 'vote-tx',
+    'code': 0,
+    'log': '',
+  },
+  '/shielded-vote/v1/tx/vote-tx': {
+    'height': 11,
+    'code': 0,
+    'log': '',
+    'events': [
+      {
+        'type': 'cast_vote',
+        'attributes': [
+          {'key': 'leaf_index', 'value': '1,2'},
+          {'key': 'vote_round_id', 'value': _roundId},
+        ],
+      },
+    ],
+  },
+  '/shielded-vote/v1/shares': {'status': 'queued'},
+  'https://voting.example/shielded-vote/v1/share-status/$_roundId/$_shareIdOne': {
+    'status': 'confirmed',
+  },
 };
 
-int _tallyRequestCount(FakeVotingHttpClient http) {
+int _tallyRequestCount(FakeVotingHttpClient http, [String? roundId]) {
+  final targetRoundId = roundId ?? _roundId;
   return http.requests
-      .where((request) => request.uri.path.endsWith('/tally-results/$_roundId'))
+      .where(
+        (request) => request.uri.path.endsWith('/tally-results/$targetRoundId'),
+      )
       .length;
 }
 
 const _roundId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _unauthenticatedRoundId =
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const _draftKey = VotingSessionKey(roundId: _roundId, accountUuid: 'account-1');
 const _bytes1x32Base64 = 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=';
 const _bytes2x32Base64 = 'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=';
 const _bytes3x32Base64 = 'AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=';
+const _shareIdOne =
+    '0101010101010101010101010101010101010101010101010101010101010101';
 const _bytes12x64Base64 =
     'DAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA==';
 
@@ -2493,6 +2623,30 @@ class _MutableVotingRecoveryApi extends _FakeVotingRecoveryApi {
 }
 
 class _NoopVotingRustApi implements VotingRustApi {
+  @override
+  Future<rust_wire.VotingRoundParams> trustedVotingRoundParamsFromConfig({
+    required rust_config.ResolvedVotingConfig config,
+    required String roundId,
+    required BigInt snapshotHeight,
+    required List<int> ncRoot,
+    required List<int> nullifierImtRoot,
+  }) async {
+    rust_config.AuthenticatedRound? matchedRound;
+    for (final round in config.authenticatedRounds) {
+      if (round.roundId == roundId) {
+        matchedRound = round;
+        break;
+      }
+    }
+    return rust_wire.VotingRoundParams(
+      voteRoundId: roundId,
+      snapshotHeight: snapshotHeight,
+      eaPk: matchedRound?.eaPk ?? Uint8List.fromList(const [1, 2, 3]),
+      ncRoot: Uint8List.fromList(ncRoot),
+      nullifierImtRoot: Uint8List.fromList(nullifierImtRoot),
+    );
+  }
+
   @override
   Future<void> resetVotingSessionState({
     required String dbPath,
