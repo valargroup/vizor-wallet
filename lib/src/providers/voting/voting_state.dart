@@ -17,6 +17,7 @@ class VotingRoundView {
   final String status;
   final bool voted;
   final bool inProgress;
+  final bool recoveryError;
   final Map<String, dynamic> rawJson;
 
   const VotingRoundView({
@@ -25,6 +26,7 @@ class VotingRoundView {
     required this.status,
     this.voted = false,
     this.inProgress = false,
+    this.recoveryError = false,
     this.rawJson = const {},
   });
 
@@ -32,6 +34,7 @@ class VotingRoundView {
     VotingRoundSummary summary, {
     bool voted = false,
     bool inProgress = false,
+    bool recoveryError = false,
   }) {
     return VotingRoundView(
       roundId: summary.roundId,
@@ -39,6 +42,7 @@ class VotingRoundView {
       status: summary.status,
       voted: voted,
       inProgress: inProgress,
+      recoveryError: recoveryError,
       rawJson: summary.rawJson,
     );
   }
@@ -46,6 +50,7 @@ class VotingRoundView {
   VotingRoundView copyWith({
     bool? voted,
     bool? inProgress,
+    bool? recoveryError,
   }) {
     return VotingRoundView(
       roundId: roundId,
@@ -53,6 +58,7 @@ class VotingRoundView {
       status: status,
       voted: voted ?? this.voted,
       inProgress: inProgress ?? this.inProgress,
+      recoveryError: recoveryError ?? this.recoveryError,
       rawJson: rawJson,
     );
   }
