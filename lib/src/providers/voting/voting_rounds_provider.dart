@@ -5,9 +5,7 @@ import '../../features/voting/voting_flow_models.dart';
 import '../../features/voting/voting_resume_plan.dart';
 import '../../rust/third_party/zcash_voting/wire.dart' as rust_voting;
 import '../../services/voting/voting_api_client.dart';
-import '../../services/voting/resolved_voting_config_extensions.dart';
 import '../../services/voting/voting_models.dart';
-import '../../services/voting/voting_retry.dart';
 import 'voting_config_provider.dart';
 import 'voting_service_providers.dart';
 import 'voting_state.dart';
@@ -28,11 +26,6 @@ Future<void> refreshVotingPollList({
 
 /// Provides poll-list rows with explicit, route-driven reloads.
 class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
-  static const _roundsRetryDelays = <Duration>[
-    Duration(milliseconds: 300),
-    Duration(seconds: 1),
-  ];
-
   Future<void>? _reloadFuture;
   bool _reloadQueued = false;
 
@@ -55,7 +48,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
       do {
         _reloadQueued = false;
         state = const AsyncLoading<List<VotingRoundView>>();
-        state = await AsyncValue.guard(() => _withRoundsRetry(_load));
+        state = await AsyncValue.guard(_load);
       } while (_reloadQueued);
     }();
     _reloadFuture = run;
@@ -94,6 +87,7 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
           round,
           voted: recoveryStates[round.roundId]?.voted ?? false,
           inProgress: recoveryStates[round.roundId]?.inProgress ?? false,
+          recoveryError: recoveryStates[round.roundId]?.recoveryError ?? false,
         ),
     ];
   }
@@ -124,14 +118,21 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
           accountUuid: accountUuid,
           round: round,
         );
-        if (recoveryState.voted || recoveryState.inProgress) {
+        if (recoveryState.voted ||
+            recoveryState.inProgress ||
+            recoveryState.recoveryError) {
           states[round.roundId] = recoveryState;
         }
       } catch (error) {
         debugPrint(
-          '[zcash] Voting: skipped poll-state lookup for round '
+          '[zcash] Voting: recovery lookup failed for round '
           '${round.roundId}: '
           '$error',
+        );
+        states[round.roundId] = const _RoundListRecoveryState(
+          voted: false,
+          inProgress: true,
+          recoveryError: true,
         );
       }
     }
@@ -148,30 +149,32 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
     final proposalIds = await _proposalIdsForRound(api, round);
     rust_voting.RoundPlanView? roundPlan;
     if (proposalIds.isNotEmpty) {
-      try {
-        roundPlan = await recovery.loadRoundPlan(
-          dbPath: dbPath,
-          accountUuid: accountUuid,
-          roundId: round.roundId,
-          proposalIds: proposalIds,
-        );
-      } catch (error) {
-        debugPrint(
-          '[zcash] Voting: skipped in-progress lookup for round '
-          '${round.roundId}: $error',
-        );
-      }
+      roundPlan = await recovery.loadRoundPlan(
+        dbPath: dbPath,
+        accountUuid: accountUuid,
+        roundId: round.roundId,
+        proposalIds: proposalIds,
+      );
     }
     if (hasBlockingRoundRecoveryWork(roundPlan)) {
-      return const _RoundListRecoveryState(voted: false, inProgress: true);
+      return const _RoundListRecoveryState(
+        voted: false,
+        inProgress: true,
+        recoveryError: false,
+      );
     }
     if (hasCompletedVoteForDisplay(roundPlan)) {
-      return const _RoundListRecoveryState(voted: true, inProgress: false);
+      return const _RoundListRecoveryState(
+        voted: true,
+        inProgress: false,
+        recoveryError: false,
+      );
     }
 
     return _RoundListRecoveryState(
       voted: false,
       inProgress: roundPlan?.pendingRecovery ?? false,
+      recoveryError: false,
     );
   }
 
@@ -204,14 +207,6 @@ class VotingRoundsNotifier extends AsyncNotifier<List<VotingRoundView>> {
       return const [];
     }
   }
-
-  Future<T> _withRoundsRetry<T>(Future<T> Function() operation) async {
-    return retryVotingOperation(
-      operation: operation,
-      delays: _roundsRetryDelays,
-      label: 'round reload',
-    );
-  }
 }
 
 final votingRoundsProvider =
@@ -223,8 +218,10 @@ class _RoundListRecoveryState {
   const _RoundListRecoveryState({
     required this.voted,
     required this.inProgress,
+    required this.recoveryError,
   });
 
   final bool voted;
   final bool inProgress;
+  final bool recoveryError;
 }
