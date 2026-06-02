@@ -31,7 +31,7 @@ final _roundTallyProvider = FutureProvider.autoDispose.family((
   final config = await ref.watch(votingConfigProvider.future);
   config.assertRoundAuthenticated(roundId);
   return ref
-      .read(votingApiClientProvider(config.apiBaseUrl))
+      .read(votingApiClientProvider(config.apiServers))
       .getRoundTally(roundId);
 });
 

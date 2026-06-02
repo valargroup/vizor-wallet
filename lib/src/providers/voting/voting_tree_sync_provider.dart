@@ -1,8 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/formatting/duration_format.dart';
 import '../../services/voting/resolved_voting_config_extensions.dart';
-import 'voting_debug_print.dart';
 import 'voting_config_provider.dart';
 import 'voting_service_providers.dart';
 

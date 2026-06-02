@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../rust/api/voting_config.dart';
 import '../../rust/third_party/zcash_voting/config.dart';
-import '../../services/voting/voting_models.dart';
 import '../../services/voting/voting_retry.dart';
 import 'voting_config_source_provider.dart';
 import 'voting_rounds_provider.dart';
@@ -52,6 +51,7 @@ final votingConfigRefreshFailureProvider =
 class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
   int _loadGeneration = 0;
   ResolvedVotingConfig? _previousResolvedConfig;
+  String? _previousResolvedSourceUrl;
 
   @override
   Future<ResolvedVotingConfig> build() async {
@@ -98,8 +98,13 @@ class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
     } catch (error, stackTrace) {
       if (!_isCurrentLoad(generation)) return;
       _recordRefreshFailure(error: error, stackTrace: stackTrace);
+      final sourceUrl = (await ref.read(
+        votingConfigSourceProvider.future,
+      )).sourceUrl;
       final lastGoodConfig = _previousResolvedConfig;
-      if (_isRetryableRefreshError(error) && lastGoodConfig != null) {
+      final canReuseLastGood =
+          lastGoodConfig != null && _previousResolvedSourceUrl == sourceUrl;
+      if (_isRetryableRefreshError(error) && canReuseLastGood) {
         state = AsyncData(lastGoodConfig);
         return;
       }
@@ -115,19 +120,27 @@ class VotingConfigNotifier extends AsyncNotifier<ResolvedVotingConfig> {
   ///
   /// Returning `null` signals this generation became stale while resolving.
   Future<ResolvedVotingConfig?> _loadAndCommit(int generation) async {
-    await ref.read(votingConfigSourceProvider.future);
+    final sourceState = await ref.read(votingConfigSourceProvider.future);
+    final sourceUrl = sourceState.sourceUrl;
+    final previousForSource = _previousResolvedSourceUrl == sourceUrl
+        ? _previousResolvedConfig
+        : null;
     final resolution = await _loadWithConfigRetry(
       () => ref
           .read(votingConfigLoaderProvider)
-          .load(previous: _previousResolvedConfig),
+          .load(previous: previousForSource),
     );
     if (!_isCurrentLoad(generation)) return null;
-    return _commitResolution(resolution);
+    return _commitResolution(resolution, sourceUrl: sourceUrl);
   }
 
-  ResolvedVotingConfig _commitResolution(VotingConfigResolution resolution) {
+  ResolvedVotingConfig _commitResolution(
+    VotingConfigResolution resolution, {
+    required String sourceUrl,
+  }) {
     _applySwitch(resolution.switchKind);
     _previousResolvedConfig = resolution.config;
+    _previousResolvedSourceUrl = sourceUrl;
     _clearRefreshFailure();
     return resolution.config;
   }
