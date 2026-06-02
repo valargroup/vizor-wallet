@@ -56,7 +56,7 @@ void main() {
     });
 
     await tester.pumpWidget(_settingsHarness());
-    await tester.tap(find.text('Coinholder Polling'));
+    await tester.tap(find.text('Coinholder polling'));
     await tester.pumpAndSettle();
 
     expect(find.text('voting route'), findsOneWidget);
@@ -72,7 +72,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Hardware accounts coming soon'), findsNothing);
-    await tester.tap(find.text('Coinholder Polling'));
+    await tester.tap(find.text('Coinholder polling'));
     await tester.pumpAndSettle();
     expect(find.text('voting route'), findsOneWidget);
   });

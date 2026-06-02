@@ -521,14 +521,14 @@ class _SkippedQuestionsDialog extends StatelessWidget {
               AppButton(
                 onPressed: () => Navigator.of(context).pop(true),
                 minWidth: 312,
-                child: const Text('Continue to Review'),
+                child: const Text('Continue to review'),
               ),
               const SizedBox(height: AppSpacing.s),
               AppButton(
                 onPressed: () => Navigator.of(context).pop(false),
                 variant: AppButtonVariant.ghost,
                 minWidth: 312,
-                child: const Text('Keep Voting'),
+                child: const Text('Keep voting'),
               ),
             ],
           ),
@@ -739,7 +739,7 @@ class _ReviewAnswersButton extends StatelessWidget {
           variant: AppButtonVariant.primary,
           size: AppButtonSize.large,
           minWidth: constraints.maxWidth,
-          child: const Text('Review Answers'),
+          child: const Text('Review answers'),
         );
       },
     );
@@ -1015,7 +1015,7 @@ class _VotingPowerMeta extends StatelessWidget {
     final votingPower = zatoshi;
     if (votingPower == null) {
       if (!preparing) {
-        return const _MetaText('Voting Power unavailable');
+        return const _MetaText('Voting power unavailable');
       }
       final colors = context.colors;
       return Row(
@@ -1034,7 +1034,7 @@ class _VotingPowerMeta extends StatelessWidget {
         ],
       );
     }
-    return _MetaText('Voting Power ${formatVotingPower(votingPower)}');
+    return _MetaText('Voting power ${formatVotingPower(votingPower)}');
   }
 }
 

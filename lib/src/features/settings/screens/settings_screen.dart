@@ -365,7 +365,7 @@ class _SettingsList extends StatelessWidget {
           rows: [
             _SettingsRow(
               iconName: AppIcons.scroll,
-              label: 'Coinholder Polling',
+              label: 'Coinholder polling',
               value: 'Open',
               onTap: onVoting,
             ),

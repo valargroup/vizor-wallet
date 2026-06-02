@@ -762,7 +762,7 @@ class _KeystoneSigningPanel extends StatelessWidget {
                 const SizedBox(width: 64),
                 Expanded(
                   child: Text(
-                    'Sign Bundle ${request.bundleIndex + 1} of ${request.bundleCount}',
+                    'Sign bundle ${request.bundleIndex + 1} of ${request.bundleCount}',
                     textAlign: TextAlign.center,
                     style: AppTypography.bodyMediumStrong.copyWith(
                       color: colors.text.accent,
@@ -818,7 +818,7 @@ class _KeystoneSigningPanel extends StatelessWidget {
               onPressed: urParts.isEmpty ? null : onScan,
               variant: AppButtonVariant.primary,
               minWidth: 220,
-              child: const Text('Scan Signature'),
+              child: const Text('Scan signature'),
             ),
           ],
         ),
@@ -881,7 +881,7 @@ class _SoftwareAccountRequiredContent extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Software Account Required',
+              'Software account required',
               textAlign: TextAlign.center,
               style: AppTypography.displaySmall.copyWith(
                 color: context.colors.text.accent,

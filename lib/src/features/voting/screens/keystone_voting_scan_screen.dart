@@ -102,7 +102,7 @@ class _KeystoneVotingScanScreenState
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Scan Voting Signature',
+                        'Scan voting signature',
                         style: AppTypography.displaySmall.copyWith(
                           color: colors.text.accent,
                         ),

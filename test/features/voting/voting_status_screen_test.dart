@@ -114,9 +114,9 @@ void main() {
       UncontrolledProviderScope(container: container, child: _statusHarness()),
     );
     await tester.pumpAndSettle();
-    await _pumpUntilFound(tester, find.text('Software Account Required'));
+    await _pumpUntilFound(tester, find.text('Software account required'));
 
-    expect(find.text('Software Account Required'), findsOneWidget);
+    expect(find.text('Software account required'), findsOneWidget);
     expect(
       find.text(
         'Coinholder voting requires a software account. Switch to a software account to vote in this round.',
@@ -700,8 +700,8 @@ void main() {
     await _pumpUntilFound(tester, find.text('submission confirmed route'));
 
     expect(find.text('submission confirmed route'), findsOne);
-    expect(find.text('Sign Bundle 1 of 1'), findsNothing);
-    expect(find.text('Scan Signature'), findsNothing);
+    expect(find.text('Sign bundle 1 of 1'), findsNothing);
+    expect(find.text('Scan signature'), findsNothing);
     expect(rust.setupDelegationBundleCalls, 0);
     expect(rust.keystoneDelegationRequestCalls, 0);
     expect(recoveryApi.ballotIntents, isEmpty);
@@ -802,8 +802,8 @@ void main() {
     await _pumpUntilFound(tester, find.text('submission confirmed route'));
 
     expect(find.text('submission confirmed route'), findsOne);
-    expect(find.text('Sign Bundle 1 of 1'), findsNothing);
-    expect(find.text('Scan Signature'), findsNothing);
+    expect(find.text('Sign bundle 1 of 1'), findsNothing);
+    expect(find.text('Scan signature'), findsNothing);
     expect(rust.setupDelegationBundleCalls, 0);
     expect(rust.keystoneDelegationRequestCalls, 0);
     expect(
@@ -923,9 +923,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('[TEST] Max Proposals'), findsOneWidget);
-    expect(find.text('Voting Power 0.000001 ZEC'), findsOneWidget);
+    expect(find.text('Voting power 0.000001 ZEC'), findsOneWidget);
     expect(find.text('Yes'), findsOneWidget);
-    expect(find.text('Review Answers'), findsOneWidget);
+    expect(find.text('Review answers'), findsOneWidget);
     expect(find.text('Start Voting'), findsNothing);
     expect(find.text('View more'), findsNothing);
 
@@ -1001,7 +1001,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Voting Power unavailable'), findsOneWidget);
+    expect(find.text('Voting power unavailable'), findsOneWidget);
     expect(find.text('Preparing voting power'), findsNothing);
   });
 
@@ -1109,6 +1109,87 @@ void main() {
     expect(find.textContaining("Couldn't load results"), findsNothing);
   });
 
+  testWidgets('results screen refreshes pending tally responses', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final round = _roundStatusJson()..['status'] = 'tallying';
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round}
+        ..['/shielded-vote/v1/tally-results/$_roundId'] =
+            SequentialVotingHttpResponses([
+              {
+                'vote_round_id': _roundId,
+                'status': 'pending',
+                'results': const [],
+              },
+              {
+                'vote_round_id': _roundId,
+                'results': [
+                  {'proposal_id': 1, 'vote_decision': 0, 'total_value': 8},
+                ],
+              },
+            ]),
+    );
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _resultsHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Results pending...'), findsOneWidget);
+    expect(_tallyRequestCount(http), 1);
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Results pending...'), findsNothing);
+    expect(find.text('First proposal'), findsOneWidget);
+    expect(find.text('1.00 ZEC'), findsOneWidget);
+    expect(_tallyRequestCount(http), greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('results screen treats not-ready tally errors as pending', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1152, 768));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    final round = _roundStatusJson()..['status'] = '2';
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round}
+        ..['/shielded-vote/v1/tally-results/$_roundId'] = jsonResponse({
+          'error': 'tally not ready',
+        }, statusCode: 404),
+    );
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _MnemonicAccountNotifier.new,
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: _resultsHarness()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Results pending...'), findsOneWidget);
+    expect(find.textContaining("Couldn't load results"), findsNothing);
+  });
+
   testWidgets('reviewing partial votes warns and marks skipped rows', (
     tester,
   ) async {
@@ -1144,7 +1225,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Review Answers'));
+    await tester.tap(find.text('Review answers'));
     await tester.pumpAndSettle();
 
     expect(find.text('Skip unanswered questions?'), findsOneWidget);
@@ -1153,7 +1234,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Continue to Review'));
+    await tester.tap(find.text('Continue to review'));
     await tester.pumpAndSettle();
 
     expect(find.text('Review your answers'), findsOneWidget);
@@ -1544,17 +1625,17 @@ void main() {
         child: _statusHarness(keystoneScanResult: const [3]),
       ),
     );
-    await _pumpUntilFound(tester, find.text('Sign Bundle 1 of 1'));
+    await _pumpUntilFound(tester, find.text('Sign bundle 1 of 1'));
 
-    expect(find.text('Sign Bundle 1 of 1'), findsOneWidget);
+    expect(find.text('Sign bundle 1 of 1'), findsOneWidget);
     expect(find.text('Memo'), findsOneWidget);
     expect(
       find.textContaining('vote on Poll with 0.00000100 ZEC'),
       findsOneWidget,
     );
-    expect(find.text('Scan Signature'), findsOneWidget);
-    expect(find.text('Software Account Required'), findsNothing);
-    await tester.tap(find.text('Scan Signature'));
+    expect(find.text('Scan signature'), findsOneWidget);
+    expect(find.text('Software account required'), findsNothing);
+    await tester.tap(find.text('Scan signature'));
     await tester.pumpAndSettle();
 
     expect(find.text('keystone scan route'), findsOneWidget);
@@ -1661,14 +1742,14 @@ void main() {
         child: _statusHarness(keystoneScanResult: const [3]),
       ),
     );
-    await _pumpUntilFound(tester, find.text('Sign Bundle 1 of 2'));
+    await _pumpUntilFound(tester, find.text('Sign bundle 1 of 2'));
 
-    await tester.tap(find.text('Scan Signature'));
+    await tester.tap(find.text('Scan signature'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Return Signature'));
     await _pumpUntilFound(tester, find.text('Skip'));
 
-    expect(find.text('Sign Bundle 2 of 2'), findsOneWidget);
+    expect(find.text('Sign bundle 2 of 2'), findsOneWidget);
     expect(find.text('Skip'), findsOneWidget);
 
     await tester.tap(find.text('Skip'));
@@ -1724,11 +1805,11 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(container: container, child: _statusHarness()),
     );
-    await _pumpUntilFound(tester, find.text('Sign Bundle 1 of 1'));
+    await _pumpUntilFound(tester, find.text('Sign bundle 1 of 1'));
 
     expect(tester.takeException(), isNull);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
-    expect(find.text('Sign Bundle 1 of 1'), findsOneWidget);
+    expect(find.text('Sign bundle 1 of 1'), findsOneWidget);
   });
 
   testWidgets('hardware status screen shows retry when Keystone QR fails', (
@@ -1776,7 +1857,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Retry'), findsOneWidget);
-    expect(find.text('Scan Signature'), findsNothing);
+    expect(find.text('Scan signature'), findsNothing);
   });
 }
 
@@ -2060,6 +2141,12 @@ Map<String, Object> _votingHttpResponses() => {
   'https://voting.example/dynamic-voting-config.json': _dynamicConfigJson(),
   '/shielded-vote/v1/round/$_roundId': {'round': _roundStatusJson()},
 };
+
+int _tallyRequestCount(FakeVotingHttpClient http) {
+  return http.requests
+      .where((request) => request.uri.path.endsWith('/tally-results/$_roundId'))
+      .length;
+}
 
 const _roundId =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
