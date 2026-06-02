@@ -118,6 +118,7 @@ void main() {
 
     persistence.completeLoad(const VotingDraftState(choices: {1: 0, 2: 1}));
     await notifier.ensureLoaded();
+    await persistence.waitForSaveCount(1);
 
     expect(container.read(votingDraftProvider(key)).choices, {
       1: 0,
@@ -146,6 +147,7 @@ void main() {
 
     persistence.completeLoad(const VotingDraftState(choices: {1: 0, 2: 1}));
     await notifier.ensureLoaded();
+    await persistence.waitForSaveCount(1);
 
     expect(container.read(votingDraftProvider(key)).choices, {2: 1});
     expect(persistence.saved.single.choices, {2: 1});
@@ -155,6 +157,7 @@ void main() {
 class _DelayedDraftPersistence implements VotingDraftPersistence {
   final _load = Completer<VotingDraftState>();
   final saved = <VotingDraftState>[];
+  final _saveWaiters = <({int count, Completer<void> waiter})>[];
 
   @override
   Future<VotingDraftState> load(VotingSessionKey key) => _load.future;
@@ -162,9 +165,22 @@ class _DelayedDraftPersistence implements VotingDraftPersistence {
   @override
   Future<void> save(VotingSessionKey key, VotingDraftState draft) async {
     saved.add(draft);
+    for (final entry in _saveWaiters.toList()) {
+      if (saved.length >= entry.count && !entry.waiter.isCompleted) {
+        entry.waiter.complete();
+        _saveWaiters.remove(entry);
+      }
+    }
   }
 
   void completeLoad(VotingDraftState draft) {
     _load.complete(draft);
+  }
+
+  Future<void> waitForSaveCount(int count) {
+    if (saved.length >= count) return Future.value();
+    final waiter = Completer<void>();
+    _saveWaiters.add((count: count, waiter: waiter));
+    return waiter.future;
   }
 }
