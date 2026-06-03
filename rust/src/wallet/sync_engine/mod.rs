@@ -9,7 +9,7 @@ use zcash_client_backend::{
         chain::{self, error::Error as ChainError, scan_cached_blocks},
         scanning::{ScanPriority, ScanRange},
         wallet::ConfirmationsPolicy,
-        WalletRead, WalletWrite,
+        WalletCommitmentTrees, WalletRead, WalletWrite,
     },
     proto::service,
 };
@@ -94,6 +94,10 @@ const BATCH_SIZE_SANDBLASTING: u32 = 100;
 
 const SAPLING_ACTIVATION_HEIGHT: u32 = 419200;
 const MAX_WITNESS_REPAIR_PASSES_PER_RUN: u32 = 3;
+// `truncate_to_chain_state` only injects a canonical frontier when the requested
+// height is below the retained checkpoint window. Start at the pruning depth
+// and escalate so corrupted anchor checkpoints do not survive the repair.
+const ANCHOR_ROOT_REPAIR_REWIND_DISTANCES: [u32; 3] = [100, 1000, 10_000];
 
 /// Sync-scoped elapsed time reference. Set at sync start.
 static SYNC_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
@@ -302,6 +306,132 @@ fn queue_witness_repairs_if_needed(
             "sync completion blocked: witness repair queued ranges but no pending scan \
              ranges were produced at tip {current_tip_height}"
         )));
+    }
+
+    Ok(Some(pending_blocks))
+}
+
+async fn repair_anchor_root_mismatch_if_needed(
+    client: &mut CompactTxStreamerClient<Channel>,
+    db: &mut WalletDatabase,
+    current_tip_height: u64,
+    repair_passes_this_run: &mut u32,
+) -> Result<Option<u64>, SyncError> {
+    let Some((target_height, anchor_height)) = db
+        .get_target_and_anchor_heights(ConfirmationsPolicy::default().trusted())
+        .map_err(|e| SyncError::db(format!("get_target_and_anchor_heights: {e}")))?
+    else {
+        return Ok(None);
+    };
+
+    let local_sapling = db
+        .with_sapling_tree_mut(|tree| tree.root_at_checkpoint_id(&anchor_height))
+        .map_err(|e| SyncError::db(format!("sapling root at {anchor_height}: {e}")))?;
+    let local_orchard = db
+        .with_orchard_tree_mut(|tree| tree.root_at_checkpoint_id(&anchor_height))
+        .map_err(|e| SyncError::db(format!("orchard root at {anchor_height}: {e}")))?;
+
+    let anchor_chain_state = get_tree_state(client, u32::from(anchor_height) as u64)
+        .await?
+        .to_chain_state()
+        .map_err(|e| SyncError::parse(format!("parse anchor tree state: {e}")))?;
+    if anchor_chain_state.block_height() != anchor_height {
+        return Err(SyncError::parse(format!(
+            "lightwalletd returned tree state for height {}, requested {anchor_height}",
+            anchor_chain_state.block_height(),
+        )));
+    }
+
+    let canonical_sapling = anchor_chain_state.final_sapling_tree().root();
+    let canonical_orchard = anchor_chain_state.final_orchard_tree().root();
+    if local_sapling.as_ref() == Some(&canonical_sapling)
+        && local_orchard.as_ref() == Some(&canonical_orchard)
+    {
+        return Ok(None);
+    }
+
+    let Some(rewind_distance) = ANCHOR_ROOT_REPAIR_REWIND_DISTANCES
+        .get(usize::try_from(*repair_passes_this_run).unwrap_or(usize::MAX))
+        .copied()
+    else {
+        return Err(SyncError::db(format!(
+            "sync completion blocked: anchor root repair budget exhausted \
+             after {} pass(es) at anchor {anchor_height}",
+            ANCHOR_ROOT_REPAIR_REWIND_DISTANCES.len(),
+        )));
+    };
+
+    *repair_passes_this_run += 1;
+    let repair_height = anchor_height.saturating_sub(rewind_distance);
+    let repair_chain_state = get_tree_state(client, u32::from(repair_height) as u64)
+        .await?
+        .to_chain_state()
+        .map_err(|e| SyncError::parse(format!("parse repair tree state: {e}")))?;
+    if repair_chain_state.block_height() != repair_height {
+        return Err(SyncError::parse(format!(
+            "lightwalletd returned tree state for height {}, requested {repair_height}",
+            repair_chain_state.block_height(),
+        )));
+    }
+
+    log::warn!(
+        "[{}] sync: anchor root mismatch at {anchor_height} \
+         (target={}, repair_height={repair_height}, pass {}/{}); \
+         local_sapling={:?}, canonical_sapling={:?}, local_orchard={:?}, \
+         canonical_orchard={:?}; rewinding to canonical chain state",
+        elapsed(),
+        u32::from(target_height),
+        *repair_passes_this_run,
+        ANCHOR_ROOT_REPAIR_REWIND_DISTANCES.len(),
+        local_sapling,
+        canonical_sapling,
+        local_orchard,
+        canonical_orchard,
+    );
+
+    let current_tip = BlockHeight::from_u32(current_tip_height as u32);
+    let post_rewind_ranges = with_wallet_db_write_lock(
+        "sync_engine.truncate_to_chain_state.anchor_root_mismatch",
+        || -> Result<Vec<ScanRange>, SyncError> {
+            db.truncate_to_chain_state(repair_chain_state.clone())
+                .map_err(|e| {
+                    if is_sqlite_lock_contention(&e) {
+                        SyncError::other(format!(
+                            "truncate_to_chain_state({repair_height}): SQLite lock contention: {e}"
+                        ))
+                    } else {
+                        SyncError::db(format!("truncate_to_chain_state({repair_height}): {e}"))
+                    }
+                })?;
+            db.update_chain_tip(current_tip).map_err(|e| {
+                SyncError::db(format!(
+                    "update_chain_tip({current_tip_height}) after anchor root repair: {e}"
+                ))
+            })?;
+            db.suggest_scan_ranges().map_err(|e| {
+                SyncError::db(format!("suggest_scan_ranges after anchor root repair: {e}"))
+            })
+        },
+    )?;
+
+    let pending_blocks = pending_scan_blocks(&post_rewind_ranges);
+    let first_pending =
+        first_pending_scan_range(&post_rewind_ranges).unwrap_or_else(|| "none".into());
+    log::info!(
+        "[{}] sync: anchor root repair queued {pending_blocks} block(s) \
+         (first_pending={first_pending})",
+        elapsed(),
+    );
+
+    let anchor_height_u64 = u32::from(anchor_height) as u64;
+    if pending_blocks == 0 && anchor_height_u64 < current_tip_height {
+        return Err(SyncError::continuity(
+            current_tip_height,
+            format!(
+                "anchor root repair at {anchor_height} produced no pending scan \
+                 ranges, but lightwalletd tip is {current_tip_height}"
+            ),
+        ));
     }
 
     Ok(Some(pending_blocks))
@@ -630,6 +760,7 @@ async fn run_sync_impl(
     let mut verify_rewinds_this_run: u32 = 0;
     let mut main_rewinds_this_run: u32 = 0;
     let mut witness_repair_passes_this_run: u32 = 0;
+    let mut anchor_root_repair_passes_this_run: u32 = 0;
 
     // Phase-transition markers used only for logging. Progress through the
     // scan queue is implicitly ordered by `ScanPriority::Verify` >
@@ -750,6 +881,18 @@ async fn run_sync_impl(
                     current_tip_height,
                     &mut witness_repair_passes_this_run,
                 )? {
+                    initial_total = repair_pending_blocks;
+                    prev_remaining = repair_pending_blocks;
+                    prefetch = None;
+                    continue;
+                } else if let Some(repair_pending_blocks) = repair_anchor_root_mismatch_if_needed(
+                    &mut client,
+                    &mut db,
+                    current_tip_height,
+                    &mut anchor_root_repair_passes_this_run,
+                )
+                .await?
+                {
                     initial_total = repair_pending_blocks;
                     prev_remaining = repair_pending_blocks;
                     prefetch = None;
