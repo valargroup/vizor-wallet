@@ -19,6 +19,24 @@ use zcash_voting::selection::select_notes_with_lwd;
 use zcash_voting::storage::VotingDb;
 use zcash_voting::BundlePolicy;
 
+const ZATOSHI_PER_ZEC: u64 = 100_000_000;
+const WHALE_PROTECTION_BUNDLE_ADDITION_THRESHOLD_ZATOSHI: u64 = 500 * ZATOSHI_PER_ZEC;
+
+/// Start a new bundle before adding a note would cross the whale threshold.
+///
+/// `zcash_voting` owns the final bundle planning. Vizor only supplies the
+/// threshold used when deciding whether another note can join a bundle.
+fn whale_protected_bundle_policy(bundle_policy: BundlePolicy) -> BundlePolicy {
+    bundle_policy.with_bundle_addition_threshold(WHALE_PROTECTION_BUNDLE_ADDITION_THRESHOLD_ZATOSHI)
+}
+
+fn prepare_params_with_whale_protection<'a>(
+    mut prepare_params: PrepareDelegationBundleParams<'a>,
+) -> PrepareDelegationBundleParams<'a> {
+    prepare_params.bundle_policy = whale_protected_bundle_policy(prepare_params.bundle_policy);
+    prepare_params
+}
+
 /// Completes the proof phase for a previously prepared delegation bundle.
 ///
 /// Opens the voting database for `account_uuid`, connects to `pir_server_url`,
@@ -104,6 +122,7 @@ pub async fn setup_delegation_bundles(
     .await
     .map_err(|e| e.to_string())?;
     let note_infos = selected.voting_note_infos();
+    let bundle_policy = whale_protected_bundle_policy(bundle_policy);
     voting_db
         .ensure_bundles_with_skipped_suffix_with_policy(
             round_params.vote_round_id.as_str(),
@@ -141,6 +160,7 @@ pub async fn check_voting_eligibility(
     .await
     .map_err(|e| e.to_string())?;
     let note_infos = selected.voting_note_infos();
+    let bundle_policy = whale_protected_bundle_policy(bundle_policy);
     zcash_voting::minimum_voting_eligibility_for_notes(&note_infos, bundle_policy)
         .map_err(|e| e.to_string())
 }
@@ -185,17 +205,19 @@ pub async fn precompute_delegation_pir(
         .map_err(|e| format!("Voting hotkey reconstruction failed: {e}"))?;
         let voting_db = open_voting_db(&db_path, &account_uuid)?;
         let wallet_db = open_wallet_db_for_read(&db_path, wallet_network(voting_hotkey.network()))?;
+        let prepare_params = PrepareDelegationBundleParams {
+            lwd,
+            session_json: session_json.as_deref(),
+            account_uuid: &account_uuid,
+            voting_hotkey: &voting_hotkey,
+            bundle_index,
+            bundle_policy,
+        };
+        let prepare_params = prepare_params_with_whale_protection(prepare_params);
         let prepared = zcash_voting::delegate::prepare_delegation_bundle(
             &voting_db,
             &wallet_db,
-            PrepareDelegationBundleParams {
-                lwd,
-                session_json: session_json.as_deref(),
-                account_uuid: &account_uuid,
-                voting_hotkey: &voting_hotkey,
-                bundle_index,
-                bundle_policy,
-            },
+            prepare_params,
         )
         .map_err(|e| e.to_string())?;
         let pir_client = zcash_voting::PirClientBlocking::with_transport(
@@ -242,6 +264,7 @@ where
         db_path,
         wallet_network(prepare_params.voting_hotkey.network()),
     )?;
+    let prepare_params = prepare_params_with_whale_protection(prepare_params);
 
     let prepared_bundle =
         zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
@@ -336,6 +359,7 @@ pub async fn build_keystone_delegation_request(
         db_path,
         wallet_network(prepare_params.voting_hotkey.network()),
     )?;
+    let prepare_params = prepare_params_with_whale_protection(prepare_params);
     let prepared =
         zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
             .map_err(|e| e.to_string())?;
@@ -375,6 +399,7 @@ where
         db_path,
         wallet_network(prepare_params.voting_hotkey.network()),
     )?;
+    let prepare_params = prepare_params_with_whale_protection(prepare_params);
     let prepared_bundle =
         zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
             .map_err(|e| e.to_string())?;
@@ -413,6 +438,45 @@ mod tests {
     use secrecy::ExposeSecret;
     use std::sync::{Arc, Mutex};
     use zip32::{fingerprint::SeedFingerprint, AccountId};
+
+    fn note_with_value(position: u64, value: u64) -> zcash_voting::NoteInfo {
+        let tag = position as u8;
+        zcash_voting::NoteInfo {
+            commitment: vec![tag; 32],
+            nullifier: vec![tag.wrapping_add(1); 32],
+            value,
+            position,
+            diversifier: vec![tag; 11],
+            rho: vec![tag; 32],
+            rseed: vec![tag; 32],
+            scope: 0,
+            ufvk_str: "uviewtest".to_string(),
+        }
+    }
+
+    #[test]
+    fn whale_protection_starts_new_bundle_when_addition_would_cross_threshold() {
+        let notes = vec![
+            note_with_value(1, WHALE_PROTECTION_BUNDLE_ADDITION_THRESHOLD_ZATOSHI),
+            note_with_value(2, 400 * ZATOSHI_PER_ZEC),
+            note_with_value(3, 200 * ZATOSHI_PER_ZEC),
+        ];
+        let default_plan =
+            zcash_voting::round::note_bundles_with_policy(&notes, BundlePolicy::default()).unwrap();
+        assert_eq!(default_plan[0].len(), 3);
+
+        let policy = whale_protected_bundle_policy(BundlePolicy::default());
+        let protected_plan = zcash_voting::round::note_bundles_with_policy(&notes, policy).unwrap();
+        let protected_positions: Vec<Vec<u64>> = protected_plan
+            .iter()
+            .map(|bundle| bundle.iter().map(|note| note.position).collect())
+            .collect();
+
+        assert_eq!(protected_plan.len(), 3);
+        assert!(protected_positions.contains(&vec![1]));
+        assert!(protected_positions.contains(&vec![2]));
+        assert!(protected_positions.contains(&vec![3]));
+    }
 
     #[test]
     fn build_prove_and_sign_delegation_payload_rejects_invalid_round_params_before_progress() {
