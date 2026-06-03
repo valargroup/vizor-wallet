@@ -456,10 +456,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
     }
     if (!mounted || _selectedJobKey() != key) return;
     context.go(
-      votingSubmissionConfirmedRoute(
-        key.roundId,
-        accountUuid: key.accountUuid,
-      ),
+      votingSubmissionConfirmedRoute(key.roundId, accountUuid: key.accountUuid),
     );
   }
 }
@@ -529,7 +526,7 @@ class _SkipSignedBundlesDialog extends StatelessWidget {
                   AppButton(
                     onPressed: () => Navigator.of(context).pop(true),
                     variant: AppButtonVariant.primary,
-                    child: const Text('Use signed bundles'),
+                    child: const Text('Skip bundles'),
                   ),
                 ],
               ),
@@ -807,7 +804,7 @@ class _WalletSyncProgressText extends StatelessWidget {
   }
 }
 
-class _KeystoneSigningPanel extends StatelessWidget {
+class _KeystoneSigningPanel extends StatefulWidget {
   const _KeystoneSigningPanel({
     required this.request,
     required this.urParts,
@@ -827,13 +824,54 @@ class _KeystoneSigningPanel extends StatelessWidget {
   final VoidCallback? onSkipRemainingBundles;
 
   @override
+  State<_KeystoneSigningPanel> createState() => _KeystoneSigningPanelState();
+}
+
+class _KeystoneSigningPanelState extends State<_KeystoneSigningPanel> {
+  static const _transitionCueDuration = Duration(milliseconds: 1300);
+
+  bool _showTransitionCue = false;
+  int _cueGeneration = 0;
+
+  @override
+  void didUpdateWidget(covariant _KeystoneSigningPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.request.bundleIndex != widget.request.bundleIndex) {
+      _triggerTransitionCue();
+    }
+  }
+
+  void _triggerTransitionCue() {
+    setState(() {
+      _showTransitionCue = true;
+    });
+
+    final generation = ++_cueGeneration;
+    Future<void>.delayed(_transitionCueDuration, () {
+      if (!mounted || generation != _cueGeneration) return;
+      setState(() {
+        _showTransitionCue = false;
+      });
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final request = widget.request;
+    final urParts = widget.urParts;
+    final qrError = widget.qrError;
+    final scanError = widget.scanError;
+    final canSkipRemainingBundles = widget.canSkipRemainingBundles;
+    final onSkipRemainingBundles = widget.onSkipRemainingBundles;
+    final onScan = widget.onScan;
     final qrPhase = qrError != null
         ? KeystonePcztQrStagePhase.failed
         : urParts.isEmpty
         ? KeystonePcztQrStagePhase.preparing
         : KeystonePcztQrStagePhase.ready;
+    final currentBundle = request.bundleIndex + 1;
+
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: colors.border.subtle),
@@ -847,11 +885,54 @@ class _KeystoneSigningPanel extends StatelessWidget {
               children: [
                 const SizedBox(width: 64),
                 Expanded(
-                  child: Text(
-                    'Sign bundle ${request.bundleIndex + 1} of ${request.bundleCount}',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyMediumStrong.copyWith(
-                      color: colors.text.accent,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xs,
+                      vertical: AppSpacing.xxs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _showTransitionCue
+                          ? colors.background.neutralSubtleOpacity
+                          : null,
+                      borderRadius: BorderRadius.circular(AppRadii.small),
+                    ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) {
+                        final slide = Tween<Offset>(
+                          begin: const Offset(0, 0.12),
+                          end: Offset.zero,
+                        ).animate(animation);
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(position: slide, child: child),
+                        );
+                      },
+                      child: Column(
+                        key: ValueKey<String>(
+                          'bundle-${request.bundleIndex}-${request.bundleCount}',
+                        ),
+                        children: [
+                          Text(
+                            'Sign bundle $currentBundle of ${request.bundleCount}',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.bodyMediumStrong.copyWith(
+                              color: colors.text.accent,
+                            ),
+                          ),
+                          if (request.bundleCount > 1) ...[
+                            const SizedBox(height: AppSpacing.xxs),
+                            _KeystoneBundleProgress(
+                              currentBundle: currentBundle,
+                              bundleCount: request.bundleCount,
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -879,6 +960,16 @@ class _KeystoneSigningPanel extends StatelessWidget {
                 color: colors.text.secondary,
               ),
             ),
+            if (_showTransitionCue && request.bundleCount > 1) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Now signing bundle $currentBundle of ${request.bundleCount}',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodySmall.copyWith(
+                  color: colors.text.accent,
+                ),
+              ),
+            ],
             if (request.displayMemo.trim().isNotEmpty) ...[
               const SizedBox(height: AppSpacing.sm),
               _KeystoneSigningMemo(displayMemo: request.displayMemo),
@@ -892,7 +983,7 @@ class _KeystoneSigningPanel extends StatelessWidget {
             if (scanError != null) ...[
               const SizedBox(height: AppSpacing.xs),
               Text(
-                scanError!,
+                scanError,
                 textAlign: TextAlign.center,
                 style: AppTypography.bodySmall.copyWith(
                   color: colors.text.destructive,
@@ -909,6 +1000,61 @@ class _KeystoneSigningPanel extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _KeystoneBundleProgress extends StatelessWidget {
+  const _KeystoneBundleProgress({
+    required this.currentBundle,
+    required this.bundleCount,
+  });
+
+  final int currentBundle;
+  final int bundleCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    if (bundleCount <= 1) return const SizedBox.shrink();
+
+    final segments = List<Widget>.generate(bundleCount, (index) {
+      final isActive = index + 1 == currentBundle;
+      final isComplete = index + 1 < currentBundle;
+      return Expanded(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          height: 6,
+          decoration: BoxDecoration(
+            color: isActive || isComplete
+                ? colors.icon.regular
+                : colors.border.subtle,
+            borderRadius: BorderRadius.circular(AppRadii.full),
+          ),
+        ),
+      );
+    });
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            for (var i = 0; i < segments.length; i++) ...[
+              if (i > 0) const SizedBox(width: AppSpacing.xxs),
+              segments[i],
+            ],
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xxs),
+        Text(
+          '$currentBundle / $bundleCount',
+          style: AppTypography.labelSmall.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -2240,7 +2240,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Use signed bundles only?'), findsOneWidget);
 
-    await tester.tap(find.text('Use signed bundles'));
+    await tester.tap(find.text('Skip bundles'));
     await _pumpUntilFound(tester, find.text('submission confirmed route'));
 
     expect(find.text('submission confirmed route'), findsOneWidget);
