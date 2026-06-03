@@ -350,91 +350,119 @@ async fn repair_anchor_root_mismatch_if_needed(
         return Ok(None);
     }
 
-    let Some(rewind_distance) = ANCHOR_ROOT_REPAIR_REWIND_DISTANCES
-        .get(usize::try_from(*repair_passes_this_run).unwrap_or(usize::MAX))
+    let start_idx = usize::try_from(*repair_passes_this_run).unwrap_or(usize::MAX);
+    let mut last_root_conflict = None;
+    for rewind_distance in ANCHOR_ROOT_REPAIR_REWIND_DISTANCES
+        .iter()
         .copied()
-    else {
-        return Err(SyncError::db(format!(
-            "sync completion blocked: anchor root repair budget exhausted \
-             after {} pass(es) at anchor {anchor_height}",
+        .skip(start_idx)
+    {
+        *repair_passes_this_run += 1;
+        let repair_height = anchor_height.saturating_sub(rewind_distance);
+        let repair_chain_state = get_tree_state(client, u32::from(repair_height) as u64)
+            .await?
+            .to_chain_state()
+            .map_err(|e| SyncError::parse(format!("parse repair tree state: {e}")))?;
+        if repair_chain_state.block_height() != repair_height {
+            return Err(SyncError::parse(format!(
+                "lightwalletd returned tree state for height {}, requested {repair_height}",
+                repair_chain_state.block_height(),
+            )));
+        }
+
+        log::warn!(
+            "[{}] sync: anchor root mismatch at {anchor_height} \
+             (target={}, repair_height={repair_height}, pass {}/{}); \
+             local_sapling={:?}, canonical_sapling={:?}, local_orchard={:?}, \
+             canonical_orchard={:?}; rewinding to canonical chain state",
+            elapsed(),
+            u32::from(target_height),
+            *repair_passes_this_run,
             ANCHOR_ROOT_REPAIR_REWIND_DISTANCES.len(),
-        )));
-    };
+            local_sapling,
+            canonical_sapling,
+            local_orchard,
+            canonical_orchard,
+        );
 
-    *repair_passes_this_run += 1;
-    let repair_height = anchor_height.saturating_sub(rewind_distance);
-    let repair_chain_state = get_tree_state(client, u32::from(repair_height) as u64)
-        .await?
-        .to_chain_state()
-        .map_err(|e| SyncError::parse(format!("parse repair tree state: {e}")))?;
-    if repair_chain_state.block_height() != repair_height {
-        return Err(SyncError::parse(format!(
-            "lightwalletd returned tree state for height {}, requested {repair_height}",
-            repair_chain_state.block_height(),
-        )));
-    }
-
-    log::warn!(
-        "[{}] sync: anchor root mismatch at {anchor_height} \
-         (target={}, repair_height={repair_height}, pass {}/{}); \
-         local_sapling={:?}, canonical_sapling={:?}, local_orchard={:?}, \
-         canonical_orchard={:?}; rewinding to canonical chain state",
-        elapsed(),
-        u32::from(target_height),
-        *repair_passes_this_run,
-        ANCHOR_ROOT_REPAIR_REWIND_DISTANCES.len(),
-        local_sapling,
-        canonical_sapling,
-        local_orchard,
-        canonical_orchard,
-    );
-
-    let current_tip = BlockHeight::from_u32(current_tip_height as u32);
-    let post_rewind_ranges = with_wallet_db_write_lock(
-        "sync_engine.truncate_to_chain_state.anchor_root_mismatch",
-        || -> Result<Vec<ScanRange>, SyncError> {
-            db.truncate_to_chain_state(repair_chain_state.clone())
-                .map_err(|e| {
-                    if is_sqlite_lock_contention(&e) {
-                        SyncError::other(format!(
-                            "truncate_to_chain_state({repair_height}): SQLite lock contention: {e}"
-                        ))
-                    } else {
-                        SyncError::db(format!("truncate_to_chain_state({repair_height}): {e}"))
+        let current_tip = BlockHeight::from_u32(current_tip_height as u32);
+        let attempt_result = with_wallet_db_write_lock(
+            "sync_engine.truncate_to_chain_state.anchor_root_mismatch",
+            || -> Result<Result<Vec<ScanRange>, String>, SyncError> {
+                match db.truncate_to_chain_state(repair_chain_state.clone()) {
+                    Ok(()) => {}
+                    Err(e) if is_commitment_tree_root_conflict(&e) => {
+                        return Ok(Err(format!("{e}")));
                     }
+                    Err(e) if is_sqlite_lock_contention(&e) => {
+                        return Err(SyncError::other(format!(
+                            "truncate_to_chain_state({repair_height}): SQLite lock contention: {e}"
+                        )));
+                    }
+                    Err(e) => {
+                        return Err(SyncError::db(format!(
+                            "truncate_to_chain_state({repair_height}): {e}"
+                        )));
+                    }
+                }
+                db.update_chain_tip(current_tip).map_err(|e| {
+                    SyncError::db(format!(
+                        "update_chain_tip({current_tip_height}) after anchor root repair: {e}"
+                    ))
                 })?;
-            db.update_chain_tip(current_tip).map_err(|e| {
-                SyncError::db(format!(
-                    "update_chain_tip({current_tip_height}) after anchor root repair: {e}"
-                ))
-            })?;
-            db.suggest_scan_ranges().map_err(|e| {
-                SyncError::db(format!("suggest_scan_ranges after anchor root repair: {e}"))
-            })
-        },
-    )?;
+                db.suggest_scan_ranges()
+                    .map_err(|e| {
+                        SyncError::db(format!("suggest_scan_ranges after anchor root repair: {e}"))
+                    })
+                    .map(Ok)
+            },
+        )?;
 
-    let pending_blocks = pending_scan_blocks(&post_rewind_ranges);
-    let first_pending =
-        first_pending_scan_range(&post_rewind_ranges).unwrap_or_else(|| "none".into());
-    log::info!(
-        "[{}] sync: anchor root repair queued {pending_blocks} block(s) \
-         (first_pending={first_pending})",
-        elapsed(),
-    );
+        let post_rewind_ranges = match attempt_result {
+            Ok(ranges) => ranges,
+            Err(conflict) => {
+                log::warn!(
+                    "[{}] sync: anchor root repair at {repair_height} conflicted \
+                     with an existing tree root; trying a deeper repair if available ({conflict})",
+                    elapsed(),
+                );
+                last_root_conflict = Some(conflict);
+                continue;
+            }
+        };
 
-    let anchor_height_u64 = u32::from(anchor_height) as u64;
-    if pending_blocks == 0 && anchor_height_u64 < current_tip_height {
-        return Err(SyncError::continuity(
-            current_tip_height,
-            format!(
-                "anchor root repair at {anchor_height} produced no pending scan \
-                 ranges, but lightwalletd tip is {current_tip_height}"
-            ),
-        ));
+        let pending_blocks = pending_scan_blocks(&post_rewind_ranges);
+        let first_pending =
+            first_pending_scan_range(&post_rewind_ranges).unwrap_or_else(|| "none".into());
+        log::info!(
+            "[{}] sync: anchor root repair queued {pending_blocks} block(s) \
+             (first_pending={first_pending})",
+            elapsed(),
+        );
+
+        let anchor_height_u64 = u32::from(anchor_height) as u64;
+        if pending_blocks == 0 && anchor_height_u64 < current_tip_height {
+            return Err(SyncError::continuity(
+                current_tip_height,
+                format!(
+                    "anchor root repair at {anchor_height} produced no pending scan \
+                     ranges, but lightwalletd tip is {current_tip_height}"
+                ),
+            ));
+        }
+
+        return Ok(Some(pending_blocks));
     }
 
-    Ok(Some(pending_blocks))
+    Err(SyncError::db(format!(
+        "sync completion blocked: anchor root repair budget exhausted \
+         after {} pass(es) at anchor {anchor_height}{}",
+        ANCHOR_ROOT_REPAIR_REWIND_DISTANCES.len(),
+        last_root_conflict
+            .as_deref()
+            .map(|e| format!("; last root conflict: {e}"))
+            .unwrap_or_default(),
+    )))
 }
 
 async fn refresh_utxos(
