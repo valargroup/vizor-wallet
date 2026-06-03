@@ -354,8 +354,9 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   /// Remove an account from the wallet.
   ///
   /// Destructive account changes are blocked while any vote submission is in
-  /// progress. Once removal is allowed, voting state and hotkeys for that
-  /// account are cleared with the wallet account data.
+  /// progress. Once removal is allowed, process-local voting state is cleared
+  /// before the wallet delete. Durable voting rows, hotkeys, and other
+  /// account-scoped sidecars are cleared after the wallet account is deleted.
   Future<void> removeAccount(String uuid) async {
     ref.read(votingSubmissionGuardProvider.notifier).throwIfActive();
     final prev = state.value ?? const AccountState();
@@ -391,6 +392,14 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       'removeAccount: rust delete complete in '
       '${rustDeleteWatch.elapsedMilliseconds}ms uuid=$uuid',
     );
+    try {
+      await _deleteDurableVotingStateForAccount(uuid, dbPath: dbPath);
+    } catch (e, st) {
+      log(
+        'removeAccount: failed to delete durable voting state for '
+        '$uuid after wallet deletion: $e\n$st',
+      );
+    }
     try {
       await _storage.deleteAccountMnemonic(uuid);
     } catch (e, st) {
@@ -466,8 +475,18 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     final prev = state.value ?? const AccountState();
     final activeAccountUuid = prev.activeAccountUuid;
     if (activeAccountUuid != null) {
-      // Do not delay routing to unlock while best-effort process cleanup runs.
-      unawaited(_resetVotingProcessStateForAccount(activeAccountUuid));
+      final guardedSubmission = ref
+          .read(votingSubmissionGuardProvider.notifier)
+          .guardForAccount(activeAccountUuid);
+      if (guardedSubmission == null) {
+        // Do not delay routing to unlock while best-effort process cleanup runs.
+        unawaited(_resetVotingProcessStateForAccount(activeAccountUuid));
+      } else {
+        log(
+          'AccountNotifier: skipped voting process reset for lock while '
+          'submission is guarded for $activeAccountUuid',
+        );
+      }
     }
     state = AsyncData(
       AccountState(
@@ -500,6 +519,24 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         '$accountUuid: $e\n$st',
       );
     }
+  }
+
+  /// Delete durable voting sidecar rows scoped to an account.
+  ///
+  /// This runs only after the wallet account delete succeeds. The caller decides
+  /// whether a cleanup failure should abort the broader lifecycle.
+  Future<void> _deleteDurableVotingStateForAccount(
+    String accountUuid, {
+    required String dbPath,
+  }) async {
+    final deletedRounds = await rust_voting.deleteVotingAccountState(
+      dbPath: dbPath,
+      accountUuid: accountUuid,
+    );
+    log(
+      'AccountNotifier: deleted durable voting state for '
+      '$accountUuid rounds=$deletedRounds',
+    );
   }
 
   Future<void> restoreAfterUnlock() async {
