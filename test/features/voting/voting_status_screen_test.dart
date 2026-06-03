@@ -357,9 +357,11 @@ void main() {
 
       expect(configNotifier.refreshCount, 1);
       expect(roundsNotifier.reloadCount, 1);
+      expect(find.text('Updating polls...'), findsOneWidget);
+      expect(find.text('Updating...'), findsOneWidget);
       expect(find.text('Refreshed poll'), findsNothing);
 
-      await tester.tap(find.text('Done'));
+      await tester.tap(find.text('Updating...'), warnIfMissed: false);
       await tester.pump();
 
       expect(configNotifier.refreshCount, 1);

@@ -11,6 +11,16 @@ import 'voting_config_provider.dart';
 import 'voting_service_providers.dart';
 import 'voting_state.dart';
 
+const kVotingPollListRecentRefreshWindow = Duration(seconds: 10);
+DateTime? _lastVotingPollListRefreshAt;
+
+bool wasVotingPollListRecentlyRefreshed() {
+  final refreshedAt = _lastVotingPollListRefreshAt;
+  if (refreshedAt == null) return false;
+  return DateTime.now().difference(refreshedAt) <=
+      kVotingPollListRecentRefreshWindow;
+}
+
 /// Refreshes the dynamic voting config and then reloads the poll list.
 ///
 /// Call this before returning to the poll menu after completing voting work so
@@ -23,6 +33,7 @@ Future<void> refreshVotingPollList({
   await config.refresh();
   if (shouldReload != null && !shouldReload()) return;
   await readRounds().reload();
+  _lastVotingPollListRefreshAt = DateTime.now();
 }
 
 /// Provides poll-list rows with explicit, route-driven reloads.
