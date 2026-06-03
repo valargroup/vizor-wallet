@@ -246,10 +246,11 @@ class _VotingSubmissionConfirmationScreenState
         'round=${widget.roundId} account=${state.accountUuid} error=$error',
       );
     } finally {
-      if (!mounted || _votingPowerRefreshKey != key) return;
-      setState(() {
-        _refreshingVotingPower = false;
-      });
+      if (mounted && _votingPowerRefreshKey == key) {
+        setState(() {
+          _refreshingVotingPower = false;
+        });
+      }
     }
   }
 }

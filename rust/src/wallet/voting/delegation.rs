@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use ff::PrimeField;
 use secrecy::{ExposeSecret, SecretVec};
-use zeroize::Zeroizing;
 use zcash_keys::keys::UnifiedSpendingKey;
+use zeroize::Zeroizing;
 use zip32::{fingerprint::SeedFingerprint, AccountId};
 
 use crate::wallet::sync::open_wallet_db_for_read;
@@ -152,8 +152,7 @@ pub async fn precompute_delegation_pir(
         )
         .map_err(|e| format!("Voting hotkey reconstruction failed: {e}"))?;
         let voting_db = open_voting_db(&db_path, &account_uuid)?;
-        let wallet_db =
-            open_wallet_db_for_read(&db_path, wallet_network(voting_hotkey.network()))?;
+        let wallet_db = open_wallet_db_for_read(&db_path, wallet_network(voting_hotkey.network()))?;
         let prepared = zcash_voting::delegate::prepare_delegation_bundle(
             &voting_db,
             &wallet_db,
@@ -207,8 +206,10 @@ where
         .map_err(|e| format!("Invalid voting round params: {e}"))?;
     on_progress(DelegationProgress::SelectingNotes);
     let voting_db = open_voting_db(db_path, account_uuid)?;
-    let wallet_db =
-        open_wallet_db_for_read(db_path, wallet_network(prepare_params.voting_hotkey.network()))?;
+    let wallet_db = open_wallet_db_for_read(
+        db_path,
+        wallet_network(prepare_params.voting_hotkey.network()),
+    )?;
 
     let prepared_bundle =
         zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
@@ -299,8 +300,10 @@ pub async fn build_keystone_delegation_request(
     prepare_params: PrepareDelegationBundleParams<'_>,
 ) -> Result<zcash_voting::delegate::KeystoneSigningRequest, String> {
     let voting_db = open_voting_db(db_path, account_uuid)?;
-    let wallet_db =
-        open_wallet_db_for_read(db_path, wallet_network(prepare_params.voting_hotkey.network()))?;
+    let wallet_db = open_wallet_db_for_read(
+        db_path,
+        wallet_network(prepare_params.voting_hotkey.network()),
+    )?;
     let prepared =
         zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
             .map_err(|e| e.to_string())?;
@@ -336,8 +339,10 @@ where
 
     on_progress(DelegationProgress::SelectingNotes);
     let voting_db = open_voting_db(db_path, account_uuid)?;
-    let wallet_db =
-        open_wallet_db_for_read(db_path, wallet_network(prepare_params.voting_hotkey.network()))?;
+    let wallet_db = open_wallet_db_for_read(
+        db_path,
+        wallet_network(prepare_params.voting_hotkey.network()),
+    )?;
     let prepared_bundle =
         zcash_voting::delegate::prepare_delegation_bundle(&voting_db, &wallet_db, prepare_params)
             .map_err(|e| e.to_string())?;
