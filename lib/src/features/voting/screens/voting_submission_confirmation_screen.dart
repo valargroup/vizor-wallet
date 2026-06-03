@@ -14,6 +14,7 @@ import '../../../providers/voting/voting_config_provider.dart';
 import '../../../providers/voting/voting_rounds_provider.dart';
 import '../../../providers/voting/voting_session_provider.dart';
 import '../../../providers/voting/voting_submission_job_provider.dart';
+import '../../../providers/voting/voting_state.dart';
 import '../voting_flow_models.dart';
 import '../voting_formatters.dart';
 import '../voting_resume_plan.dart';
@@ -36,6 +37,9 @@ class VotingSubmissionConfirmationScreen extends ConsumerStatefulWidget {
 class _VotingSubmissionConfirmationScreenState
     extends ConsumerState<VotingSubmissionConfirmationScreen> {
   bool _isReturningToPolls = false;
+  bool _refreshingVotingPower = false;
+  String? _votingPowerRefreshKey;
+  BigInt? _refreshedVotingPowerZatoshi;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +74,12 @@ class _VotingSubmissionConfirmationScreenState
                 final pollTitle = state.round?.title.isNotEmpty == true
                     ? state.round!.title
                     : 'Coinholder poll';
+                final confirmed = hasCompletedVoteForDisplay(state.roundPlan);
+                _maybeRefreshVotingPower(
+                  confirmed: confirmed,
+                  state: state,
+                  jobKey: jobKey,
+                );
                 if (!hasCompletedVoteForDisplay(state.roundPlan)) {
                   return _ConfirmationScaffold(
                     confirmed: false,
@@ -86,9 +96,9 @@ class _VotingSubmissionConfirmationScreenState
                   pollTitle: pollTitle,
                   message:
                       'Your vote was successfully published and cannot be changed.',
-                  votingPower: state.eligibleWeightZatoshi == null
-                      ? 'Not available'
-                      : formatVotingPower(state.eligibleWeightZatoshi!),
+                  votingPower: _formatVotingPower(
+                    _refreshedVotingPowerZatoshi ?? state.eligibleWeightZatoshi,
+                  ),
                   doneEnabled: !_isReturningToPolls,
                   onDone: () => unawaited(_returnToPolls(jobKey)),
                 );
@@ -123,6 +133,61 @@ class _VotingSubmissionConfirmationScreenState
       );
       setState(() {
         _isReturningToPolls = false;
+      });
+    }
+  }
+
+  String _formatVotingPower(BigInt? zatoshi) {
+    if (zatoshi == null) return 'Not available';
+    return formatVotingPower(zatoshi);
+  }
+
+  void _maybeRefreshVotingPower({
+    required bool confirmed,
+    required VotingSessionState state,
+    required VotingSessionKey? jobKey,
+  }) {
+    final refreshKey =
+        '${widget.roundId}|${jobKey?.accountUuid ?? state.accountUuid ?? ''}';
+    if (_votingPowerRefreshKey != refreshKey) {
+      _votingPowerRefreshKey = refreshKey;
+      _refreshingVotingPower = false;
+      _refreshedVotingPowerZatoshi = null;
+    }
+    if (!confirmed || _refreshingVotingPower || _refreshedVotingPowerZatoshi != null) {
+      return;
+    }
+
+    _refreshingVotingPower = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_refreshVotingPower(state: state, jobKey: jobKey, key: refreshKey));
+    });
+  }
+
+  Future<void> _refreshVotingPower({
+    required VotingSessionState state,
+    required VotingSessionKey? jobKey,
+    required String key,
+  }) async {
+    try {
+      final notifier = jobKey == null
+          ? ref.read(votingSessionProvider(widget.roundId).notifier)
+          : ref.read(votingSubmissionSessionProvider(jobKey).notifier);
+      final refreshed = await notifier.refreshEligibleWeight();
+      if (!mounted || _votingPowerRefreshKey != key) return;
+      setState(() {
+        _refreshedVotingPowerZatoshi = refreshed;
+      });
+    } catch (error) {
+      debugPrint(
+        '[zcash] Voting: confirmation voting power refresh failed '
+        'round=${widget.roundId} account=${state.accountUuid} error=$error',
+      );
+    } finally {
+      if (!mounted || _votingPowerRefreshKey != key) return;
+      setState(() {
+        _refreshingVotingPower = false;
       });
     }
   }

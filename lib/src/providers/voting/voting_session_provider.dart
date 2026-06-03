@@ -234,6 +234,12 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     return _enqueue(_prepareDelegationUnlocked);
   }
 
+  Future<BigInt?> refreshEligibleWeight() {
+    return _enqueue(_refreshEligibleWeightUnlocked).then((_) {
+      return state.value?.eligibleWeightZatoshi;
+    });
+  }
+
   Future<void> ensureWalletReadyForVoting() {
     return _enqueue(() async {
       final context = await _loadContext(_roundId);
@@ -597,6 +603,9 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
             roundId: context.round.roundId,
             keepCount: signedPrefixCount,
           );
+      final bundleSetup = await ref
+          .read(votingRustApiProvider)
+          .setupDelegationBundles(ctx: _apiRoundContext(context));
       final refreshedPlan = await _loadResumePlan(context);
       final refreshedRoundPlan = await _loadRoundPlan(context);
       final retainedSignatures = {
@@ -609,6 +618,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           phase: VotingSessionPhase.readyToDelegate,
           resumePlan: refreshedPlan,
           roundPlan: refreshedRoundPlan,
+          eligibleWeightZatoshi: bundleSetup.eligibleWeight,
           keystoneSignatures: retainedSignatures,
           clearKeystoneSigningRequest: true,
           clearKeystoneScanError: true,
@@ -2487,6 +2497,26 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         resumePlan: refreshedPlan,
         roundPlan: refreshedRoundPlan,
         eligibleWeightZatoshi: bundleSetup.eligibleWeight,
+        isHardwareAccount: context.isHardwareAccount,
+      ),
+    );
+  }
+
+  Future<void> _refreshEligibleWeightUnlocked() async {
+    final current = await future;
+    final context = await _loadContext(_roundId);
+    final bundleSetup = await ref
+        .read(votingRustApiProvider)
+        .setupDelegationBundles(ctx: _apiRoundContext(context));
+    final refreshedPlan = await _loadResumePlan(context);
+    final refreshedRoundPlan = await _loadRoundPlan(context);
+    final eligibleWeight = bundleSetup.eligibleWeight;
+    _setStateForContext(
+      context,
+      (state.value ?? current).copyWith(
+        resumePlan: refreshedPlan,
+        roundPlan: refreshedRoundPlan,
+        eligibleWeightZatoshi: eligibleWeight,
         isHardwareAccount: context.isHardwareAccount,
       ),
     );
