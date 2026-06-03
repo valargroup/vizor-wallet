@@ -5900,7 +5900,7 @@ class FakeVotingRustApi implements VotingRustApi {
       rk: Uint8List.fromList([2, bundleIndex]),
       actionIndex: 0,
       displayMemo:
-          'I am authorizing this hotkey managed by my wallet to vote on ${ctx.roundName} with 0.00000100 ZEC.',
+          'I am authorizing this hotkey managed by my wallet to vote on ${ctx.roundName}.\nAmount: 0.00000100 ZEC.',
       eligibleWeightZatoshi: BigInt.from(100),
       delegatedWeightZatoshi: BigInt.from(100),
       bundleCount: bundleCount,

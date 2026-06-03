@@ -2129,7 +2129,7 @@ void main() {
     expect(find.text('Sign bundle 1 of 1'), findsOneWidget);
     expect(find.text('Memo'), findsOneWidget);
     expect(
-      find.textContaining('vote on Poll with 0.00000100 ZEC'),
+      find.textContaining('Amount: 0.00000100 ZEC'),
       findsOneWidget,
     );
     expect(find.text('Scan signature'), findsOneWidget);
@@ -3454,7 +3454,7 @@ class _VotingStatusRustApi extends _NoopVotingRustApi {
       rk: Uint8List.fromList(const [4]),
       actionIndex: 0,
       displayMemo:
-          'I am authorizing this hotkey managed by my wallet to vote on ${ctx.roundName} with 0.00000100 ZEC.',
+          'I am authorizing this hotkey managed by my wallet to vote on ${ctx.roundName}.\nAmount: 0.00000100 ZEC.',
       eligibleWeightZatoshi: BigInt.from(100),
       delegatedWeightZatoshi: BigInt.from(100),
       bundleCount: bundleCount,

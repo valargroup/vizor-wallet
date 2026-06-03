@@ -954,7 +954,7 @@ class _KeystoneSigningPanelState extends State<_KeystoneSigningPanel> {
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Scan this QR with Keystone, then scan the signed voting QR here.',
+              'Scan QR on this screen with Keystone. Then, scan the signed voting QR displayed on Keystone with this device\'s camera',
               textAlign: TextAlign.center,
               style: AppTypography.bodySmall.copyWith(
                 color: colors.text.secondary,
@@ -1089,6 +1089,8 @@ class _KeystoneSigningMemo extends StatelessWidget {
               const SizedBox(height: AppSpacing.xxs),
               SelectableText(
                 displayMemo,
+                textAlign: TextAlign.left,
+                maxLines: null,
                 style: AppTypography.bodySmall.copyWith(
                   color: colors.text.accent,
                 ),
