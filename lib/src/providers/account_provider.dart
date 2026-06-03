@@ -25,10 +25,6 @@ export 'account_models.dart';
 const _accountsKey = 'zcash_accounts';
 const _activeAccountKey = 'zcash_active_account';
 const _networkKey = 'zcash_wallet_network';
-// Keep in sync with zcash_voting::storage::VotingDb::wallet_sidecar_path,
-// which appends ".voting" to the wallet DB path for sidecar persistence.
-const _votingSidecarSuffix = '.voting';
-const _sqliteCompanionSuffixes = ['', '-journal', '-wal', '-shm'];
 
 const kWalletCreationCurrentBlockHeightErrorMessage =
     'We need the current Zcash block height to create your wallet. '
@@ -625,11 +621,11 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   }
 
   Future<void> _deleteExistingDb(String dbPath) async {
-    for (final path in walletDbCleanupPaths(dbPath)) {
-      final file = File(path);
-      if (file.existsSync()) {
-        file.deleteSync();
-      }
+    final file = File(dbPath);
+    if (file.existsSync()) file.deleteSync();
+    for (final suffix in ['-journal', '-wal', '-shm']) {
+      final f = File('$dbPath$suffix');
+      if (f.existsSync()) f.deleteSync();
     }
   }
 }
@@ -653,14 +649,4 @@ String? resolveNextActiveAccountUuidAfterRemoval({
       .clamp(0, remainingAccounts.length - 1)
       .toInt();
   return remainingAccounts[nextIndex].uuid;
-}
-
-@visibleForTesting
-List<String> walletDbCleanupPaths(String dbPath) {
-  // Voting persists to a deterministic SQLite sidecar next to the wallet DB.
-  final targets = [dbPath, '$dbPath$_votingSidecarSuffix'];
-  return [
-    for (final target in targets)
-      for (final suffix in _sqliteCompanionSuffixes) '$target$suffix',
-  ];
 }
