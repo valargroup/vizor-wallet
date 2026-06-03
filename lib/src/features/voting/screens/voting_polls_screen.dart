@@ -39,6 +39,13 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (_wasPollListRecentlyRefreshed()) {
+        setState(() {
+          _entryRefreshInFlight = false;
+        });
+        _preSyncLoadedRounds();
+        return;
+      }
       _reloadRoundsWithFreshConfig(entryRefresh: true);
     });
   }
@@ -181,6 +188,10 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
         });
       }),
     );
+  }
+
+  bool _wasPollListRecentlyRefreshed() {
+    return wasVotingPollListRecentlyRefreshed();
   }
 
   Future<void> _refreshConfigAndReloadRounds() async {

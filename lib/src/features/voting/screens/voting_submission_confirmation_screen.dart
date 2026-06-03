@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../../../core/privacy/sensitive_privacy_overlay.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_icon.dart';
 import '../../../providers/voting/voting_config_provider.dart';
 import '../../../providers/voting/voting_rounds_provider.dart';
 import '../../../providers/voting/voting_session_provider.dart';
@@ -38,8 +40,12 @@ class _VotingSubmissionConfirmationScreenState
     extends ConsumerState<VotingSubmissionConfirmationScreen> {
   bool _isReturningToPolls = false;
   bool _refreshingVotingPower = false;
+  bool _votingPowerRefreshAttempted = false;
   String? _votingPowerRefreshKey;
   BigInt? _refreshedVotingPowerZatoshi;
+  String? _pollRefreshKey;
+  Future<void>? _pollRefreshFuture;
+  String? _returnErrorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +86,11 @@ class _VotingSubmissionConfirmationScreenState
                   state: state,
                   jobKey: jobKey,
                 );
+                _maybePrefetchPollRefresh(
+                  confirmed: confirmed,
+                  state: state,
+                  jobKey: jobKey,
+                );
                 if (!hasCompletedVoteForDisplay(state.roundPlan)) {
                   return _ConfirmationScaffold(
                     confirmed: false,
@@ -88,6 +99,7 @@ class _VotingSubmissionConfirmationScreenState
                     message:
                         'This account has not completed submission for this poll.',
                     votingPower: 'Not available',
+                    doneLabel: 'Done',
                   );
                 }
                 return _ConfirmationScaffold(
@@ -99,7 +111,10 @@ class _VotingSubmissionConfirmationScreenState
                   votingPower: _formatVotingPower(
                     _refreshedVotingPowerZatoshi ?? state.eligibleWeightZatoshi,
                   ),
+                  isReturningToPolls: _isReturningToPolls,
                   doneEnabled: !_isReturningToPolls,
+                  doneLabel: _isReturningToPolls ? 'Updating...' : 'Done',
+                  returnErrorMessage: _returnErrorMessage,
                   onDone: () => unawaited(_returnToPolls(jobKey)),
                 );
               },
@@ -114,13 +129,10 @@ class _VotingSubmissionConfirmationScreenState
     if (_isReturningToPolls) return;
     setState(() {
       _isReturningToPolls = true;
+      _returnErrorMessage = null;
     });
     try {
-      await refreshVotingPollList(
-        config: ref.read(votingConfigProvider.notifier),
-        readRounds: () => ref.read(votingRoundsProvider.notifier),
-        shouldReload: () => mounted,
-      );
+      await _runPollRefresh();
       if (!mounted) return;
       if (jobKey != null) {
         ref.read(votingSubmissionJobsProvider.notifier).dismiss(jobKey);
@@ -133,6 +145,7 @@ class _VotingSubmissionConfirmationScreenState
       );
       setState(() {
         _isReturningToPolls = false;
+        _returnErrorMessage = "Couldn't update polls. Try again.";
       });
     }
   }
@@ -152,17 +165,65 @@ class _VotingSubmissionConfirmationScreenState
     if (_votingPowerRefreshKey != refreshKey) {
       _votingPowerRefreshKey = refreshKey;
       _refreshingVotingPower = false;
+      _votingPowerRefreshAttempted = false;
       _refreshedVotingPowerZatoshi = null;
     }
-    if (!confirmed || _refreshingVotingPower || _refreshedVotingPowerZatoshi != null) {
+    if (!confirmed || _refreshingVotingPower || _votingPowerRefreshAttempted) {
       return;
     }
 
     _refreshingVotingPower = true;
+    _votingPowerRefreshAttempted = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(_refreshVotingPower(state: state, jobKey: jobKey, key: refreshKey));
+      unawaited(
+        _refreshVotingPower(state: state, jobKey: jobKey, key: refreshKey),
+      );
     });
+  }
+
+  void _maybePrefetchPollRefresh({
+    required bool confirmed,
+    required VotingSessionState state,
+    required VotingSessionKey? jobKey,
+  }) {
+    final refreshKey =
+        '${widget.roundId}|${jobKey?.accountUuid ?? state.accountUuid ?? ''}';
+    if (_pollRefreshKey != refreshKey) {
+      _pollRefreshKey = refreshKey;
+      _pollRefreshFuture = null;
+      _returnErrorMessage = null;
+    }
+    if (!confirmed || _pollRefreshFuture != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pollRefreshFuture != null) return;
+      unawaited(
+        _runPollRefresh().catchError((Object error) {
+          debugPrint(
+            '[zcash] Voting: poll list prefetch before return failed: $error',
+          );
+        }),
+      );
+    });
+  }
+
+  Future<void> _runPollRefresh() {
+    final inFlight = _pollRefreshFuture;
+    if (inFlight != null) return inFlight;
+
+    final refresh = refreshVotingPollList(
+      config: ref.read(votingConfigProvider.notifier),
+      readRounds: () => ref.read(votingRoundsProvider.notifier),
+      shouldReload: () => mounted,
+    );
+    _pollRefreshFuture = refresh;
+    return refresh.then(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        _pollRefreshFuture = null;
+        Error.throwWithStackTrace(error, stackTrace);
+      },
+    );
   }
 
   Future<void> _refreshVotingPower({
@@ -201,7 +262,10 @@ class _ConfirmationScaffold extends StatelessWidget {
     required this.message,
     required this.votingPower,
     this.onDone,
+    this.isReturningToPolls = false,
     this.doneEnabled = true,
+    this.doneLabel = 'Done',
+    this.returnErrorMessage,
   });
 
   final bool confirmed;
@@ -210,106 +274,165 @@ class _ConfirmationScaffold extends StatelessWidget {
   final String message;
   final String votingPower;
   final VoidCallback? onDone;
+  final bool isReturningToPolls;
   final bool doneEnabled;
+  final String doneLabel;
+  final String? returnErrorMessage;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        const Align(alignment: Alignment.centerLeft, child: AppRouteBackLink()),
-        Expanded(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Spacer(),
-                  Row(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: AppRouteBackLink(),
+            ),
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: colors.background.inverse,
-                          borderRadius: BorderRadius.circular(AppRadii.full),
-                        ),
-                        child: Icon(
-                          Icons.how_to_vote,
-                          color: colors.text.inverse,
-                          size: 24,
+                      const Spacer(),
+                      Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: colors.background.inverse,
+                              borderRadius: BorderRadius.circular(
+                                AppRadii.full,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.how_to_vote,
+                              color: colors.text.inverse,
+                              size: 24,
+                            ),
+                          ),
+                          Transform.translate(
+                            offset: const Offset(-6, 0),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    colors.background.utilitySuccessSubtle,
+                                    colors.background.utilitySuccessStrong,
+                                  ],
+                                ),
+                                border: Border.all(
+                                  color: colors.background.base,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadii.full,
+                                ),
+                              ),
+                              child: Icon(
+                                confirmed
+                                    ? Icons.verified
+                                    : Icons.error_outline,
+                                color: confirmed
+                                    ? colors.text.success
+                                    : colors.text.warning,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        title,
+                        style: AppTypography.headlineMedium.copyWith(
+                          color: colors.text.accent,
                         ),
                       ),
-                      Transform.translate(
-                        offset: const Offset(-6, 0),
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                colors.background.utilitySuccessSubtle,
-                                colors.background.utilitySuccessStrong,
-                              ],
-                            ),
-                            border: Border.all(
-                              color: colors.background.base,
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(AppRadii.full),
-                          ),
-                          child: Icon(
-                            confirmed ? Icons.verified : Icons.error_outline,
-                            color: confirmed
-                                ? colors.text.success
-                                : colors.text.warning,
-                            size: 24,
-                          ),
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        message,
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: colors.text.secondary,
                         ),
                       ),
+                      const SizedBox(height: AppSpacing.md),
+                      _ReceiptCard(
+                        rows: [
+                          _ReceiptRow(label: 'Poll', value: pollTitle),
+                          _ReceiptRow(
+                            label: 'Voting power',
+                            value: votingPower,
+                          ),
+                        ],
+                      ),
+                      const Spacer(flex: 2),
+                      SizedBox(
+                        width: double.infinity,
+                        child: AppButton(
+                          onPressed: doneEnabled
+                              ? onDone ?? () => context.go('/voting')
+                              : null,
+                          variant: AppButtonVariant.primary,
+                          child: Text(doneLabel),
+                        ),
+                      ),
+                      if (returnErrorMessage != null) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          returnErrorMessage!,
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: colors.text.warning,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    title,
-                    style: AppTypography.headlineMedium.copyWith(
-                      color: colors.text.accent,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (isReturningToPolls)
+          Positioned.fill(
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(color: Color(0x4D000000)),
+                  child: Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const AppIcon(
+                          AppIcons.loader,
+                          size: 20,
+                          color: Color(0xFFFFFFFF),
+                        ),
+                        const SizedBox(width: AppSpacing.xxs),
+                        Text(
+                          'Updating polls...',
+                          style: AppTypography.bodyMediumStrong.copyWith(
+                            color: const Color(0xFFFFFFFF),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.xxs),
-                  Text(
-                    message,
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: colors.text.secondary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _ReceiptCard(
-                    rows: [
-                      _ReceiptRow(label: 'Poll', value: pollTitle),
-                      _ReceiptRow(label: 'Voting power', value: votingPower),
-                    ],
-                  ),
-                  const Spacer(flex: 2),
-                  SizedBox(
-                    width: double.infinity,
-                    child: AppButton(
-                      onPressed: doneEnabled
-                          ? onDone ?? () => context.go('/voting')
-                          : null,
-                      variant: AppButtonVariant.primary,
-                      child: const Text('Done'),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
