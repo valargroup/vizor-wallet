@@ -10,6 +10,7 @@ use zcash_client_backend::{
     },
     proto::service,
 };
+use shardtree::error::{InsertionError, ShardTreeError};
 use zcash_client_sqlite::error::SqliteClientError;
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
@@ -754,6 +755,15 @@ async fn run_sync_impl(
                         format!("BlockConflict at {at_height}: wallet rewind required"),
                     )
                 }
+                ChainError::Wallet(wallet_err) if is_commitment_tree_root_conflict(&wallet_err) => {
+                    let at_height = u32::from(start) as u64;
+                    SyncError::continuity(
+                        at_height,
+                        format!(
+                            "commitment tree root conflict while scanning from {at_height}: {wallet_err}"
+                        ),
+                    )
+                }
                 ChainError::Wallet(wallet_err) => {
                     // Transient SQLite lock contention (e.g. another wallet
                     // connection holds a write lock) must retry, not bail out.
@@ -1146,6 +1156,13 @@ fn is_sqlite_lock_contention(err: &SqliteClientError) -> bool {
     }
 }
 
+fn is_commitment_tree_root_conflict(err: &SqliteClientError) -> bool {
+    matches!(
+        err,
+        SqliteClientError::CommitmentTree(ShardTreeError::Insert(InsertionError::Conflict(_)))
+    )
+}
+
 // ==================== Tests ====================
 //
 // Error-taxonomy tests now live alongside their types in `error.rs`. The
@@ -1198,5 +1215,28 @@ mod tests {
             zcash_protocol::consensus::BlockHeight::from_u32(2_500_000),
         );
         assert!(!is_sqlite_lock_contention(&block_conflict));
+    }
+
+    #[test]
+    fn commitment_tree_root_conflict_is_recognised() {
+        use incrementalmerkletree::{Address, Level};
+
+        let conflict = SqliteClientError::CommitmentTree(ShardTreeError::Insert(
+            InsertionError::Conflict(Address::from_parts(Level::new(7), 391_096)),
+        ));
+        assert!(is_commitment_tree_root_conflict(&conflict));
+
+        let out_of_range = SqliteClientError::CommitmentTree(ShardTreeError::Insert(
+            InsertionError::OutOfRange(
+                incrementalmerkletree::Position::from(0),
+                incrementalmerkletree::Position::from(1)..incrementalmerkletree::Position::from(2),
+            ),
+        ));
+        assert!(!is_commitment_tree_root_conflict(&out_of_range));
+
+        let block_conflict = SqliteClientError::BlockConflict(
+            zcash_protocol::consensus::BlockHeight::from_u32(2_500_000),
+        );
+        assert!(!is_commitment_tree_root_conflict(&block_conflict));
     }
 }
