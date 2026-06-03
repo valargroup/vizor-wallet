@@ -478,7 +478,7 @@ void _validateTallyResultsEnvelope(
 
   final results = object['results'];
   if (results == null) {
-    if (object.isEmpty) return;
+    if (object.isEmpty || _isPendingTallyEnvelope(object)) return;
     throw const FormatException('getRoundTally expected results field');
   }
   if (results is! List) {
@@ -494,6 +494,14 @@ void _validateTallyResultsEnvelope(
       context: 'getRoundTally',
     );
   }
+}
+
+bool _isPendingTallyEnvelope(Map<String, dynamic> object) {
+  final status = (object['status'] ?? object['phase'] ?? '')
+      .toString()
+      .trim()
+      .toLowerCase();
+  return status == '2' || status == 'tallying' || status == 'pending';
 }
 
 void _requireMatchingRoundId({

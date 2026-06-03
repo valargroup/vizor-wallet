@@ -6,6 +6,10 @@ import 'package:zcash_wallet/src/rust/third_party/zcash_voting/config.dart'
 import 'package:zcash_wallet/src/services/voting/resolved_voting_config_extensions.dart';
 
 void main() {
+  const encodedRoundId = 'El5UdfZTsHTV9MNnMIUmlfNWQWwrbDBCUWqRLlv/3RE=';
+  const hexRoundId =
+      '125e5475f653b074d5f4c36730852695f356416c2b6c3042516a912e5bffdd11';
+
   test('apiServers exposes primary and failover vote servers', () {
     final config = _resolvedConfig(
       authenticatedRoundIds: const [],
@@ -46,6 +50,15 @@ void main() {
       () => config.assertRoundAuthenticated(
         '0000000000000000000000000000000000000000000000000000000000000001',
       ),
+      returnsNormally,
+    );
+  });
+
+  test('assertRoundAuthenticated accepts base64 route round ids', () {
+    final config = _resolvedConfig(authenticatedRoundIds: const [hexRoundId]);
+
+    expect(
+      () => config.assertRoundAuthenticated(encodedRoundId),
       returnsNormally,
     );
   });

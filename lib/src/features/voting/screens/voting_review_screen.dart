@@ -14,6 +14,7 @@ import '../../../providers/voting/voting_state.dart';
 import '../voting_choice_style.dart';
 import '../voting_error_messages.dart';
 import '../voting_flow_models.dart';
+import '../voting_poll_ordering.dart';
 import '../voting_routes.dart';
 import '../widgets/voting_metadata_widgets.dart';
 
@@ -32,6 +33,7 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
   bool _votingPowerPreparationInFlight = false;
   String? _votingPowerPreparationKey;
   String? _delegationPirPrecomputeKey;
+  String? _resultsRedirectRoundId;
 
   @override
   void didUpdateWidget(covariant VotingReviewScreen oldWidget) {
@@ -42,6 +44,7 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
       _votingPowerPreparationInFlight = false;
       _votingPowerPreparationKey = null;
       _delegationPirPrecomputeKey = null;
+      _resultsRedirectRoundId = null;
     }
   }
 
@@ -113,6 +116,15 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
     }
   }
 
+  void _redirectToResults(String roundId) {
+    if (_resultsRedirectRoundId == roundId) return;
+    _resultsRedirectRoundId = roundId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.go(votingResultsRoute(roundId));
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(votingSessionProvider(widget.roundId));
@@ -125,9 +137,15 @@ class _VotingReviewScreenState extends ConsumerState<VotingReviewScreen> {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => _Message("Couldn't load review: $error"),
           data: (state) {
+            final round = state.round;
+            if (round != null &&
+                votingPollListStatus(round.status) !=
+                    VotingPollListStatus.active) {
+              _redirectToResults(round.roundId);
+              return const Center(child: CircularProgressIndicator());
+            }
             _maybePrepareVotingPower(state);
             _maybePrecomputeDelegationPir(state);
-            final round = state.round;
             final proposals = round == null
                 ? <VotingProposalView>[]
                 : proposalsFromRound(round);

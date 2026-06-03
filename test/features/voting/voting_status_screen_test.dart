@@ -1516,6 +1516,34 @@ void main() {
     expect(find.text('Review answers'), findsNothing);
   });
 
+  testWidgets('review routes non-active rounds to results', (tester) async {
+    final round = _roundStatusJson()..['status'] = 'pending';
+    final http = FakeVotingHttpClient(
+      responses: _votingHttpResponses()
+        ..['/shielded-vote/v1/round/$_roundId'] = {'round': round},
+    );
+    final container = _statusContainer(
+      http: http,
+      accountOverride: _MnemonicAccountNotifier.new,
+      recoveryApi: _MutableVotingRecoveryApi(),
+    );
+    addTearDown(container.dispose);
+    container.read(votingDraftProvider(_draftKey).notifier).setChoice(1, 0);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _proposalHarness(
+          initialLocation: '/voting/poll/$_roundId/review',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('results route'), findsOneWidget);
+    expect(find.text('Confirm & submit'), findsNothing);
+  });
+
   testWidgets('proposal detail shows completed vote before eligibility loads', (
     tester,
   ) async {
@@ -2050,11 +2078,7 @@ void main() {
         ..['/shielded-vote/v1/round/$_roundId'] = {'round': round}
         ..['/shielded-vote/v1/tally-results/$_roundId'] =
             SequentialVotingHttpResponses([
-              {
-                'vote_round_id': _roundId,
-                'status': 'pending',
-                'results': const [],
-              },
+              {'vote_round_id': _roundId, 'status': 'pending'},
               {
                 'vote_round_id': _roundId,
                 'results': [

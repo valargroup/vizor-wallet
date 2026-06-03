@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../rust/third_party/zcash_voting/config.dart';
+import 'voting_models.dart';
 
 @immutable
 class VotingApiServerSet {
@@ -49,19 +50,25 @@ extension ResolvedVotingConfigX on ResolvedVotingConfig {
 
   List<Uri> get apiFailoverBaseUrls => apiServers.failovers;
 
-  Set<String> get authenticatedRoundIdSet =>
-      authenticatedRounds.map((round) => round.roundId).toSet();
+  Set<String> get authenticatedRoundIdSet => authenticatedRounds
+      .map((round) => _normalizeRoundIdForConfig(round.roundId))
+      .toSet();
 
   List<Uri> get pirEndpointUrls => pirEndpoints
       .map((endpoint) => Uri.parse(endpoint.url))
       .toList(growable: false);
 
   bool isRoundAuthenticated(String roundId) {
-    return authenticatedRoundIdSet.contains(roundId);
+    return authenticatedRoundIdSet.contains(
+      _normalizeRoundIdForConfig(roundId),
+    );
   }
 
   bool isRoundExplicitlySkipped(String roundId) {
-    return skippedRoundIds.contains(roundId);
+    final normalizedRoundId = _normalizeRoundIdForConfig(roundId);
+    return skippedRoundIds
+        .map(_normalizeRoundIdForConfig)
+        .contains(normalizedRoundId);
   }
 
   void assertRoundAuthenticated(String roundId) {
@@ -74,5 +81,13 @@ extension ResolvedVotingConfigX on ResolvedVotingConfig {
     throw StateError(
       'Round $roundId is not authenticated by voting config: $reason.',
     );
+  }
+}
+
+String _normalizeRoundIdForConfig(String roundId) {
+  try {
+    return normalizeVotingRoundId(roundId);
+  } on FormatException {
+    return roundId;
   }
 }
