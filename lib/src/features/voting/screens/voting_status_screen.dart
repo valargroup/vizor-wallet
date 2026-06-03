@@ -9,6 +9,7 @@ import '../../../core/layout/app_main_sidebar.dart';
 import '../../../core/privacy/sensitive_privacy_overlay.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../providers/voting/voting_session_provider.dart';
 import '../../../providers/voting/voting_submission_job_provider.dart';
 import '../../../providers/voting/voting_state.dart';
 import '../../../rust/third_party/zcash_voting/delegate.dart' as rust_delegate;
@@ -438,13 +439,28 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
         }
         return;
       }
-      context.go(
-        votingSubmissionConfirmedRoute(
-          key.roundId,
-          accountUuid: key.accountUuid,
-        ),
-      );
+      unawaited(_navigateToConfirmation(key));
     });
+  }
+
+  Future<void> _navigateToConfirmation(VotingSessionKey key) async {
+    try {
+      await ref
+          .read(votingSubmissionSessionProvider(key).notifier)
+          .refreshEligibleWeight();
+    } catch (error) {
+      debugPrint(
+        '[zcash] Voting: pre-confirmation voting power refresh failed '
+        'round=${key.roundId} account=${key.accountUuid} error=$error',
+      );
+    }
+    if (!mounted || _selectedJobKey() != key) return;
+    context.go(
+      votingSubmissionConfirmedRoute(
+        key.roundId,
+        accountUuid: key.accountUuid,
+      ),
+    );
   }
 }
 

@@ -1644,10 +1644,13 @@ void main() {
     'hardware voting can skip unsigned Keystone bundles after prefix signed',
     () async {
       late FakeVotingRecoveryApi recoveryApi;
-      final rust = FakeVotingRustApi(
+      late FakeVotingRustApi rust;
+      rust = FakeVotingRustApi(
         bundleCount: 2,
+        setupEligibleWeight: 4900000000,
         onDeleteSkippedBundles: (keepCount) {
           recoveryApi.state = recoveryState(bundleCount: keepCount);
+          rust.setupEligibleWeight = 3712500000;
         },
       );
       recoveryApi = FakeVotingRecoveryApi(state: recoveryState(bundleCount: 2));
@@ -1678,6 +1681,7 @@ void main() {
 
       expect(state.phase, VotingSessionPhase.readyToDelegate);
       expect(state.resumePlan?.bundleCount, 1);
+      expect(state.eligibleWeightZatoshi, BigInt.from(3712500000));
       expect(state.keystoneSigningRequest, isNull);
       expect(rust.deleteSkippedBundleKeepCounts, [1]);
       expect(rust.storedKeystoneSignatures.keys, [0]);
@@ -5702,6 +5706,7 @@ class FakeVotingRustApi implements VotingRustApi {
     this.precomputeGate,
     this.failPrecompute = false,
     this.bundleCount = 1,
+    this.setupEligibleWeight = 100,
     this.commitmentShareCount = 1,
     this.mismatchKeystoneSubmission = false,
     this.delegationStreamError,
@@ -5720,6 +5725,7 @@ class FakeVotingRustApi implements VotingRustApi {
   final Completer<void>? precomputeGate;
   final bool failPrecompute;
   final int bundleCount;
+  int setupEligibleWeight;
   final int commitmentShareCount;
   final bool mismatchKeystoneSubmission;
   final Object? delegationStreamError;
@@ -5815,7 +5821,7 @@ class FakeVotingRustApi implements VotingRustApi {
     _activeSetups--;
     return rust_round.BundleLayout(
       bundleCount: bundleCount,
-      eligibleWeight: BigInt.from(100),
+      eligibleWeight: BigInt.from(setupEligibleWeight),
       droppedCount: 0,
     );
   }
