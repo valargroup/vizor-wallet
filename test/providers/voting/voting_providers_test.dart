@@ -2438,6 +2438,7 @@ void main() {
         http: http,
         rust: rust,
         recoveryApi: _submittedDelegationOnlyRecoveryApi(),
+        accountMnemonic: null,
         txConfirmationPolling: _fastTxConfirmationPolling,
       );
       addTearDown(container.dispose);
@@ -4716,6 +4717,7 @@ ProviderContainer _sessionContainer({
   ProviderListenable<String?>? activeAccountUuidListenable,
   bool accountIsHardware = false,
   Set<String>? hardwareAccountUuids,
+  String? accountMnemonic = kTestMnemonic,
   List<ProviderObserver>? observers,
   VotingTxConfirmationPolling? txConfirmationPolling,
   VotingWalletSyncReadinessChecker? walletSyncReadinessChecker,
@@ -4785,7 +4787,7 @@ ProviderContainer _sessionContainer({
         ),
       ),
       accountProvider.overrideWith(
-        () => _FakeVotingAccountNotifier(mnemonic: kTestMnemonic),
+        () => _FakeVotingAccountNotifier(mnemonic: accountMnemonic),
       ),
       votingDraftPersistenceProvider.overrideWithValue(
         draftPersistence ?? FakeVotingDraftPersistence(),

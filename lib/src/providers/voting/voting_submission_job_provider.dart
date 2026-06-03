@@ -442,7 +442,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
         activeSession,
       );
       final needsDelegation = _sessionNeedsDelegation(activeSession);
-      final needsDelegationSubmission = _sessionNeedsDelegationSubmission(
+      final needsDelegationSigning = _sessionNeedsDelegationSigning(
         activeSession,
       );
       if (draftVotes.isEmpty &&
@@ -456,8 +456,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
         return;
       }
 
-      if (activeSession.isHardwareAccount &&
-          _sessionNeedsKeystoneSigning(activeSession)) {
+      if (activeSession.isHardwareAccount && needsDelegationSigning) {
         _storePendingKeystoneState(
           key: key,
           generation: generation,
@@ -506,7 +505,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
         return;
       }
       String? softwareMnemonic;
-      if (!activeSession.isHardwareAccount && needsDelegationSubmission) {
+      if (!activeSession.isHardwareAccount && needsDelegationSigning) {
         softwareMnemonic = await ref
             .read(accountProvider.notifier)
             .getMnemonicForAccount(key.accountUuid);
@@ -1051,7 +1050,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
     return roundPlan != null && roundPlanNeedsDraftSetup(roundPlan);
   }
 
-  bool _sessionNeedsKeystoneSigning(VotingSessionState session) {
+  bool _sessionNeedsDelegationSigning(VotingSessionState session) {
     final roundPlan = session.roundPlan;
     if (roundPlan != null) {
       return roundPlan.nextSteps.any((step) => step.kind == 'delegate') ||
