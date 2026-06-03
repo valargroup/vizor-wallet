@@ -289,6 +289,16 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       return;
     }
     if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
+    final plan = await _loadResumePlan(context);
+    if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
+    final pendingBundles = plan.pendingDelegationBundleIndexes;
+    if (pendingBundles.isEmpty) {
+      debugPrint(
+        '[zcash] Voting: delegation PIR precompute skipped '
+        'round=${context.round.roundId} reason=no-pending-bundles',
+      );
+      return;
+    }
     final pirEndpoint = await _resolvePirEndpoint(context);
     if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
     if (pirEndpoint == null) return;
@@ -310,17 +320,6 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       return;
     }
     if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
-
-    final rust = ref.read(votingRustApiProvider);
-    final bundleSetup = await rust.setupDelegationBundles(
-      ctx: _apiRoundContext(context),
-    );
-    if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
-    final plan = await _loadResumePlan(context);
-    if (!_isCurrentPrecomputeContext(context, accountUuid)) return;
-    final pendingBundles = plan.pendingDelegationBundleIndexes.isNotEmpty
-        ? plan.pendingDelegationBundleIndexes
-        : [for (var i = 0; i < bundleSetup.bundleCount; i++) i];
 
     for (final bundleIndex in pendingBundles) {
       final key = _delegationPirPrecomputeKey(context, bundleIndex);

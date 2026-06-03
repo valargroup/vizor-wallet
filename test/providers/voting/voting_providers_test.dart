@@ -4612,10 +4612,38 @@ void main() {
       await rust.precomputeStarted.future;
 
       expect(rust.precomputeStoredHotkeySecrets.single, [9, 9, 9]);
+      expect(rust.setupCalls, 0);
 
       precomputeGate.complete();
       await rust.precomputeFinished.future;
       await Future<void>.delayed(Duration.zero);
+    },
+  );
+
+  test(
+    'delegation PIR warmup skips cold plans without durable setup',
+    () async {
+      final rust = FakeVotingRustApi();
+      final hotkeyStore = FakeVotingHotkeyStore(null);
+      final container = _sessionContainer(
+        rust: rust,
+        hotkeyStore: hotkeyStore,
+        recoveryApi: FakeVotingRecoveryApi(
+          state: recoveryState(bundleCount: 0),
+        ),
+        pirResolver: FakePirResolver(error: StateError('unexpected PIR')),
+      );
+      addTearDown(container.dispose);
+
+      await container.read(votingSessionProvider(kRoundId).future);
+      await container
+          .read(votingSessionProvider(kRoundId).notifier)
+          .precomputeDelegationPir(accountUuid: 'account-1');
+
+      expect(rust.setupCalls, 0);
+      expect(rust.precomputedDelegationPir, isEmpty);
+      expect(rust.generateVotingHotkeyCalls, 0);
+      expect(hotkeyStore.hotkey, isNull);
     },
   );
 
