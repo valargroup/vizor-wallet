@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
+use nonempty::NonEmpty;
 use shardtree::error::{InsertionError, ShardTreeError};
 use tonic::transport::Channel;
 use zcash_client_backend::{
@@ -92,6 +93,7 @@ const SANDBLASTING_END: u32 = 2_050_000;
 const BATCH_SIZE_SANDBLASTING: u32 = 100;
 
 const SAPLING_ACTIVATION_HEIGHT: u32 = 419200;
+const MAX_WITNESS_REPAIR_PASSES_PER_RUN: u32 = 3;
 
 /// Sync-scoped elapsed time reference. Set at sync start.
 static SYNC_START: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
@@ -188,6 +190,14 @@ fn wallet_summary_heights(db: &WalletDatabase) -> Result<Option<(u64, u64)>, Syn
         })
 }
 
+fn block_range_len(range: &std::ops::Range<BlockHeight>) -> u64 {
+    u32::from(range.end).saturating_sub(u32::from(range.start)) as u64
+}
+
+fn describe_block_range(range: &std::ops::Range<BlockHeight>) -> String {
+    format!("{}..{}", u32::from(range.start), u32::from(range.end))
+}
+
 fn ensure_complete_scan_state(
     db: &WalletDatabase,
     current_tip_height: u64,
@@ -237,6 +247,64 @@ fn ensure_complete_scan_state(
     }
 
     Ok((fully_scanned_height, db_tip_height))
+}
+
+fn queue_witness_repairs_if_needed(
+    db: &mut WalletDatabase,
+    current_tip_height: u64,
+    repair_passes_this_run: &mut u32,
+) -> Result<Option<u64>, SyncError> {
+    let rescan_ranges = with_wallet_db_write_lock("sync_engine.check_witnesses", || {
+        db.check_witnesses()
+            .map_err(|e| SyncError::db(format!("check_witnesses: {e}")))
+    })?;
+
+    let Some(nonempty_ranges) = NonEmpty::from_vec(rescan_ranges) else {
+        return Ok(None);
+    };
+
+    if *repair_passes_this_run >= MAX_WITNESS_REPAIR_PASSES_PER_RUN {
+        let first = describe_block_range(&nonempty_ranges.head);
+        return Err(SyncError::db(format!(
+            "sync completion blocked: witness repair budget exhausted \
+             after {} pass(es); first remaining repair range: {first}",
+            MAX_WITNESS_REPAIR_PASSES_PER_RUN,
+        )));
+    }
+
+    *repair_passes_this_run += 1;
+    let pass = *repair_passes_this_run;
+    let range_count = 1 + nonempty_ranges.tail.len();
+    let repair_blocks = nonempty_ranges.iter().map(block_range_len).sum::<u64>();
+    let first = describe_block_range(&nonempty_ranges.head);
+
+    log::warn!(
+        "[{}] sync: witness repair pass {}/{} queued {} range(s), {} block(s) \
+         (first={first})",
+        elapsed(),
+        pass,
+        MAX_WITNESS_REPAIR_PASSES_PER_RUN,
+        range_count,
+        repair_blocks,
+    );
+
+    with_wallet_db_write_lock("sync_engine.queue_witness_repairs", || {
+        db.queue_rescans(nonempty_ranges, ScanPriority::Verify)
+            .map_err(|e| SyncError::db(format!("queue witness rescans: {e}")))
+    })?;
+
+    let post_ranges = db
+        .suggest_scan_ranges()
+        .map_err(|e| SyncError::db(format!("suggest_scan_ranges after witness repair: {e}")))?;
+    let pending_blocks = pending_scan_blocks(&post_ranges);
+    if pending_blocks == 0 && current_tip_height > 0 {
+        return Err(SyncError::db(format!(
+            "sync completion blocked: witness repair queued ranges but no pending scan \
+             ranges were produced at tip {current_tip_height}"
+        )));
+    }
+
+    Ok(Some(pending_blocks))
 }
 
 async fn refresh_utxos(
@@ -561,6 +629,7 @@ async fn run_sync_impl(
     // verify range can't eat the main scan's rewind budget.
     let mut verify_rewinds_this_run: u32 = 0;
     let mut main_rewinds_this_run: u32 = 0;
+    let mut witness_repair_passes_this_run: u32 = 0;
 
     // Phase-transition markers used only for logging. Progress through the
     // scan queue is implicitly ordered by `ScanPriority::Verify` >
@@ -676,8 +745,19 @@ async fn run_sync_impl(
         let range = match ranges.iter().find(|r| is_pending_scan_range(r)) {
             Some(r) => r.clone(),
             None => {
-                ensure_complete_scan_state(&db, current_tip_height)?;
-                break;
+                if let Some(repair_pending_blocks) = queue_witness_repairs_if_needed(
+                    &mut db,
+                    current_tip_height,
+                    &mut witness_repair_passes_this_run,
+                )? {
+                    initial_total = repair_pending_blocks;
+                    prev_remaining = repair_pending_blocks;
+                    prefetch = None;
+                    continue;
+                } else {
+                    ensure_complete_scan_state(&db, current_tip_height)?;
+                    break;
+                }
             }
         };
 
