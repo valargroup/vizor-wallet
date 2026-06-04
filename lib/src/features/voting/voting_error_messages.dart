@@ -9,7 +9,7 @@ bool isVotingEligibilityErrorText(String text) {
   final lowerMessage = message.toLowerCase();
   return _noSpendableNotesPattern.firstMatch(message) != null ||
       _minimumVotingEligibilityPattern.firstMatch(message) != null ||
-      lowerMessage.startsWith('this account is not eligible for this poll.') ||
+      lowerMessage.startsWith('this account is not eligible for this ') ||
       lowerMessage.startsWith(
         'voting requires at least 5 eligible shielded notes totaling 0.125 zec',
       );
@@ -21,9 +21,9 @@ String friendlyVotingErrorText(String text) {
   if (noSpendableNotes != null) {
     final heightText = noSpendableNotes.group(1);
     final snapshot = heightText == null
-        ? 'the poll snapshot block'
+        ? 'the voting round snapshot block'
         : 'snapshot block ${formatBlockHeight(int.parse(heightText))}';
-    return 'This account is not eligible for this poll. It had no eligible '
+    return 'This account is not eligible for this voting round. It had no eligible '
         'shielded funds at $snapshot. Switch to an eligible account to vote.';
   }
 
@@ -33,7 +33,7 @@ String friendlyVotingErrorText(String text) {
   if (minimumVotingEligibility != null) {
     final heightText = minimumVotingEligibility.group(1);
     final snapshot = heightText == null
-        ? 'the poll snapshot block'
+        ? 'the voting round snapshot block'
         : 'snapshot block ${formatBlockHeight(int.parse(heightText))}';
     return 'Voting requires at least 5 eligible shielded notes totaling '
         '0.125 ZEC at $snapshot. Switch to an eligible account to vote.';

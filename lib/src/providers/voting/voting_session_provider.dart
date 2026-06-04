@@ -2306,7 +2306,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final highest = formatBlockHeight(
         reportedHeights.reduce((left, right) => left > right ? left : right),
       );
-      return 'Voting PIR data is not ready for this poll yet. Expected '
+      return 'Voting PIR data is not ready for this voting round yet. Expected '
           'snapshot block $expected; PIR endpoints report $highest. Retry '
           'once the PIR service catches up.';
     }
@@ -2319,7 +2319,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       final lowest = formatBlockHeight(
         reportedHeights.reduce((left, right) => left < right ? left : right),
       );
-      return 'Configured PIR endpoints are ahead of this poll snapshot. '
+      return 'Configured PIR endpoints are ahead of this voting round snapshot. '
           'Expected snapshot block $expected; endpoints report $lowest.';
     }
 
@@ -2333,7 +2333,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
           'connection and retry.';
     }
 
-    return 'No PIR endpoint matched this poll snapshot. Expected snapshot '
+    return 'No PIR endpoint matched this voting round snapshot. Expected snapshot '
         'block $expected. Diagnostics: ${_pirDiagnosticsLog(diagnostics)}.';
   }
 
@@ -3385,7 +3385,7 @@ class _VotingWalletSyncTimeout implements Exception {
 
   @override
   String toString() {
-    return 'Wallet sync did not reach this poll snapshot within '
+    return 'Wallet sync did not reach this voting round snapshot within '
         '${formatElapsedSeconds(maxWait)}. Scanned block '
         '${formatBlockHeight(readiness.scannedHeight)} of '
         '${formatBlockHeight(readiness.snapshotHeight)}. Let wallet sync '

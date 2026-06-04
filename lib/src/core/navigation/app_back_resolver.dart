@@ -54,7 +54,7 @@ abstract final class AppBackResolver {
     '/settings/endpoint': 'Endpoint',
     '/onboarding/keystone': 'Connect Keystone',
     '/voting': 'Vote',
-    '/voting/poll/:roundId': 'Poll',
+    '/voting/poll/:roundId': 'Voting round',
     '/voting/poll/:roundId/review': 'Review',
     '/voting/poll/:roundId/status': 'Status',
     '/voting/poll/:roundId/submitted': 'Submitted',

@@ -108,7 +108,7 @@ class _VotingResultsScreenState extends ConsumerState<VotingResultsScreen> {
                     _clearPendingTallyRefresh();
                     if (session.hasError) {
                       return _Message(
-                        "Couldn't load poll details: ${session.error}",
+                        "Couldn't load voting round details: ${session.error}",
                       );
                     }
                     return const Center(child: CircularProgressIndicator());
@@ -562,7 +562,7 @@ bool _isTallyNotReadyError(Object error) {
 
 String _roundTitle(VotingRoundDetails round) {
   final title = round.title.trim();
-  return title.isEmpty ? 'Poll results' : title;
+  return title.isEmpty ? 'Voting results' : title;
 }
 
 String? _roundDescription(VotingRoundDetails round) {

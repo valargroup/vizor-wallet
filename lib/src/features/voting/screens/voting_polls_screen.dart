@@ -82,7 +82,7 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
                           loading: () =>
                               const Center(child: CircularProgressIndicator()),
                           error: (error, _) => _VotingMessage(
-                            title: "Couldn't load polls",
+                            title: "Couldn't load voting rounds",
                             message: error.toString(),
                             actionLabel: 'Try again',
                             onAction: () => _reloadRoundsWithFreshConfig(),
@@ -109,8 +109,8 @@ class _VotingPollsScreenState extends ConsumerState<VotingPollsScreen> {
   Widget _buildRoundList(List<VotingRoundView> items) {
     if (items.isEmpty) {
       return const _VotingMessage(
-        title: 'No polls available',
-        message: 'There are no coinholder polls to display yet.',
+        title: 'No voting rounds available',
+        message: 'There are no token holder voting rounds to display yet.',
       );
     }
     final sortedItems = sortVotingRoundsForPollList(items);
@@ -619,7 +619,7 @@ Color _statusText(_PollCardState state) {
 String _actionLabel(_PollCardState state) {
   return switch (state) {
     _PollCardState.inProgress => 'Resume',
-    _PollCardState.active => 'Enter poll',
+    _PollCardState.active => 'Start voting',
     _PollCardState.voted => 'Review',
     _PollCardState.tallying || _PollCardState.closed => 'View results',
   };

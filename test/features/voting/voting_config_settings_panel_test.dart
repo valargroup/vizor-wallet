@@ -30,7 +30,7 @@ void main() {
     await _pumpPanel(tester, store: _FakeVotingConfigSourceStore());
 
     expect(find.text('Voting config'), findsOneWidget);
-    expect(find.text('Coinholder poll'), findsOneWidget);
+    expect(find.text('Token holder voting'), findsOneWidget);
     expect(find.text('Current: Default'), findsNothing);
     expect(find.text(kDefaultStaticVotingConfigSource), findsNothing);
   });
@@ -161,7 +161,7 @@ void main() {
     expect(find.text('Use'), findsNothing);
     expect(store.sourceUrl, savedUrl);
 
-    await tester.tap(find.text('Coinholder poll'));
+    await tester.tap(find.text('Token holder voting'));
     await tester.pump();
 
     expect(store.sourceUrl, savedUrl);

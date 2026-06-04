@@ -91,7 +91,7 @@ void main() {
     await tester.tap(find.text('Open Voting Review'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Poll'), findsOneWidget);
+    expect(find.text('Voting round'), findsOneWidget);
   });
 }
 

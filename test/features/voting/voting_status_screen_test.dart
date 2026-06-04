@@ -209,7 +209,7 @@ void main() {
     await tester.pumpAndSettle();
 
     const message =
-        'This account is not eligible for this poll. It had no eligible '
+        'This account is not eligible for this voting round. It had no eligible '
         'shielded funds at snapshot block 3,359,740. Switch to an eligible '
         'account to vote.';
     await _pumpUntilFound(tester, find.text(message));
@@ -373,7 +373,7 @@ void main() {
     await tester.pumpAndSettle();
 
     const message =
-        'This account is not eligible for this poll. It had no eligible '
+        'This account is not eligible for this voting round. It had no eligible '
         'shielded funds at snapshot block 3,359,740. Switch to an eligible '
         'account to vote.';
     await _pumpUntilFound(tester, find.text(message));
@@ -409,7 +409,9 @@ void main() {
 
     expect(find.text('Submission confirmed!'), findsNothing);
     expect(
-      find.text('This account has not completed submission for this poll.'),
+      find.text(
+        'This account has not completed submission for this voting round.',
+      ),
       findsOneWidget,
     );
   });
@@ -597,7 +599,7 @@ void main() {
 
       expect(configNotifier.refreshCount, 1);
       expect(roundsNotifier.reloadCount, 1);
-      expect(find.text('Updating polls...'), findsOneWidget);
+      expect(find.text('Updating voting rounds...'), findsOneWidget);
       expect(find.text('Updating...'), findsOneWidget);
       expect(find.text('Refreshed poll'), findsNothing);
 
@@ -1744,7 +1746,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(votingDraftProvider(_draftKey)).isEmpty, true);
-    expect(find.text('Not eligible for this poll'), findsOneWidget);
+    expect(find.text('Not eligible for this voting round'), findsOneWidget);
     expect(find.text(message), findsOneWidget);
 
     await tester.tap(find.text('Done'));
@@ -1753,7 +1755,7 @@ void main() {
     await tester.tap(find.text('Not eligible'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Not eligible for this poll'), findsOneWidget);
+    expect(find.text('Not eligible for this voting round'), findsOneWidget);
     expect(find.text(message), findsOneWidget);
   });
 

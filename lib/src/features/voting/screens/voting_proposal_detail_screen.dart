@@ -68,13 +68,13 @@ class _VotingProposalDetailScreenState
           skipLoadingOnRefresh: false,
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) =>
-              _Message(title: "Couldn't load poll", message: '$error'),
+              _Message(title: "Couldn't load voting round", message: '$error'),
           data: (state) {
             final round = state.round;
             if (round == null) {
               return const _Message(
-                title: 'Poll unavailable',
-                message: 'The selected poll could not be loaded.',
+                title: 'Voting round unavailable',
+                message: 'The selected voting round could not be loaded.',
               );
             }
             if (shouldPreSyncVotingTree(round.status)) {
@@ -104,7 +104,7 @@ class _VotingProposalDetailScreenState
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _PendingVoteContent(
                   roundTitle: round.title.isEmpty
-                      ? 'Coinholder poll'
+                      ? 'Token holder voting'
                       : round.title,
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
@@ -120,7 +120,7 @@ class _VotingProposalDetailScreenState
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _VotedPollContent(
                   roundTitle: round.title.isEmpty
-                      ? 'Coinholder poll'
+                      ? 'Token holder voting'
                       : round.title,
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
@@ -138,7 +138,7 @@ class _VotingProposalDetailScreenState
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _PendingVoteContent(
                   roundTitle: round.title.isEmpty
-                      ? 'Coinholder poll'
+                      ? 'Token holder voting'
                       : round.title,
                   snapshotHeight: round.snapshotHeight,
                   description: _roundDescription(round.rawJson),
@@ -176,7 +176,7 @@ class _VotingProposalDetailScreenState
             _maybePrecomputeDelegationPir(state);
             return _ActivePollContent(
               roundId: roundId,
-              title: round.title.isEmpty ? 'Coinholder poll' : round.title,
+              title: round.title.isEmpty ? 'Token holder voting' : round.title,
               snapshotHeight: round.snapshotHeight,
               description: _roundDescription(round.rawJson),
               forumUri: forumUri,
@@ -453,7 +453,7 @@ class _ActivePollContentState extends State<_ActivePollContent> {
           child: widget.proposals.isEmpty
               ? const _Message(
                   title: 'No proposals',
-                  message: 'This poll does not contain any proposals.',
+                  message: 'This voting round does not contain any proposals.',
                 )
               : VotingPaneListView.separated(
                   maxWidth: 560,
@@ -659,7 +659,7 @@ class _IneligiblePollDialog extends StatelessWidget {
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
-                      'Not eligible for this poll',
+                      'Not eligible for this voting round',
                       style: AppTypography.bodyLarge.copyWith(
                         color: colors.text.accent,
                         fontWeight: FontWeight.w600,
@@ -982,7 +982,7 @@ class _VotedPollContent extends StatelessWidget {
           child: proposals.isEmpty
               ? const _Message(
                   title: 'No proposals',
-                  message: 'This poll does not contain any proposals.',
+                  message: 'This voting round does not contain any proposals.',
                 )
               : VotingPaneListView.separated(
                   maxWidth: 560,

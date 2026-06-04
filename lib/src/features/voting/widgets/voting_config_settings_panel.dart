@@ -428,7 +428,7 @@ class _VotingConfigSettingsPanelState
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           _SourceCard(
-                            title: 'Coinholder poll',
+                            title: 'Token holder voting',
                             sourceUrl: kDefaultStaticVotingConfigSource,
                             isDefault: true,
                             selected: selectedSource.isDefault,

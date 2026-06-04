@@ -312,7 +312,7 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
 
   static const _genericVotingStatusErrorMessage =
       'Voting could not continue for this account. Retry, or switch to an '
-      'eligible account if this account cannot vote in this poll.';
+      'eligible account if this account cannot vote in this voting round.';
 
   String _pirDiagnosticsErrorMessage({
     required int expectedSnapshotHeight,
@@ -330,10 +330,10 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
       final highest = formatBlockHeight(
         reportedHeights.reduce((left, right) => left > right ? left : right),
       );
-      return 'Voting PIR data is not ready for this poll yet. Expected '
+      return 'Voting PIR data is not ready for this voting round yet. Expected '
           'snapshot block $expected; PIR endpoints report $highest.';
     }
-    return 'No PIR endpoint matched this poll snapshot. Expected snapshot '
+    return 'No PIR endpoint matched this voting round snapshot. Expected snapshot '
         'block $expected.';
   }
 
@@ -503,7 +503,7 @@ class _SkipSignedBundlesDialog extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Unsigned bundles are skipped, which lowers voting power for this poll.',
+                'Unsigned bundles are skipped, which lowers voting power for this voting round.',
                 style: AppTypography.bodySmall.copyWith(
                   color: colors.text.warning,
                 ),
@@ -767,7 +767,7 @@ class _WalletSyncProgressText extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.xxs),
             Text(
-              'Your wallet is catching up to this poll snapshot. Voting will continue automatically once the wallet has synced through the snapshot block.',
+              'Your wallet is catching up to this voting round snapshot. Voting will continue automatically once the wallet has synced through the snapshot block.',
               textAlign: TextAlign.center,
               style: AppTypography.bodySmall.copyWith(
                 color: colors.text.secondary,
@@ -1127,7 +1127,7 @@ class _SoftwareAccountRequiredContent extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Coinholder voting requires a software account. Switch to a software account to vote in this round.',
+              'Token holder voting requires a software account. Switch to a software account to vote in this round.',
               textAlign: TextAlign.center,
               style: AppTypography.bodyMedium.copyWith(
                 color: context.colors.text.secondary,

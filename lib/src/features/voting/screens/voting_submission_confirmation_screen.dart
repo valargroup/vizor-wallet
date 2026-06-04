@@ -101,7 +101,7 @@ class _VotingSubmissionConfirmationScreenState
               return _ConfirmationScaffold(
                 confirmed: false,
                 title: 'Submission not complete',
-                pollTitle: 'Coinholder poll',
+                pollTitle: 'Token holder voting',
                 message: "Couldn't load submission details: $error",
                 votingPower: 'Not available',
               );
@@ -122,7 +122,7 @@ class _VotingSubmissionConfirmationScreenState
   }) {
     final pollTitle = state.round?.title.isNotEmpty == true
         ? state.round!.title
-        : 'Coinholder poll';
+        : 'Token holder voting';
     final hasCompletedSubmission = hasCompletedVoteForDisplay(state.roundPlan);
     if (hasCompletedSubmission) {
       _lastSubmissionState = state;
@@ -147,7 +147,8 @@ class _VotingSubmissionConfirmationScreenState
         confirmed: false,
         title: 'Submission not complete',
         pollTitle: pollTitle,
-        message: 'This account has not completed submission for this poll.',
+        message:
+            'This account has not completed submission for this voting round.',
         votingPower: 'Not available',
         doneLabel: 'Done',
       );
@@ -221,7 +222,7 @@ class _VotingSubmissionConfirmationScreenState
       );
       setState(() {
         _isReturningToPolls = false;
-        _returnErrorMessage = "Couldn't update polls. Try again.";
+        _returnErrorMessage = "Couldn't update voting rounds. Try again.";
       });
     }
   }
@@ -494,7 +495,7 @@ class _ConfirmationScaffold extends StatelessWidget {
                       const SizedBox(height: AppSpacing.md),
                       _ReceiptCard(
                         rows: [
-                          _ReceiptRow(label: 'Poll', value: pollTitle),
+                          _ReceiptRow(label: 'Voting round', value: pollTitle),
                           _ReceiptRow(
                             label: 'Voting power',
                             value: votingPower,
@@ -557,7 +558,7 @@ class _ConfirmationScaffold extends StatelessWidget {
                         ),
                         const SizedBox(width: AppSpacing.xxs),
                         Text(
-                          'Updating polls...',
+                          'Updating voting rounds...',
                           style: AppTypography.bodyMediumStrong.copyWith(
                             color: const Color(0xFFFFFFFF),
                           ),

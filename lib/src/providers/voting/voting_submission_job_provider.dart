@@ -562,7 +562,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
             key: key,
             generation: generation,
             message:
-                'Coinholder voting requires a software account. Switch to a software account to vote in this round.',
+                'Token holder voting requires a software account. Switch to a software account to vote in this round.',
             softwareAccountRequired: true,
           );
           return;
@@ -1080,7 +1080,7 @@ class VotingSubmissionJobNotifier extends Notifier<VotingSubmissionJobState> {
 
   static const _genericVotingStatusErrorMessage =
       'Voting could not continue for this account. Retry, or switch to an '
-      'eligible account if this account cannot vote in this poll.';
+      'eligible account if this account cannot vote in this voting round.';
 
   bool _canRecoverWithoutDraft(VotingSessionState session) {
     final roundPlan = session.roundPlan;
