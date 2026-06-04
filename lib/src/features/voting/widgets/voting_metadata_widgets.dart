@@ -174,6 +174,16 @@ class VotingProposalCard extends StatelessWidget {
     final zipBadges = proposal.zipBadges;
     final forumUri = proposal.forumUri ?? fallbackForumUri;
     final statusLabel = this.statusLabel;
+    final selectedChoice = this.selectedChoice;
+    final missingSelectedOption =
+        readOnly &&
+            selectedChoice != null &&
+            !proposal.options.any((option) => option.index == selectedChoice)
+        ? VotingOptionView(
+            index: selectedChoice,
+            label: 'Choice $selectedChoice',
+          )
+        : null;
     final titleStyle = AppTypography.headlineSmall.copyWith(
       color: colors.text.accent,
       fontWeight: FontWeight.w600,
@@ -258,6 +268,18 @@ class VotingProposalCard extends StatelessWidget {
             ),
             if (option != proposal.options.last)
               const SizedBox(height: AppSpacing.xs),
+          ],
+          if (missingSelectedOption != null) ...[
+            if (proposal.options.isNotEmpty)
+              const SizedBox(height: AppSpacing.xs),
+            _VotingProposalOptionRow(
+              option: missingSelectedOption,
+              selected: true,
+              enabled: true,
+              readOnly: true,
+              onDisabledTap: null,
+              onTap: () {},
+            ),
           ],
         ],
       ),
