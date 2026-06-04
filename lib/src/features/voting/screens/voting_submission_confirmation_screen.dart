@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_main_sidebar.dart';
-import '../../../core/privacy/sensitive_privacy_overlay.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_back_link.dart';
 import '../../../core/widgets/app_button.dart';
@@ -85,34 +84,31 @@ class _VotingSubmissionConfirmationScreenState
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
         padding: EdgeInsets.zero,
-        child: SensitivePrivacyOverlay(
-          sensitiveContentVisible: true,
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: session.when(
-              skipLoadingOnRefresh: false,
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) {
-                final cachedState = _lastSubmissionState;
-                if (cachedState != null) {
-                  return _buildSubmissionContent(
-                    state: cachedState,
-                    jobKey: jobKey,
-                    loadError: error,
-                  );
-                }
-                return _ConfirmationScaffold(
-                  confirmed: false,
-                  title: 'Submission not complete',
-                  pollTitle: 'Coinholder poll',
-                  message: "Couldn't load submission details: $error",
-                  votingPower: 'Not available',
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: session.when(
+            skipLoadingOnRefresh: false,
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) {
+              final cachedState = _lastSubmissionState;
+              if (cachedState != null) {
+                return _buildSubmissionContent(
+                  state: cachedState,
+                  jobKey: jobKey,
+                  loadError: error,
                 );
-              },
-              data: (state) {
-                return _buildSubmissionContent(state: state, jobKey: jobKey);
-              },
-            ),
+              }
+              return _ConfirmationScaffold(
+                confirmed: false,
+                title: 'Submission not complete',
+                pollTitle: 'Coinholder poll',
+                message: "Couldn't load submission details: $error",
+                votingPower: 'Not available',
+              );
+            },
+            data: (state) {
+              return _buildSubmissionContent(state: state, jobKey: jobKey);
+            },
           ),
         ),
       ),

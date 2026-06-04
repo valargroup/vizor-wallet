@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_main_sidebar.dart';
-import '../../../core/privacy/sensitive_privacy_overlay.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../providers/voting/voting_session_provider.dart';
@@ -194,87 +193,84 @@ class _VotingStatusScreenState extends ConsumerState<VotingStatusScreen> {
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
         padding: EdgeInsets.zero,
-        child: SensitivePrivacyOverlay(
-          sensitiveContentVisible: true,
-          child: session.when(
-            skipLoadingOnRefresh: false,
-            loading: () {
-              if (startError != null) {
-                return _StatusContent(
-                  phase: VotingSessionPhase.error,
-                  errorMessage: startError,
-                  onRetry: _retry,
-                );
-              }
-              if (job?.status == VotingSubmissionJobStatus.error &&
-                  job?.key?.roundId == widget.roundId) {
-                return _StatusContent(
-                  phase: VotingSessionPhase.error,
-                  errorMessage: job?.errorMessage,
-                  onRetry: _retry,
-                  onClear: _clearError,
-                );
-              }
-              return const Center(child: CircularProgressIndicator());
-            },
-            error: (error, _) => _StatusContent(
-              phase: VotingSessionPhase.error,
-              errorMessage: job?.errorMessage ?? _messageFromError(error),
+        child: session.when(
+          skipLoadingOnRefresh: false,
+          loading: () {
+            if (startError != null) {
+              return _StatusContent(
+                phase: VotingSessionPhase.error,
+                errorMessage: startError,
+                onRetry: _retry,
+              );
+            }
+            if (job?.status == VotingSubmissionJobStatus.error &&
+                job?.key?.roundId == widget.roundId) {
+              return _StatusContent(
+                phase: VotingSessionPhase.error,
+                errorMessage: job?.errorMessage,
+                onRetry: _retry,
+                onClear: _clearError,
+              );
+            }
+            return const Center(child: CircularProgressIndicator());
+          },
+          error: (error, _) => _StatusContent(
+            phase: VotingSessionPhase.error,
+            errorMessage: job?.errorMessage ?? _messageFromError(error),
+            onRetry: _retry,
+            onClear: job?.status == VotingSubmissionJobStatus.error
+                ? _clearError
+                : null,
+          ),
+          data: (state) {
+            final localError = job?.errorMessage;
+            final submissionJobComplete =
+                job?.status == VotingSubmissionJobStatus.complete;
+            final submissionJobInFlight = job?.isInFlight ?? false;
+            final sessionCompleted = _hasCompletedSubmission(state);
+            final completedSubmission =
+                submissionJobComplete ||
+                (!submissionJobInFlight && sessionCompleted) ||
+                (submissionJobInFlight &&
+                    sessionCompleted &&
+                    _hasCompletedCurrentSubmissionProgress(state));
+            final phase = job?.status != VotingSubmissionJobStatus.error
+                ? _displayPhase(
+                    state.phase,
+                    completedSubmission: completedSubmission,
+                  )
+                : VotingSessionPhase.error;
+            return _StatusContent(
+              phase: phase,
+              voteSubmissionDetail: _voteSubmissionDetail(state),
+              voteSubmissionProgress: _voteSubmissionProgress(
+                state,
+                completedSubmission: completedSubmission,
+              ),
+              delegationProgress: _delegationProgress(state),
+              completedSubmission: completedSubmission,
+              submissionJobComplete: submissionJobComplete,
+              submissionJobInFlight: submissionJobInFlight,
+              softwareAccountRequired: job?.softwareAccountRequired ?? false,
+              isHardwareAccount: state.isHardwareAccount,
+              keystoneSigningRequest: state.keystoneSigningRequest,
+              canSkipRemainingKeystoneBundles:
+                  state.canSkipRemainingKeystoneBundles,
+              keystoneUrParts: job?.keystoneUrParts ?? const [],
+              keystoneQrError: job?.keystoneQrError,
+              keystoneScanError: state.keystoneScanError,
+              walletScannedHeight: state.walletScannedHeight,
+              walletSnapshotHeight: state.walletSnapshotHeight,
+              walletChainTipHeight: state.walletChainTipHeight,
+              errorMessage: _sessionErrorMessage(state, localError),
               onRetry: _retry,
               onClear: job?.status == VotingSubmissionJobStatus.error
                   ? _clearError
                   : null,
-            ),
-            data: (state) {
-              final localError = job?.errorMessage;
-              final submissionJobComplete =
-                  job?.status == VotingSubmissionJobStatus.complete;
-              final submissionJobInFlight = job?.isInFlight ?? false;
-              final sessionCompleted = _hasCompletedSubmission(state);
-              final completedSubmission =
-                  submissionJobComplete ||
-                  (!submissionJobInFlight && sessionCompleted) ||
-                  (submissionJobInFlight &&
-                      sessionCompleted &&
-                      _hasCompletedCurrentSubmissionProgress(state));
-              final phase = job?.status != VotingSubmissionJobStatus.error
-                  ? _displayPhase(
-                      state.phase,
-                      completedSubmission: completedSubmission,
-                    )
-                  : VotingSessionPhase.error;
-              return _StatusContent(
-                phase: phase,
-                voteSubmissionDetail: _voteSubmissionDetail(state),
-                voteSubmissionProgress: _voteSubmissionProgress(
-                  state,
-                  completedSubmission: completedSubmission,
-                ),
-                delegationProgress: _delegationProgress(state),
-                completedSubmission: completedSubmission,
-                submissionJobComplete: submissionJobComplete,
-                submissionJobInFlight: submissionJobInFlight,
-                softwareAccountRequired: job?.softwareAccountRequired ?? false,
-                isHardwareAccount: state.isHardwareAccount,
-                keystoneSigningRequest: state.keystoneSigningRequest,
-                canSkipRemainingKeystoneBundles:
-                    state.canSkipRemainingKeystoneBundles,
-                keystoneUrParts: job?.keystoneUrParts ?? const [],
-                keystoneQrError: job?.keystoneQrError,
-                keystoneScanError: state.keystoneScanError,
-                walletScannedHeight: state.walletScannedHeight,
-                walletSnapshotHeight: state.walletSnapshotHeight,
-                walletChainTipHeight: state.walletChainTipHeight,
-                errorMessage: _sessionErrorMessage(state, localError),
-                onRetry: _retry,
-                onClear: job?.status == VotingSubmissionJobStatus.error
-                    ? _clearError
-                    : null,
-                onScanKeystone: _scanKeystoneSignature,
-                onSkipKeystoneBundles: _skipRemainingKeystoneBundles,
-              );
-            },
-          ),
+              onScanKeystone: _scanKeystoneSignature,
+              onSkipKeystoneBundles: _skipRemainingKeystoneBundles,
+            );
+          },
         ),
       ),
     );
