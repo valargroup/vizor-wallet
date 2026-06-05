@@ -2653,6 +2653,46 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
     required _VotingSessionContext context,
   }) async {
     try {
+      if (_hasPersistedVotingBundles(current: current, context: context)) {
+        final bundleSetup = await ref
+            .read(votingRustApiProvider)
+            .setupDelegationBundles(ctx: _apiRoundContext(context));
+        final refreshedPlan = await _loadResumePlan(context);
+        final refreshedRoundPlan = await _loadRoundPlan(context);
+        final isEligible =
+            bundleSetup.bundleCount > 0 &&
+            bundleSetup.eligibleWeight > BigInt.zero;
+        final successPhase = current.phase == VotingSessionPhase.error
+            ? VotingSessionPhase.idle
+            : current.phase;
+        final base = (state.value ?? current).copyWith(
+          phase: isEligible ? successPhase : VotingSessionPhase.error,
+          config: context.config,
+          round: context.round,
+          resumePlan: refreshedPlan,
+          roundPlan: refreshedRoundPlan,
+          eligibleWeightZatoshi: bundleSetup.eligibleWeight,
+          isHardwareAccount: context.isHardwareAccount,
+          clearError: isEligible,
+        );
+        _setStateForContext(
+          context,
+          isEligible
+              ? base
+              : base.copyWith(
+                  error: VotingSessionError(
+                    message:
+                        'minimum voting eligibility requires at least one '
+                        'eligible voting bundle with 12500000 zatoshi voting '
+                        'weight; selected ${bundleSetup.bundleCount} '
+                        'persisted bundles with ${bundleSetup.eligibleWeight} '
+                        'zatoshi eligible bundle weight at snapshot height '
+                        '${context.round.snapshotHeight}',
+                  ),
+                ),
+        );
+        return;
+      }
       final eligibility = await ref
           .read(votingRustApiProvider)
           .checkVotingEligibility(ctx: _apiRoundContext(context));
@@ -2701,6 +2741,16 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
         ),
       );
     }
+  }
+
+  bool _hasPersistedVotingBundles({
+    required VotingSessionState current,
+    required _VotingSessionContext context,
+  }) {
+    final livePlan = state.value?.resumePlan;
+    return (livePlan?.bundleCount ?? 0) > 0 ||
+        (current.resumePlan?.bundleCount ?? 0) > 0 ||
+        context.resumePlan.bundleCount > 0;
   }
 
   String _minimumVotingEligibilityErrorMessage({
