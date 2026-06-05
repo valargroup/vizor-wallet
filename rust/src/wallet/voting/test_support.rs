@@ -21,14 +21,17 @@ pub(crate) fn test_api_round_params() -> zcash_voting::wire::VotingRoundParams {
 }
 
 pub(crate) fn test_note_info(position: u64) -> zcash_voting::NoteInfo {
+    let mut unique = [0u8; 32];
+    unique[..8].copy_from_slice(&position.to_le_bytes());
+
     zcash_voting::NoteInfo {
-        commitment: vec![1; 32],
-        nullifier: vec![2; 32],
+        commitment: unique.map(|byte| byte ^ 0x11).to_vec(),
+        nullifier: unique.map(|byte| byte ^ 0x22).to_vec(),
         value: zcash_voting::governance::BALLOT_DIVISOR,
         position,
         diversifier: vec![3; 11],
-        rho: vec![4; 32],
-        rseed: vec![5; 32],
+        rho: unique.map(|byte| byte ^ 0x44).to_vec(),
+        rseed: unique.map(|byte| byte ^ 0x55).to_vec(),
         scope: 0,
         ufvk_str: "uviewtest".to_string(),
     }
