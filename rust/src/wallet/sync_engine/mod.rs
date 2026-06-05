@@ -1320,10 +1320,18 @@ async fn run_sync_impl(
         //     to a continuity error and equally recoverable via
         //     `truncate_to_height`, so it gets the same treatment.
         //
-        // Any other `ChainError::Wallet(e)` is a real DB failure and
-        // becomes `SyncError::Db` (Fatal). Everything else (non-scan,
-        // non-wallet — e.g. block-source errors, unrecognised scan
-        // variants) becomes `SyncError::Other` (retry-with-backoff).
+        //   - `ChainError::Wallet(SqliteClientError::NonSequentialBlocks)` —
+        //     `put_blocks` rejected the compact block batch or its
+        //     `from_state` as non-sequential. This can happen when a
+        //     reverse-proxied lightwalletd endpoint momentarily serves a
+        //     block stream and tree state from different backend nodes. Treat
+        //     it as a local continuity break: rewind and re-scan on the same
+        //     endpoint, not as DB corruption or an endpoint-failover signal.
+        //
+        // Any other `ChainError::Wallet(e)` is a real DB failure and becomes
+        // `SyncError::Db` (Fatal). Everything else (non-scan, non-wallet —
+        // e.g. block-source errors, unrecognised scan variants) becomes
+        // `SyncError::Other` (retry-with-backoff).
         let scan_result = with_wallet_db_write_lock("sync_engine.scan_cached_blocks", || {
             scan_cached_blocks(
                 &network,
@@ -1343,6 +1351,15 @@ async fn run_sync_impl(
                     SyncError::continuity(
                         at_height,
                         format!("BlockConflict at {at_height}: wallet rewind required"),
+                    )
+                }
+                ChainError::Wallet(SqliteClientError::NonSequentialBlocks) => {
+                    let at_height = u32::from(start) as u64;
+                    SyncError::continuity(
+                        at_height,
+                        format!(
+                            "non-sequential compact block batch while scanning from {at_height}"
+                        ),
                     )
                 }
                 ChainError::Wallet(wallet_err) if is_commitment_tree_root_conflict(&wallet_err) => {

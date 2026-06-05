@@ -24,6 +24,7 @@ use zcash_client_backend::{
     data_api::{
         chain::CommitmentTreeRoot, wallet::ConfirmationsPolicy, WalletCommitmentTrees, WalletRead,
     },
+    proto::compact_formats::CompactBlock,
     proto::service::{
         self, compact_tx_streamer_client::CompactTxStreamerClient, BlockId, BlockRange, ChainSpec,
         Empty, GetSubtreeRootsArg, RawTransaction, SendResponse, TransparentAddressBlockFilter,
@@ -445,6 +446,135 @@ pub(super) async fn download_blocks(
     while let Some(block) = next_stream_message(&mut stream, "get_block_range stream").await? {
         blocks.push(block);
     }
+    validate_downloaded_block_range(&blocks, start, end)?;
 
     Ok(MemoryBlockSource::new(blocks))
+}
+
+fn validate_downloaded_block_range(
+    blocks: &[CompactBlock],
+    start: BlockHeight,
+    end: BlockHeight,
+) -> Result<(), SyncError> {
+    let requested_start = u32::from(start) as u64;
+    let requested_end = u32::from(end) as u64;
+
+    if blocks.is_empty() {
+        return Err(inconsistent_block_stream_error(
+            requested_start,
+            requested_end,
+            "received no blocks".to_string(),
+            blocks,
+        ));
+    }
+
+    let mut expected = requested_start;
+    for (index, block) in blocks.iter().enumerate() {
+        if expected > requested_end {
+            return Err(inconsistent_block_stream_error(
+                requested_start,
+                requested_end,
+                format!(
+                    "received extra height {} at index {} after requested end {}",
+                    block.height, index, requested_end
+                ),
+                blocks,
+            ));
+        }
+        if block.height != expected {
+            return Err(inconsistent_block_stream_error(
+                requested_start,
+                requested_end,
+                format!(
+                    "at index {}, expected height {}, received {}",
+                    index, expected, block.height
+                ),
+                blocks,
+            ));
+        }
+        expected += 1;
+    }
+
+    if expected <= requested_end {
+        return Err(inconsistent_block_stream_error(
+            requested_start,
+            requested_end,
+            format!(
+                "stream ended at height {}, expected end {}",
+                blocks.last().map(|block| block.height).unwrap_or_default(),
+                requested_end
+            ),
+            blocks,
+        ));
+    }
+
+    Ok(())
+}
+
+fn inconsistent_block_stream_error(
+    requested_start: u64,
+    requested_end: u64,
+    reason: String,
+    blocks: &[CompactBlock],
+) -> SyncError {
+    SyncError::other(format!(
+        "inconsistent compact block stream: requested {}-{}, {}; received {}",
+        requested_start,
+        requested_end,
+        reason,
+        compact_block_height_summary(blocks)
+    ))
+}
+
+fn compact_block_height_summary(blocks: &[CompactBlock]) -> String {
+    match blocks {
+        [] => "none".to_string(),
+        [block] => block.height.to_string(),
+        [first, .., last] => format!(
+            "{}..{} ({} blocks)",
+            first.height,
+            last.height,
+            blocks.len()
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wallet::sync_engine::error::RecoveryStrategy;
+
+    fn block(height: u64) -> CompactBlock {
+        CompactBlock {
+            height,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn validates_exact_downloaded_block_range() {
+        let blocks = vec![block(141), block(142), block(143)];
+
+        validate_downloaded_block_range(
+            &blocks,
+            BlockHeight::from_u32(141),
+            BlockHeight::from_u32(143),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn rejects_inconsistent_downloaded_block_range_as_local_retry() {
+        let blocks = vec![block(141), block(143)];
+        let err = validate_downloaded_block_range(
+            &blocks,
+            BlockHeight::from_u32(141),
+            BlockHeight::from_u32(143),
+        )
+        .unwrap_err();
+
+        assert_eq!(err.recovery_strategy(), RecoveryStrategy::RetryWithBackoff);
+        assert!(!err.is_endpoint_failover_candidate());
+        assert!(format!("{err}").contains("inconsistent compact block stream"));
+    }
 }
