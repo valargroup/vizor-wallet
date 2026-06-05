@@ -337,7 +337,7 @@ Future<void> _importFirstWallet(WidgetTester tester) async {
 }
 
 Future<String> _copyActiveShieldedAddress(WidgetTester tester) async {
-  await _tapWidget(tester, const ValueKey('sidebar_receive_button'));
+  await _tapWidget(tester, const ValueKey('home_receive_button'));
   await _pumpUntil(
     tester,
     () => tester.any(
@@ -454,7 +454,7 @@ Future<Map<String, Object?>> _postDriver(
 }
 
 Future<void> _openWallet(WidgetTester tester) async {
-  await _tapWidget(tester, const ValueKey('sidebar_wallet_button'));
+  await _tapWidget(tester, const ValueKey('sidebar_home_button'));
   await _waitForHome(tester);
 }
 

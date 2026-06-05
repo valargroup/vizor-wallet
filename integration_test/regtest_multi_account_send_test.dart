@@ -245,7 +245,7 @@ Future<void> _openAddAccountFlow(WidgetTester tester) async {
 }
 
 Future<String> _copyActiveShieldedAddress(WidgetTester tester) async {
-  await _tapWidget(tester, const ValueKey('sidebar_receive_button'));
+  await _tapWidget(tester, const ValueKey('home_receive_button'));
   await _pumpUntil(
     tester,
     () => tester.any(
@@ -271,7 +271,7 @@ Future<void> _sendToAddress(
   String amount,
 ) async {
   _log('sending $amount $_currencyTicker to second account');
-  await _tapWidget(tester, const ValueKey('sidebar_send_button'));
+  await _tapWidget(tester, const ValueKey('home_send_button'));
   await _enterText(tester, const ValueKey('send_address_field'), address);
   await _enterText(tester, const ValueKey('send_amount_field'), amount);
   await _tapAppButton(
@@ -357,7 +357,7 @@ Future<T> _zcashdRpc<T>(
 }
 
 Future<void> _openWallet(WidgetTester tester) async {
-  await _tapWidget(tester, const ValueKey('sidebar_wallet_button'));
+  await _tapWidget(tester, const ValueKey('sidebar_home_button'));
   await _waitForHome(tester);
 }
 

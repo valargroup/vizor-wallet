@@ -1123,6 +1123,9 @@ class _HomeBalanceCardState extends State<_HomeBalanceCard> {
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   AppButton(
+                                                    key: const ValueKey(
+                                                      'home_send_button',
+                                                    ),
                                                     onPressed: () =>
                                                         context.push('/send'),
                                                     variant: AppButtonVariant
@@ -1138,6 +1141,9 @@ class _HomeBalanceCardState extends State<_HomeBalanceCard> {
                                                     width: AppSpacing.xs,
                                                   ),
                                                   AppButton(
+                                                    key: const ValueKey(
+                                                      'home_receive_button',
+                                                    ),
                                                     onPressed: () => context
                                                         .push('/receive'),
                                                     variant: AppButtonVariant
