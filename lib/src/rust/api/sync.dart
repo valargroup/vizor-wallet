@@ -219,6 +219,23 @@ Future<ProposalResult> proposeSend({
   memo: memo,
 );
 
+/// Propose a PCZT batch while reserving selected shielded notes between messages.
+Future<List<ReservedPcztBatchItem>> createReservedPcztBatch({
+  required String dbPath,
+  required String network,
+  required String accountUuid,
+  required List<ReservedPcztBatchRequest> requests,
+  String? spendParamsPath,
+  String? outputParamsPath,
+}) => RustLib.instance.api.crateApiSyncCreateReservedPcztBatch(
+  dbPath: dbPath,
+  network: network,
+  accountUuid: accountUuid,
+  requests: requests,
+  spendParamsPath: spendParamsPath,
+  outputParamsPath: outputParamsPath,
+);
+
 /// Estimate the fee for a transfer without storing a proposal.
 Future<BigInt> estimateFee({
   required String dbPath,
@@ -757,6 +774,76 @@ class ProposalResult {
           proposalId == other.proposalId &&
           needsSaplingParams == other.needsSaplingParams &&
           feeZatoshi == other.feeZatoshi;
+}
+
+class ReservedPcztBatchItem {
+  final String id;
+  final Uint8List pcztWithProofs;
+  final Uint8List redactedPczt;
+  final BigInt feeZatoshi;
+  final List<String> spendNullifiers;
+
+  const ReservedPcztBatchItem({
+    required this.id,
+    required this.pcztWithProofs,
+    required this.redactedPczt,
+    required this.feeZatoshi,
+    required this.spendNullifiers,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      pcztWithProofs.hashCode ^
+      redactedPczt.hashCode ^
+      feeZatoshi.hashCode ^
+      spendNullifiers.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ReservedPcztBatchItem &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          pcztWithProofs == other.pcztWithProofs &&
+          redactedPczt == other.redactedPczt &&
+          feeZatoshi == other.feeZatoshi &&
+          spendNullifiers == other.spendNullifiers;
+}
+
+class ReservedPcztBatchRequest {
+  final String id;
+  final String sendFlowId;
+  final String toAddress;
+  final BigInt amountZatoshi;
+  final String? memo;
+
+  const ReservedPcztBatchRequest({
+    required this.id,
+    required this.sendFlowId,
+    required this.toAddress,
+    required this.amountZatoshi,
+    this.memo,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      sendFlowId.hashCode ^
+      toAddress.hashCode ^
+      amountZatoshi.hashCode ^
+      memo.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ReservedPcztBatchRequest &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          sendFlowId == other.sendFlowId &&
+          toAddress == other.toAddress &&
+          amountZatoshi == other.amountZatoshi &&
+          memo == other.memo;
 }
 
 class ScanRangeInfo {

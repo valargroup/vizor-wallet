@@ -42,7 +42,8 @@ pub use pczt::{
 };
 pub(crate) use send::estimate_send_max;
 pub(crate) use send::{
-    create_shield_transparent_pczt, get_shield_transparent_status, shield_transparent_balance,
+    create_reserved_pczt_batch, create_shield_transparent_pczt, get_shield_transparent_status,
+    shield_transparent_balance,
 };
 pub use send::{
     estimate_fee, execute_proposal, execute_proposal_with_seed_loader, propose_send,
@@ -53,6 +54,10 @@ pub use send::{
 pub(crate) use send::resubmit_pending_transactions;
 #[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
 pub(crate) use send::ProposalResult;
+#[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
+pub(crate) use send::ReservedPcztBatchItem;
+#[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
+pub(crate) use send::ReservedPcztBatchRequest;
 #[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
 pub(crate) use send::SendMaxEstimateResult;
 #[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface

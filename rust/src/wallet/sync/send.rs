@@ -34,31 +34,31 @@
 //! components) and the provers log+fail loudly rather than produce a
 //! silently-invalid proof.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
 use secrecy::{ExposeSecret, SecretVec};
-use transparent::{address::TransparentAddress, keys::TransparentKeyScope};
-use zcash_client_backend::data_api::wallet::input_selection::GreedyInputSelector;
+use transparent::{address::TransparentAddress, bundle::OutPoint, keys::TransparentKeyScope};
+use zcash_client_backend::data_api::wallet::input_selection::{GreedyInputSelector, InputSelector};
 use zcash_client_backend::{
     data_api::{
         wallet::{
             self, create_proposed_transactions, propose_send_max_transfer, propose_shielding,
             propose_transfer, ConfirmationsPolicy,
         },
-        Account as _, Balance, InputSource, MaxSpendMode, TransparentKeyOrigin,
-        TransparentOutputFilter, WalletRead,
+        Account as _, AccountMeta, Balance, InputSource, MaxSpendMode, NoteFilter, ReceivedNotes,
+        TargetValue, TransparentKeyOrigin, TransparentOutputFilter, WalletRead, WalletUtxo,
     },
     fees::{
         zip317::{MultiOutputChangeStrategy, Zip317FeeRule},
         DustOutputPolicy, SplitPolicy, StandardFeeRule,
     },
     proposal::Proposal,
-    wallet::OvkPolicy,
+    wallet::{Note, OvkPolicy, ReceivedNote},
     zip321::{Payment, TransactionRequest},
 };
-use zcash_client_sqlite::AccountUuid;
+use zcash_client_sqlite::{AccountUuid, ReceivedNoteId};
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_primitives::transaction::{
     fees::{
@@ -93,6 +93,22 @@ pub(crate) struct ProposalResult {
     pub proposal_id: u64,
     pub needs_sapling_params: bool,
     pub fee_zatoshi: u64,
+}
+
+pub(crate) struct ReservedPcztBatchRequest {
+    pub id: String,
+    pub send_flow_id: String,
+    pub to_address: String,
+    pub amount_zatoshi: u64,
+    pub memo: Option<String>,
+}
+
+pub(crate) struct ReservedPcztBatchItem {
+    pub id: String,
+    pub pczt_with_proofs: Vec<u8>,
+    pub redacted_pczt: Vec<u8>,
+    pub fee_zatoshi: u64,
+    pub spend_nullifiers: Vec<String>,
 }
 
 pub struct ExecuteProposalResult {
@@ -203,25 +219,9 @@ pub fn propose_send(
 
     let mut db = open_wallet_db_for_read(db_path, network)?;
     let account_id = parse_account_uuid(account_uuid)?;
-
-    let to: zcash_address::ZcashAddress = to_address
-        .parse()
-        .map_err(|e| format!("Bad address: {e}"))?;
-    let value = Zatoshis::from_u64(amount_zatoshi).map_err(|_| "Bad amount")?;
-    let memo_bytes = match memo_str {
-        Some(m) => {
-            let bytes = MemoBytes::from(
-                Memo::from_bytes(m.as_bytes()).map_err(|e| format!("Bad memo: {e}"))?,
-            );
-            Some(bytes)
-        }
-        None => None,
-    };
+    let request = build_send_request(to_address, amount_zatoshi, memo_str)?;
 
     let (change_strategy, input_selector) = zip317_helper::<WalletDatabase>(None);
-    let payment = Payment::new(to, Some(value), memo_bytes, None, None, vec![])
-        .map_err(|e| format!("Cannot create payment: {e:?}"))?;
-    let request = TransactionRequest::new(vec![payment]).map_err(|e| format!("{e:?}"))?;
 
     let proposal = propose_transfer::<_, _, _, _, Infallible>(
         &mut db,
@@ -269,6 +269,81 @@ pub fn propose_send(
     })
 }
 
+pub(crate) fn create_reserved_pczt_batch(
+    db_path: &str,
+    network: WalletNetwork,
+    account_uuid: &str,
+    requests: Vec<ReservedPcztBatchRequest>,
+    spend_params_path: Option<&str>,
+    output_params_path: Option<&str>,
+) -> Result<Vec<ReservedPcztBatchItem>, String> {
+    use zcash_client_backend::data_api::wallet::create_pczt_from_proposal as zcb_create_pczt;
+
+    if requests.is_empty() {
+        return Err("Batch requires at least one request".to_string());
+    }
+
+    let db = open_wallet_db_for_read(db_path, network)?;
+    let account_id = parse_account_uuid(account_uuid)?;
+    let mut reserved = BTreeSet::new();
+    let mut items = Vec::with_capacity(requests.len());
+
+    for request in requests {
+        if request.id.is_empty() {
+            return Err("Batch message id is required".to_string());
+        }
+        if request.send_flow_id.is_empty() {
+            return Err(format!("Send flow id is required for {}", request.id));
+        }
+
+        let transaction_request = build_send_request(
+            &request.to_address,
+            request.amount_zatoshi,
+            request.memo.as_deref(),
+        )?;
+        let proposal = propose_send_with_reserved_notes(
+            &db,
+            network,
+            account_id,
+            transaction_request,
+            &reserved,
+        )
+        .map_err(|e| format!("Proposal {} failed: {e}", request.id))?;
+
+        for note_ref in proposal_selected_note_refs(&proposal) {
+            reserved.insert(note_ref);
+        }
+
+        let fee_zatoshi = proposal_fee_zatoshi(&proposal);
+        let pczt = with_wallet_db_write_lock("send.create_reserved_pczt_batch", || {
+            let mut write_db = open_wallet_db(db_path, network)?;
+            zcb_create_pczt::<_, _, Infallible, _, Infallible, _>(
+                &mut write_db,
+                &network,
+                account_id,
+                OvkPolicy::Sender,
+                &proposal,
+            )
+            .map_err(|e| format!("Create PCZT {} failed: {e}", request.id))
+        })?;
+        let pczt_bytes = pczt.serialize();
+        let spend_nullifiers = crate::wallet::keystone::pczt_spend_nullifiers(&pczt_bytes)?;
+        let pczt_with_proofs =
+            super::pczt::add_proofs_to_pczt(&pczt_bytes, spend_params_path, output_params_path)?;
+        let redacted_pczt = super::pczt::redact_pczt_for_signer(&pczt_bytes)?;
+
+        items.push(ReservedPcztBatchItem {
+            id: request.id,
+            pczt_with_proofs,
+            redacted_pczt,
+            fee_zatoshi,
+            spend_nullifiers,
+        });
+    }
+
+    Ok(items)
+}
+
 /// Estimate the fee for a transfer without storing the proposal.
 /// Used for validation only — does not consume resources in
 /// `PROPOSAL_STORE`.
@@ -282,25 +357,9 @@ pub fn estimate_fee(
 ) -> Result<u64, String> {
     let mut db = open_wallet_db_for_read(db_path, network)?;
     let account_id = parse_account_uuid(account_uuid)?;
-
-    let to: zcash_address::ZcashAddress = to_address
-        .parse()
-        .map_err(|e| format!("Bad address: {e}"))?;
-    let value = Zatoshis::from_u64(amount_zatoshi).map_err(|_| "Bad amount")?;
-    let memo_bytes = match memo_str {
-        Some(m) => {
-            let bytes = MemoBytes::from(
-                Memo::from_bytes(m.as_bytes()).map_err(|e| format!("Bad memo: {e}"))?,
-            );
-            Some(bytes)
-        }
-        None => None,
-    };
+    let request = build_send_request(to_address, amount_zatoshi, memo_str)?;
 
     let (change_strategy, input_selector) = zip317_helper::<WalletDatabase>(None);
-    let payment = Payment::new(to, Some(value), memo_bytes, None, None, vec![])
-        .map_err(|e| format!("Cannot create payment: {e:?}"))?;
-    let request = TransactionRequest::new(vec![payment]).map_err(|e| format!("{e:?}"))?;
 
     let proposal = propose_transfer::<_, _, _, _, Infallible>(
         &mut db,
@@ -646,6 +705,181 @@ fn build_shielding_proposal(
     .map_err(|e| format!("Shield proposal failed: {e}"))?;
 
     Ok((proposal, selected_value))
+}
+
+fn build_send_request(
+    to_address: &str,
+    amount_zatoshi: u64,
+    memo_str: Option<&str>,
+) -> Result<TransactionRequest, String> {
+    let to: zcash_address::ZcashAddress = to_address
+        .parse()
+        .map_err(|e| format!("Bad address: {e}"))?;
+    let value = Zatoshis::from_u64(amount_zatoshi).map_err(|_| "Bad amount")?;
+    let memo_bytes = match memo_str {
+        Some(m) => {
+            let bytes = MemoBytes::from(
+                Memo::from_bytes(m.as_bytes()).map_err(|e| format!("Bad memo: {e}"))?,
+            );
+            Some(bytes)
+        }
+        None => None,
+    };
+
+    let payment = Payment::new(to, Some(value), memo_bytes, None, None, vec![])
+        .map_err(|e| format!("Cannot create payment: {e:?}"))?;
+    TransactionRequest::new(vec![payment]).map_err(|e| format!("{e:?}"))
+}
+
+fn propose_send_with_reserved_notes(
+    db: &WalletDatabase,
+    network: WalletNetwork,
+    account_id: AccountUuid,
+    request: TransactionRequest,
+    reserved: &BTreeSet<ReceivedNoteId>,
+) -> Result<Proposal<WalletFeeRule, ReceivedNoteId>, String> {
+    let confirmations_policy = ConfirmationsPolicy::default();
+    let (target_height, anchor_height) = db
+        .get_target_and_anchor_heights(confirmations_policy.trusted())
+        .map_err(|e| format!("Read chain state for proposal: {e}"))?
+        .ok_or("Wallet must sync before creating a reserved batch")?;
+    let reserved_db = ReservedInputSource {
+        inner: db,
+        reserved,
+    };
+    let (change_strategy, input_selector) = zip317_helper::<ReservedInputSource<'_>>(None);
+
+    input_selector
+        .propose_transaction(
+            &network,
+            &reserved_db,
+            target_height,
+            anchor_height,
+            confirmations_policy,
+            account_id,
+            request,
+            &change_strategy,
+            None,
+        )
+        .map_err(|e| format!("Propose failed: {e}"))
+}
+
+fn proposal_selected_note_refs(
+    proposal: &Proposal<WalletFeeRule, ReceivedNoteId>,
+) -> impl Iterator<Item = ReceivedNoteId> + '_ {
+    proposal
+        .steps()
+        .iter()
+        .flat_map(|step| step.shielded_inputs().into_iter())
+        .flat_map(|inputs| inputs.notes().iter())
+        .map(|note| *note.internal_note_id())
+}
+
+struct ReservedInputSource<'a> {
+    inner: &'a WalletDatabase,
+    reserved: &'a BTreeSet<ReceivedNoteId>,
+}
+
+impl ReservedInputSource<'_> {
+    fn merged_excludes(&self, exclude: &[ReceivedNoteId]) -> Vec<ReceivedNoteId> {
+        let mut merged = exclude.to_vec();
+        merged.extend(self.reserved.iter().copied());
+        merged.sort_unstable();
+        merged.dedup();
+        merged
+    }
+}
+
+impl InputSource for ReservedInputSource<'_> {
+    type Error = <WalletDatabase as InputSource>::Error;
+    type AccountId = <WalletDatabase as InputSource>::AccountId;
+    type NoteRef = <WalletDatabase as InputSource>::NoteRef;
+
+    fn get_spendable_note(
+        &self,
+        txid: &TxId,
+        protocol: ShieldedProtocol,
+        index: u32,
+        target_height: wallet::TargetHeight,
+    ) -> Result<Option<ReceivedNote<Self::NoteRef, Note>>, Self::Error> {
+        Ok(self
+            .inner
+            .get_spendable_note(txid, protocol, index, target_height)?
+            .filter(|note| !self.reserved.contains(note.internal_note_id())))
+    }
+
+    fn select_spendable_notes(
+        &self,
+        account: Self::AccountId,
+        target_value: TargetValue,
+        sources: &[ShieldedProtocol],
+        target_height: wallet::TargetHeight,
+        confirmations_policy: ConfirmationsPolicy,
+        exclude: &[Self::NoteRef],
+    ) -> Result<ReceivedNotes<Self::NoteRef>, Self::Error> {
+        self.inner.select_spendable_notes(
+            account,
+            target_value,
+            sources,
+            target_height,
+            confirmations_policy,
+            &self.merged_excludes(exclude),
+        )
+    }
+
+    fn select_unspent_notes(
+        &self,
+        account: Self::AccountId,
+        sources: &[ShieldedProtocol],
+        target_height: wallet::TargetHeight,
+        exclude: &[Self::NoteRef],
+    ) -> Result<ReceivedNotes<Self::NoteRef>, Self::Error> {
+        self.inner.select_unspent_notes(
+            account,
+            sources,
+            target_height,
+            &self.merged_excludes(exclude),
+        )
+    }
+
+    fn get_account_metadata(
+        &self,
+        account: Self::AccountId,
+        selector: &NoteFilter,
+        target_height: wallet::TargetHeight,
+        exclude: &[Self::NoteRef],
+    ) -> Result<AccountMeta, Self::Error> {
+        self.inner.get_account_metadata(
+            account,
+            selector,
+            target_height,
+            &self.merged_excludes(exclude),
+        )
+    }
+
+    fn get_unspent_transparent_output(
+        &self,
+        outpoint: &OutPoint,
+        target_height: wallet::TargetHeight,
+    ) -> Result<Option<WalletUtxo>, Self::Error> {
+        self.inner
+            .get_unspent_transparent_output(outpoint, target_height)
+    }
+
+    fn get_spendable_transparent_outputs(
+        &self,
+        address: &TransparentAddress,
+        target_height: wallet::TargetHeight,
+        confirmations_policy: ConfirmationsPolicy,
+        output_filter: TransparentOutputFilter,
+    ) -> Result<Vec<WalletUtxo>, Self::Error> {
+        self.inner.get_spendable_transparent_outputs(
+            address,
+            target_height,
+            confirmations_policy,
+            output_filter,
+        )
+    }
 }
 
 fn build_send_max_proposal(

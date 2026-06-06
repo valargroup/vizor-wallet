@@ -587,6 +587,22 @@ pub struct ProposalResult {
     pub fee_zatoshi: u64,
 }
 
+pub struct ReservedPcztBatchRequest {
+    pub id: String,
+    pub send_flow_id: String,
+    pub to_address: String,
+    pub amount_zatoshi: u64,
+    pub memo: Option<String>,
+}
+
+pub struct ReservedPcztBatchItem {
+    pub id: String,
+    pub pczt_with_proofs: Vec<u8>,
+    pub redacted_pczt: Vec<u8>,
+    pub fee_zatoshi: u64,
+    pub spend_nullifiers: Vec<String>,
+}
+
 pub struct ExecuteProposalResult {
     pub txids: String,
     pub status: String,
@@ -656,6 +672,50 @@ pub fn propose_send(
             proposal_id: r.proposal_id,
             needs_sapling_params: r.needs_sapling_params,
             fee_zatoshi: r.fee_zatoshi,
+        })
+    })
+}
+
+/// Propose a PCZT batch while reserving selected shielded notes between messages.
+pub fn create_reserved_pczt_batch(
+    db_path: String,
+    network: String,
+    account_uuid: String,
+    requests: Vec<ReservedPcztBatchRequest>,
+    spend_params_path: Option<String>,
+    output_params_path: Option<String>,
+) -> Result<Vec<ReservedPcztBatchItem>, String> {
+    catch(|| {
+        let network = parse_network_and_migrate(&db_path, &network)?;
+        let requests = requests
+            .into_iter()
+            .map(|request| wallet_sync::ReservedPcztBatchRequest {
+                id: request.id,
+                send_flow_id: request.send_flow_id,
+                to_address: request.to_address,
+                amount_zatoshi: request.amount_zatoshi,
+                memo: request.memo,
+            })
+            .collect();
+        wallet_sync::create_reserved_pczt_batch(
+            &db_path,
+            network,
+            &account_uuid,
+            requests,
+            spend_params_path.as_deref(),
+            output_params_path.as_deref(),
+        )
+        .map(|items| {
+            items
+                .into_iter()
+                .map(|item| ReservedPcztBatchItem {
+                    id: item.id,
+                    pczt_with_proofs: item.pczt_with_proofs,
+                    redacted_pczt: item.redacted_pczt,
+                    fee_zatoshi: item.fee_zatoshi,
+                    spend_nullifiers: item.spend_nullifiers,
+                })
+                .collect()
         })
     })
 }

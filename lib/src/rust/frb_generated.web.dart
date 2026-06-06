@@ -274,6 +274,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   dco_decode_list_recoverable_commitment_bundle(dynamic raw);
 
   @protected
+  List<ReservedPcztBatchItem> dco_decode_list_reserved_pczt_batch_item(
+    dynamic raw,
+  );
+
+  @protected
+  List<ReservedPcztBatchRequest> dco_decode_list_reserved_pczt_batch_request(
+    dynamic raw,
+  );
+
+  @protected
   List<ScanRangeInfo> dco_decode_list_scan_range_info(dynamic raw);
 
   @protected
@@ -326,6 +336,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<WireEncryptedShare> dco_decode_list_wire_encrypted_share(dynamic raw);
 
   @protected
+  List<ZcashBatchMessageInput> dco_decode_list_zcash_batch_message_input(
+    dynamic raw,
+  );
+
+  @protected
+  List<ZcashBatchSignedMessage> dco_decode_list_zcash_batch_signed_message(
+    dynamic raw,
+  );
+
+  @protected
   NextStepView dco_decode_next_step_view(dynamic raw);
 
   @protected
@@ -370,6 +390,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RecoverableCommitmentBundle dco_decode_recoverable_commitment_bundle(
     dynamic raw,
   );
+
+  @protected
+  ReservedPcztBatchItem dco_decode_reserved_pczt_batch_item(dynamic raw);
+
+  @protected
+  ReservedPcztBatchRequest dco_decode_reserved_pczt_batch_request(dynamic raw);
 
   @protected
   ResolvedVotingConfig dco_decode_resolved_voting_config(dynamic raw);
@@ -506,6 +532,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WireEncryptedShare dco_decode_wire_encrypted_share(dynamic raw);
+
+  @protected
+  ZcashBatchMessageInput dco_decode_zcash_batch_message_input(dynamic raw);
+
+  @protected
+  ZcashBatchSignResult dco_decode_zcash_batch_sign_result(dynamic raw);
+
+  @protected
+  ZcashBatchSignedMessage dco_decode_zcash_batch_signed_message(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -812,6 +847,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   sse_decode_list_recoverable_commitment_bundle(SseDeserializer deserializer);
 
   @protected
+  List<ReservedPcztBatchItem> sse_decode_list_reserved_pczt_batch_item(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ReservedPcztBatchRequest> sse_decode_list_reserved_pczt_batch_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<ScanRangeInfo> sse_decode_list_scan_range_info(
     SseDeserializer deserializer,
   );
@@ -880,6 +925,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<ZcashBatchMessageInput> sse_decode_list_zcash_batch_message_input(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ZcashBatchSignedMessage> sse_decode_list_zcash_batch_signed_message(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   NextStepView sse_decode_next_step_view(SseDeserializer deserializer);
 
   @protected
@@ -930,6 +985,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecoverableCommitmentBundle sse_decode_recoverable_commitment_bundle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ReservedPcztBatchItem sse_decode_reserved_pczt_batch_item(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ReservedPcztBatchRequest sse_decode_reserved_pczt_batch_request(
     SseDeserializer deserializer,
   );
 
@@ -1096,6 +1161,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WireEncryptedShare sse_decode_wire_encrypted_share(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZcashBatchMessageInput sse_decode_zcash_batch_message_input(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZcashBatchSignResult sse_decode_zcash_batch_sign_result(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZcashBatchSignedMessage sse_decode_zcash_batch_signed_message(
     SseDeserializer deserializer,
   );
 
@@ -1478,6 +1558,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_reserved_pczt_batch_item(
+    List<ReservedPcztBatchItem> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_reserved_pczt_batch_request(
+    List<ReservedPcztBatchRequest> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_scan_range_info(
     List<ScanRangeInfo> self,
     SseSerializer serializer,
@@ -1562,6 +1654,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_zcash_batch_message_input(
+    List<ZcashBatchMessageInput> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_zcash_batch_signed_message(
+    List<ZcashBatchSignedMessage> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_next_step_view(NextStepView self, SseSerializer serializer);
 
   @protected
@@ -1621,6 +1725,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_recoverable_commitment_bundle(
     RecoverableCommitmentBundle self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_reserved_pczt_batch_item(
+    ReservedPcztBatchItem self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_reserved_pczt_batch_request(
+    ReservedPcztBatchRequest self,
     SseSerializer serializer,
   );
 
@@ -1831,6 +1947,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_wire_encrypted_share(
     WireEncryptedShare self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zcash_batch_message_input(
+    ZcashBatchMessageInput self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zcash_batch_sign_result(
+    ZcashBatchSignResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zcash_batch_signed_message(
+    ZcashBatchSignedMessage self,
     SseSerializer serializer,
   );
 }

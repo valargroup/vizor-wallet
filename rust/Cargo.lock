@@ -2939,6 +2939,7 @@ dependencies = [
  "incrementalmerkletree",
  "jubjub",
  "log",
+ "minicbor",
  "nonempty",
  "orchard",
  "pasta_curves",

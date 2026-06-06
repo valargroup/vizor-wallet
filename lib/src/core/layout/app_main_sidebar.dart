@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -204,6 +205,17 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                         ? null
                         : () => _navigateTo('/about'),
                   ),
+                  if (kDebugMode) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    AppSidebarItem(
+                      label: 'Keystone batch',
+                      iconName: AppIcons.keystone,
+                      active: _matches('/debug/keystone-batch'),
+                      onTap: _matches('/debug/keystone-batch')
+                          ? null
+                          : () => _navigateTo('/debug/keystone-batch'),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
                     label: 'Sign out',
