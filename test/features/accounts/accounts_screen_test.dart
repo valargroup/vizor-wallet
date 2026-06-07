@@ -151,7 +151,13 @@ void main() {
       findsNothing,
     );
 
-    await tester.drag(find.byType(ListView), const Offset(0, -900));
+    await tester.drag(
+      find.descendant(
+        of: find.byKey(const ValueKey('accounts_list_scrollbar')),
+        matching: find.byType(ListView),
+      ),
+      const Offset(0, -900),
+    );
     await tester.pumpAndSettle();
 
     expect(
