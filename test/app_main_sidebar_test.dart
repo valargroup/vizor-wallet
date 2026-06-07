@@ -95,6 +95,7 @@ void main() {
       tester.getTopLeft(find.text('Home')).dy,
       tester.getTopLeft(find.text('Swap')).dy,
       tester.getTopLeft(find.text('Vote')).dy,
+      tester.getTopLeft(find.text('Migration')).dy,
       tester.getTopLeft(find.text('Address book')).dy,
       tester.getTopLeft(find.text('Activity')).dy,
     ];
@@ -272,6 +273,7 @@ Widget _sidebarHarness(
       GoRoute(path: '/send', builder: (_, _) => const Text('send')),
       GoRoute(path: '/swap', builder: (_, _) => const Text('swap')),
       GoRoute(path: '/voting', builder: (_, _) => const Text('voting')),
+      GoRoute(path: '/migration', builder: (_, _) => const Text('migration')),
       GoRoute(path: '/receive', builder: (_, _) => const Text('receive')),
       GoRoute(
         path: '/address-book',
