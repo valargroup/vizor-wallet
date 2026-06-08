@@ -37,6 +37,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
+use std::time::Duration;
 
 use secrecy::{ExposeSecret, SecretVec};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::TransparentKeyScope};
@@ -162,6 +163,7 @@ pub(crate) struct ShieldTransparentPcztResult {
 
 const SHIELDING_THRESHOLD_ZATOSHI: u64 = 100_000;
 const MIN_IRONWOOD_MIGRATION_OUTPUT_ZATOSHI: u64 = 1;
+const IRONWOOD_MIGRATION_BROADCAST_DELAY: Duration = Duration::from_secs(5 * 60);
 
 /// Wallet-local ZIP-317 rule that preserves standard fee parameters but
 /// prevents exact transparent-input serialization from shrinking below
@@ -688,10 +690,9 @@ pub async fn migrate_orchard_to_ironwood(
     let amount = Zatoshis::from_u64(MIN_IRONWOOD_MIGRATION_OUTPUT_ZATOSHI)
         .map_err(|_| "Bad migration amount")?;
 
-    let (txids, fee_zatoshi, migrated_zatoshi) = with_wallet_db_write_lock(
-        "send.migrate_orchard_to_ironwood",
-        move || {
-            let mut db = open_wallet_db(db_path, network)?;
+    let spending_keys =
+        with_wallet_db_write_lock("send.migrate_orchard_to_ironwood.keys", move || {
+            let db = open_wallet_db_for_read(db_path, network)?;
             let account_id = parse_account_uuid(account_uuid)?;
             let account = db
                 .get_account(account_id)
@@ -706,81 +707,160 @@ pub async fn migrate_orchard_to_ironwood(
                 .map_err(|e| format!("USK derivation failed: {e:?}"))?;
             drop(seed);
 
-            let spend_prover = NoOpSpendProver;
-            let output_prover = NoOpOutputProver;
-            let spending_keys = wallet::SpendingKeys::from_unified_spending_key(usk);
-            let fee_rule = ConservativeZip317FeeRule;
-            let mut txids = Vec::new();
-            let mut total_fee = Zatoshis::ZERO;
-            let mut total_migrated = Zatoshis::ZERO;
-            let mut migration_index = 0u32;
+            Ok::<_, String>(wallet::SpendingKeys::from_unified_spending_key(usk))
+        })?;
 
-            loop {
-                migration_index = migration_index
-                    .checked_add(1)
-                    .ok_or("Migration transaction count overflow")?;
-                let memo_text = format!("Ironwood migration {migration_index}");
-                let memo = MemoBytes::from(
-                    Memo::from_bytes(memo_text.as_bytes())
-                        .map_err(|e| format!("Bad migration memo: {e}"))?,
-                );
-                let transaction = match create_orchard_to_ironwood_transaction(
-                    &mut db,
-                    &network,
-                    &spend_prover,
-                    &output_prover,
+    let mut txids = Vec::new();
+    let mut total_fee = Zatoshis::ZERO;
+    let mut total_migrated = Zatoshis::ZERO;
+    let mut broadcasted_count = 0u32;
+    let mut migration_index = 0u32;
+
+    loop {
+        migration_index = migration_index
+            .checked_add(1)
+            .ok_or("Migration transaction count overflow")?;
+
+        let transaction =
+            with_wallet_db_write_lock("send.migrate_orchard_to_ironwood.create", || {
+                create_orchard_to_ironwood_migration_transaction(
+                    db_path,
+                    network,
                     &spending_keys,
-                    OvkPolicy::Sender,
                     amount,
-                    Some(memo),
-                    &fee_rule,
-                    ConfirmationsPolicy::default(),
-                ) {
-                    Ok(transaction) => transaction,
-                    Err(WalletError::InsufficientFunds { .. }) => {
-                        if txids.is_empty() {
-                            return Err(
-                                "Create Ironwood migration TX failed: insufficient Orchard funds to migrate"
-                                    .to_string(),
-                            );
-                        } else {
-                            log::info!(
-                                "ironwood_migration: created {} migration txs; no more spendable Orchard notes to migrate",
-                                txids.len(),
-                            );
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        return Err(format!("Create Ironwood migration TX failed: {e}"));
-                    }
-                };
+                    migration_index,
+                )
+            })?;
 
-                let txid = transaction.txid();
-                let fee_amount = transaction.fee_amount();
-                let migrated_amount = transaction.migrated_amount();
-                total_fee = (total_fee + fee_amount).ok_or("Migration fee total overflow")?;
-                total_migrated =
-                    (total_migrated + migrated_amount).ok_or("Migration amount total overflow")?;
-                txids.push(txid);
-            }
-
+        let Some(transaction) = transaction else {
             if txids.is_empty() {
                 return Err(
-                    "Create Ironwood migration TX failed: no migration transactions were created"
+                    "Create Ironwood migration TX failed: insufficient Orchard funds to migrate"
                         .to_string(),
                 );
             }
 
-            Ok::<_, String>((txids, total_fee, total_migrated))
-        },
-    )?;
+            log::info!(
+                "ironwood_migration: created {} migration txs; no more spendable Orchard notes to migrate",
+                txids.len(),
+            );
+            break;
+        };
 
-    let broadcast =
-        broadcast_created_transactions(db_path, lightwalletd_url, &txids, "ironwood_migration")
-            .await;
-    Ok(broadcast
-        .into_ironwood_migration_result(u64::from(fee_zatoshi), u64::from(migrated_zatoshi)))
+        let txid = transaction.txid;
+        txids.push(txid);
+        total_fee = (total_fee + transaction.fee_amount).ok_or("Migration fee total overflow")?;
+        total_migrated = (total_migrated + transaction.migrated_amount)
+            .ok_or("Migration amount total overflow")?;
+
+        let broadcast = broadcast_created_transactions(
+            db_path,
+            lightwalletd_url,
+            std::slice::from_ref(&txid),
+            "ironwood_migration",
+        )
+        .await;
+
+        if broadcast.status != CreatedBroadcastResult::BROADCASTED {
+            let status = if broadcasted_count == 0 {
+                CreatedBroadcastResult::PENDING_BROADCAST
+            } else {
+                CreatedBroadcastResult::PARTIAL_BROADCAST
+            };
+
+            return Ok(CreatedBroadcastResult {
+                txids: join_txids(&txids),
+                status,
+                broadcasted_count: broadcasted_count + broadcast.broadcasted_count,
+                total_count: txids.len() as u32,
+                message: broadcast.message,
+            }
+            .into_ironwood_migration_result(u64::from(total_fee), u64::from(total_migrated)));
+        }
+
+        broadcasted_count += 1;
+
+        if remaining_orchard_migration_balance(db_path, network, account_uuid)? > 0 {
+            log::info!(
+                "ironwood_migration: waiting {}s before creating the next migration tx",
+                IRONWOOD_MIGRATION_BROADCAST_DELAY.as_secs(),
+            );
+            tokio::time::sleep(IRONWOOD_MIGRATION_BROADCAST_DELAY).await;
+        } else {
+            break;
+        }
+    }
+
+    Ok(CreatedBroadcastResult {
+        txids: join_txids(&txids),
+        status: CreatedBroadcastResult::BROADCASTED,
+        broadcasted_count,
+        total_count: txids.len() as u32,
+        message: None,
+    }
+    .into_ironwood_migration_result(u64::from(total_fee), u64::from(total_migrated)))
+}
+
+struct CreatedIronwoodMigrationTx {
+    txid: TxId,
+    fee_amount: Zatoshis,
+    migrated_amount: Zatoshis,
+}
+
+fn create_orchard_to_ironwood_migration_transaction(
+    db_path: &str,
+    network: WalletNetwork,
+    spending_keys: &wallet::SpendingKeys,
+    amount: Zatoshis,
+    migration_index: u32,
+) -> Result<Option<CreatedIronwoodMigrationTx>, String> {
+    let mut db = open_wallet_db(db_path, network)?;
+    let spend_prover = NoOpSpendProver;
+    let output_prover = NoOpOutputProver;
+    let fee_rule = ConservativeZip317FeeRule;
+    let memo_text = format!("Ironwood migration {migration_index}");
+    let memo = MemoBytes::from(
+        Memo::from_bytes(memo_text.as_bytes()).map_err(|e| format!("Bad migration memo: {e}"))?,
+    );
+
+    let transaction = match create_orchard_to_ironwood_transaction(
+        &mut db,
+        &network,
+        &spend_prover,
+        &output_prover,
+        spending_keys,
+        OvkPolicy::Sender,
+        amount,
+        Some(memo),
+        &fee_rule,
+        ConfirmationsPolicy::default(),
+    ) {
+        Ok(transaction) => transaction,
+        Err(WalletError::InsufficientFunds { .. }) => return Ok(None),
+        Err(e) => return Err(format!("Create Ironwood migration TX failed: {e}")),
+    };
+
+    Ok(Some(CreatedIronwoodMigrationTx {
+        txid: transaction.txid(),
+        fee_amount: transaction.fee_amount(),
+        migrated_amount: transaction.migrated_amount(),
+    }))
+}
+
+fn remaining_orchard_migration_balance(
+    db_path: &str,
+    network: WalletNetwork,
+    account_uuid: &str,
+) -> Result<u64, String> {
+    super::transactions::get_wallet_balance(db_path, network, account_uuid).map(|b| b.orchard)
+}
+
+fn join_txids(txids: &[TxId]) -> String {
+    txids
+        .iter()
+        .map(|id| format!("{id}"))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn shielding_threshold() -> Result<Zatoshis, String> {

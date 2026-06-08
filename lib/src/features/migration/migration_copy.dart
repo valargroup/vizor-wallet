@@ -35,7 +35,7 @@ abstract final class MigrationCopy {
   static const broadcastingTitle = 'Broadcasting migration';
   static const broadcastingSubtitle = 'Sending your transactions';
   static const broadcastingInstruction =
-      'Keep Vizor open while your migration transactions are sent.';
+      'Keep Vizor open while your migration transactions are sent over about five minutes.';
   static const signBack = 'Back';
 
   // Scan
