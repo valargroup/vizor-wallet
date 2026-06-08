@@ -12,8 +12,19 @@ import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../migration_copy.dart';
 import '../models/migration_view_state.dart';
-import '../widgets/migration_completion_dialog.dart';
 import '../widgets/migration_signing_overlay.dart';
+
+class MigrationExpectedTransferCountNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void setCount(int count) => state = count;
+}
+
+final migrationExpectedTransferCountProvider =
+    NotifierProvider<MigrationExpectedTransferCountNotifier, int?>(
+      MigrationExpectedTransferCountNotifier.new,
+    );
 
 class MigrationScreen extends ConsumerStatefulWidget {
   const MigrationScreen({super.key});
@@ -28,10 +39,14 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   void _startSigning() => setState(() => _signing = true);
   void _cancelSigning() => setState(() => _signing = false);
 
-  Future<void> _completeSigning() async {
+  void _completeSigning(rust_sync.IronwoodMigrationResult result) {
+    final totalCount = result.totalCount;
+    if (totalCount > 0) {
+      ref
+          .read(migrationExpectedTransferCountProvider.notifier)
+          .setCount(totalCount);
+    }
     setState(() => _signing = false);
-    if (!mounted) return;
-    await showMigrationCompletionDialog(context);
   }
 
   @override
@@ -45,6 +60,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     final hasPendingMigration = migrationTransactions.any(_isPendingMigration);
     final hasCompletedMigration = migrationTransactions.any(
       _isCompletedMigration,
+    );
+    final expectedTransferCount = ref.watch(
+      migrationExpectedTransferCountProvider,
     );
 
     final viewState = migrationViewState(
@@ -60,6 +78,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       MigrationViewState.idle => _IdleView(onStart: _startSigning),
       MigrationViewState.inProgress => _InProgressView(
         migrationTransactions: migrationTransactions,
+        expectedTransferCount: expectedTransferCount,
         amountZatoshi: _migrationDisplayAmount(sync, migrationTransactions),
       ),
       MigrationViewState.complete => const _CompleteView(),
@@ -217,9 +236,11 @@ class _SoftwareRequiredView extends StatelessWidget {
 class _InProgressView extends StatelessWidget {
   const _InProgressView({
     required this.migrationTransactions,
+    required this.expectedTransferCount,
     required this.amountZatoshi,
   });
   final List<rust_sync.TransactionInfo> migrationTransactions;
+  final int? expectedTransferCount;
   final BigInt amountZatoshi;
 
   @override
@@ -228,9 +249,11 @@ class _InProgressView extends StatelessWidget {
     final amount = ZecAmount.fromZatoshi(
       amountZatoshi,
     ).pretty(denomStyle: ZecDenomStyle.upper).toString();
-    final total = migrationTransactions.isEmpty
-        ? 1
-        : migrationTransactions.length;
+    final total = [
+      migrationTransactions.length,
+      expectedTransferCount ?? 0,
+      1,
+    ].reduce((a, b) => a > b ? a : b);
     final completed = migrationTransactions.where(_isCompletedMigration).length;
     final progress = migrationTransactions.isEmpty ? null : completed / total;
 

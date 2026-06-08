@@ -29,7 +29,7 @@ class MigrationSigningOverlay extends ConsumerStatefulWidget {
   });
 
   final VoidCallback onCancel;
-  final VoidCallback onComplete;
+  final ValueChanged<rust_sync.IronwoodMigrationResult> onComplete;
 
   @override
   ConsumerState<MigrationSigningOverlay> createState() =>
@@ -150,7 +150,7 @@ class _MigrationSigningOverlayState
       }
 
       if (!mounted) return;
-      widget.onComplete();
+      widget.onComplete(result);
     } catch (e, st) {
       log('MigrationSigningOverlay._startMigration: ERROR: $e\n$st');
       if (!mounted) return;
