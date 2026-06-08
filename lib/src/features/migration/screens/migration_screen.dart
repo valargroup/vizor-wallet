@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,11 +9,9 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
+import '../../../rust/api/sync.dart' as rust_sync;
 import '../migration_copy.dart';
-import '../migration_formatters.dart';
-import '../models/migration_demo_state.dart';
 import '../models/migration_view_state.dart';
-import '../providers/migration_demo_provider.dart';
 import '../widgets/migration_completion_dialog.dart';
 import '../widgets/migration_signing_overlay.dart';
 
@@ -28,24 +24,6 @@ class MigrationScreen extends ConsumerStatefulWidget {
 
 class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   bool _signing = false;
-  Timer? _ticker;
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
-  }
-
-  void _ensureTicker(bool active) {
-    if (active && _ticker == null) {
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
-    } else if (!active && _ticker != null) {
-      _ticker!.cancel();
-      _ticker = null;
-    }
-  }
 
   void _startSigning() => setState(() => _signing = true);
   void _cancelSigning() => setState(() => _signing = false);
@@ -56,31 +34,35 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     await showMigrationCompletionDialog(context);
   }
 
-  Future<void> _resetDemo() => ref.read(migrationDemoProvider.notifier).reset();
-
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountProvider).value?.activeAccount;
     final isHardware = account?.isHardware ?? false;
-    final demo = ref.watch(migrationDemoProvider).value;
-    final now = DateTime.now();
+    final sync = ref.watch(syncProvider).value;
+    final migrationTransactions = _migrationTransactions(
+      sync?.recentTransactions ?? const [],
+    );
+    final hasPendingMigration = migrationTransactions.any(_isPendingMigration);
+    final hasCompletedMigration = migrationTransactions.any(
+      _isCompletedMigration,
+    );
 
     final viewState = migrationViewState(
       isHardware: isHardware,
-      demo: demo,
-      now: now,
+      hasPendingMigration: hasPendingMigration,
+      hasCompletedMigration: hasCompletedMigration,
+      orchardBalance: sync?.orchardBalance ?? BigInt.zero,
+      ironwoodBalance: sync?.ironwoodBalance ?? BigInt.zero,
     );
-    _ensureTicker(viewState == MigrationViewState.inProgress);
 
     final Widget body = switch (viewState) {
       MigrationViewState.softwareRequired => const _SoftwareRequiredView(),
       MigrationViewState.idle => _IdleView(onStart: _startSigning),
       MigrationViewState.inProgress => _InProgressView(
-        demo: demo!,
-        now: now,
-        onReset: _resetDemo,
+        migrationTransactions: migrationTransactions,
+        amountZatoshi: _migrationDisplayAmount(sync, migrationTransactions),
       ),
-      MigrationViewState.complete => _CompleteView(onDone: _resetDemo),
+      MigrationViewState.complete => const _CompleteView(),
     };
 
     return AppDesktopShell(
@@ -97,13 +79,39 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
             if (_signing)
               MigrationSigningOverlay(
                 onCancel: _cancelSigning,
-                onComplete: () => unawaited(_completeSigning()),
+                onComplete: _completeSigning,
               ),
           ],
         ),
       ),
     );
   }
+}
+
+List<rust_sync.TransactionInfo> _migrationTransactions(
+  Iterable<rust_sync.TransactionInfo> transactions,
+) {
+  return transactions
+      .where((tx) => tx.txKind == 'migration')
+      .toList(growable: false);
+}
+
+bool _isPendingMigration(rust_sync.TransactionInfo tx) =>
+    tx.minedHeight == BigInt.zero && !tx.expiredUnmined;
+
+bool _isCompletedMigration(rust_sync.TransactionInfo tx) =>
+    tx.minedHeight != BigInt.zero && !tx.expiredUnmined;
+
+BigInt _migrationDisplayAmount(
+  SyncState? sync,
+  List<rust_sync.TransactionInfo> migrationTransactions,
+) {
+  final txAmount = migrationTransactions.fold<BigInt>(
+    BigInt.zero,
+    (sum, tx) => sum + tx.displayAmount,
+  );
+  if (txAmount > BigInt.zero) return txAmount;
+  return sync?.orchardBalance ?? BigInt.zero;
 }
 
 class _IdleView extends ConsumerWidget {
@@ -208,21 +216,23 @@ class _SoftwareRequiredView extends StatelessWidget {
 
 class _InProgressView extends StatelessWidget {
   const _InProgressView({
-    required this.demo,
-    required this.now,
-    required this.onReset,
+    required this.migrationTransactions,
+    required this.amountZatoshi,
   });
-  final MigrationDemoState demo;
-  final DateTime now;
-  final VoidCallback onReset;
+  final List<rust_sync.TransactionInfo> migrationTransactions;
+  final BigInt amountZatoshi;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final amount = ZecAmount.fromZatoshi(
-      demo.displayAmountZatoshi,
+      amountZatoshi,
     ).pretty(denomStyle: ZecDenomStyle.upper).toString();
-    final sent = demo.transfersSent(now);
+    final total = migrationTransactions.isEmpty
+        ? 1
+        : migrationTransactions.length;
+    final completed = migrationTransactions.where(_isCompletedMigration).length;
+    final progress = migrationTransactions.isEmpty ? null : completed / total;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,7 +264,7 @@ class _InProgressView extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadii.full),
                 child: LinearProgressIndicator(
-                  value: demo.progressFraction(now),
+                  value: progress,
                   minHeight: 8,
                   backgroundColor: colors.background.neutralSubtleOpacity,
                   color: colors.icon.success,
@@ -262,8 +272,7 @@ class _InProgressView extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                '${formatRemaining(demo.remaining(now))} · '
-                '${formatStartedAgo(demo.sinceStart(now))}',
+                '$completed of $total confirmed',
                 style: AppTypography.bodyExtraSmall.copyWith(
                   color: colors.text.secondary,
                 ),
@@ -275,37 +284,15 @@ class _InProgressView extends StatelessWidget {
         _Card(
           child: Column(
             children: [
-              for (var i = 0; i < demo.transferOffsetsMs.length; i++) ...[
+              for (var i = 0; i < total; i++) ...[
                 if (i > 0)
                   Divider(height: AppSpacing.md, color: colors.border.subtle),
-                Row(
-                  children: [
-                    AppIcon(
-                      sent[i] ? AppIcons.checkCircle : AppIcons.time,
-                      size: AppIconSize.medium,
-                      color: sent[i] ? colors.icon.success : colors.icon.muted,
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        MigrationCopy.transferLabel(
-                          i + 1,
-                          demo.transferOffsetsMs.length,
-                        ),
-                        style: AppTypography.bodyMedium.copyWith(
-                          color: colors.text.accent,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      sent[i]
-                          ? MigrationCopy.transferSent
-                          : formatTransferEta(demo.transferEta(i, now)),
-                      style: AppTypography.bodyMedium.copyWith(
-                        color: colors.text.secondary,
-                      ),
-                    ),
-                  ],
+                _MigrationTransferRow(
+                  index: i,
+                  total: total,
+                  transaction: i < migrationTransactions.length
+                      ? migrationTransactions[i]
+                      : null,
                 ),
               ],
             ],
@@ -333,13 +320,59 @@ class _InProgressView extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
-        AppButton(
-          key: const ValueKey('migration_reset_button'),
-          onPressed: onReset,
-          variant: AppButtonVariant.ghost,
-          size: AppButtonSize.medium,
-          child: const Text(MigrationCopy.resetCta),
+      ],
+    );
+  }
+}
+
+class _MigrationTransferRow extends StatelessWidget {
+  const _MigrationTransferRow({
+    required this.index,
+    required this.total,
+    required this.transaction,
+  });
+
+  final int index;
+  final int total;
+  final rust_sync.TransactionInfo? transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final tx = transaction;
+    final isComplete = tx != null && _isCompletedMigration(tx);
+    final isFailed = tx?.expiredUnmined ?? false;
+    final statusText = isFailed
+        ? 'Failed'
+        : isComplete
+        ? 'Completed'
+        : 'In progress';
+    final icon = isFailed
+        ? AppIcons.warning
+        : isComplete
+        ? AppIcons.checkCircle
+        : AppIcons.time;
+    final iconColor = isFailed
+        ? colors.icon.destructive
+        : isComplete
+        ? colors.icon.success
+        : colors.icon.muted;
+
+    return Row(
+      children: [
+        AppIcon(icon, size: AppIconSize.medium, color: iconColor),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: Text(
+            MigrationCopy.transferLabel(index + 1, total),
+            style: AppTypography.bodyMedium.copyWith(color: colors.text.accent),
+          ),
+        ),
+        Text(
+          statusText,
+          style: AppTypography.bodyMedium.copyWith(
+            color: colors.text.secondary,
+          ),
         ),
       ],
     );
@@ -347,8 +380,7 @@ class _InProgressView extends StatelessWidget {
 }
 
 class _CompleteView extends StatelessWidget {
-  const _CompleteView({required this.onDone});
-  final VoidCallback onDone;
+  const _CompleteView();
 
   @override
   Widget build(BuildContext context) {
@@ -367,11 +399,6 @@ class _CompleteView extends StatelessWidget {
           style: AppTypography.bodyMedium.copyWith(
             color: colors.text.secondary,
           ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        AppButton(
-          onPressed: onDone,
-          child: const Text(MigrationCopy.doneButton),
         ),
       ],
     );

@@ -18,7 +18,6 @@ import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../migration_copy.dart';
 import '../models/migration_batch.dart';
-import '../providers/migration_demo_provider.dart';
 
 enum _MigrationPhase { preparing, broadcasting, failed }
 
@@ -143,19 +142,6 @@ class _MigrationSigningOverlayState
         });
         return;
       }
-
-      final txids = result.txids
-          .split(',')
-          .map((txid) => txid.trim())
-          .where((txid) => txid.isNotEmpty)
-          .toList(growable: false);
-      await ref
-          .read(migrationDemoProvider.notifier)
-          .startDemoForAccount(
-            accountUuid: accountUuid,
-            displayAmountZatoshi: result.migratedZatoshi,
-            txids: txids,
-          );
 
       try {
         await ref.read(syncProvider.notifier).refreshAfterSend();

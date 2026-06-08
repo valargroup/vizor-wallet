@@ -1,5 +1,3 @@
-import 'migration_demo_state.dart';
-
 /// Which of the Migration tab's four resting states to render.
 enum MigrationViewState { softwareRequired, idle, inProgress, complete }
 
@@ -7,11 +5,16 @@ enum MigrationViewState { softwareRequired, idle, inProgress, complete }
 /// testable without stubbing the account/sync provider stack.
 MigrationViewState migrationViewState({
   required bool isHardware,
-  required MigrationDemoState? demo,
-  required DateTime now,
+  required bool hasPendingMigration,
+  required bool hasCompletedMigration,
+  required BigInt orchardBalance,
+  required BigInt ironwoodBalance,
 }) {
   if (isHardware) return MigrationViewState.softwareRequired;
-  if (demo == null) return MigrationViewState.idle;
-  if (demo.isComplete(now)) return MigrationViewState.complete;
-  return MigrationViewState.inProgress;
+  if (hasPendingMigration) return MigrationViewState.inProgress;
+  if (hasCompletedMigration ||
+      (orchardBalance == BigInt.zero && ironwoodBalance > BigInt.zero)) {
+    return MigrationViewState.complete;
+  }
+  return MigrationViewState.idle;
 }

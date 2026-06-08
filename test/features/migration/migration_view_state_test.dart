@@ -1,64 +1,67 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/migration/models/migration_demo_state.dart';
 import 'package:zcash_wallet/src/features/migration/models/migration_view_state.dart';
 
 void main() {
-  final now = DateTime.fromMillisecondsSinceEpoch(1000000);
-
-  MigrationDemoState demoStartedAt(int startMs, {int durationMs = 10000}) =>
-      MigrationDemoState(
-        accountUuid: 'acc',
-        startedAtEpochMs: startMs,
-        totalDurationMs: durationMs,
-        displayAmountZatoshi: BigInt.zero,
-        transferOffsetsMs: const [0, 1, 2],
-        txids: const [],
-      );
-
   test('hardware account shows softwareRequired', () {
-    expect(
-      migrationViewState(isHardware: true, demo: null, now: now),
-      MigrationViewState.softwareRequired,
-    );
     expect(
       migrationViewState(
         isHardware: true,
-        demo: demoStartedAt(1000000),
-        now: now,
+        hasPendingMigration: true,
+        hasCompletedMigration: false,
+        orchardBalance: BigInt.from(1),
+        ironwoodBalance: BigInt.zero,
       ),
       MigrationViewState.softwareRequired,
     );
   });
 
-  test('software account with no demo shows idle', () {
+  test('software account with no migration shows idle', () {
     expect(
-      migrationViewState(isHardware: false, demo: null, now: now),
+      migrationViewState(
+        isHardware: false,
+        hasPendingMigration: false,
+        hasCompletedMigration: false,
+        orchardBalance: BigInt.from(1),
+        ironwoodBalance: BigInt.zero,
+      ),
       MigrationViewState.idle,
     );
   });
 
-  test('software account with an active demo shows inProgress', () {
-    // started now, 10s window -> not complete.
+  test('software account with a pending migration shows inProgress', () {
     expect(
       migrationViewState(
         isHardware: false,
-        demo: demoStartedAt(now.millisecondsSinceEpoch),
-        now: now,
+        hasPendingMigration: true,
+        hasCompletedMigration: false,
+        orchardBalance: BigInt.zero,
+        ironwoodBalance: BigInt.zero,
       ),
       MigrationViewState.inProgress,
     );
   });
 
-  test('software account past the window shows complete', () {
-    // started 20s before now, 10s window -> complete.
+  test('software account with a mined migration shows complete', () {
     expect(
       migrationViewState(
         isHardware: false,
-        demo: demoStartedAt(
-          now.millisecondsSinceEpoch - 20000,
-          durationMs: 10000,
-        ),
-        now: now,
+        hasPendingMigration: false,
+        hasCompletedMigration: true,
+        orchardBalance: BigInt.zero,
+        ironwoodBalance: BigInt.from(1),
+      ),
+      MigrationViewState.complete,
+    );
+  });
+
+  test('software account with migrated ironwood balance shows complete', () {
+    expect(
+      migrationViewState(
+        isHardware: false,
+        hasPendingMigration: false,
+        hasCompletedMigration: false,
+        orchardBalance: BigInt.zero,
+        ironwoodBalance: BigInt.from(1),
       ),
       MigrationViewState.complete,
     );

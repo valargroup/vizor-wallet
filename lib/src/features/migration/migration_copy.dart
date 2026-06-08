@@ -61,15 +61,12 @@ abstract final class MigrationCopy {
   static String migratingAmount(String amount) => 'Migrating $amount';
   static String transferLabel(int index, int total) =>
       'Transfer $index of $total';
-  static const transferSent = 'Sent';
   static const keepOpenWarning =
       'Keep Vizor connected to the Ironwood testnet while these transactions confirm.';
-  static const resetCta = 'Reset demo';
 
   // Done
   static const doneTitle = 'Migration complete';
   static const doneBody = 'Your migration transactions have finished.';
-  static const doneButton = 'Done';
 
   // Errors
   static const genericError =
