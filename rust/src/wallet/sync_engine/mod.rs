@@ -127,6 +127,27 @@ fn batch_size_for_range(base_batch_size: u32, start: BlockHeight, range_end: Blo
     }
 }
 
+fn chain_tip_exclusive_end(current_tip_height: u64) -> BlockHeight {
+    let current_tip = u32::try_from(current_tip_height).unwrap_or(u32::MAX);
+    BlockHeight::from_u32(current_tip.saturating_add(1))
+}
+
+fn scannable_batch_end(
+    base_batch_size: u32,
+    start: BlockHeight,
+    range_end: BlockHeight,
+    current_tip_height: u64,
+) -> Option<(u32, BlockHeight)> {
+    let available_end = std::cmp::min(range_end, chain_tip_exclusive_end(current_tip_height));
+    if start >= available_end {
+        return None;
+    }
+
+    let batch_size = batch_size_for_range(base_batch_size, start, available_end);
+    let end = std::cmp::min(start + batch_size, available_end);
+    Some((batch_size, end))
+}
+
 fn effective_base_batch_size(default_batch_size: u32) -> u32 {
     #[cfg(debug_assertions)]
     {
@@ -1215,6 +1236,7 @@ async fn run_sync_impl(
         }
 
         let start = range.block_range().start;
+        let range_end = range.block_range().end;
         // Adaptive batch size: shrink to BATCH_SIZE_SANDBLASTING
         // when the current range overlaps the known Zcash mainnet
         // sandblasting attack window. These blocks contain an
@@ -1222,8 +1244,17 @@ async fn run_sync_impl(
         // making scan_cached_blocks much slower per block and
         // using more memory. Matches the SDK's
         // `SANDBLASTING_RANGE` check.
-        let batch_size = batch_size_for_range(base_batch_size, start, range.block_range().end);
-        let end = std::cmp::min(start + batch_size, range.block_range().end);
+        let Some((batch_size, end)) =
+            scannable_batch_end(base_batch_size, start, range_end, current_tip_height)
+        else {
+            log::info!(
+                "[{}] sync: pending range {} starts after current tip {}, waiting for tip advance",
+                elapsed(),
+                describe_block_range(range.block_range()),
+                current_tip_height,
+            );
+            break;
+        };
         let batch_blocks = u32::from(end).saturating_sub(u32::from(start)) as u64;
         let current_pct = if initial_total > 0 {
             1.0 - (prev_remaining as f64 / initial_total as f64)
@@ -1722,20 +1753,29 @@ async fn run_sync_impl(
         // the prefetch — the next range comes from
         // suggest_scan_ranges() which needs the DB state the current
         // scan just committed, and we can't predict it in advance.
-        if end < range.block_range().end && !cancel.load(Ordering::Relaxed) {
+        if end < range_end && !cancel.load(Ordering::Relaxed) {
             let pf_start = end;
             // Recompute batch_size for the prefetch range in case
             // it crosses a sandblasting boundary differently.
-            let pf_batch = batch_size_for_range(base_batch_size, pf_start, range.block_range().end);
-            let pf_end = std::cmp::min(pf_start + pf_batch, range.block_range().end);
-            let mut pf_client = client.clone();
-            prefetch = Some(Prefetch {
-                start: pf_start,
-                end: pf_end,
-                handle: Some(tokio::spawn(async move {
-                    download_blocks(&mut pf_client, pf_start, pf_end - 1).await
-                })),
-            });
+            if let Some((_, pf_end)) =
+                scannable_batch_end(base_batch_size, pf_start, range_end, current_tip_height)
+            {
+                let mut pf_client = client.clone();
+                prefetch = Some(Prefetch {
+                    start: pf_start,
+                    end: pf_end,
+                    handle: Some(tokio::spawn(async move {
+                        download_blocks(&mut pf_client, pf_start, pf_end - 1).await
+                    })),
+                });
+            } else {
+                log::debug!(
+                    "[{}] sync: skipping prefetch from {} past current tip {}",
+                    elapsed(),
+                    u32::from(pf_start),
+                    current_tip_height,
+                );
+            }
         }
     }
 
@@ -1843,6 +1883,32 @@ mod tests {
         assert!(
             !should_use_empty_chain_state(&WalletNetwork::Regtest, BlockHeight::from_u32(141))
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn scannable_batch_end_clamps_to_current_tip() {
+        assert_eq!(
+            scannable_batch_end(
+                2_000,
+                BlockHeight::from_u32(121),
+                BlockHeight::from_u32(131),
+                121,
+            ),
+            Some((2_000, BlockHeight::from_u32(122))),
+        );
+    }
+
+    #[test]
+    fn scannable_batch_end_skips_ranges_past_current_tip() {
+        assert_eq!(
+            scannable_batch_end(
+                2_000,
+                BlockHeight::from_u32(122),
+                BlockHeight::from_u32(131),
+                121,
+            ),
+            None,
         );
     }
 
