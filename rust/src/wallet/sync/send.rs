@@ -80,7 +80,7 @@ use crate::wallet::network::WalletNetwork;
 
 use super::{
     consume_stored_proposal, open_readonly_conn, open_wallet_db, open_wallet_db_for_read,
-    record_ironwood_migration_outputs, StoredProposal, WalletDatabase, PROPOSAL_STORE,
+    StoredProposal, WalletDatabase, PROPOSAL_STORE,
 };
 
 /// Result of a successful [`propose_send`]. `proposal_id` is the
@@ -717,7 +717,6 @@ pub async fn migrate_orchard_to_ironwood(
             let spending_keys = wallet::SpendingKeys::from_unified_spending_key(usk);
             let fee_rule = ConservativeZip317FeeRule;
             let mut txids = Vec::with_capacity(transfer_count as usize);
-            let mut ironwood_outputs = Vec::with_capacity(transfer_count as usize);
             let mut total_fee = Zatoshis::ZERO;
             let mut total_migrated = Zatoshis::ZERO;
 
@@ -759,7 +758,6 @@ pub async fn migrate_orchard_to_ironwood(
                 total_fee = (total_fee + fee_amount).ok_or("Migration fee total overflow")?;
                 total_migrated =
                     (total_migrated + migrated_amount).ok_or("Migration amount total overflow")?;
-                ironwood_outputs.push((txid, u64::from(migrated_amount)));
                 txids.push(txid);
             }
 
@@ -770,8 +768,6 @@ pub async fn migrate_orchard_to_ironwood(
                 );
             }
 
-            drop(db);
-            record_ironwood_migration_outputs(db_path, account_id, &ironwood_outputs)?;
             Ok::<_, String>((txids, total_fee, total_migrated))
         },
     )?;
