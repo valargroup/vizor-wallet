@@ -1,26 +1,25 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io' show Platform;
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
 import '../../../core/layout/app_layout.dart';
 import '../../../core/storage/wallet_paths.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_pane_modal_overlay.dart';
 import '../../../providers/account_provider.dart';
+import '../../../providers/app_security_provider.dart';
 import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
-import '../../../rust/api/keystone.dart' as rust_keystone;
 import '../../../rust/api/sync.dart' as rust_sync;
-import '../../../rust/wallet/keystone.dart';
-import '../../keystone/widgets/keystone_signing_modal.dart';
 import '../migration_copy.dart';
 import '../models/migration_batch.dart';
 import '../providers/migration_demo_provider.dart';
 
-enum _MigrationSignPhase { preparing, ready, broadcasting, failed }
+enum _MigrationPhase { preparing, broadcasting, failed }
 
 class MigrationSigningOverlay extends ConsumerStatefulWidget {
   const MigrationSigningOverlay({
@@ -42,12 +41,8 @@ class _MigrationSigningOverlayState
   static const int _transferCount = 3;
   static const int _amountPerTransferZatoshi = 10000; // 0.0001 ZEC
 
-  _MigrationSignPhase _phase = _MigrationSignPhase.preparing;
+  _MigrationPhase _phase = _MigrationPhase.preparing;
   String? _error;
-  List<String> _urParts = const [];
-  String? _requestId;
-  List<ZcashBatchMessageInput> _messages = const [];
-  Map<String, List<int>> _pcztsWithProofsById = const {};
 
   @override
   void initState() {
@@ -55,143 +50,95 @@ class _MigrationSigningOverlayState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(appLayoutProvider.notifier).setMode(AppLayoutMode.large);
-      unawaited(_prepareBatch());
+      unawaited(_startMigration());
     });
   }
 
-  Future<void> _prepareBatch() async {
+  Future<void> _startMigration() async {
+    setState(() {
+      _phase = _MigrationPhase.broadcasting;
+      _error = null;
+    });
+
     try {
       final accountState = ref.read(accountProvider).value;
       final account = accountState?.activeAccount;
       final accountUuid = accountState?.activeAccountUuid;
-      final address = accountState?.activeAddress;
-      if (account == null ||
-          accountUuid == null ||
-          address == null ||
-          address.isEmpty) {
+      if (account == null || accountUuid == null) {
         throw MigrationBatchError('No active account.');
       }
-      if (!account.isHardware) {
-        throw MigrationBatchError('Migration requires a Keystone account.');
-      }
-
-      final dbPath = await getWalletDbPath();
-      final endpoint = ref.read(rpcEndpointProvider);
-      final requestId =
-          'vizor-migration-${DateTime.now().millisecondsSinceEpoch}';
-
-      final batchItems = await rust_sync.createReservedPcztBatch(
-        dbPath: dbPath,
-        network: endpoint.networkName,
-        accountUuid: accountUuid,
-        requests: [
-          for (var i = 0; i < _transferCount; i++)
-            rust_sync.ReservedPcztBatchRequest(
-              id: 'tx-${i + 1}',
-              sendFlowId: '$requestId-${i + 1}',
-              toAddress: address,
-              amountZatoshi: BigInt.from(_amountPerTransferZatoshi),
-              memo: 'Ironwood migration ${i + 1}/$_transferCount',
-            ),
-        ],
-      );
-
-      if (batchItems.length != _transferCount) {
+      if (account.isHardware) {
         throw MigrationBatchError(
-          'This demo needs at least 3 spendable notes. Receive a few '
-          'payments, let Vizor sync, then try again.',
+          'Switch to a software account before migrating.',
         );
       }
-      verifyDistinctNotes(batchItems);
-
-      final messages = <ZcashBatchMessageInput>[];
-      final proofsById = <String, List<int>>{};
-      for (final item in batchItems) {
-        proofsById[item.id] = item.pcztWithProofs;
-        messages.add(
-          ZcashBatchMessageInput(id: item.id, pcztBytes: item.redactedPczt),
-        );
-      }
-
-      final urParts = await rust_keystone.encodeZcashSignBatchUrParts(
-        requestId: requestId,
-        messages: messages,
-        maxFragmentLen: BigInt.from(200),
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _phase = _MigrationSignPhase.ready;
-        _requestId = requestId;
-        _messages = messages;
-        _pcztsWithProofsById = proofsById;
-        _urParts = urParts;
-      });
-    } catch (e, st) {
-      log('MigrationSigningOverlay._prepareBatch: ERROR: $e\n$st');
-      if (!mounted) return;
-      setState(() {
-        _phase = _MigrationSignPhase.failed;
-        _error = _friendlyError(e);
-      });
-    }
-  }
-
-  Future<void> _getSignature() async {
-    if (_phase != _MigrationSignPhase.ready) return;
-    final cbor = await context.push<Uint8List>('/migration/scan');
-    if (cbor == null || !mounted) return;
-    await _broadcast(cbor);
-  }
-
-  Future<void> _broadcast(Uint8List cbor) async {
-    setState(() {
-      _phase = _MigrationSignPhase.broadcasting;
-      _error = null;
-    });
-    try {
-      final requestId = _requestId;
-      if (requestId == null || _messages.isEmpty) {
-        throw MigrationBatchError('Prepare the migration before broadcasting.');
-      }
-
-      final result = await rust_keystone.decodeZcashSignResultCbor(cbor: cbor);
-      verifySignResult(
-        result,
-        requestId,
-        _messages.map((m) => m.id).toSet(),
-      );
 
       final dbPath = await getWalletDbPath();
       final endpoint = ref.read(rpcEndpointProvider);
-      final txids = <String>[];
-      for (final signed in result.results) {
-        final proofs = _pcztsWithProofsById[signed.id];
-        if (proofs == null) {
-          throw MigrationBatchError('Missing proof data for ${signed.id}.');
-        }
-        final broadcast = await rust_sync.extractAndBroadcastPczt(
-          dbPath: dbPath,
-          lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-          network: endpoint.networkName,
-          pcztWithProofsBytes: proofs,
-          pcztWithSignaturesBytes: signed.signedPcztBytes,
-        );
-        if (broadcast.status != 'broadcasted') {
+      late final rust_sync.IronwoodMigrationResult result;
+
+      if (Platform.isMacOS) {
+        final password = ref
+            .read(appSecurityProvider.notifier)
+            .requireSessionPasswordForNativeSecretUse();
+        result = await rust_sync
+            .migrateOrchardToIronwoodWithMacosStoredMnemonic(
+              dbPath: dbPath,
+              lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+              network: endpoint.networkName,
+              accountUuid: accountUuid,
+              password: password,
+              amountZatoshi: BigInt.from(_amountPerTransferZatoshi),
+              transferCount: _transferCount,
+            );
+      } else {
+        final mnemonicBytes = await ref
+            .read(accountProvider.notifier)
+            .getMnemonicBytesForAccount(accountUuid);
+        if (mnemonicBytes == null || mnemonicBytes.isEmpty) {
           throw MigrationBatchError(
-            txids.isEmpty
-                ? 'A transfer could not be broadcast (${broadcast.status}).'
-                : 'Some transfers were sent, but a later one failed '
-                    '(${broadcast.status}). Check Activity before retrying.',
+            'Mnemonic not found for the active account.',
           );
         }
-        txids.add(broadcast.txid);
+
+        try {
+          result = await rust_sync.migrateOrchardToIronwood(
+            dbPath: dbPath,
+            lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+            network: endpoint.networkName,
+            accountUuid: accountUuid,
+            mnemonicBytes: mnemonicBytes,
+            amountZatoshi: BigInt.from(_amountPerTransferZatoshi),
+            transferCount: _transferCount,
+          );
+        } finally {
+          mnemonicBytes.fillRange(0, mnemonicBytes.length, 0);
+        }
       }
 
-      final orchardBalance =
-          ref.read(syncProvider).value?.orchardBalance ?? BigInt.zero;
-      await ref.read(migrationDemoProvider.notifier).startDemo(
-            displayAmountZatoshi: orchardBalance,
+      log(
+        'MigrationSigningOverlay: migration txids=${result.txids} '
+        'status=${result.status} '
+        'broadcasted=${result.broadcastedCount}/${result.totalCount} '
+        'fee=${result.feeZatoshi} migrated=${result.migratedZatoshi}',
+      );
+
+      if (result.status != 'broadcasted') {
+        throw MigrationBatchError(
+          result.message ??
+              'Migration transactions were created but not fully broadcast.',
+        );
+      }
+
+      final txids = result.txids
+          .split(',')
+          .map((txid) => txid.trim())
+          .where((txid) => txid.isNotEmpty)
+          .toList(growable: false);
+      await ref
+          .read(migrationDemoProvider.notifier)
+          .startDemo(
+            displayAmountZatoshi: result.migratedZatoshi,
             txids: txids,
           );
 
@@ -204,10 +151,10 @@ class _MigrationSigningOverlayState
       if (!mounted) return;
       widget.onComplete();
     } catch (e, st) {
-      log('MigrationSigningOverlay._broadcast: ERROR: $e\n$st');
+      log('MigrationSigningOverlay._startMigration: ERROR: $e\n$st');
       if (!mounted) return;
       setState(() {
-        _phase = _MigrationSignPhase.failed;
+        _phase = _MigrationPhase.failed;
         _error = _friendlyError(e);
       });
     }
@@ -216,59 +163,95 @@ class _MigrationSigningOverlayState
   String _friendlyError(Object error) {
     if (error is MigrationBatchError) return error.message;
     final lower = error.toString().toLowerCase();
-    if (lower.contains('sync')) {
+    if (lower.contains('insufficient') || lower.contains('spendable')) {
+      return 'Receive enough Orchard funds, let Vizor sync, then try again.';
+    }
+    if (lower.contains('sync') || lower.contains('scan required')) {
       return 'Sync the wallet before migrating.';
     }
     return MigrationCopy.genericError;
   }
 
   void _cancel() {
-    if (_phase == _MigrationSignPhase.broadcasting) return;
+    if (_phase == _MigrationPhase.broadcasting) return;
     widget.onCancel();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isBroadcasting = _phase == _MigrationSignPhase.broadcasting;
-    final isFailed = _phase == _MigrationSignPhase.failed;
-    final modalPhase = switch (_phase) {
-      _MigrationSignPhase.ready => KeystoneSigningModalPhase.ready,
-      _MigrationSignPhase.failed => KeystoneSigningModalPhase.failed,
-      _MigrationSignPhase.preparing ||
-      _MigrationSignPhase.broadcasting =>
-        KeystoneSigningModalPhase.preparing,
-    };
-
+    final isFailed = _phase == _MigrationPhase.failed;
     return AppPaneModalOverlay(
       onDismiss: _cancel,
-      child: KeystoneSigningModal(
-        phase: modalPhase,
-        urParts: _urParts,
-        error: _error,
-        title: isBroadcasting
-            ? MigrationCopy.broadcastingTitle
-            : MigrationCopy.signTitle,
-        subtitle: isBroadcasting
-            ? MigrationCopy.broadcastingSubtitle
-            : MigrationCopy.signSubtitle,
-        instruction: isBroadcasting
-            ? MigrationCopy.broadcastingInstruction
-            : isFailed
-                ? null
-                : MigrationCopy.signInstruction,
-        primaryLabel: _phase == _MigrationSignPhase.ready
-            ? MigrationCopy.signPrimary
-            : null,
-        onPrimary: _phase == _MigrationSignPhase.ready
-            ? () => unawaited(_getSignature())
-            : null,
-        secondaryLabel: isBroadcasting
-            ? null
-            : isFailed
-                ? MigrationCopy.signBack
-                : MigrationCopy.signCancel,
-        onSecondary: _cancel,
+      child: Container(
+        width: 420,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: context.colors.background.ground,
+          borderRadius: BorderRadius.circular(AppRadii.xSmall),
+          border: Border.all(color: context.colors.border.subtle),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isFailed ? MigrationCopy.genericError : MigrationCopy.signTitle,
+              style: AppTypography.headlineLarge.copyWith(
+                color: context.colors.text.accent,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xxs),
+            Text(
+              isFailed ? (_error ?? MigrationCopy.genericError) : _subtitle,
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.colors.text.secondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (!isFailed) ...[
+              Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: context.colors.icon.success,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      MigrationCopy.broadcastingInstruction,
+                      style: AppTypography.bodyExtraSmall.copyWith(
+                        color: context.colors.text.secondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AppButton(
+                    onPressed: _cancel,
+                    variant: AppButtonVariant.secondary,
+                    size: AppButtonSize.medium,
+                    child: const Text(MigrationCopy.signBack),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
+
+  String get _subtitle => switch (_phase) {
+    _MigrationPhase.preparing => MigrationCopy.signSubtitle,
+    _MigrationPhase.broadcasting => MigrationCopy.broadcastingSubtitle,
+    _MigrationPhase.failed => MigrationCopy.genericError,
+  };
 }

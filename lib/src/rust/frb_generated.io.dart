@@ -196,6 +196,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
+  IronwoodMigrationResult dco_decode_ironwood_migration_result(dynamic raw);
+
+  @protected
   KeystoneAccountInfo dco_decode_keystone_account_info(dynamic raw);
 
   @protected
@@ -749,6 +752,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  IronwoodMigrationResult sse_decode_ironwood_migration_result(
+    SseDeserializer deserializer,
+  );
 
   @protected
   KeystoneAccountInfo sse_decode_keystone_account_info(
@@ -1428,6 +1436,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ironwood_migration_result(
+    IronwoodMigrationResult self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_keystone_account_info(

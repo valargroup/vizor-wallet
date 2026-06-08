@@ -140,6 +140,12 @@ final kMainnetRpcEndpointPresets = List<RpcEndpointPreset>.unmodifiable([
 
 final kTestnetRpcEndpointPresets = List<RpcEndpointPreset>.unmodifiable([
   const RpcEndpointPreset(
+    id: 'local-ironwood-testnet',
+    region: 'Testnet',
+    label: 'Local Ironwood',
+    url: 'http://127.0.0.1:9067',
+  ),
+  const RpcEndpointPreset(
     id: 'default-testnet',
     region: 'Testnet',
     label: 'Zec Rocks Testnet',

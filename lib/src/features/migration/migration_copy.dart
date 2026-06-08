@@ -6,36 +6,36 @@ abstract final class MigrationCopy {
   static const idleTitle = 'Migration';
   static const idleBody =
       "Move your shielded ZEC to Ironwood, Zcash's next-generation shielded "
-      'pool. Your Keystone approves the whole migration in one signature.';
+      'pool. This software-wallet test path creates real Ironwood migration '
+      'transactions on the selected testnet endpoint.';
   static const fromPoolName = 'Orchard';
   static const fromPoolTag = 'Current pool';
   static const toPoolName = 'Ironwood';
   static const toPoolTag = 'New pool';
   static const readyToMigrateLabel = 'Ready to migrate';
   static const poolFlow = 'Orchard pool → Ironwood pool';
-  static const bullet1 = 'Funds move in small batches over random intervals.';
-  static const bullet2 = 'Migration can take up to 24 hours to finish.';
-  static const bullet3 = 'Keep Vizor open until it completes.';
+  static const bullet1 =
+      'Software wallet migration sends Orchard funds to Ironwood.';
+  static const bullet2 = 'Use a testnet endpoint that understands NU7 blocks.';
+  static const bullet3 = 'Keystone and PCZT migration support will come later.';
   static const startCta = 'Start migration';
 
-  // Software-account (no Keystone) state
-  static const keystoneRequiredTitle = 'Migration';
-  static const keystoneRequiredBody =
-      'Migration is available for Keystone accounts. Switch to or add a '
-      'Keystone account to try it.';
+  // Hardware-account state
+  static const softwareRequiredTitle = 'Migration';
+  static const softwareRequiredBody =
+      'Migration is available for software accounts in this build. Switch to '
+      'a software account to test it.';
 
-  // Signing
-  static const signTitle = 'Approve your migration';
-  static const signSubtitle = 'Scan this code with your Keystone';
+  // Broadcast
+  static const signTitle = 'Starting migration';
+  static const signSubtitle = 'Creating Ironwood transactions';
   static const signInstruction =
-      'Your Keystone signs all 3 transfers in one step. Approve on the device, '
-      'then scan the result.';
-  static const signPrimary = 'Scan signed result';
+      'Keep Vizor open while the migration transactions are created and broadcast.';
   static const signCancel = 'Cancel';
   static const broadcastingTitle = 'Broadcasting migration';
-  static const broadcastingSubtitle = 'Sending your transfers';
+  static const broadcastingSubtitle = 'Sending your transactions';
   static const broadcastingInstruction =
-      'Keep Vizor open while your transfers are sent.';
+      'Keep Vizor open while your migration transactions are sent.';
   static const signBack = 'Back';
 
   // Scan
@@ -50,28 +50,24 @@ abstract final class MigrationCopy {
   // Completion popup
   static const completeTitle = 'Migration started';
   static const completeBody =
-      'Your funds are on their way to the Ironwood pool. Transfers go out in '
-      'small batches over random intervals across the next 24 hours.\n\n'
-      'Keep Vizor open so the migration can finish.';
+      'Your migration transactions were created and sent to the selected '
+      'testnet endpoint.';
   static const completeButton = 'Got it';
 
   // In progress
   static const inProgressTitle = 'Migration in progress';
   static const inProgressBody =
-      'Your funds are moving from Orchard to Ironwood. This finishes on its '
-      'own — just keep Vizor open.';
+      'Your funds are moving from Orchard to Ironwood.';
   static String migratingAmount(String amount) => 'Migrating $amount';
   static String transferLabel(int index) => 'Transfer $index of 3';
   static const transferSent = 'Sent';
   static const keepOpenWarning =
-      'Keep Vizor open. Closing the app pauses the remaining transfers until '
-      'you reopen it.';
+      'Keep Vizor connected to the Ironwood testnet while these transactions confirm.';
   static const resetCta = 'Reset demo';
 
   // Done
   static const doneTitle = 'Migration complete';
-  static const doneBody =
-      'Your funds have finished moving to the Ironwood pool.';
+  static const doneBody = 'Your migration transactions have finished.';
   static const doneButton = 'Done';
 
   // Errors

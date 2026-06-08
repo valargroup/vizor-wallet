@@ -15,42 +15,49 @@ void main() {
         txids: const [],
       );
 
-  test('software account always shows keystoneRequired', () {
+  test('hardware account shows softwareRequired', () {
     expect(
-      migrationViewState(isHardware: false, demo: null, now: now),
-      MigrationViewState.keystoneRequired,
+      migrationViewState(isHardware: true, demo: null, now: now),
+      MigrationViewState.softwareRequired,
     );
     expect(
       migrationViewState(
-          isHardware: false, demo: demoStartedAt(1000000), now: now),
-      MigrationViewState.keystoneRequired,
+        isHardware: true,
+        demo: demoStartedAt(1000000),
+        now: now,
+      ),
+      MigrationViewState.softwareRequired,
     );
   });
 
-  test('keystone account with no demo shows idle', () {
+  test('software account with no demo shows idle', () {
     expect(
-      migrationViewState(isHardware: true, demo: null, now: now),
+      migrationViewState(isHardware: false, demo: null, now: now),
       MigrationViewState.idle,
     );
   });
 
-  test('keystone account with an active demo shows inProgress', () {
+  test('software account with an active demo shows inProgress', () {
     // started now, 10s window -> not complete.
     expect(
       migrationViewState(
-          isHardware: true, demo: demoStartedAt(now.millisecondsSinceEpoch),
-          now: now),
+        isHardware: false,
+        demo: demoStartedAt(now.millisecondsSinceEpoch),
+        now: now,
+      ),
       MigrationViewState.inProgress,
     );
   });
 
-  test('keystone account past the window shows complete', () {
+  test('software account past the window shows complete', () {
     // started 20s before now, 10s window -> complete.
     expect(
       migrationViewState(
-        isHardware: true,
-        demo: demoStartedAt(now.millisecondsSinceEpoch - 20000,
-            durationMs: 10000),
+        isHardware: false,
+        demo: demoStartedAt(
+          now.millisecondsSinceEpoch - 20000,
+          durationMs: 10000,
+        ),
         now: now,
       ),
       MigrationViewState.complete,

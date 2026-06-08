@@ -46,8 +46,8 @@ pub(crate) use send::{
     shield_transparent_balance,
 };
 pub use send::{
-    estimate_fee, execute_proposal, execute_proposal_with_seed_loader, propose_send,
-    ExecuteProposalResult,
+    estimate_fee, execute_proposal, execute_proposal_with_seed_loader, migrate_orchard_to_ironwood,
+    propose_send, ExecuteProposalResult, IronwoodMigrationResult,
 };
 // Internal-only re-export for `sync_engine::run_sync_impl`'s
 // auto-resubmit pass. Not part of the `wallet::sync` public surface.

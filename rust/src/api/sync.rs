@@ -611,6 +611,16 @@ pub struct ExecuteProposalResult {
     pub message: Option<String>,
 }
 
+pub struct IronwoodMigrationResult {
+    pub txids: String,
+    pub status: String,
+    pub broadcasted_count: u32,
+    pub total_count: u32,
+    pub message: Option<String>,
+    pub fee_zatoshi: u64,
+    pub migrated_zatoshi: u64,
+}
+
 pub struct ExtractAndBroadcastPcztResult {
     pub txid: String,
     pub status: String,
@@ -839,6 +849,79 @@ pub fn execute_proposal_with_macos_stored_mnemonic(
             broadcasted_count: r.broadcasted_count,
             total_count: r.total_count,
             message: r.message,
+        })
+    })
+}
+
+pub fn migrate_orchard_to_ironwood(
+    db_path: String,
+    lightwalletd_url: String,
+    network: String,
+    account_uuid: String,
+    mnemonic_bytes: Vec<u8>,
+    amount_zatoshi: u64,
+    transfer_count: u32,
+) -> Result<IronwoodMigrationResult, String> {
+    catch(|| {
+        let network = parse_network_and_migrate(&db_path, &network)?;
+        let mnemonic_bytes = Zeroizing::new(mnemonic_bytes);
+        let seed = keys::mnemonic_bytes_to_seed(mnemonic_bytes.as_slice())?;
+        drop(mnemonic_bytes);
+
+        let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
+        let r = rt.block_on(wallet_sync::migrate_orchard_to_ironwood(
+            &db_path,
+            &lightwalletd_url,
+            network,
+            &account_uuid,
+            seed,
+            amount_zatoshi,
+            transfer_count,
+        ))?;
+        Ok(IronwoodMigrationResult {
+            txids: r.txids,
+            status: r.status,
+            broadcasted_count: r.broadcasted_count,
+            total_count: r.total_count,
+            message: r.message,
+            fee_zatoshi: r.fee_zatoshi,
+            migrated_zatoshi: r.migrated_zatoshi,
+        })
+    })
+}
+
+pub fn migrate_orchard_to_ironwood_with_macos_stored_mnemonic(
+    db_path: String,
+    lightwalletd_url: String,
+    network: String,
+    account_uuid: String,
+    password: String,
+    amount_zatoshi: u64,
+    transfer_count: u32,
+) -> Result<IronwoodMigrationResult, String> {
+    catch(|| {
+        let network = parse_network_and_migrate(&db_path, &network)?;
+        let password = Zeroizing::new(password.into_bytes());
+        let seed = secret_store::seed_from_macos_stored_mnemonic(network, &account_uuid, password)?;
+
+        let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
+        let r = rt.block_on(wallet_sync::migrate_orchard_to_ironwood(
+            &db_path,
+            &lightwalletd_url,
+            network,
+            &account_uuid,
+            seed,
+            amount_zatoshi,
+            transfer_count,
+        ))?;
+        Ok(IronwoodMigrationResult {
+            txids: r.txids,
+            status: r.status,
+            broadcasted_count: r.broadcasted_count,
+            total_count: r.total_count,
+            message: r.message,
+            fee_zatoshi: r.fee_zatoshi,
+            migrated_zatoshi: r.migrated_zatoshi,
         })
     })
 }

@@ -44,18 +44,18 @@ use zcash_client_backend::data_api::wallet::input_selection::{GreedyInputSelecto
 use zcash_client_backend::{
     data_api::{
         wallet::{
-            self, create_proposed_transactions, propose_send_max_transfer, propose_shielding,
-            propose_transfer, ConfirmationsPolicy,
+            self, create_orchard_to_ironwood_transaction, create_proposed_transactions,
+            propose_send_max_transfer, propose_shielding, propose_transfer, ConfirmationsPolicy,
         },
         Account as _, AccountMeta, Balance, InputSource, MaxSpendMode, NoteFilter, ReceivedNotes,
-        TargetValue, TransparentKeyOrigin, TransparentOutputFilter, WalletRead, WalletUtxo,
+        TargetValue, TransparentKeyOrigin, TransparentOutputFilter, WalletRead,
     },
     fees::{
         zip317::{MultiOutputChangeStrategy, Zip317FeeRule},
         DustOutputPolicy, SplitPolicy, StandardFeeRule,
     },
     proposal::Proposal,
-    wallet::{Note, OvkPolicy, ReceivedNote},
+    wallet::{Note, OvkPolicy, ReceivedNote, WalletTransparentOutput},
     zip321::{Payment, TransactionRequest},
 };
 use zcash_client_sqlite::{AccountUuid, ReceivedNoteId};
@@ -117,6 +117,16 @@ pub struct ExecuteProposalResult {
     pub broadcasted_count: u32,
     pub total_count: u32,
     pub message: Option<String>,
+}
+
+pub struct IronwoodMigrationResult {
+    pub txids: String,
+    pub status: String,
+    pub broadcasted_count: u32,
+    pub total_count: u32,
+    pub message: Option<String>,
+    pub fee_zatoshi: u64,
+    pub migrated_zatoshi: u64,
 }
 
 pub(crate) struct SendMaxEstimateResult {
@@ -666,6 +676,85 @@ async fn execute_stored_proposal(
     )
 }
 
+pub async fn migrate_orchard_to_ironwood(
+    db_path: &str,
+    lightwalletd_url: &str,
+    network: WalletNetwork,
+    account_uuid: &str,
+    seed: SecretVec<u8>,
+    amount_zatoshi: u64,
+    transfer_count: u32,
+) -> Result<IronwoodMigrationResult, String> {
+    if transfer_count == 0 {
+        return Err("Migration transfer count must be greater than zero".to_string());
+    }
+
+    let amount = Zatoshis::from_u64(amount_zatoshi).map_err(|_| "Bad migration amount")?;
+    if amount == Zatoshis::ZERO {
+        return Err("Migration amount must be greater than zero".to_string());
+    }
+
+    let (txids, fee_zatoshi) =
+        with_wallet_db_write_lock("send.migrate_orchard_to_ironwood", move || {
+            let mut db = open_wallet_db(db_path, network)?;
+            let account_id = parse_account_uuid(account_uuid)?;
+            let account = db
+                .get_account(account_id)
+                .map_err(|e| format!("{e}"))?
+                .ok_or("Account not found")?;
+            let zip32_index = account
+                .source()
+                .key_derivation()
+                .ok_or("No key derivation")?
+                .account_index();
+            let usk = UnifiedSpendingKey::from_seed(&network, seed.expose_secret(), zip32_index)
+                .map_err(|e| format!("USK derivation failed: {e:?}"))?;
+            drop(seed);
+
+            let spend_prover = NoOpSpendProver;
+            let output_prover = NoOpOutputProver;
+            let spending_keys = wallet::SpendingKeys::from_unified_spending_key(usk);
+            let fee_rule = ConservativeZip317FeeRule;
+            let mut txids = Vec::with_capacity(transfer_count as usize);
+            let mut total_fee = Zatoshis::ZERO;
+
+            for index in 0..transfer_count {
+                let memo_text = format!("Ironwood migration {}/{}", index + 1, transfer_count);
+                let memo = MemoBytes::from(
+                    Memo::from_bytes(memo_text.as_bytes())
+                        .map_err(|e| format!("Bad migration memo: {e}"))?,
+                );
+                let transaction = create_orchard_to_ironwood_transaction(
+                    &mut db,
+                    &network,
+                    &spend_prover,
+                    &output_prover,
+                    &spending_keys,
+                    OvkPolicy::Sender,
+                    amount,
+                    Some(memo),
+                    &fee_rule,
+                    ConfirmationsPolicy::default(),
+                )
+                .map_err(|e| format!("Create Ironwood migration TX failed: {e}"))?;
+
+                total_fee =
+                    (total_fee + transaction.fee_amount()).ok_or("Migration fee total overflow")?;
+                txids.push(transaction.txid());
+            }
+
+            Ok::<_, String>((txids, total_fee))
+        })?;
+
+    let migrated_zatoshi = amount_zatoshi
+        .checked_mul(u64::from(transfer_count))
+        .ok_or("Migration amount overflow")?;
+    let broadcast =
+        broadcast_created_transactions(db_path, lightwalletd_url, &txids, "ironwood_migration")
+            .await;
+    Ok(broadcast.into_ironwood_migration_result(u64::from(fee_zatoshi), migrated_zatoshi))
+}
+
 fn shielding_threshold() -> Result<Zatoshis, String> {
     Zatoshis::from_u64(SHIELDING_THRESHOLD_ZATOSHI)
         .map_err(|_| "Bad shielding threshold".to_string())
@@ -861,7 +950,7 @@ impl InputSource for ReservedInputSource<'_> {
         &self,
         outpoint: &OutPoint,
         target_height: wallet::TargetHeight,
-    ) -> Result<Option<WalletUtxo>, Self::Error> {
+    ) -> Result<Option<WalletTransparentOutput<Self::AccountId>>, Self::Error> {
         self.inner
             .get_unspent_transparent_output(outpoint, target_height)
     }
@@ -872,7 +961,7 @@ impl InputSource for ReservedInputSource<'_> {
         target_height: wallet::TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
         output_filter: TransparentOutputFilter,
-    ) -> Result<Vec<WalletUtxo>, Self::Error> {
+    ) -> Result<Vec<WalletTransparentOutput<Self::AccountId>>, Self::Error> {
         self.inner.get_spendable_transparent_outputs(
             address,
             target_height,
@@ -1044,6 +1133,22 @@ impl CreatedBroadcastResult {
             message: self.message,
             fee_zatoshi,
             shielded_zatoshi,
+        }
+    }
+
+    fn into_ironwood_migration_result(
+        self,
+        fee_zatoshi: u64,
+        migrated_zatoshi: u64,
+    ) -> IronwoodMigrationResult {
+        IronwoodMigrationResult {
+            txids: self.txids,
+            status: self.status.to_string(),
+            broadcasted_count: self.broadcasted_count,
+            total_count: self.total_count,
+            message: self.message,
+            fee_zatoshi,
+            migrated_zatoshi,
         }
     }
 }
@@ -1604,7 +1709,9 @@ mod tests {
             txid[4..8].copy_from_slice(&0xfeed_beefu32.to_le_bytes());
             let outpoint = OutPoint::new(txid, 0);
             let txout = TxOut::new(value, taddr.script().into());
-            let utxo = WalletTransparentOutput::from_parts(outpoint, txout, Some(tip)).unwrap();
+            let utxo =
+                WalletTransparentOutput::from_parts(outpoint, txout, Some(tip), None, None, None)
+                    .unwrap();
             db.put_received_transparent_utxo(&utxo).unwrap();
         }
 

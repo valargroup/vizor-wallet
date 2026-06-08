@@ -56,8 +56,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     await showMigrationCompletionDialog(context);
   }
 
-  Future<void> _resetDemo() =>
-      ref.read(migrationDemoProvider.notifier).reset();
+  Future<void> _resetDemo() => ref.read(migrationDemoProvider.notifier).reset();
 
   @override
   Widget build(BuildContext context) {
@@ -66,15 +65,21 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     final demo = ref.watch(migrationDemoProvider).value;
     final now = DateTime.now();
 
-    final viewState =
-        migrationViewState(isHardware: isHardware, demo: demo, now: now);
+    final viewState = migrationViewState(
+      isHardware: isHardware,
+      demo: demo,
+      now: now,
+    );
     _ensureTicker(viewState == MigrationViewState.inProgress);
 
     final Widget body = switch (viewState) {
-      MigrationViewState.keystoneRequired => const _KeystoneRequiredView(),
+      MigrationViewState.softwareRequired => const _SoftwareRequiredView(),
       MigrationViewState.idle => _IdleView(onStart: _startSigning),
-      MigrationViewState.inProgress =>
-        _InProgressView(demo: demo!, now: now, onReset: _resetDemo),
+      MigrationViewState.inProgress => _InProgressView(
+        demo: demo!,
+        now: now,
+        onReset: _resetDemo,
+      ),
       MigrationViewState.complete => _CompleteView(onDone: _resetDemo),
     };
 
@@ -110,20 +115,24 @@ class _IdleView extends ConsumerWidget {
     final colors = context.colors;
     final orchard =
         ref.watch(syncProvider).value?.orchardBalance ?? BigInt.zero;
-    final amount = ZecAmount.fromZatoshi(orchard)
-        .pretty(denomStyle: ZecDenomStyle.upper)
-        .toString();
+    final amount = ZecAmount.fromZatoshi(
+      orchard,
+    ).pretty(denomStyle: ZecDenomStyle.upper).toString();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(MigrationCopy.idleTitle,
-            style:
-                AppTypography.displaySmall.copyWith(color: colors.text.accent)),
+        Text(
+          MigrationCopy.idleTitle,
+          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
+        ),
         const SizedBox(height: AppSpacing.xs),
-        Text(MigrationCopy.idleBody,
-            style: AppTypography.bodyMedium
-                .copyWith(color: colors.text.secondary)),
+        Text(
+          MigrationCopy.idleBody,
+          style: AppTypography.bodyMedium.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
         const SizedBox(height: AppSpacing.md),
         const _PoolTransition(),
         const SizedBox(height: AppSpacing.md),
@@ -131,18 +140,27 @@ class _IdleView extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(MigrationCopy.readyToMigrateLabel,
-                  style: AppTypography.labelLarge
-                      .copyWith(color: colors.text.secondary)),
+              Text(
+                MigrationCopy.readyToMigrateLabel,
+                style: AppTypography.labelLarge.copyWith(
+                  color: colors.text.secondary,
+                ),
+              ),
               const SizedBox(height: AppSpacing.xxs),
-              Text(amount,
-                  key: const ValueKey('migration_ready_amount'),
-                  style: AppTypography.displaySmall
-                      .copyWith(color: colors.text.accent)),
+              Text(
+                amount,
+                key: const ValueKey('migration_ready_amount'),
+                style: AppTypography.displaySmall.copyWith(
+                  color: colors.text.accent,
+                ),
+              ),
               const SizedBox(height: AppSpacing.xxs),
-              Text(MigrationCopy.poolFlow,
-                  style: AppTypography.bodyExtraSmall
-                      .copyWith(color: colors.text.secondary)),
+              Text(
+                MigrationCopy.poolFlow,
+                style: AppTypography.bodyExtraSmall.copyWith(
+                  color: colors.text.secondary,
+                ),
+              ),
             ],
           ),
         ),
@@ -160,8 +178,8 @@ class _IdleView extends ConsumerWidget {
   }
 }
 
-class _KeystoneRequiredView extends StatelessWidget {
-  const _KeystoneRequiredView();
+class _SoftwareRequiredView extends StatelessWidget {
+  const _SoftwareRequiredView();
 
   @override
   Widget build(BuildContext context) {
@@ -169,16 +187,18 @@ class _KeystoneRequiredView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(MigrationCopy.keystoneRequiredTitle,
-            style:
-                AppTypography.displaySmall.copyWith(color: colors.text.accent)),
+        Text(
+          MigrationCopy.softwareRequiredTitle,
+          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
+        ),
         const SizedBox(height: AppSpacing.s),
         _Card(
           child: Text(
-            MigrationCopy.keystoneRequiredBody,
-            key: const ValueKey('migration_keystone_required'),
-            style:
-                AppTypography.bodyMedium.copyWith(color: colors.text.secondary),
+            MigrationCopy.softwareRequiredBody,
+            key: const ValueKey('migration_software_required'),
+            style: AppTypography.bodyMedium.copyWith(
+              color: colors.text.secondary,
+            ),
           ),
         ),
       ],
@@ -187,8 +207,11 @@ class _KeystoneRequiredView extends StatelessWidget {
 }
 
 class _InProgressView extends StatelessWidget {
-  const _InProgressView(
-      {required this.demo, required this.now, required this.onReset});
+  const _InProgressView({
+    required this.demo,
+    required this.now,
+    required this.onReset,
+  });
   final MigrationDemoState demo;
   final DateTime now;
   final VoidCallback onReset;
@@ -196,30 +219,37 @@ class _InProgressView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final amount = ZecAmount.fromZatoshi(demo.displayAmountZatoshi)
-        .pretty(denomStyle: ZecDenomStyle.upper)
-        .toString();
+    final amount = ZecAmount.fromZatoshi(
+      demo.displayAmountZatoshi,
+    ).pretty(denomStyle: ZecDenomStyle.upper).toString();
     final sent = demo.transfersSent(now);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(MigrationCopy.inProgressTitle,
-            key: const ValueKey('migration_in_progress_title'),
-            style:
-                AppTypography.displaySmall.copyWith(color: colors.text.accent)),
+        Text(
+          MigrationCopy.inProgressTitle,
+          key: const ValueKey('migration_in_progress_title'),
+          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
+        ),
         const SizedBox(height: AppSpacing.xs),
-        Text(MigrationCopy.inProgressBody,
-            style: AppTypography.bodyMedium
-                .copyWith(color: colors.text.secondary)),
+        Text(
+          MigrationCopy.inProgressBody,
+          style: AppTypography.bodyMedium.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
         const SizedBox(height: AppSpacing.md),
         _Card(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(MigrationCopy.migratingAmount(amount),
-                  style: AppTypography.labelLarge
-                      .copyWith(color: colors.text.secondary)),
+              Text(
+                MigrationCopy.migratingAmount(amount),
+                style: AppTypography.labelLarge.copyWith(
+                  color: colors.text.secondary,
+                ),
+              ),
               const SizedBox(height: AppSpacing.s),
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadii.full),
@@ -234,8 +264,9 @@ class _InProgressView extends StatelessWidget {
               Text(
                 '${formatRemaining(demo.remaining(now))} · '
                 '${formatStartedAgo(demo.sinceStart(now))}',
-                style: AppTypography.bodyExtraSmall
-                    .copyWith(color: colors.text.secondary),
+                style: AppTypography.bodyExtraSmall.copyWith(
+                  color: colors.text.secondary,
+                ),
               ),
             ],
           ),
@@ -256,16 +287,20 @@ class _InProgressView extends StatelessWidget {
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
-                      child: Text(MigrationCopy.transferLabel(i + 1),
-                          style: AppTypography.bodyMedium
-                              .copyWith(color: colors.text.accent)),
+                      child: Text(
+                        MigrationCopy.transferLabel(i + 1),
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: colors.text.accent,
+                        ),
+                      ),
                     ),
                     Text(
                       sent[i]
                           ? MigrationCopy.transferSent
                           : formatTransferEta(demo.transferEta(i, now)),
-                      style: AppTypography.bodyMedium
-                          .copyWith(color: colors.text.secondary),
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: colors.text.secondary,
+                      ),
                     ),
                   ],
                 ),
@@ -278,13 +313,19 @@ class _InProgressView extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppIcon(AppIcons.warning,
-                  size: AppIconSize.medium, color: colors.icon.muted),
+              AppIcon(
+                AppIcons.warning,
+                size: AppIconSize.medium,
+                color: colors.icon.muted,
+              ),
               const SizedBox(width: AppSpacing.xs),
               Expanded(
-                child: Text(MigrationCopy.keepOpenWarning,
-                    style: AppTypography.bodyExtraSmall
-                        .copyWith(color: colors.text.secondary)),
+                child: Text(
+                  MigrationCopy.keepOpenWarning,
+                  style: AppTypography.bodyExtraSmall.copyWith(
+                    color: colors.text.secondary,
+                  ),
+                ),
               ),
             ],
           ),
@@ -312,14 +353,18 @@ class _CompleteView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(MigrationCopy.doneTitle,
-            key: const ValueKey('migration_done_title'),
-            style:
-                AppTypography.displaySmall.copyWith(color: colors.text.accent)),
+        Text(
+          MigrationCopy.doneTitle,
+          key: const ValueKey('migration_done_title'),
+          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
+        ),
         const SizedBox(height: AppSpacing.xs),
-        Text(MigrationCopy.doneBody,
-            style: AppTypography.bodyMedium
-                .copyWith(color: colors.text.secondary)),
+        Text(
+          MigrationCopy.doneBody,
+          style: AppTypography.bodyMedium.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
         const SizedBox(height: AppSpacing.md),
         AppButton(
           onPressed: onDone,
@@ -342,31 +387,46 @@ class _PoolTransition extends StatelessWidget {
           child: _Card(
             child: Column(
               children: [
-                Text(MigrationCopy.fromPoolName,
-                    style: AppTypography.bodyLarge
-                        .copyWith(color: colors.text.accent)),
-                Text(MigrationCopy.fromPoolTag,
-                    style: AppTypography.bodyExtraSmall
-                        .copyWith(color: colors.text.secondary)),
+                Text(
+                  MigrationCopy.fromPoolName,
+                  style: AppTypography.bodyLarge.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+                Text(
+                  MigrationCopy.fromPoolTag,
+                  style: AppTypography.bodyExtraSmall.copyWith(
+                    color: colors.text.secondary,
+                  ),
+                ),
               ],
             ),
           ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
-          child: AppIcon(AppIcons.arrowForwardIos,
-              size: AppIconSize.medium, color: colors.icon.muted),
+          child: AppIcon(
+            AppIcons.arrowForwardIos,
+            size: AppIconSize.medium,
+            color: colors.icon.muted,
+          ),
         ),
         Expanded(
           child: _Card(
             child: Column(
               children: [
-                Text(MigrationCopy.toPoolName,
-                    style: AppTypography.bodyLarge
-                        .copyWith(color: colors.text.accent)),
-                Text(MigrationCopy.toPoolTag,
-                    style: AppTypography.bodyExtraSmall
-                        .copyWith(color: colors.text.secondary)),
+                Text(
+                  MigrationCopy.toPoolName,
+                  style: AppTypography.bodyLarge.copyWith(
+                    color: colors.text.accent,
+                  ),
+                ),
+                Text(
+                  MigrationCopy.toPoolTag,
+                  style: AppTypography.bodyExtraSmall.copyWith(
+                    color: colors.text.secondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -383,21 +443,27 @@ class _Bullets extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     Widget bullet(String text) => Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('›  ',
-                  style: AppTypography.bodyMedium
-                      .copyWith(color: colors.text.secondary)),
-              Expanded(
-                child: Text(text,
-                    style: AppTypography.bodyMedium
-                        .copyWith(color: colors.text.secondary)),
-              ),
-            ],
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '›  ',
+            style: AppTypography.bodyMedium.copyWith(
+              color: colors.text.secondary,
+            ),
           ),
-        );
+          Expanded(
+            child: Text(
+              text,
+              style: AppTypography.bodyMedium.copyWith(
+                color: colors.text.secondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

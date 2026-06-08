@@ -309,6 +309,44 @@ Future<ExecuteProposalResult> executeProposalWithMacosStoredMnemonic({
   outputParamsPath: outputParamsPath,
 );
 
+Future<IronwoodMigrationResult> migrateOrchardToIronwood({
+  required String dbPath,
+  required String lightwalletdUrl,
+  required String network,
+  required String accountUuid,
+  required List<int> mnemonicBytes,
+  required BigInt amountZatoshi,
+  required int transferCount,
+}) => RustLib.instance.api.crateApiSyncMigrateOrchardToIronwood(
+  dbPath: dbPath,
+  lightwalletdUrl: lightwalletdUrl,
+  network: network,
+  accountUuid: accountUuid,
+  mnemonicBytes: mnemonicBytes,
+  amountZatoshi: amountZatoshi,
+  transferCount: transferCount,
+);
+
+Future<IronwoodMigrationResult>
+migrateOrchardToIronwoodWithMacosStoredMnemonic({
+  required String dbPath,
+  required String lightwalletdUrl,
+  required String network,
+  required String accountUuid,
+  required String password,
+  required BigInt amountZatoshi,
+  required int transferCount,
+}) => RustLib.instance.api
+    .crateApiSyncMigrateOrchardToIronwoodWithMacosStoredMnemonic(
+      dbPath: dbPath,
+      lightwalletdUrl: lightwalletdUrl,
+      network: network,
+      accountUuid: accountUuid,
+      password: password,
+      amountZatoshi: amountZatoshi,
+      transferCount: transferCount,
+    );
+
 /// Dry-run transparent shielding without creating or broadcasting a transaction.
 Future<ShieldTransparentStatus> getShieldTransparentStatus({
   required String dbPath,
@@ -749,6 +787,49 @@ class ExtractAndBroadcastPcztResult {
           txid == other.txid &&
           status == other.status &&
           message == other.message;
+}
+
+class IronwoodMigrationResult {
+  final String txids;
+  final String status;
+  final int broadcastedCount;
+  final int totalCount;
+  final String? message;
+  final BigInt feeZatoshi;
+  final BigInt migratedZatoshi;
+
+  const IronwoodMigrationResult({
+    required this.txids,
+    required this.status,
+    required this.broadcastedCount,
+    required this.totalCount,
+    this.message,
+    required this.feeZatoshi,
+    required this.migratedZatoshi,
+  });
+
+  @override
+  int get hashCode =>
+      txids.hashCode ^
+      status.hashCode ^
+      broadcastedCount.hashCode ^
+      totalCount.hashCode ^
+      message.hashCode ^
+      feeZatoshi.hashCode ^
+      migratedZatoshi.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is IronwoodMigrationResult &&
+          runtimeType == other.runtimeType &&
+          txids == other.txids &&
+          status == other.status &&
+          broadcastedCount == other.broadcastedCount &&
+          totalCount == other.totalCount &&
+          message == other.message &&
+          feeZatoshi == other.feeZatoshi &&
+          migratedZatoshi == other.migratedZatoshi;
 }
 
 class ProposalResult {

@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1785197534;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -859661400;
 
 // Section: executor
 
@@ -2893,6 +2893,101 @@ fn wire__crate__api__voting__mark_vote_submitted_impl(
         },
     )
 }
+fn wire__crate__api__sync__migrate_orchard_to_ironwood_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "migrate_orchard_to_ironwood",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_db_path = <String>::sse_decode(&mut deserializer);
+            let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
+            let api_network = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
+            let api_mnemonic_bytes = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_amount_zatoshi = <u64>::sse_decode(&mut deserializer);
+            let api_transfer_count = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::sync::migrate_orchard_to_ironwood(
+                        api_db_path,
+                        api_lightwalletd_url,
+                        api_network,
+                        api_account_uuid,
+                        api_mnemonic_bytes,
+                        api_amount_zatoshi,
+                        api_transfer_count,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__sync__migrate_orchard_to_ironwood_with_macos_stored_mnemonic_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "migrate_orchard_to_ironwood_with_macos_stored_mnemonic",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_db_path = <String>::sse_decode(&mut deserializer);
+            let api_lightwalletd_url = <String>::sse_decode(&mut deserializer);
+            let api_network = <String>::sse_decode(&mut deserializer);
+            let api_account_uuid = <String>::sse_decode(&mut deserializer);
+            let api_password = <String>::sse_decode(&mut deserializer);
+            let api_amount_zatoshi = <u64>::sse_decode(&mut deserializer);
+            let api_transfer_count = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::sync::migrate_orchard_to_ironwood_with_macos_stored_mnemonic(
+                            api_db_path,
+                            api_lightwalletd_url,
+                            api_network,
+                            api_account_uuid,
+                            api_password,
+                            api_amount_zatoshi,
+                            api_transfer_count,
+                        )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__wallet__mnemonic_word_list_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -5342,6 +5437,28 @@ impl SseDecode for i64 {
     }
 }
 
+impl SseDecode for crate::api::sync::IronwoodMigrationResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_txids = <String>::sse_decode(deserializer);
+        let mut var_status = <String>::sse_decode(deserializer);
+        let mut var_broadcastedCount = <u32>::sse_decode(deserializer);
+        let mut var_totalCount = <u32>::sse_decode(deserializer);
+        let mut var_message = <Option<String>>::sse_decode(deserializer);
+        let mut var_feeZatoshi = <u64>::sse_decode(deserializer);
+        let mut var_migratedZatoshi = <u64>::sse_decode(deserializer);
+        return crate::api::sync::IronwoodMigrationResult {
+            txids: var_txids,
+            status: var_status,
+            broadcasted_count: var_broadcastedCount,
+            total_count: var_totalCount,
+            message: var_message,
+            fee_zatoshi: var_feeZatoshi,
+            migrated_zatoshi: var_migratedZatoshi,
+        };
+    }
+}
+
 impl SseDecode for crate::wallet::keystone::KeystoneAccountInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -6903,41 +7020,43 @@ fn pde_ffi_dispatcher_primary_impl(
 73 => wire__crate__api__voting__mark_delegation_submitted_impl(port, ptr, rust_vec_len, data_len),
 74 => wire__crate__api__voting__mark_share_confirmed_impl(port, ptr, rust_vec_len, data_len),
 75 => wire__crate__api__voting__mark_vote_submitted_impl(port, ptr, rust_vec_len, data_len),
-77 => wire__crate__api__voting__next_share_tracking_delay_seconds_impl(port, ptr, rust_vec_len, data_len),
-78 => wire__crate__api__voting__parse_signed_voting_pczt_impl(port, ptr, rust_vec_len, data_len),
-79 => wire__crate__api__keystone__pczt_spend_nullifiers_impl(port, ptr, rust_vec_len, data_len),
-80 => wire__crate__api__voting__plan_share_submissions_impl(port, ptr, rust_vec_len, data_len),
-81 => wire__crate__api__voting__precompute_delegation_pir_impl(port, ptr, rust_vec_len, data_len),
-82 => wire__crate__api__sync__propose_send_impl(port, ptr, rust_vec_len, data_len),
-83 => wire__crate__api__sync__put_subtree_roots_impl(port, ptr, rust_vec_len, data_len),
-84 => wire__crate__api__voting__record_share_delegation_impl(port, ptr, rust_vec_len, data_len),
-85 => wire__crate__api__voting__recover_vote_commitment_impl(port, ptr, rust_vec_len, data_len),
-86 => wire__crate__api__voting__recovered_vote_share_wire_json_impl(port, ptr, rust_vec_len, data_len),
-87 => wire__crate__api__sync__redact_pczt_for_signer_impl(port, ptr, rust_vec_len, data_len),
-89 => wire__crate__api__voting__reset_vote_tree_impl(port, ptr, rust_vec_len, data_len),
-90 => wire__crate__api__voting__reset_voting_session_state_impl(port, ptr, rust_vec_len, data_len),
-91 => wire__crate__api__voting__resolve_static_voting_config_impl(port, ptr, rust_vec_len, data_len),
-92 => wire__crate__api__voting__resolve_voting_config_impl(port, ptr, rust_vec_len, data_len),
-93 => wire__crate__api__sync__rewind_to_height_impl(port, ptr, rust_vec_len, data_len),
-94 => wire__crate__api__sync__run_full_sync_blocking_impl(port, ptr, rust_vec_len, data_len),
-95 => wire__crate__api__sync__scan_blocks_impl(port, ptr, rust_vec_len, data_len),
-96 => wire__crate__api__voting__set_ballot_intent_impl(port, ptr, rust_vec_len, data_len),
-98 => wire__crate__api__sync__set_transaction_status_impl(port, ptr, rust_vec_len, data_len),
-99 => wire__crate__api__voting__setup_delegation_bundles_impl(port, ptr, rust_vec_len, data_len),
-100 => wire__crate__api__voting__share_tracking_flags_impl(port, ptr, rust_vec_len, data_len),
-101 => wire__crate__api__sync__shield_transparent_balance_impl(port, ptr, rust_vec_len, data_len),
-102 => wire__crate__api__sync__shield_transparent_balance_with_macos_stored_mnemonic_impl(port, ptr, rust_vec_len, data_len),
-103 => wire__crate__api__sync__start_full_sync_impl(port, ptr, rust_vec_len, data_len),
-104 => wire__crate__api__sync__start_mempool_observer_impl(port, ptr, rust_vec_len, data_len),
-106 => wire__crate__api__voting__store_keystone_signature_impl(port, ptr, rust_vec_len, data_len),
-107 => wire__crate__api__sync__suggest_scan_ranges_impl(port, ptr, rust_vec_len, data_len),
-108 => wire__crate__api__voting__sync_vote_tree_impl(port, ptr, rust_vec_len, data_len),
-109 => wire__crate__api__voting__trusted_voting_round_params_from_config_impl(port, ptr, rust_vec_len, data_len),
-110 => wire__crate__api__sync__update_chain_tip_impl(port, ptr, rust_vec_len, data_len),
-111 => wire__crate__api__sync__validate_address_impl(port, ptr, rust_vec_len, data_len),
-113 => wire__crate__api__voting__vote_commitment_wire_json_impl(port, ptr, rust_vec_len, data_len),
-114 => wire__crate__api__voting__vote_share_wire_json_impl(port, ptr, rust_vec_len, data_len),
-116 => wire__crate__api__sync__write_block_metadata_impl(port, ptr, rust_vec_len, data_len),
+76 => wire__crate__api__sync__migrate_orchard_to_ironwood_impl(port, ptr, rust_vec_len, data_len),
+77 => wire__crate__api__sync__migrate_orchard_to_ironwood_with_macos_stored_mnemonic_impl(port, ptr, rust_vec_len, data_len),
+79 => wire__crate__api__voting__next_share_tracking_delay_seconds_impl(port, ptr, rust_vec_len, data_len),
+80 => wire__crate__api__voting__parse_signed_voting_pczt_impl(port, ptr, rust_vec_len, data_len),
+81 => wire__crate__api__keystone__pczt_spend_nullifiers_impl(port, ptr, rust_vec_len, data_len),
+82 => wire__crate__api__voting__plan_share_submissions_impl(port, ptr, rust_vec_len, data_len),
+83 => wire__crate__api__voting__precompute_delegation_pir_impl(port, ptr, rust_vec_len, data_len),
+84 => wire__crate__api__sync__propose_send_impl(port, ptr, rust_vec_len, data_len),
+85 => wire__crate__api__sync__put_subtree_roots_impl(port, ptr, rust_vec_len, data_len),
+86 => wire__crate__api__voting__record_share_delegation_impl(port, ptr, rust_vec_len, data_len),
+87 => wire__crate__api__voting__recover_vote_commitment_impl(port, ptr, rust_vec_len, data_len),
+88 => wire__crate__api__voting__recovered_vote_share_wire_json_impl(port, ptr, rust_vec_len, data_len),
+89 => wire__crate__api__sync__redact_pczt_for_signer_impl(port, ptr, rust_vec_len, data_len),
+91 => wire__crate__api__voting__reset_vote_tree_impl(port, ptr, rust_vec_len, data_len),
+92 => wire__crate__api__voting__reset_voting_session_state_impl(port, ptr, rust_vec_len, data_len),
+93 => wire__crate__api__voting__resolve_static_voting_config_impl(port, ptr, rust_vec_len, data_len),
+94 => wire__crate__api__voting__resolve_voting_config_impl(port, ptr, rust_vec_len, data_len),
+95 => wire__crate__api__sync__rewind_to_height_impl(port, ptr, rust_vec_len, data_len),
+96 => wire__crate__api__sync__run_full_sync_blocking_impl(port, ptr, rust_vec_len, data_len),
+97 => wire__crate__api__sync__scan_blocks_impl(port, ptr, rust_vec_len, data_len),
+98 => wire__crate__api__voting__set_ballot_intent_impl(port, ptr, rust_vec_len, data_len),
+100 => wire__crate__api__sync__set_transaction_status_impl(port, ptr, rust_vec_len, data_len),
+101 => wire__crate__api__voting__setup_delegation_bundles_impl(port, ptr, rust_vec_len, data_len),
+102 => wire__crate__api__voting__share_tracking_flags_impl(port, ptr, rust_vec_len, data_len),
+103 => wire__crate__api__sync__shield_transparent_balance_impl(port, ptr, rust_vec_len, data_len),
+104 => wire__crate__api__sync__shield_transparent_balance_with_macos_stored_mnemonic_impl(port, ptr, rust_vec_len, data_len),
+105 => wire__crate__api__sync__start_full_sync_impl(port, ptr, rust_vec_len, data_len),
+106 => wire__crate__api__sync__start_mempool_observer_impl(port, ptr, rust_vec_len, data_len),
+108 => wire__crate__api__voting__store_keystone_signature_impl(port, ptr, rust_vec_len, data_len),
+109 => wire__crate__api__sync__suggest_scan_ranges_impl(port, ptr, rust_vec_len, data_len),
+110 => wire__crate__api__voting__sync_vote_tree_impl(port, ptr, rust_vec_len, data_len),
+111 => wire__crate__api__voting__trusted_voting_round_params_from_config_impl(port, ptr, rust_vec_len, data_len),
+112 => wire__crate__api__sync__update_chain_tip_impl(port, ptr, rust_vec_len, data_len),
+113 => wire__crate__api__sync__validate_address_impl(port, ptr, rust_vec_len, data_len),
+115 => wire__crate__api__voting__vote_commitment_wire_json_impl(port, ptr, rust_vec_len, data_len),
+116 => wire__crate__api__voting__vote_share_wire_json_impl(port, ptr, rust_vec_len, data_len),
+118 => wire__crate__api__sync__write_block_metadata_impl(port, ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
 }
@@ -6963,12 +7082,12 @@ fn pde_ffi_dispatcher_sync_impl(
         71 => {
             wire__crate__api__voting__last_moment_buffer_seconds_impl(ptr, rust_vec_len, data_len)
         }
-        76 => wire__crate__api__wallet__mnemonic_word_list_impl(ptr, rust_vec_len, data_len),
-        88 => wire__crate__api__keystone__reset_ur_session_impl(ptr, rust_vec_len, data_len),
-        97 => wire__crate__api__sync__set_sync_mode_impl(ptr, rust_vec_len, data_len),
-        105 => wire__crate__api__sync__stop_mempool_observer_impl(ptr, rust_vec_len, data_len),
-        112 => wire__crate__api__wallet__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
-        115 => wire__crate__api__wallet__wallet_exists_impl(ptr, rust_vec_len, data_len),
+        78 => wire__crate__api__wallet__mnemonic_word_list_impl(ptr, rust_vec_len, data_len),
+        90 => wire__crate__api__keystone__reset_ur_session_impl(ptr, rust_vec_len, data_len),
+        99 => wire__crate__api__sync__set_sync_mode_impl(ptr, rust_vec_len, data_len),
+        107 => wire__crate__api__sync__stop_mempool_observer_impl(ptr, rust_vec_len, data_len),
+        114 => wire__crate__api__wallet__validate_mnemonic_impl(ptr, rust_vec_len, data_len),
+        117 => wire__crate__api__wallet__wallet_exists_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -7576,6 +7695,32 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::sync::ExtractAndBroadcastPczt
     for crate::api::sync::ExtractAndBroadcastPcztResult
 {
     fn into_into_dart(self) -> crate::api::sync::ExtractAndBroadcastPcztResult {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::sync::IronwoodMigrationResult {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.txids.into_into_dart().into_dart(),
+            self.status.into_into_dart().into_dart(),
+            self.broadcasted_count.into_into_dart().into_dart(),
+            self.total_count.into_into_dart().into_dart(),
+            self.message.into_into_dart().into_dart(),
+            self.fee_zatoshi.into_into_dart().into_dart(),
+            self.migrated_zatoshi.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::sync::IronwoodMigrationResult
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::sync::IronwoodMigrationResult>
+    for crate::api::sync::IronwoodMigrationResult
+{
+    fn into_into_dart(self) -> crate::api::sync::IronwoodMigrationResult {
         self
     }
 }
@@ -9121,6 +9266,19 @@ impl SseEncode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_i64::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::sync::IronwoodMigrationResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.txids, serializer);
+        <String>::sse_encode(self.status, serializer);
+        <u32>::sse_encode(self.broadcasted_count, serializer);
+        <u32>::sse_encode(self.total_count, serializer);
+        <Option<String>>::sse_encode(self.message, serializer);
+        <u64>::sse_encode(self.fee_zatoshi, serializer);
+        <u64>::sse_encode(self.migrated_zatoshi, serializer);
     }
 }
 
