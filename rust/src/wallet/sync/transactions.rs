@@ -34,6 +34,9 @@ use crate::wallet::network::WalletNetwork;
 
 use super::{open_readonly_conn, open_wallet_db, open_wallet_db_for_read};
 
+const ORCHARD_NOTE_VERSION: i64 = 2;
+const IRONWOOD_NOTE_VERSION: i64 = 3;
+
 // ======================== Balance ========================
 
 pub(crate) struct WalletBalance {
@@ -304,6 +307,7 @@ struct TxBase {
     tx_index: i64,
     created: Option<String>,
     created_time: u64,
+    spent_orchard_note: bool,
 }
 
 struct TxOutput {
@@ -318,6 +322,7 @@ struct TxOutput {
     to_key_scope: Option<i64>,
     value: u64,
     memo: Option<Vec<u8>>,
+    note_version: Option<i64>,
 }
 
 impl TxOutput {
@@ -372,6 +377,7 @@ struct ActivitySummary {
     sent: ActivityAmounts,
     received: ActivityAmounts,
     shielded: ActivityAmounts,
+    migration: ActivityAmounts,
     has_own_transparent_output: bool,
     has_external_transparent_send: bool,
 }
@@ -596,7 +602,17 @@ fn read_history_base_by_txid(
             vt.expiry_height,
             COALESCE(vt.tx_index, -1) AS tx_index,
             tx.created,
-            CAST(COALESCE(strftime('%s', tx.created), 0) AS INTEGER) AS created_time
+            CAST(COALESCE(strftime('%s', tx.created), 0) AS INTEGER) AS created_time,
+            EXISTS (
+                SELECT 1
+                FROM transactions spent_tx
+                JOIN orchard_received_note_spends spent
+                    ON spent.transaction_id = spent_tx.id_tx
+                JOIN orchard_received_notes spent_note
+                    ON spent_note.id = spent.orchard_received_note_id
+                WHERE spent_tx.txid = vt.txid
+                  AND spent_note.note_version = ?3
+            ) AS spent_orchard_note
         FROM v_transactions vt
         LEFT JOIN transactions tx ON tx.txid = vt.txid
         WHERE vt.account_uuid = ?1
@@ -607,23 +623,27 @@ fn read_history_base_by_txid(
         .map_err(|e| format!("SQL error: {e}"))?;
 
     let row = stmt
-        .query_row(rusqlite::params![account_uuid, txid], |row| {
-            Ok(TxBase {
-                txid: row.get(0)?,
-                mined_height: row.get(1)?,
-                expired_unmined: row.get(2)?,
-                account_balance_delta: row.get(3)?,
-                fee: row.get::<_, i64>(4)?.unsigned_abs(),
-                block_time: row.get::<_, i64>(5)?.unsigned_abs(),
-                total_spent: row.get::<_, i64>(6)?.unsigned_abs(),
-                total_received: row.get::<_, i64>(7)?.unsigned_abs(),
-                is_shielding: row.get(8)?,
-                expiry_height: row.get(9)?,
-                tx_index: row.get(10)?,
-                created: row.get(11)?,
-                created_time: row.get::<_, i64>(12)?.unsigned_abs(),
-            })
-        })
+        .query_row(
+            rusqlite::params![account_uuid, txid, ORCHARD_NOTE_VERSION],
+            |row| {
+                Ok(TxBase {
+                    txid: row.get(0)?,
+                    mined_height: row.get(1)?,
+                    expired_unmined: row.get(2)?,
+                    account_balance_delta: row.get(3)?,
+                    fee: row.get::<_, i64>(4)?.unsigned_abs(),
+                    block_time: row.get::<_, i64>(5)?.unsigned_abs(),
+                    total_spent: row.get::<_, i64>(6)?.unsigned_abs(),
+                    total_received: row.get::<_, i64>(7)?.unsigned_abs(),
+                    is_shielding: row.get(8)?,
+                    expiry_height: row.get(9)?,
+                    tx_index: row.get(10)?,
+                    created: row.get(11)?,
+                    created_time: row.get::<_, i64>(12)?.unsigned_abs(),
+                    spent_orchard_note: row.get(13)?,
+                })
+            },
+        )
         .optional()
         .map_err(|e| format!("Query error: {e}"))?;
 
@@ -650,7 +670,17 @@ fn read_history_bases(
             vt.expiry_height,
             COALESCE(vt.tx_index, -1) AS tx_index,
             tx.created,
-            CAST(COALESCE(strftime('%s', tx.created), 0) AS INTEGER) AS created_time
+            CAST(COALESCE(strftime('%s', tx.created), 0) AS INTEGER) AS created_time,
+            EXISTS (
+                SELECT 1
+                FROM transactions spent_tx
+                JOIN orchard_received_note_spends spent
+                    ON spent.transaction_id = spent_tx.id_tx
+                JOIN orchard_received_notes spent_note
+                    ON spent_note.id = spent.orchard_received_note_id
+                WHERE spent_tx.txid = vt.txid
+                  AND spent_note.note_version = ?2
+            ) AS spent_orchard_note
         FROM v_transactions vt
         LEFT JOIN transactions tx ON tx.txid = vt.txid
         WHERE vt.account_uuid = ?1
@@ -659,23 +689,27 @@ fn read_history_bases(
         .map_err(|e| format!("SQL error: {e}"))?;
 
     let rows = stmt
-        .query_map(rusqlite::params![account_uuid], |row| {
-            Ok(TxBase {
-                txid: row.get(0)?,
-                mined_height: row.get(1)?,
-                expired_unmined: row.get(2)?,
-                account_balance_delta: row.get(3)?,
-                fee: row.get::<_, i64>(4)?.unsigned_abs(),
-                block_time: row.get::<_, i64>(5)?.unsigned_abs(),
-                total_spent: row.get::<_, i64>(6)?.unsigned_abs(),
-                total_received: row.get::<_, i64>(7)?.unsigned_abs(),
-                is_shielding: row.get(8)?,
-                expiry_height: row.get(9)?,
-                tx_index: row.get(10)?,
-                created: row.get(11)?,
-                created_time: row.get::<_, i64>(12)?.unsigned_abs(),
-            })
-        })
+        .query_map(
+            rusqlite::params![account_uuid, ORCHARD_NOTE_VERSION],
+            |row| {
+                Ok(TxBase {
+                    txid: row.get(0)?,
+                    mined_height: row.get(1)?,
+                    expired_unmined: row.get(2)?,
+                    account_balance_delta: row.get(3)?,
+                    fee: row.get::<_, i64>(4)?.unsigned_abs(),
+                    block_time: row.get::<_, i64>(5)?.unsigned_abs(),
+                    total_spent: row.get::<_, i64>(6)?.unsigned_abs(),
+                    total_received: row.get::<_, i64>(7)?.unsigned_abs(),
+                    is_shielding: row.get(8)?,
+                    expiry_height: row.get(9)?,
+                    tx_index: row.get(10)?,
+                    created: row.get(11)?,
+                    created_time: row.get::<_, i64>(12)?.unsigned_abs(),
+                    spent_orchard_note: row.get(13)?,
+                })
+            },
+        )
         .map_err(|e| format!("Query error: {e}"))?;
 
     rows.collect::<Result<Vec<_>, _>>()
@@ -721,7 +755,15 @@ fn read_history_outputs(
                 LIMIT 1
             ) AS to_key_scope,
             txo.value,
-            txo.memo
+            txo.memo,
+            (
+                SELECT orn.note_version
+                FROM orchard_received_notes orn
+                WHERE txo.output_pool = 3
+                  AND orn.transaction_id = txo.transaction_id
+                  AND orn.action_index = txo.output_index
+                LIMIT 1
+            ) AS note_version
         FROM v_tx_outputs txo
         JOIN (
             SELECT DISTINCT txid
@@ -748,6 +790,7 @@ fn read_history_outputs(
                 to_key_scope: row.get(8)?,
                 value: row.get::<_, i64>(9)?.unsigned_abs(),
                 memo: row.get(10)?,
+                note_version: row.get(11)?,
             })
         })
         .map_err(|e| format!("Query error: {e}"))?;
@@ -812,7 +855,15 @@ fn read_outputs_for_tx(
                 LIMIT 1
             ) AS to_key_scope,
             txo.value,
-            txo.memo
+            txo.memo,
+            (
+                SELECT orn.note_version
+                FROM orchard_received_notes orn
+                WHERE txo.output_pool = 3
+                  AND orn.transaction_id = txo.transaction_id
+                  AND orn.action_index = txo.output_index
+                LIMIT 1
+            ) AS note_version
         FROM v_tx_outputs txo
         WHERE txo.txid = ?2
           AND (
@@ -837,6 +888,7 @@ fn read_outputs_for_tx(
                 to_key_scope: row.get(8)?,
                 value: row.get::<_, i64>(9)?.unsigned_abs(),
                 memo: row.get(10)?,
+                note_version: row.get(11)?,
             })
         })
         .map_err(|e| format!("Query error: {e}"))?;
@@ -860,6 +912,15 @@ fn summarize_activity_outputs(
             if to_own && is_shielded_pool(output.output_pool) {
                 summary.shielded.add_output(output);
             }
+            continue;
+        }
+
+        if from_own
+            && to_own
+            && base.spent_orchard_note
+            && output.note_version == Some(IRONWOOD_NOTE_VERSION)
+        {
+            summary.migration.add_output(output);
             continue;
         }
 
@@ -999,6 +1060,17 @@ fn classify_history_tx(base: &TxBase, summary: &ActivitySummary) -> Vec<Classifi
         )];
     }
 
+    if is_ironwood_migration_candidate(base, summary) {
+        return vec![build_classified_tx(
+            base,
+            "migration",
+            summary.migration.amount,
+            "ironwood",
+            false,
+            1,
+        )];
+    }
+
     let mut rows = Vec::new();
     if summary.sent.amount > 0 {
         rows.push(build_classified_tx(
@@ -1022,17 +1094,6 @@ fn classify_history_tx(base: &TxBase, summary: &ActivitySummary) -> Vec<Classifi
     }
 
     if rows.is_empty() {
-        if is_ironwood_migration_candidate(base, summary) {
-            rows.push(build_classified_tx(
-                base,
-                "migration",
-                base.total_spent.saturating_sub(base.fee),
-                "ironwood",
-                false,
-                1,
-            ));
-            return rows;
-        }
         if base.mined_height.is_none() && base.account_balance_delta < 0 && base.total_spent > 0 {
             let sent_amount = base
                 .account_balance_delta
@@ -1073,9 +1134,9 @@ fn classify_history_tx(base: &TxBase, summary: &ActivitySummary) -> Vec<Classifi
 fn is_ironwood_migration_candidate(base: &TxBase, summary: &ActivitySummary) -> bool {
     !base.is_shielding
         && !base.expired_unmined
-        && base.account_balance_delta < 0
+        && base.spent_orchard_note
         && base.total_spent > 0
-        && base.total_received == 0
+        && summary.migration.amount > 0
         && summary.sent.amount == 0
         && summary.received.amount == 0
 }
@@ -1362,12 +1423,16 @@ mod tests {
             tx_index: 0,
             created: None,
             created_time: 0,
+            spent_orchard_note: true,
         }
     }
 
     #[test]
     fn classify_orchard_to_ironwood_migration_shows_moved_amount() {
-        let rows = classify_history_tx(&tx_base_for_history(), &ActivitySummary::default());
+        let mut summary = ActivitySummary::default();
+        summary.migration.amount = 624_980_000;
+
+        let rows = classify_history_tx(&tx_base_for_history(), &summary);
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].info.tx_kind, "migration");
@@ -1432,7 +1497,18 @@ mod tests {
                  value INTEGER NOT NULL,
                  memo BLOB
              );
+             CREATE TABLE orchard_received_notes (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 transaction_id INTEGER NOT NULL,
+                 action_index INTEGER NOT NULL,
+                 note_version INTEGER NOT NULL
+             );
+             CREATE TABLE orchard_received_note_spends (
+                 orchard_received_note_id INTEGER NOT NULL,
+                 transaction_id INTEGER NOT NULL
+             );
              CREATE TABLE v_tx_outputs (
+                 transaction_id INTEGER NOT NULL,
                  txid BLOB NOT NULL,
                  output_pool INTEGER NOT NULL,
                  output_index INTEGER NOT NULL,
@@ -1581,6 +1657,13 @@ mod tests {
                 .unwrap();
             }
         }
+        let transaction_id = conn
+            .query_row(
+                "SELECT id_tx FROM transactions WHERE txid = ?1",
+                rusqlite::params![txid],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
         let output_index = conn
             .query_row(
                 "SELECT COALESCE(MAX(output_index) + 1, 0)
@@ -1594,10 +1677,11 @@ mod tests {
         let to_bytes = to_account.map(|uuid| uuid.as_bytes().to_vec());
         conn.execute(
             "INSERT INTO v_tx_outputs (
-                 txid, output_pool, output_index, from_account_uuid,
+                 transaction_id, txid, output_pool, output_index, from_account_uuid,
                  to_account_uuid, to_address, value, is_change, memo
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
+                transaction_id,
                 txid,
                 output_pool,
                 output_index,
@@ -1611,6 +1695,61 @@ mod tests {
         )
         .unwrap();
         output_index
+    }
+
+    fn insert_received_note_version(
+        db: &NamedTempFile,
+        txid: &[u8],
+        output_index: i64,
+        note_version: i64,
+    ) {
+        let conn = rusqlite::Connection::open(db.path()).unwrap();
+        let transaction_id = conn
+            .query_row(
+                "SELECT id_tx FROM transactions WHERE txid = ?1",
+                rusqlite::params![txid],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        conn.execute(
+            "INSERT INTO orchard_received_notes (
+                 transaction_id, action_index, note_version
+             ) VALUES (?1, ?2, ?3)",
+            rusqlite::params![transaction_id, output_index, note_version],
+        )
+        .unwrap();
+    }
+
+    fn insert_spent_note_version(db: &NamedTempFile, txid: &[u8], note_version: i64) {
+        let conn = rusqlite::Connection::open(db.path()).unwrap();
+        let transaction_id = conn
+            .query_row(
+                "SELECT id_tx FROM transactions WHERE txid = ?1",
+                rusqlite::params![txid],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        conn.execute(
+            "INSERT INTO transactions (txid) VALUES (randomblob(32))",
+            [],
+        )
+        .unwrap();
+        let source_transaction_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO orchard_received_notes (
+                 transaction_id, action_index, note_version
+             ) VALUES (?1, 0, ?2)",
+            rusqlite::params![source_transaction_id, note_version],
+        )
+        .unwrap();
+        let note_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO orchard_received_note_spends (
+                 orchard_received_note_id, transaction_id
+             ) VALUES (?1, ?2)",
+            rusqlite::params![note_id, transaction_id],
+        )
+        .unwrap();
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2002,6 +2141,55 @@ mod tests {
         assert_eq!(got[1].tx_kind, "received");
         assert_eq!(got[1].display_amount, 18_262_101);
         assert_eq!(got[1].display_pool, "transparent");
+    }
+
+    #[test]
+    fn history_classifies_orchard_to_ironwood_self_output_as_migration() {
+        let db = fresh_history_db();
+        let account = test_account_uuid();
+        let migration_tx = fake_txid(0xB5);
+
+        insert_history_tx(
+            &db,
+            account,
+            &migration_tx,
+            None,
+            1,
+            Some(1_000_100),
+            -20_000,
+            625_000_000,
+            624_980_000,
+            false,
+            Some("2026-06-08T22:45:02Z"),
+        );
+        let output_index = insert_output_with_address_and_memo(
+            &db,
+            &migration_tx,
+            3,
+            Some(account),
+            Some(account),
+            624_980_000,
+            true,
+            None,
+            Some(1),
+            Some(b"Ironwood migration 1"),
+        );
+        insert_received_note_version(&db, &migration_tx, output_index, IRONWOOD_NOTE_VERSION);
+        insert_spent_note_version(&db, &migration_tx, ORCHARD_NOTE_VERSION);
+
+        let got = get_transaction_history(
+            db.path().to_str().unwrap(),
+            WalletNetwork::Test,
+            None,
+            &account.to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].txid_hex, hex::encode(migration_tx));
+        assert_eq!(got[0].tx_kind, "migration");
+        assert_eq!(got[0].display_amount, 624_980_000);
+        assert_eq!(got[0].display_pool, "ironwood");
     }
 
     #[test]
