@@ -363,7 +363,9 @@ class _PreviewSyncNotifier extends SyncNotifier {
   Future<SyncState> build() async => SyncState();
 
   @override
-  Future<void> refreshAfterSend() async {}
+  Future<void> refreshAfterSend({
+    int transactionHistoryLimit = defaultRecentTransactionHistoryLimit,
+  }) async {}
 
   @override
   Future<WalletMutationSyncPause> pauseForWalletMutation({

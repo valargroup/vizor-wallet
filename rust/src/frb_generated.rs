@@ -3285,6 +3285,9 @@ fn wire__crate__api__sync__put_subtree_roots_impl(
             let api_orchard_start_index = <u64>::sse_decode(&mut deserializer);
             let api_orchard_roots =
                 <Vec<crate::api::sync::SubtreeRoot>>::sse_decode(&mut deserializer);
+            let api_ironwood_start_index = <u64>::sse_decode(&mut deserializer);
+            let api_ironwood_roots =
+                <Vec<crate::api::sync::SubtreeRoot>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
@@ -3295,6 +3298,8 @@ fn wire__crate__api__sync__put_subtree_roots_impl(
                         api_sapling_roots,
                         api_orchard_start_index,
                         api_orchard_roots,
+                        api_ironwood_start_index,
+                        api_ironwood_roots,
                     )?;
                     Ok(output_ok)
                 })())
@@ -3767,6 +3772,7 @@ fn wire__crate__api__sync__scan_blocks_impl(
             let api_tree_state_time = <u32>::sse_decode(&mut deserializer);
             let api_tree_state_sapling_tree = <String>::sse_decode(&mut deserializer);
             let api_tree_state_orchard_tree = <String>::sse_decode(&mut deserializer);
+            let api_tree_state_ironwood_tree = <String>::sse_decode(&mut deserializer);
             let api_limit = <u64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
@@ -3782,6 +3788,7 @@ fn wire__crate__api__sync__scan_blocks_impl(
                         api_tree_state_time,
                         api_tree_state_sapling_tree,
                         api_tree_state_orchard_tree,
+                        api_tree_state_ironwood_tree,
                         api_limit,
                     )?;
                     Ok(output_ok)
@@ -6495,9 +6502,11 @@ impl SseDecode for crate::api::sync::SubtreeIndices {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_nextSapling = <u64>::sse_decode(deserializer);
         let mut var_nextOrchard = <u64>::sse_decode(deserializer);
+        let mut var_nextIronwood = <u64>::sse_decode(deserializer);
         return crate::api::sync::SubtreeIndices {
             next_sapling: var_nextSapling,
             next_orchard: var_nextOrchard,
+            next_ironwood: var_nextIronwood,
         };
     }
 }
@@ -8333,6 +8342,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::sync::SubtreeIndices {
         [
             self.next_sapling.into_into_dart().into_dart(),
             self.next_orchard.into_into_dart().into_dart(),
+            self.next_ironwood.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -10031,6 +10041,7 @@ impl SseEncode for crate::api::sync::SubtreeIndices {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u64>::sse_encode(self.next_sapling, serializer);
         <u64>::sse_encode(self.next_orchard, serializer);
+        <u64>::sse_encode(self.next_ironwood, serializer);
     }
 }
 

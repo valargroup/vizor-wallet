@@ -583,6 +583,7 @@ fn queue_witness_repairs_if_needed(
 async fn repair_anchor_root_mismatch_if_needed(
     client: &mut CompactTxStreamerClient<Channel>,
     db: &mut WalletDatabase,
+    network: WalletNetwork,
     current_tip_height: u64,
     repair_passes_this_run: &mut u32,
 ) -> Result<Option<u64>, SyncError> {
@@ -599,6 +600,14 @@ async fn repair_anchor_root_mismatch_if_needed(
     let local_orchard = db
         .with_orchard_tree_mut(|tree| tree.root_at_checkpoint_id(&anchor_height))
         .map_err(|e| SyncError::db(format!("orchard root at {anchor_height}: {e}")))?;
+    let local_ironwood = if lwd::ironwood_sync_enabled(network) {
+        Some(
+            db.with_ironwood_tree_mut(|tree| tree.root_at_checkpoint_id(&anchor_height))
+                .map_err(|e| SyncError::db(format!("ironwood root at {anchor_height}: {e}")))?,
+        )
+    } else {
+        None
+    };
 
     let anchor_chain_state = get_tree_state(client, u32::from(anchor_height) as u64)
         .await?
@@ -613,8 +622,16 @@ async fn repair_anchor_root_mismatch_if_needed(
 
     let canonical_sapling = anchor_chain_state.final_sapling_tree().root();
     let canonical_orchard = anchor_chain_state.final_orchard_tree().root();
+    let canonical_ironwood = lwd::ironwood_sync_enabled(network)
+        .then(|| anchor_chain_state.final_ironwood_tree().root());
+    let ironwood_roots_match = match (&local_ironwood, &canonical_ironwood) {
+        (Some(local), Some(canonical)) => local.as_ref() == Some(canonical),
+        (None, None) => true,
+        _ => false,
+    };
     if local_sapling.as_ref() == Some(&canonical_sapling)
         && local_orchard.as_ref() == Some(&canonical_orchard)
+        && ironwood_roots_match
     {
         return Ok(None);
     }
@@ -643,7 +660,8 @@ async fn repair_anchor_root_mismatch_if_needed(
             "[{}] sync: anchor root mismatch at {anchor_height} \
              (target={}, repair_height={repair_height}, pass {}/{}); \
              local_sapling={:?}, canonical_sapling={:?}, local_orchard={:?}, \
-             canonical_orchard={:?}; rewinding to canonical chain state",
+             canonical_orchard={:?}, local_ironwood={:?}, canonical_ironwood={:?}; \
+             rewinding to canonical chain state",
             elapsed(),
             u32::from(target_height),
             *repair_passes_this_run,
@@ -652,6 +670,8 @@ async fn repair_anchor_root_mismatch_if_needed(
             canonical_sapling,
             local_orchard,
             canonical_orchard,
+            local_ironwood,
+            canonical_ironwood,
         );
 
         let current_tip = BlockHeight::from_u32(current_tip_height as u32);
@@ -1033,7 +1053,7 @@ async fn run_sync_impl(
     }
 
     // 3. Download subtree roots (incremental)
-    download_subtree_roots(&mut client, &mut db).await?;
+    download_subtree_roots(&mut client, &mut db, network).await?;
 
     // 4. Calculate initial scan target (before any scanning)
     let mut initial_total: u64 = {
@@ -1192,6 +1212,7 @@ async fn run_sync_impl(
                 } else if let Some(repair_pending_blocks) = repair_anchor_root_mismatch_if_needed(
                     &mut client,
                     &mut db,
+                    network,
                     current_tip_height,
                     &mut anchor_root_repair_passes_this_run,
                 )
@@ -1310,17 +1331,17 @@ async fn run_sync_impl(
                     _ => {
                         // Prefetch failed — download synchronously.
                         log::warn!("[{}] sync: prefetch failed, downloading fresh", elapsed(),);
-                        download_blocks(&mut client, start, end - 1).await?
+                        download_blocks(&mut client, start, end - 1, network).await?
                     }
                 }
             } else {
                 // Range changed (reorg, priority switch, etc.) —
                 // Drop the Prefetch, which aborts the background task.
                 drop(pf);
-                download_blocks(&mut client, start, end - 1).await?
+                download_blocks(&mut client, start, end - 1, network).await?
             }
         } else {
-            download_blocks(&mut client, start, end - 1).await?
+            download_blocks(&mut client, start, end - 1, network).await?
         };
 
         if cancel.load(Ordering::Relaxed) || desired_mode.load(Ordering::SeqCst) != running_mode {
@@ -1765,7 +1786,7 @@ async fn run_sync_impl(
                     start: pf_start,
                     end: pf_end,
                     handle: Some(tokio::spawn(async move {
-                        download_blocks(&mut pf_client, pf_start, pf_end - 1).await
+                        download_blocks(&mut pf_client, pf_start, pf_end - 1, network).await
                     })),
                 });
             } else {
