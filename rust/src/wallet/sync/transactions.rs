@@ -1133,7 +1133,6 @@ fn classify_history_tx(base: &TxBase, summary: &ActivitySummary) -> Vec<Classifi
 
 fn is_ironwood_migration_candidate(base: &TxBase, summary: &ActivitySummary) -> bool {
     !base.is_shielding
-        && !base.expired_unmined
         && base.spent_orchard_note
         && base.total_spent > 0
         && summary.migration.amount > 0
@@ -1436,6 +1435,24 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].info.tx_kind, "migration");
+        assert_eq!(rows[0].info.display_amount, 624_980_000);
+        assert_eq!(rows[0].info.display_pool, "ironwood");
+    }
+
+    #[test]
+    fn classify_expired_orchard_to_ironwood_migration_keeps_failed_row() {
+        let mut base = tx_base_for_history();
+        base.mined_height = None;
+        base.expired_unmined = true;
+
+        let mut summary = ActivitySummary::default();
+        summary.migration.amount = 624_980_000;
+
+        let rows = classify_history_tx(&base, &summary);
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].info.tx_kind, "migration");
+        assert!(rows[0].info.expired_unmined);
         assert_eq!(rows[0].info.display_amount, 624_980_000);
         assert_eq!(rows[0].info.display_pool, "ironwood");
     }
