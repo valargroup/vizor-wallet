@@ -101,16 +101,16 @@ vote-commitment-tree = { git = "https://github.com/valargroup/zcash_voting", rev
 
 [patch.crates-io]
 orchard = { git = "https://github.com/valargroup/qr_orchard", branch = "ironwood-qr" }
-pczt = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_address = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_client_backend = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_client_sqlite = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_encoding = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_keys = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_primitives = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_proofs = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_protocol = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
-zcash_transparent = { git = "https://github.com/valargroup/librustzcash", rev = "4dd89d2693bcc19f1dd865409eb2c8fec3013fb3" }
+pczt = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_address = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_client_backend = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_client_sqlite = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_encoding = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_keys = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_primitives = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_proofs = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_protocol = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
+zcash_transparent = { git = "https://github.com/valargroup/librustzcash", rev = "51e5f41f2eab4fc0d7e283f4a5dd9d5872f86cc9" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
