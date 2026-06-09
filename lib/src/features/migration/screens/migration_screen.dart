@@ -172,7 +172,11 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
 
   Future<void> _refreshMigrationProgress() async {
     try {
-      await ref.read(syncProvider.notifier).refreshAfterSend();
+      await ref
+          .read(syncProvider.notifier)
+          .refreshAfterSend(
+            transactionHistoryLimit: migrationProgressTransactionHistoryLimit,
+          );
     } catch (e) {
       log('MigrationScreen: migration progress refresh failed: $e');
     }
@@ -360,7 +364,10 @@ class _InProgressView extends StatelessWidget {
       expectedTransferCount ?? 0,
       1,
     ].reduce((a, b) => a > b ? a : b);
-    final completed = migrationTransactions.where(_isCompletedMigration).length;
+    final transferTransactions = migrationTransactions.reversed.toList(
+      growable: false,
+    );
+    final completed = transferTransactions.where(_isCompletedMigration).length;
     final progress = migrationTransactions.isEmpty ? null : completed / total;
 
     return Column(
@@ -419,8 +426,8 @@ class _InProgressView extends StatelessWidget {
                 _MigrationTransferRow(
                   index: i,
                   total: total,
-                  transaction: i < migrationTransactions.length
-                      ? migrationTransactions[i]
+                  transaction: i < transferTransactions.length
+                      ? transferTransactions[i]
                       : null,
                 ),
               ],

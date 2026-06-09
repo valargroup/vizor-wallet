@@ -207,7 +207,11 @@ class _MigrationSigningOverlayState
         .value
         ?.activeAccountUuid;
     if (activeAccountUuid != accountUuid) return;
-    await providerContainer.read(syncProvider.notifier).refreshAfterSend();
+    await providerContainer
+        .read(syncProvider.notifier)
+        .refreshAfterSend(
+          transactionHistoryLimit: migrationProgressTransactionHistoryLimit,
+        );
   }
 
   String? _firstTxid(String txids) {

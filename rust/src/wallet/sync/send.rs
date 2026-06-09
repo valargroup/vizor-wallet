@@ -713,6 +713,8 @@ pub async fn migrate_orchard_to_ironwood(
             Ok::<_, String>(wallet::SpendingKeys::from_unified_spending_key(usk))
         })?;
 
+    let total_count =
+        remaining_orchard_migration_transaction_count(db_path, network, account_uuid, amount)?;
     let mut txids = Vec::new();
     let transaction = with_wallet_db_write_lock("send.migrate_orchard_to_ironwood.create", || {
         create_orchard_to_ironwood_migration_transaction(
@@ -756,14 +758,12 @@ pub async fn migrate_orchard_to_ironwood(
         ));
     }
 
-    let remaining_count =
-        remaining_orchard_migration_transaction_count(db_path, network, account_uuid, amount)?;
+    let remaining_count = total_count.saturating_sub(1);
     let status = if remaining_count > 0 {
         match spawn_remaining_orchard_to_ironwood_migration(
             db_path.to_string(),
             lightwalletd_url.to_string(),
             network,
-            account_uuid.to_string(),
             spending_keys,
             amount,
             2,
@@ -792,9 +792,7 @@ pub async fn migrate_orchard_to_ironwood(
         txids: join_txids(&txids),
         status,
         broadcasted_count: 1,
-        total_count: remaining_count
-            .checked_add(1)
-            .ok_or("Migration transaction count overflow")?,
+        total_count: total_count.max(1),
         message: None,
     }
     .into_ironwood_migration_result(
@@ -884,7 +882,6 @@ fn spawn_remaining_orchard_to_ironwood_migration(
     db_path: String,
     lightwalletd_url: String,
     network: WalletNetwork,
-    account_uuid: String,
     spending_keys: wallet::SpendingKeys,
     amount: Zatoshis,
     next_migration_index: u32,
@@ -909,7 +906,6 @@ fn spawn_remaining_orchard_to_ironwood_migration(
                 db_path,
                 lightwalletd_url,
                 network,
-                account_uuid,
                 spending_keys,
                 amount,
                 next_migration_index,
@@ -925,7 +921,6 @@ async fn run_remaining_orchard_to_ironwood_migration(
     db_path: String,
     lightwalletd_url: String,
     network: WalletNetwork,
-    account_uuid: String,
     spending_keys: wallet::SpendingKeys,
     amount: Zatoshis,
     mut migration_index: u32,
@@ -973,12 +968,6 @@ async fn run_remaining_orchard_to_ironwood_migration(
         }
 
         log::info!("ironwood_migration: broadcast delayed migration tx {txid}");
-
-        if remaining_orchard_migration_transaction_count(&db_path, network, &account_uuid, amount)?
-            == 0
-        {
-            return Ok(());
-        }
 
         migration_index = migration_index
             .checked_add(1)

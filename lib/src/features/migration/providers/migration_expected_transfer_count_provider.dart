@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const _migrationDelayedBroadcastInterval = Duration(seconds: 60);
 const _migrationExpectedTransferCountBuffer = Duration(seconds: 45);
+const migrationProgressTransactionHistoryLimit = 1000;
 
 class MigrationExpectedTransferCount {
   const MigrationExpectedTransferCount({

@@ -15,6 +15,8 @@ import 'app_security_provider.dart';
 import 'rpc_endpoint_failover_provider.dart';
 import 'sync_failure.dart';
 
+const defaultRecentTransactionHistoryLimit = 10;
+
 class SyncState {
   /// Account UUID that owns the balance, shield status, and recent transaction
   /// fields below. Sync progress itself is wallet-wide.
@@ -1379,7 +1381,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         recentTxs = await rust_sync.getTransactionHistory(
           dbPath: dbPath,
           network: network,
-          limit: 10,
+          limit: defaultRecentTransactionHistoryLimit,
           accountUuid: accountUuid,
         );
         didFetchRecentTxs = true;
@@ -1524,11 +1526,15 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   // ======================== Balance Refresh ========================
 
   /// Public: refresh balance and recent transactions (e.g. after send).
-  Future<void> refreshAfterSend() => _refreshBalance();
+  Future<void> refreshAfterSend({
+    int transactionHistoryLimit = defaultRecentTransactionHistoryLimit,
+  }) => _refreshBalance(transactionHistoryLimit: transactionHistoryLimit);
 
   Future<void> refreshAfterUnlock() => _refreshBalance();
 
-  Future<void> _refreshBalance() async {
+  Future<void> _refreshBalance({
+    int transactionHistoryLimit = defaultRecentTransactionHistoryLimit,
+  }) async {
     if (_requiresUnlock) {
       _stopDisplayProgressTimer();
       state = AsyncData(SyncState());
@@ -1591,7 +1597,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       recentTxs = await rust_sync.getTransactionHistory(
         dbPath: dbPath,
         network: network,
-        limit: 10,
+        limit: transactionHistoryLimit,
         accountUuid: accountUuid,
       );
       didFetchRecentTxs = true;

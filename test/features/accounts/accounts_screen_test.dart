@@ -1110,7 +1110,9 @@ class _FakeSyncNotifier extends SyncNotifier {
   Future<SyncState> build() async => SyncState();
 
   @override
-  Future<void> refreshAfterSend() async {
+  Future<void> refreshAfterSend({
+    int transactionHistoryLimit = defaultRecentTransactionHistoryLimit,
+  }) async {
     events?.add('refresh');
     refreshCount += 1;
   }
