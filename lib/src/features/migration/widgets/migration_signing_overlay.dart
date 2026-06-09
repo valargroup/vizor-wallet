@@ -26,11 +26,13 @@ class MigrationSigningCompletion {
   const MigrationSigningCompletion({
     required this.accountUuid,
     required this.completedAtStart,
+    required this.transactionCountAtStart,
     required this.result,
   });
 
   final String accountUuid;
   final int completedAtStart;
+  final int transactionCountAtStart;
   final rust_sync.IronwoodMigrationResult result;
 }
 
@@ -83,9 +85,12 @@ class _MigrationSigningOverlayState
           'Switch to a software account before migrating.',
         );
       }
-      final completedAtStart = _completedMigrationCount(
+      final migrationTransactionsAtStart = _migrationTransactions(
         ref.read(syncProvider).value?.recentTransactions ?? const [],
       );
+      final completedAtStart = migrationTransactionsAtStart
+          .where(_isCompletedMigration)
+          .length;
 
       final endpoint = ref.read(rpcEndpointProvider);
       if (endpoint.network != ZcashNetwork.testnet) {
@@ -152,14 +157,13 @@ class _MigrationSigningOverlayState
               accountUuid,
               result.totalCount,
               completedAtStart: completedAtStart,
+              transactionCountAtStart: migrationTransactionsAtStart.length,
             );
       }
 
       if (!migrationStarted) {
         try {
-          await providerContainer
-              .read(syncProvider.notifier)
-              .refreshAfterSend();
+          await _refreshIfAccountStillActive(providerContainer, accountUuid);
         } catch (e) {
           log('MigrationSigningOverlay: refreshAfterSend failed: $e');
         }
@@ -174,7 +178,7 @@ class _MigrationSigningOverlayState
       }
 
       try {
-        await providerContainer.read(syncProvider.notifier).refreshAfterSend();
+        await _refreshIfAccountStillActive(providerContainer, accountUuid);
       } catch (e) {
         log('MigrationSigningOverlay: refreshAfterSend failed: $e');
       }
@@ -184,6 +188,7 @@ class _MigrationSigningOverlayState
         MigrationSigningCompletion(
           accountUuid: accountUuid,
           completedAtStart: completedAtStart,
+          transactionCountAtStart: migrationTransactionsAtStart.length,
           result: result,
         ),
       );
@@ -204,18 +209,28 @@ class _MigrationSigningOverlayState
         result.message == null;
   }
 
-  int _completedMigrationCount(
+  Future<void> _refreshIfAccountStillActive(
+    ProviderContainer providerContainer,
+    String accountUuid,
+  ) async {
+    final activeAccountUuid = providerContainer
+        .read(accountProvider)
+        .value
+        ?.activeAccountUuid;
+    if (activeAccountUuid != accountUuid) return;
+    await providerContainer.read(syncProvider.notifier).refreshAfterSend();
+  }
+
+  List<rust_sync.TransactionInfo> _migrationTransactions(
     Iterable<rust_sync.TransactionInfo> transactions,
   ) {
     return transactions
-        .where(
-          (tx) =>
-              tx.txKind == 'migration' &&
-              tx.minedHeight != BigInt.zero &&
-              !tx.expiredUnmined,
-        )
-        .length;
+        .where((tx) => tx.txKind == 'migration')
+        .toList(growable: false);
   }
+
+  bool _isCompletedMigration(rust_sync.TransactionInfo tx) =>
+      tx.minedHeight != BigInt.zero && !tx.expiredUnmined;
 
   Future<rust_sync.IronwoodMigrationResult> _migrateWithMnemonicBytes({
     required String dbPath,
