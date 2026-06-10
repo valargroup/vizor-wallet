@@ -21,6 +21,48 @@ abstract final class MigrationCopy {
       'Signed migration transactions are submitted over about one minute.';
   static const startCta = 'Start preparation';
 
+  // Two-step layout
+  static const stepOneTitle = 'Prepare denominations';
+  static const stepOneBody =
+      'Split your Orchard funds into standard note amounts in a single '
+      'transaction.';
+  static const stepOneCta = 'Prepare denominations';
+  static const stepOneRunning =
+      'Creating and submitting the denomination transaction...';
+  static const stepOneWaiting =
+      'Denomination transaction submitted. The prepared notes need to '
+      'confirm before migration can start.';
+  static String stepOneDone(int count) => '$count prepared notes ready.';
+  static const stepOneDoneGeneric = 'Prepared notes ready.';
+  static String stepOnePreparedCounts(int prepared, int total) =>
+      'Prepared notes: $prepared of $total';
+  static const stepOneNoFunds = 'No Orchard funds to prepare.';
+  static const stepOneUnspendable =
+      'Waiting for Orchard funds to become spendable. Keep Vizor syncing.';
+  static const stepTwoTitle = 'Migrate to Ironwood';
+  static const stepTwoLocked = 'Available once the prepared notes confirm.';
+  static String stepTwoReady(int count, String window) =>
+      'Vizor signs $count migration transactions and submits them over '
+      '$window.';
+  static const stepTwoCta = 'Start migration';
+  static const stepTwoSigning = 'Signing migration transactions...';
+  static String stepTwoSubmitting(int index, int total) =>
+      'Submitting migration transaction $index of $total...';
+  static const stepTwoPausedNote =
+      'Migration paused. Start migration to resume this run.';
+  static const stepTwoKeepOpen =
+      'Keep Vizor open while the migration transactions are created and '
+      'broadcast.';
+  static const partialBroadcastError =
+      'Migration transactions were created locally but not fully broadcast. '
+      'Keep Vizor open and do not start another migration.';
+
+  static String migrationWindowText(int seconds) {
+    if (seconds == 60) return 'about one minute';
+    if (seconds < 90) return 'about $seconds seconds';
+    return 'about ${(seconds / 60).round()} minutes';
+  }
+
   // Hardware-account state
   static const softwareRequiredTitle = 'Migration';
   static const softwareRequiredBody =
