@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
-    show Uint64List;
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart' show Uint64List;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/migration/providers/orchard_migration_status_provider.dart';
 import 'package:zcash_wallet/src/providers/sync_provider.dart';
@@ -47,6 +46,7 @@ rust_sync.MigrationStatus _status(String phase) {
     signingBatchLimit: 8,
     broadcastWindowSeconds: BigInt.from(60),
     maxPreparedNotesPerRun: 64,
+    scheduledBroadcasts: const [],
   );
 }
 
@@ -90,10 +90,7 @@ void main() {
         overrides: [syncProvider.overrideWith(() => fake)],
       );
       addTearDown(container.dispose);
-      final gate = container.listen(
-        migrationStatusSyncGateProvider,
-        (_, _) {},
-      );
+      final gate = container.listen(migrationStatusSyncGateProvider, (_, _) {});
       await container.read(syncProvider.future);
       await _tick();
       final settled = gate.read();

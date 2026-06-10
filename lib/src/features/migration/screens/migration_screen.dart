@@ -750,10 +750,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   String _remainingSubmissionText(DateTime scheduledAt) {
     final remaining = scheduledAt.difference(DateTime.now());
     if (remaining.inSeconds <= 0) return 'now';
-    final minutes = remaining.inMinutes;
-    final seconds = remaining.inSeconds.remainder(60);
-    if (minutes <= 0) return 'in ${seconds}s';
-    return 'in ${minutes}m ${seconds}s';
+    return 'in ${migrationCountdownLabel(remaining)}';
   }
 
   double? _scheduleSubmissionProgress(rust_sync.MigrationStatus? status) {
@@ -1066,10 +1063,7 @@ String _clockTime(DateTime time) {
 String _durationUntilLabel(DateTime future, DateTime now) {
   final remaining = future.difference(now);
   if (remaining.inSeconds <= 0) return 'Due now';
-  final minutes = remaining.inMinutes;
-  final seconds = remaining.inSeconds.remainder(60);
-  if (minutes <= 0) return 'in ${seconds}s';
-  return 'in ${minutes}m ${seconds}s';
+  return 'in ${migrationCountdownLabel(remaining)}';
 }
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');

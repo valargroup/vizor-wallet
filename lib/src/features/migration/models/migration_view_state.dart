@@ -1,3 +1,5 @@
+import '../../../rust/api/sync.dart' as rust_sync;
+
 /// Which migration phase the tab should render.
 enum MigrationViewState {
   noOrchardFunds,
@@ -111,6 +113,49 @@ bool migrationTxidsMatch(String left, String right) {
   if (normalizedLeft == null || normalizedRight == null) return false;
   if (normalizedLeft == normalizedRight) return true;
   return _reverseTxidByteOrder(normalizedLeft) == normalizedRight;
+}
+
+bool migrationHasScheduledPendingBroadcasts(rust_sync.MigrationStatus? status) {
+  return status?.scheduledBroadcasts.any(
+        (broadcast) => broadcast.status == 'scheduled',
+      ) ??
+      false;
+}
+
+bool migrationHasDueScheduledBroadcast(
+  rust_sync.MigrationStatus? status,
+  DateTime now,
+) {
+  final nowMs = now.millisecondsSinceEpoch;
+  return status?.scheduledBroadcasts.any(
+        (broadcast) =>
+            broadcast.status == 'scheduled' &&
+            broadcast.scheduledAtMs.toInt() <= nowMs,
+      ) ??
+      false;
+}
+
+bool migrationHasBroadcastedUnconfirmedTransactions(
+  rust_sync.MigrationStatus? status,
+) {
+  return (status?.broadcastedTxCount ?? 0) > 0;
+}
+
+String migrationCountdownLabel(Duration remaining) {
+  if (remaining.inSeconds <= 0) return '0s';
+
+  final totalSeconds = remaining.inSeconds;
+  final days = totalSeconds ~/ Duration.secondsPerDay;
+  final hours =
+      (totalSeconds % Duration.secondsPerDay) ~/ Duration.secondsPerHour;
+  final minutes =
+      (totalSeconds % Duration.secondsPerHour) ~/ Duration.secondsPerMinute;
+  final seconds = totalSeconds % Duration.secondsPerMinute;
+
+  if (days > 0) return '${days}d ${hours}h ${minutes}m ${seconds}s';
+  if (hours > 0) return '${hours}h ${minutes}m ${seconds}s';
+  if (minutes > 0) return '${minutes}m ${seconds}s';
+  return '${seconds}s';
 }
 
 String? _normalizeTxid(String txid) {

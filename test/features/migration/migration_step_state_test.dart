@@ -1,5 +1,4 @@
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
-    show Uint64List;
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart' show Uint64List;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/migration/models/migration_step_state.dart';
 import 'package:zcash_wallet/src/features/migration/models/migration_view_state.dart';
@@ -9,6 +8,8 @@ rust_sync.MigrationStatus _status({
   String phase = 'ready_to_migrate',
   int pendingTxCount = 0,
   int broadcastedTxCount = 0,
+  int confirmedTxCount = 0,
+  List<rust_sync.MigrationScheduledBroadcast> scheduledBroadcasts = const [],
 }) {
   return rust_sync.MigrationStatus(
     phase: phase,
@@ -16,12 +17,13 @@ rust_sync.MigrationStatus _status({
     preparedNoteCount: 0,
     pendingTxCount: pendingTxCount,
     broadcastedTxCount: broadcastedTxCount,
-    confirmedTxCount: 0,
+    confirmedTxCount: confirmedTxCount,
     totalCount: 0,
     canAbandon: false,
     signingBatchLimit: 8,
     broadcastWindowSeconds: BigInt.from(60),
     maxPreparedNotesPerRun: 64,
+    scheduledBroadcasts: scheduledBroadcasts,
   );
 }
 
@@ -145,6 +147,77 @@ void main() {
     expect(
       _map(MigrationViewState.abandoned).stepTwo,
       MigrationStepTwoState.error,
+    );
+  });
+
+  test('migration broadcast helpers distinguish due and confirming work', () {
+    final now = DateTime.fromMillisecondsSinceEpoch(1_000);
+    final futureScheduled = _status(
+      phase: 'broadcast_scheduled',
+      scheduledBroadcasts: const [
+        rust_sync.MigrationScheduledBroadcast(
+          txidHex: 'future',
+          scheduledAtMs: 2_000,
+          status: 'scheduled',
+        ),
+      ],
+    );
+    expect(migrationHasScheduledPendingBroadcasts(futureScheduled), isTrue);
+    expect(migrationHasDueScheduledBroadcast(futureScheduled, now), isFalse);
+    expect(
+      migrationHasBroadcastedUnconfirmedTransactions(futureScheduled),
+      isFalse,
+    );
+
+    final dueScheduled = _status(
+      phase: 'broadcast_scheduled',
+      scheduledBroadcasts: const [
+        rust_sync.MigrationScheduledBroadcast(
+          txidHex: 'due',
+          scheduledAtMs: 1_000,
+          status: 'scheduled',
+        ),
+      ],
+    );
+    expect(migrationHasDueScheduledBroadcast(dueScheduled, now), isTrue);
+
+    final broadcasted = _status(
+      phase: 'waiting_migration_confirmations',
+      broadcastedTxCount: 1,
+      scheduledBroadcasts: const [
+        rust_sync.MigrationScheduledBroadcast(
+          txidHex: 'submitted',
+          scheduledAtMs: 500,
+          status: 'broadcasted',
+        ),
+      ],
+    );
+    expect(migrationHasScheduledPendingBroadcasts(broadcasted), isFalse);
+    expect(migrationHasDueScheduledBroadcast(broadcasted, now), isFalse);
+    expect(migrationHasBroadcastedUnconfirmedTransactions(broadcasted), isTrue);
+
+    final confirmed = _status(
+      phase: 'broadcast_scheduled',
+      confirmedTxCount: 1,
+    );
+    expect(migrationHasBroadcastedUnconfirmedTransactions(confirmed), isFalse);
+  });
+
+  test('migration countdown label expands for hours and days', () {
+    expect(migrationCountdownLabel(const Duration(seconds: 42)), '42s');
+    expect(
+      migrationCountdownLabel(const Duration(minutes: 12, seconds: 3)),
+      '12m 3s',
+    );
+    expect(
+      migrationCountdownLabel(const Duration(hours: 1, minutes: 2, seconds: 3)),
+      '1h 2m 3s',
+    );
+    expect(
+      migrationCountdownLabel(
+        const Duration(days: 1, hours: 2, minutes: 3, seconds: 4),
+      ),
+      '1d 2h 3m 4s',
     );
   });
 }

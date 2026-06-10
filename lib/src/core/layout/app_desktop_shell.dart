@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../main.dart' show log;
 import '../../features/migration/migration_copy.dart';
+import '../../features/migration/models/migration_view_state.dart';
 import '../../features/migration/providers/migration_expected_transfer_count_provider.dart';
 import '../../features/migration/providers/migration_run_controller.dart';
 import '../../features/migration/providers/orchard_migration_status_provider.dart';
@@ -140,11 +141,28 @@ class _GlobalMigrationWarningBannerState
       final status = ref.read(activeOrchardMigrationStatusProvider).value;
       if (!_showsMigrationWarning(status)) return;
 
-      if (_hasScheduledPendingBroadcasts(status)) {
+      final hasScheduledPendingBroadcasts =
+          migrationHasScheduledPendingBroadcasts(status);
+      final hadDueScheduledBroadcast = migrationHasDueScheduledBroadcast(
+        status,
+        DateTime.now(),
+      );
+      final hasBroadcastedUnconfirmed =
+          migrationHasBroadcastedUnconfirmedTransactions(status);
+
+      if (hasScheduledPendingBroadcasts) {
         await ref
             .read(migrationRunControllerProvider.notifier)
             .broadcastDueScheduled();
-      } else {
+      }
+
+      if (hadDueScheduledBroadcast || hasBroadcastedUnconfirmed) {
+        await ref.read(syncProvider.notifier).startSyncAnyway();
+        ref.invalidate(activeOrchardMigrationStatusProvider);
+        return;
+      }
+
+      if (!hasScheduledPendingBroadcasts) {
         await ref
             .read(syncProvider.notifier)
             .refreshAfterSend(
@@ -164,13 +182,6 @@ class _GlobalMigrationWarningBannerState
       'waiting_migration_confirmations' => true,
       _ => false,
     };
-  }
-
-  bool _hasScheduledPendingBroadcasts(rust_sync.MigrationStatus? status) {
-    return status?.scheduledBroadcasts.any(
-          (broadcast) => broadcast.status == 'scheduled',
-        ) ??
-        false;
   }
 }
 
