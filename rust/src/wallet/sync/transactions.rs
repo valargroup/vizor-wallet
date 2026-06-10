@@ -36,6 +36,10 @@ use super::{open_readonly_conn, open_wallet_db, open_wallet_db_for_read};
 
 const ORCHARD_NOTE_VERSION: i64 = 2;
 const IRONWOOD_NOTE_VERSION: i64 = 3;
+const TRANSPARENT_POOL: i64 = 0;
+const SAPLING_POOL: i64 = 2;
+const ORCHARD_POOL: i64 = 3;
+const IRONWOOD_POOL: i64 = 4;
 
 // ======================== Balance ========================
 
@@ -350,24 +354,27 @@ struct ActivityAmounts {
     amount: u64,
     has_transparent: bool,
     has_shielded: bool,
+    has_ironwood: bool,
 }
 
 impl ActivityAmounts {
     fn add_output(&mut self, output: &TxOutput) {
         self.amount = self.amount.saturating_add(output.value);
         match output.output_pool {
-            0 => self.has_transparent = true,
-            2 | 3 => self.has_shielded = true,
+            TRANSPARENT_POOL => self.has_transparent = true,
+            SAPLING_POOL | ORCHARD_POOL => self.has_shielded = true,
+            IRONWOOD_POOL => self.has_ironwood = true,
             _ => {}
         }
     }
 
     fn display_pool(&self) -> &'static str {
-        match (self.has_transparent, self.has_shielded) {
-            (true, false) => "transparent",
-            (false, true) => "shielded",
-            (true, true) => "mixed",
-            (false, false) => "unknown",
+        match (self.has_transparent, self.has_shielded, self.has_ironwood) {
+            (true, false, false) => "transparent",
+            (false, true, false) => "shielded",
+            (false, false, true) => "ironwood",
+            (false, false, false) => "unknown",
+            _ => "mixed",
         }
     }
 }
@@ -759,7 +766,7 @@ fn read_history_outputs(
             (
                 SELECT orn.note_version
                 FROM orchard_received_notes orn
-                WHERE txo.output_pool = 3
+                WHERE txo.output_pool IN (3, 4)
                   AND orn.transaction_id = txo.transaction_id
                   AND orn.action_index = txo.output_index
                 LIMIT 1
@@ -859,7 +866,7 @@ fn read_outputs_for_tx(
             (
                 SELECT orn.note_version
                 FROM orchard_received_notes orn
-                WHERE txo.output_pool = 3
+                WHERE txo.output_pool IN (3, 4)
                   AND orn.transaction_id = txo.transaction_id
                   AND orn.action_index = txo.output_index
                 LIMIT 1
@@ -915,11 +922,7 @@ fn summarize_activity_outputs(
             continue;
         }
 
-        if from_own
-            && to_own
-            && base.spent_orchard_note
-            && output.note_version == Some(IRONWOOD_NOTE_VERSION)
-        {
+        if from_own && to_own && base.spent_orchard_note && is_ironwood_output(output) {
             summary.migration.add_output(output);
             continue;
         }
@@ -969,15 +972,20 @@ fn detail_includes_output(
 }
 
 fn is_shielded_pool(output_pool: i64) -> bool {
-    matches!(output_pool, 2 | 3)
+    matches!(output_pool, SAPLING_POOL | ORCHARD_POOL | IRONWOOD_POOL)
 }
 
 fn output_pool_label(output_pool: i64) -> &'static str {
     match output_pool {
-        0 => "transparent",
-        2 | 3 => "shielded",
+        TRANSPARENT_POOL => "transparent",
+        SAPLING_POOL | ORCHARD_POOL => "shielded",
+        IRONWOOD_POOL => "ironwood",
         _ => "unknown",
     }
+}
+
+fn is_ironwood_output(output: &TxOutput) -> bool {
+    output.output_pool == IRONWOOD_POOL || output.note_version == Some(IRONWOOD_NOTE_VERSION)
 }
 
 fn is_user_visible_self_output(output: &TxOutput) -> bool {
@@ -987,11 +995,13 @@ fn is_user_visible_self_output(output: &TxOutput) -> bool {
         // Transparent self outputs are user-visible only when they land on a
         // normal external/foreign receiver. Internal and ephemeral receivers
         // are change/funding mechanics.
-        0 => has_external_or_foreign_scope,
+        TRANSPARENT_POOL => has_external_or_foreign_scope,
         // `is_change` is best-effort for wallet-owned outputs and can also be
         // set on explicit self-transfers. Treat external/foreign receivers and
         // sent-note recipients as visible; keep internal change hidden.
-        2 | 3 => has_external_or_foreign_scope || output.sent_to_address.is_some(),
+        SAPLING_POOL | ORCHARD_POOL | IRONWOOD_POOL => {
+            has_external_or_foreign_scope || output.sent_to_address.is_some()
+        }
         _ => false,
     }
 }
@@ -2192,6 +2202,54 @@ mod tests {
             Some(b"Ironwood migration 1"),
         );
         insert_received_note_version(&db, &migration_tx, output_index, IRONWOOD_NOTE_VERSION);
+        insert_spent_note_version(&db, &migration_tx, ORCHARD_NOTE_VERSION);
+
+        let got = get_transaction_history(
+            db.path().to_str().unwrap(),
+            WalletNetwork::Test,
+            None,
+            &account.to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].txid_hex, hex::encode(migration_tx));
+        assert_eq!(got[0].tx_kind, "migration");
+        assert_eq!(got[0].display_amount, 624_980_000);
+        assert_eq!(got[0].display_pool, "ironwood");
+    }
+
+    #[test]
+    fn history_classifies_pool_4_self_output_as_migration() {
+        let db = fresh_history_db();
+        let account = test_account_uuid();
+        let migration_tx = fake_txid(0xB6);
+
+        insert_history_tx(
+            &db,
+            account,
+            &migration_tx,
+            None,
+            1,
+            Some(1_000_100),
+            -20_000,
+            625_000_000,
+            624_980_000,
+            false,
+            Some("2026-06-08T22:45:02Z"),
+        );
+        insert_output_with_address_and_memo(
+            &db,
+            &migration_tx,
+            IRONWOOD_POOL,
+            Some(account),
+            Some(account),
+            624_980_000,
+            true,
+            None,
+            Some(1),
+            Some(b"Ironwood migration 1"),
+        );
         insert_spent_note_version(&db, &migration_tx, ORCHARD_NOTE_VERSION);
 
         let got = get_transaction_history(
