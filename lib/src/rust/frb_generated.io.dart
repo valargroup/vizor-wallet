@@ -202,7 +202,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   KeystoneAccountInfo dco_decode_keystone_account_info(dynamic raw);
 
   @protected
+  KeystoneMigrationMessage dco_decode_keystone_migration_message(dynamic raw);
+
+  @protected
+  KeystoneMigrationSigningRequest dco_decode_keystone_migration_signing_request(
+    dynamic raw,
+  );
+
+  @protected
   KeystoneSignatureRecord dco_decode_keystone_signature_record(dynamic raw);
+
+  @protected
+  KeystoneSignedMigrationMessage dco_decode_keystone_signed_migration_message(
+    dynamic raw,
+  );
 
   @protected
   KeystoneSigningRequest dco_decode_keystone_signing_request(dynamic raw);
@@ -248,9 +261,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<KeystoneAccountInfo> dco_decode_list_keystone_account_info(dynamic raw);
 
   @protected
+  List<KeystoneMigrationMessage> dco_decode_list_keystone_migration_message(
+    dynamic raw,
+  );
+
+  @protected
   List<KeystoneSignatureRecord> dco_decode_list_keystone_signature_record(
     dynamic raw,
   );
+
+  @protected
+  List<KeystoneSignedMigrationMessage>
+  dco_decode_list_keystone_signed_migration_message(dynamic raw);
 
   @protected
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
@@ -779,7 +801,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  KeystoneMigrationMessage sse_decode_keystone_migration_message(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  KeystoneMigrationSigningRequest sse_decode_keystone_migration_signing_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   KeystoneSignatureRecord sse_decode_keystone_signature_record(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  KeystoneSignedMigrationMessage sse_decode_keystone_signed_migration_message(
     SseDeserializer deserializer,
   );
 
@@ -837,7 +874,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<KeystoneMigrationMessage> sse_decode_list_keystone_migration_message(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<KeystoneSignatureRecord> sse_decode_list_keystone_signature_record(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<KeystoneSignedMigrationMessage>
+  sse_decode_list_keystone_signed_migration_message(
     SseDeserializer deserializer,
   );
 
@@ -1480,8 +1528,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_keystone_migration_message(
+    KeystoneMigrationMessage self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_keystone_migration_signing_request(
+    KeystoneMigrationSigningRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_keystone_signature_record(
     KeystoneSignatureRecord self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_keystone_signed_migration_message(
+    KeystoneSignedMigrationMessage self,
     SseSerializer serializer,
   );
 
@@ -1555,8 +1621,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_keystone_migration_message(
+    List<KeystoneMigrationMessage> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_keystone_signature_record(
     List<KeystoneSignatureRecord> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_keystone_signed_migration_message(
+    List<KeystoneSignedMigrationMessage> self,
     SseSerializer serializer,
   );
 

@@ -52,13 +52,6 @@ abstract final class MigrationCopy {
     return 'about ${(seconds / 60).round()} minutes';
   }
 
-  // Hardware-account state
-  static const softwareRequiredTitle = 'Migration';
-  static const softwareRequiredBody =
-      'Migration is available for software accounts in this build. Switch to '
-      'a software account to test it. Keystone migration stays disabled until '
-      'Ironwood PCZT support is proven.';
-
   // Status
   static const checkingTitle = 'Checking migration';
   static const checkingBody = 'Checking the current Orchard migration state.';

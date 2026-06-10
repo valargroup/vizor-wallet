@@ -49,6 +49,11 @@ pub use send::{
     ExecuteProposalResult, IronwoodMigrationResult,
 };
 pub(crate) use send::{
+    complete_orchard_migration_batch_pczt, complete_orchard_migration_denominations_pczt,
+    prepare_orchard_migration_batch_pczt, prepare_orchard_migration_denominations_pczt,
+    KeystoneSignedMigrationMessage,
+};
+pub(crate) use send::{
     create_reserved_pczt_batch, create_shield_transparent_pczt, get_shield_transparent_status,
     shield_transparent_balance,
 };
@@ -69,6 +74,8 @@ pub(crate) use send::ShieldTransparentPcztResult;
 pub(crate) use send::ShieldTransparentResult;
 #[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
 pub(crate) use send::ShieldTransparentStatus;
+#[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
+pub(crate) use send::{KeystoneMigrationMessage, KeystoneMigrationSigningRequest};
 pub use transactions::{
     check_tx_mined, decrypt_and_store_transaction, get_next_available_address,
     get_pending_transactions, get_transaction_data_requests, get_transaction_detail,

@@ -646,6 +646,75 @@ pub(crate) fn pending_totals_for_run(
     })
 }
 
+pub(crate) fn clear_retriable_pending_txs(db_path: &str, run: &ActiveRun) -> Result<bool, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    clear_retriable_pending_txs_with_conn(&conn, run)
+}
+
+fn clear_retriable_pending_txs_with_conn(
+    conn: &rusqlite::Connection,
+    run: &ActiveRun,
+) -> Result<bool, String> {
+    if run.phase != PHASE_FAILED_RECOVERABLE
+        || !failure_can_rebuild_pending_txs(run.last_error.as_deref())
+    {
+        return Ok(false);
+    }
+    if !table_exists(conn, PENDING_TXS_TABLE)? {
+        return Ok(false);
+    }
+
+    let scheduled_count = count_pending_with_status(conn, &run.run_id, "scheduled")?;
+    if scheduled_count == 0 {
+        return Ok(false);
+    }
+    let non_scheduled_count: u32 = conn
+        .query_row(
+            &format!(
+                "SELECT COUNT(*)
+                 FROM {PENDING_TXS_TABLE}
+                 WHERE run_id = ?1 AND status != 'scheduled'"
+            ),
+            params![run.run_id],
+            |row| row.get::<_, u32>(0),
+        )
+        .map_err(|e| format!("Count non-retriable migration pending txs: {e}"))?;
+    if non_scheduled_count > 0 {
+        return Ok(false);
+    }
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Begin migration retry reset: {e}"))?;
+    tx.execute(
+        &format!("DELETE FROM {PENDING_TXS_TABLE} WHERE run_id = ?1 AND status = 'scheduled'"),
+        params![run.run_id],
+    )
+    .map_err(|e| format!("Clear expired migration pending txs: {e}"))?;
+    let now = now_ms()?;
+    tx.execute(
+        &format!(
+            "UPDATE {RUNS_TABLE}
+             SET phase = ?1, updated_at_ms = ?2, last_error = NULL
+             WHERE run_id = ?3"
+        ),
+        params![PHASE_READY_TO_MIGRATE, now, run.run_id],
+    )
+    .map_err(|e| format!("Reset migration run for retry: {e}"))?;
+    tx.commit()
+        .map_err(|e| format!("Commit migration retry reset: {e}"))?;
+    Ok(true)
+}
+
+fn failure_can_rebuild_pending_txs(message: Option<&str>) -> bool {
+    let Some(message) = message else {
+        return false;
+    };
+    let lower = message.to_ascii_lowercase();
+    lower.contains("expiry") || lower.contains("expired")
+}
+
 fn scheduled_broadcasts_for_run(
     conn: &rusqlite::Connection,
     run_id: &str,
@@ -1350,6 +1419,177 @@ mod tests {
             )
             .unwrap();
         assert_eq!(nullifier_hex, "ab".repeat(32));
+    }
+
+    #[test]
+    fn retry_reset_clears_unbroadcasted_expired_pending_txs() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        let run = insert_failed_run(
+            &conn,
+            "run-retry",
+            Some(
+                "Migration broadcast failed. Error: transaction must not be mined greater than its expiry Height(616)",
+            ),
+        );
+        insert_prepared_note(&conn, &run.run_id);
+        insert_pending_tx(
+            &conn,
+            &run.run_id,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "scheduled",
+        );
+        insert_pending_tx(
+            &conn,
+            &run.run_id,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "scheduled",
+        );
+
+        assert!(clear_retriable_pending_txs_with_conn(&conn, &run).unwrap());
+
+        let pending_count: u32 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {PENDING_TXS_TABLE} WHERE run_id = ?1"),
+                params![run.run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_count, 0);
+        let (phase, last_error): (String, Option<String>) = conn
+            .query_row(
+                &format!("SELECT phase, last_error FROM {RUNS_TABLE} WHERE run_id = ?1"),
+                params![run.run_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(phase, PHASE_READY_TO_MIGRATE);
+        assert!(last_error.is_none());
+        let lock_state: String = conn
+            .query_row(
+                &format!("SELECT lock_state FROM {PREPARED_NOTES_TABLE} WHERE run_id = ?1"),
+                params![run.run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(lock_state, "locked");
+    }
+
+    #[test]
+    fn retry_reset_refuses_partially_broadcast_expired_run() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        let run = insert_failed_run(&conn, "run-partial", Some("transaction expired"));
+        insert_pending_tx(
+            &conn,
+            &run.run_id,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "scheduled",
+        );
+        insert_pending_tx(
+            &conn,
+            &run.run_id,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "broadcasted",
+        );
+
+        assert!(!clear_retriable_pending_txs_with_conn(&conn, &run).unwrap());
+
+        let pending_count: u32 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {PENDING_TXS_TABLE} WHERE run_id = ?1"),
+                params![run.run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_count, 2);
+        let phase: String = conn
+            .query_row(
+                &format!("SELECT phase FROM {RUNS_TABLE} WHERE run_id = ?1"),
+                params![run.run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(phase, PHASE_FAILED_RECOVERABLE);
+    }
+
+    #[test]
+    fn retry_reset_refuses_non_expiry_failures() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        let run = insert_failed_run(&conn, "run-network", Some("lightwalletd unavailable"));
+        insert_pending_tx(
+            &conn,
+            &run.run_id,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "scheduled",
+        );
+
+        assert!(!clear_retriable_pending_txs_with_conn(&conn, &run).unwrap());
+
+        let pending_count: u32 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {PENDING_TXS_TABLE} WHERE run_id = ?1"),
+                params![run.run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_count, 1);
+    }
+
+    fn insert_failed_run(
+        conn: &rusqlite::Connection,
+        run_id: &str,
+        last_error: Option<&str>,
+    ) -> ActiveRun {
+        conn.execute(
+            &format!(
+                "INSERT INTO {RUNS_TABLE}
+                 (run_id, account_uuid, network, db_fingerprint, phase,
+                  created_at_ms, updated_at_ms, target_values_json, last_error)
+                 VALUES (?1, 'account-1', 'test', 'db', ?2, 1, 1,
+                         '[100000000]', ?3)"
+            ),
+            params![run_id, PHASE_FAILED_RECOVERABLE, last_error],
+        )
+        .unwrap();
+        ActiveRun {
+            run_id: run_id.to_string(),
+            phase: PHASE_FAILED_RECOVERABLE.to_string(),
+            target_values_zatoshi: vec![100_000_000],
+            last_error: last_error.map(ToString::to_string),
+        }
+    }
+
+    fn insert_prepared_note(conn: &rusqlite::Connection, run_id: &str) {
+        conn.execute(
+            &format!(
+                "INSERT INTO {PREPARED_NOTES_TABLE}
+                 (run_id, txid_hex, output_index, value_zatoshi, note_version,
+                  nullifier_hex, lock_state)
+                 VALUES (?1,
+                         'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                         0, 100000000, 2, NULL, 'locked')"
+            ),
+            params![run_id],
+        )
+        .unwrap();
+    }
+
+    fn insert_pending_tx(conn: &rusqlite::Connection, run_id: &str, txid_hex: &str, status: &str) {
+        conn.execute(
+            &format!(
+                "INSERT INTO {PENDING_TXS_TABLE}
+                 (run_id, txid_hex, encrypted_raw_tx, target_height,
+                  expiry_height, value_zatoshi, fee_zatoshi, selected_note_txid,
+                  selected_note_output_index, selected_note_value,
+                  scheduled_at_ms, status, metadata_json)
+                 VALUES (?1, ?2, 'encrypted', 10, 30, 99990000, 10000,
+                         ?2, 0, 100000000, 1, ?3, '{{}}')"
+            ),
+            params![run_id, txid_hex, status],
+        )
+        .unwrap();
     }
 
     const MINIMUM_OUTPUT_FOR_TEST: u64 = 1;

@@ -359,6 +359,62 @@ Future<IronwoodMigrationResult> broadcastDueOrchardMigrationTransactions({
   saltBase64: saltBase64,
 );
 
+Future<KeystoneMigrationSigningRequest>
+prepareOrchardMigrationDenominationsPczt({
+  required String dbPath,
+  required String network,
+  required String accountUuid,
+}) => RustLib.instance.api.crateApiSyncPrepareOrchardMigrationDenominationsPczt(
+  dbPath: dbPath,
+  network: network,
+  accountUuid: accountUuid,
+);
+
+Future<IronwoodMigrationResult> completeOrchardMigrationDenominationsPczt({
+  required String dbPath,
+  required String lightwalletdUrl,
+  required String network,
+  required String accountUuid,
+  required String requestId,
+  required List<KeystoneSignedMigrationMessage> signedMessages,
+}) =>
+    RustLib.instance.api.crateApiSyncCompleteOrchardMigrationDenominationsPczt(
+      dbPath: dbPath,
+      lightwalletdUrl: lightwalletdUrl,
+      network: network,
+      accountUuid: accountUuid,
+      requestId: requestId,
+      signedMessages: signedMessages,
+    );
+
+Future<KeystoneMigrationSigningRequest> prepareOrchardMigrationBatchPczt({
+  required String dbPath,
+  required String network,
+  required String accountUuid,
+}) => RustLib.instance.api.crateApiSyncPrepareOrchardMigrationBatchPczt(
+  dbPath: dbPath,
+  network: network,
+  accountUuid: accountUuid,
+);
+
+Future<IronwoodMigrationResult> completeOrchardMigrationBatchPczt({
+  required String dbPath,
+  required String network,
+  required String accountUuid,
+  required String requestId,
+  required List<KeystoneSignedMigrationMessage> signedMessages,
+  required String password,
+  required String saltBase64,
+}) => RustLib.instance.api.crateApiSyncCompleteOrchardMigrationBatchPczt(
+  dbPath: dbPath,
+  network: network,
+  accountUuid: accountUuid,
+  requestId: requestId,
+  signedMessages: signedMessages,
+  password: password,
+  saltBase64: saltBase64,
+);
+
 Future<IronwoodMigrationResult>
 migrateOrchardToIronwoodWithMacosStoredMnemonic({
   required String dbPath,
@@ -860,6 +916,69 @@ class IronwoodMigrationResult {
           message == other.message &&
           feeZatoshi == other.feeZatoshi &&
           migratedZatoshi == other.migratedZatoshi;
+}
+
+class KeystoneMigrationMessage {
+  final String id;
+  final Uint8List redactedPczt;
+
+  const KeystoneMigrationMessage({
+    required this.id,
+    required this.redactedPczt,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ redactedPczt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is KeystoneMigrationMessage &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          redactedPczt == other.redactedPczt;
+}
+
+class KeystoneMigrationSigningRequest {
+  final String requestId;
+  final List<KeystoneMigrationMessage> messages;
+
+  const KeystoneMigrationSigningRequest({
+    required this.requestId,
+    required this.messages,
+  });
+
+  @override
+  int get hashCode => requestId.hashCode ^ messages.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is KeystoneMigrationSigningRequest &&
+          runtimeType == other.runtimeType &&
+          requestId == other.requestId &&
+          messages == other.messages;
+}
+
+class KeystoneSignedMigrationMessage {
+  final String id;
+  final Uint8List signedPczt;
+
+  const KeystoneSignedMigrationMessage({
+    required this.id,
+    required this.signedPczt,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ signedPczt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is KeystoneSignedMigrationMessage &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          signedPczt == other.signedPczt;
 }
 
 class MigrationScheduledBroadcast {

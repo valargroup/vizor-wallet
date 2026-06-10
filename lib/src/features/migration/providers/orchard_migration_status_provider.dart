@@ -45,7 +45,7 @@ final activeOrchardMigrationStatusProvider =
       final accountState = ref.watch(accountProvider).value;
       final account = accountState?.activeAccount;
       final accountUuid = accountState?.activeAccountUuid;
-      if (account == null || accountUuid == null || account.isHardware) {
+      if (account == null || accountUuid == null) {
         return null;
       }
 

@@ -1,6 +1,5 @@
 /// Which migration phase the tab should render.
 enum MigrationViewState {
-  softwareRequired,
   noOrchardFunds,
   waitingForSpendableOrchard,
   planningDenominations,
@@ -48,14 +47,12 @@ final _txidHexPattern = RegExp(r'^[0-9a-f]{64}$');
 /// Pure selector for the tab state. Kept out of the widget so it is trivially
 /// testable without stubbing the account/sync provider stack.
 MigrationViewState migrationViewState({
-  required bool isHardware,
   String? rustPhase,
   required bool hasPendingMigration,
   required bool hasCompletedMigration,
   required BigInt orchardBalance,
   required BigInt ironwoodBalance,
 }) {
-  if (isHardware) return MigrationViewState.softwareRequired;
   final phaseState = migrationViewStateFromRustPhase(rustPhase);
   if (phaseState != null) return phaseState;
   if (hasPendingMigration) {

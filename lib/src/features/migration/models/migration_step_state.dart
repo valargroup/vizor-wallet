@@ -43,7 +43,6 @@ MigrationStepsModel migrationStepsModel({
       (status?.broadcastedTxCount ?? 0) > 0;
 
   return switch (viewState) {
-    MigrationViewState.softwareRequired ||
     MigrationViewState.noOrchardFunds ||
     MigrationViewState.waitingForSpendableOrchard => const MigrationStepsModel(
       stepOne: MigrationStepOneState.blocked,

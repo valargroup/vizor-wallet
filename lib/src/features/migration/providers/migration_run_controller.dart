@@ -281,7 +281,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
       final accountState = ref.read(accountProvider).value;
       final account = accountState?.activeAccount;
       accountUuid = accountState?.activeAccountUuid;
-      if (account == null || accountUuid == null || account.isHardware) return;
+      if (account == null || accountUuid == null) return;
 
       final endpoint = ref.read(rpcEndpointProvider);
       if (endpoint.network != ZcashNetwork.testnet) return;

@@ -71,6 +71,7 @@
 
 use std::convert::Infallible;
 
+use zcash_primitives::transaction::{Transaction, TxId};
 use zcash_proofs::prover::LocalTxProver;
 
 use crate::wallet::db::with_wallet_db_write_lock;
@@ -112,6 +113,12 @@ impl ExtractAndBroadcastPcztResult {
             message: Some(message),
         }
     }
+}
+
+pub(crate) struct ExtractedPcztTransaction {
+    pub txid: TxId,
+    pub raw_tx: Vec<u8>,
+    pub tx: Transaction,
 }
 
 /// Create a PCZT from a stored proposal (for hardware wallet signing).
@@ -194,6 +201,13 @@ pub fn add_proofs_to_pczt(
             .map_err(|e| format!("Orchard proof: {e:?}"))?;
     }
 
+    #[cfg(zcash_unstable = "nu7")]
+    if prover.requires_ironwood_proof() {
+        prover = prover
+            .create_ironwood_proof(&orchard::circuit::ProvingKey::build())
+            .map_err(|e| format!("Ironwood proof: {e:?}"))?;
+    }
+
     if prover.requires_sapling_proofs() {
         match (spend_params_path, output_params_path) {
             (Some(sp), Some(op)) if !sp.is_empty() && !op.is_empty() => {
@@ -224,14 +238,26 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
 
     let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT: {e:?}"))?;
 
-    let redacted = Redactor::new(pczt)
+    let mut redactor = Redactor::new(pczt)
         .redact_global_with(|mut r| r.redact_proprietary("zcash_client_backend:proposal_info"))
         .redact_orchard_with(|mut r| {
             r.redact_actions(|mut ar| {
                 ar.clear_spend_witness();
                 ar.redact_output_proprietary("zcash_client_backend:output_info");
             });
-        })
+        });
+
+    #[cfg(zcash_unstable = "nu7")]
+    {
+        redactor = redactor.redact_ironwood_with(|mut r| {
+            r.redact_actions(|mut ar| {
+                ar.clear_spend_witness();
+                ar.redact_output_proprietary("zcash_client_backend:output_info");
+            });
+        });
+    }
+
+    let redacted = redactor
         .redact_sapling_with(|mut r| {
             r.redact_spends(|mut sr| sr.clear_witness());
             r.redact_outputs(|mut or| {
@@ -246,6 +272,64 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
         .finish();
 
     Ok(redacted.serialize())
+}
+
+fn combine_pczts(proofs: &[u8], sigs: &[u8]) -> Result<pczt::Pczt, String> {
+    use pczt::roles::combiner::Combiner;
+
+    let p = pczt::Pczt::parse(proofs).map_err(|e| format!("Parse PCZT with proofs: {e:?}"))?;
+    let s = pczt::Pczt::parse(sigs).map_err(|e| format!("Parse PCZT with signatures: {e:?}"))?;
+    Combiner::new(vec![p, s])
+        .combine()
+        .map_err(|e| format!("Combine PCZTs: {e:?}"))
+}
+
+pub(crate) fn extract_transaction_from_pczt(
+    pczt_with_proofs_bytes: &[u8],
+    pczt_with_signatures_bytes: &[u8],
+    spend_params_path: Option<&str>,
+    output_params_path: Option<&str>,
+) -> Result<ExtractedPcztTransaction, String> {
+    use pczt::roles::spend_finalizer::SpendFinalizer;
+    use pczt::roles::tx_extractor::TransactionExtractor;
+
+    let orchard_vk = orchard::circuit::VerifyingKey::build();
+    let sapling_vks: Option<(
+        sapling_crypto::circuit::SpendVerifyingKey,
+        sapling_crypto::circuit::OutputVerifyingKey,
+    )> = match (spend_params_path, output_params_path) {
+        (Some(sp), Some(op)) if !sp.is_empty() && !op.is_empty() => {
+            let prover = LocalTxProver::new(std::path::Path::new(sp), std::path::Path::new(op));
+            Some(prover.verifying_keys())
+        }
+        _ => None,
+    };
+
+    let finalized_pczt = SpendFinalizer::new(combine_pczts(
+        pczt_with_proofs_bytes,
+        pczt_with_signatures_bytes,
+    )?)
+    .finalize_spends()
+    .map_err(|e| format!("Finalize transparent spends in PCZT: {e:?}"))?;
+
+    let mut extractor = TransactionExtractor::new(finalized_pczt).with_orchard(&orchard_vk);
+    #[cfg(zcash_unstable = "nu7")]
+    {
+        extractor = extractor.with_ironwood(&orchard_vk);
+    }
+    if let Some((spend_vk, output_vk)) = sapling_vks.as_ref() {
+        extractor = extractor.with_sapling(spend_vk, output_vk);
+    }
+
+    let tx = extractor
+        .extract()
+        .map_err(|e| format!("Extract TX from PCZT: {e:?}"))?;
+    let txid = tx.txid();
+    let mut raw_tx = Vec::new();
+    tx.write(&mut raw_tx)
+        .map_err(|e| format!("Serialize TX: {e}"))?;
+
+    Ok(ExtractedPcztTransaction { txid, raw_tx, tx })
 }
 
 /// Combine a PCZT-with-proofs and a PCZT-with-signatures, broadcast
@@ -264,25 +348,9 @@ pub async fn extract_and_broadcast_pczt(
     spend_params_path: Option<&str>,
     output_params_path: Option<&str>,
 ) -> Result<ExtractAndBroadcastPcztResult, String> {
-    use pczt::roles::combiner::Combiner;
-    use pczt::roles::spend_finalizer::SpendFinalizer;
-    use pczt::roles::tx_extractor::TransactionExtractor;
     use zcash_client_backend::data_api::wallet::{
         decrypt_and_store_transaction, extract_and_store_transaction_from_pczt,
     };
-
-    // Re-parsing and re-combining is cheap compared to ZK proof
-    // validation; we do it twice so we can hand one owned Pczt to
-    // the in-memory extractor and a second owned Pczt to the storage
-    // function after broadcast.
-    fn combine_pczts(proofs: &[u8], sigs: &[u8]) -> Result<pczt::Pczt, String> {
-        let p = pczt::Pczt::parse(proofs).map_err(|e| format!("Parse PCZT with proofs: {e:?}"))?;
-        let s =
-            pczt::Pczt::parse(sigs).map_err(|e| format!("Parse PCZT with signatures: {e:?}"))?;
-        Combiner::new(vec![p, s])
-            .combine()
-            .map_err(|e| format!("Combine PCZTs: {e:?}"))
-    }
 
     let orchard_vk = orchard::circuit::VerifyingKey::build();
 
@@ -306,30 +374,15 @@ pub async fn extract_and_broadcast_pczt(
     // Step 1: extract the Transaction without touching the DB. We
     // keep `tx` around after broadcast so the fallback storage path
     // can use it.
-    let tx = {
-        let finalized_pczt = SpendFinalizer::new(combine_pczts(
-            pczt_with_proofs_bytes,
-            pczt_with_signatures_bytes,
-        )?)
-        .finalize_spends()
-        .map_err(|e| format!("Finalize transparent spends in PCZT: {e:?}"))?;
-
-        let mut extractor = TransactionExtractor::new(finalized_pczt).with_orchard(&orchard_vk);
-        if let Some((spend_vk, output_vk)) = sapling_vks.as_ref() {
-            extractor = extractor.with_sapling(spend_vk, output_vk);
-        }
-        extractor
-            .extract()
-            .map_err(|e| format!("Extract TX from PCZT: {e:?}"))?
-    };
-    let txid = tx.txid();
-
-    let tx_bytes = {
-        let mut buf = Vec::new();
-        tx.write(&mut buf)
-            .map_err(|e| format!("Serialize TX: {e}"))?;
-        buf
-    };
+    let extracted = extract_transaction_from_pczt(
+        pczt_with_proofs_bytes,
+        pczt_with_signatures_bytes,
+        spend_params_path,
+        output_params_path,
+    )?;
+    let txid = extracted.txid;
+    let tx_bytes = extracted.raw_tx.clone();
+    let tx = extracted.tx;
 
     let store_locally = || -> Result<(), String> {
         with_wallet_db_write_lock("pczt.extract_and_broadcast_pczt.store", || {

@@ -1,18 +1,28 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
+import '../../../core/config/rpc_endpoint_config.dart';
 import '../../../core/formatting/zec_amount.dart';
 import '../../../core/layout/app_desktop_shell.dart';
 import '../../../core/layout/app_main_sidebar.dart';
+import '../../../core/storage/wallet_paths.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
+import '../../../core/widgets/app_pane_modal_overlay.dart';
 import '../../../providers/account_provider.dart';
+import '../../../providers/app_security_provider.dart';
+import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
+import '../../../rust/api/keystone.dart' as rust_keystone;
 import '../../../rust/api/sync.dart' as rust_sync;
+import '../../../rust/wallet/keystone.dart' as rust_keystone_wallet;
+import '../../keystone/widgets/keystone_signing_modal.dart';
 import '../migration_copy.dart';
 import '../models/migration_step_state.dart';
 import '../models/migration_view_state.dart';
@@ -30,6 +40,11 @@ class MigrationScreen extends ConsumerStatefulWidget {
 
 class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   Timer? _progressRefreshTimer;
+  KeystoneSigningModalPhase? _keystonePhase;
+  String? _keystoneError;
+  List<String> _keystoneUrParts = const [];
+  rust_sync.KeystoneMigrationSigningRequest? _keystoneRequest;
+  MigrationRunIntent? _keystoneIntent;
 
   @override
   void dispose() {
@@ -88,7 +103,6 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     final migrationStatus = migrationStatusAsync.value;
     final runState = ref.watch(migrationRunControllerProvider);
     final statusIsLoading =
-        !isHardware &&
         accountUuid != null &&
         migrationStatus == null &&
         migrationStatusAsync.isLoading;
@@ -101,8 +115,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         title: MigrationCopy.checkingTitle,
         body: MigrationCopy.checkingBody,
       );
-    } else if (!isHardware &&
-        accountUuid != null &&
+    } else if (accountUuid != null &&
         statusError != null &&
         migrationStatus == null) {
       body = _StatusNote(
@@ -114,7 +127,6 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       viewState = MigrationViewState.failedRecoverable;
     } else {
       viewState = migrationViewState(
-        isHardware: isHardware,
         rustPhase: migrationStatus?.phase,
         hasPendingMigration: hasPendingMigration,
         hasCompletedMigration: hasCompletedMigration,
@@ -122,52 +134,56 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         ironwoodBalance: sync.ironwoodBalance,
       );
 
-      if (viewState == MigrationViewState.softwareRequired) {
-        body = const _SoftwareRequiredView();
-      } else {
-        final steps = migrationStepsModel(
-          viewState: viewState,
-          status: migrationStatus,
-          runInFlight: runState.inFlight,
-          intent: runState.intent,
-        );
-        final effectiveExpectedCount =
-            migrationStatus != null && migrationStatus.totalCount > 0
-            ? migrationStatus.totalCount
-            : scopedExpectedCount;
+      final steps = migrationStepsModel(
+        viewState: viewState,
+        status: migrationStatus,
+        runInFlight: runState.inFlight,
+        intent: runState.intent,
+      );
+      final effectiveExpectedCount =
+          migrationStatus != null && migrationStatus.totalCount > 0
+          ? migrationStatus.totalCount
+          : scopedExpectedCount;
 
-        body = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              MigrationCopy.idleTitle,
-              style: AppTypography.displaySmall.copyWith(
-                color: context.colors.text.accent,
-              ),
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            MigrationCopy.idleTitle,
+            style: AppTypography.displaySmall.copyWith(
+              color: context.colors.text.accent,
             ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              MigrationCopy.idleBody,
-              style: AppTypography.bodyMedium.copyWith(
-                color: context.colors.text.secondary,
-              ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            MigrationCopy.idleBody,
+            style: AppTypography.bodyMedium.copyWith(
+              color: context.colors.text.secondary,
             ),
-            const SizedBox(height: AppSpacing.md),
-            _stepOneCard(steps, viewState, migrationStatus, runState, sync),
-            const SizedBox(height: AppSpacing.s),
-            _stepTwoCard(
-              steps,
-              viewState,
-              migrationStatus,
-              runState,
-              sync,
-              currentRunMigrationTransactions,
-              effectiveExpectedCount,
-              freshExpectedTransferCount?.startedAt,
-            ),
-          ],
-        );
-      }
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _stepOneCard(
+            steps,
+            viewState,
+            migrationStatus,
+            runState,
+            sync,
+            isHardware,
+          ),
+          const SizedBox(height: AppSpacing.s),
+          _stepTwoCard(
+            steps,
+            viewState,
+            migrationStatus,
+            runState,
+            sync,
+            currentRunMigrationTransactions,
+            effectiveExpectedCount,
+            freshExpectedTransferCount?.startedAt,
+            isHardware,
+          ),
+        ],
+      );
     }
 
     _syncMigrationProgressPolling(
@@ -184,12 +200,323 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
         padding: EdgeInsets.zero,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: body,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: body,
+            ),
+            if (_keystonePhase != null)
+              AppPaneModalOverlay(
+                onDismiss: _cancelKeystoneMigration,
+                child: KeystoneSigningModal(
+                  phase: _keystonePhase!,
+                  urParts: _keystoneUrParts,
+                  error: _keystoneError,
+                  title: _keystoneModalTitle,
+                  subtitle: 'Scan the QR code to sign',
+                  instruction: _keystonePhase == KeystoneSigningModalPhase.ready
+                      ? 'After you scanned, click Get Signature.'
+                      : null,
+                  primaryLabel:
+                      _keystonePhase == KeystoneSigningModalPhase.ready
+                      ? 'Get Signature'
+                      : null,
+                  onPrimary: _keystonePhase == KeystoneSigningModalPhase.ready
+                      ? () => unawaited(_getKeystoneMigrationSignature())
+                      : null,
+                  secondaryLabel:
+                      _keystonePhase == KeystoneSigningModalPhase.preparing
+                      ? null
+                      : 'Reject',
+                  onSecondary: _cancelKeystoneMigration,
+                ),
+              ),
+          ],
         ),
       ),
     );
+  }
+
+  String get _keystoneModalTitle {
+    return switch (_keystoneIntent) {
+      MigrationRunIntent.preparing => 'Sign split on your Keystone',
+      MigrationRunIntent.migrating => 'Sign migration on your Keystone',
+      _ => 'Sign on your Keystone',
+    };
+  }
+
+  Future<void> _advanceMigration(
+    MigrationRunIntent intent,
+    bool isHardware,
+  ) async {
+    if (!isHardware) {
+      await ref.read(migrationRunControllerProvider.notifier).advance(intent);
+      return;
+    }
+
+    _showKeystoneMigration(intent);
+  }
+
+  void _showKeystoneMigration(MigrationRunIntent intent) {
+    if (_keystonePhase != null) return;
+    setState(() {
+      _keystonePhase = KeystoneSigningModalPhase.preparing;
+      _keystoneError = null;
+      _keystoneUrParts = const [];
+      _keystoneRequest = null;
+      _keystoneIntent = intent;
+    });
+    unawaited(_prepareKeystoneMigration(intent));
+  }
+
+  Future<void> _prepareKeystoneMigration(MigrationRunIntent intent) async {
+    try {
+      final accountState = ref.read(accountProvider).value;
+      final account = accountState?.activeAccount;
+      final accountUuid = accountState?.activeAccountUuid;
+      if (account == null || accountUuid == null) {
+        throw const _KeystoneMigrationError('No active account.');
+      }
+      if (!account.isHardware) {
+        throw const _KeystoneMigrationError(
+          'Keystone migration requires a hardware account.',
+        );
+      }
+
+      final endpoint = ref.read(rpcEndpointProvider);
+      if (endpoint.network != ZcashNetwork.testnet) {
+        throw const _KeystoneMigrationError(
+          'Select a testnet endpoint before migrating.',
+        );
+      }
+
+      final dbPath = await getWalletDbPath();
+      final syncNotifier = ref.read(syncProvider.notifier);
+      final syncPause = await syncNotifier.pauseForWalletMutation(
+        onStoppingSync: () {
+          log('MigrationScreen: pausing sync before Keystone migration prep');
+        },
+      );
+
+      late final rust_sync.KeystoneMigrationSigningRequest request;
+      try {
+        request = switch (intent) {
+          MigrationRunIntent.preparing =>
+            await rust_sync.prepareOrchardMigrationDenominationsPczt(
+              dbPath: dbPath,
+              network: endpoint.walletNetworkName,
+              accountUuid: accountUuid,
+            ),
+          MigrationRunIntent.migrating =>
+            await rust_sync.prepareOrchardMigrationBatchPczt(
+              dbPath: dbPath,
+              network: endpoint.walletNetworkName,
+              accountUuid: accountUuid,
+            ),
+          _ => throw const _KeystoneMigrationError(
+            'Unsupported Keystone migration step.',
+          ),
+        };
+      } finally {
+        syncNotifier.resumeAfterWalletMutation(syncPause);
+      }
+
+      final urParts = await rust_keystone.encodeZcashSignBatchUrParts(
+        requestId: request.requestId,
+        messages: request.messages
+            .map(
+              (message) => rust_keystone_wallet.ZcashBatchMessageInput(
+                id: message.id,
+                pcztBytes: message.redactedPczt,
+              ),
+            )
+            .toList(growable: false),
+        maxFragmentLen: BigInt.from(140),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _keystonePhase = KeystoneSigningModalPhase.ready;
+        _keystoneRequest = request;
+        _keystoneUrParts = urParts;
+      });
+    } catch (e, st) {
+      log('MigrationScreen._prepareKeystoneMigration: ERROR: $e\n$st');
+      if (!mounted) return;
+      setState(() {
+        _keystonePhase = KeystoneSigningModalPhase.failed;
+        _keystoneError = _friendlyKeystoneError(e);
+      });
+    }
+  }
+
+  Future<void> _getKeystoneMigrationSignature() async {
+    final request = _keystoneRequest;
+    final intent = _keystoneIntent;
+    if (_keystonePhase != KeystoneSigningModalPhase.ready ||
+        request == null ||
+        intent == null) {
+      return;
+    }
+
+    final cbor = await context.push<Uint8List>('/migration/scan');
+    if (cbor == null || !mounted) return;
+
+    setState(() {
+      _keystonePhase = KeystoneSigningModalPhase.preparing;
+      _keystoneError = null;
+    });
+
+    try {
+      final result = await rust_keystone.decodeZcashSignResultCbor(cbor: cbor);
+      if (result.requestId != request.requestId) {
+        throw _KeystoneMigrationError(
+          'Signed result is for ${result.requestId}, expected ${request.requestId}.',
+        );
+      }
+      final signedMessages = result.results
+          .map(
+            (message) => rust_sync.KeystoneSignedMigrationMessage(
+              id: message.id,
+              signedPczt: message.signedPcztBytes,
+            ),
+          )
+          .toList(growable: false);
+
+      await _completeKeystoneMigration(
+        intent: intent,
+        requestId: request.requestId,
+        signedMessages: signedMessages,
+      );
+    } catch (e, st) {
+      log('MigrationScreen._getKeystoneMigrationSignature: ERROR: $e\n$st');
+      if (!mounted) return;
+      setState(() {
+        _keystonePhase = KeystoneSigningModalPhase.failed;
+        _keystoneError = _friendlyKeystoneError(e);
+      });
+    }
+  }
+
+  Future<void> _completeKeystoneMigration({
+    required MigrationRunIntent intent,
+    required String requestId,
+    required List<rust_sync.KeystoneSignedMigrationMessage> signedMessages,
+  }) async {
+    final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
+    if (accountUuid == null) {
+      throw const _KeystoneMigrationError('No active account.');
+    }
+
+    final endpoint = ref.read(rpcEndpointProvider);
+    final dbPath = await getWalletDbPath();
+    final syncNotifier = ref.read(syncProvider.notifier);
+    final syncPause = await syncNotifier.pauseForWalletMutation(
+      onStoppingSync: () {
+        log('MigrationScreen: pausing sync before Keystone migration commit');
+      },
+    );
+
+    late final rust_sync.IronwoodMigrationResult result;
+    try {
+      result = switch (intent) {
+        MigrationRunIntent.preparing =>
+          await rust_sync.completeOrchardMigrationDenominationsPczt(
+            dbPath: dbPath,
+            lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+            network: endpoint.walletNetworkName,
+            accountUuid: accountUuid,
+            requestId: requestId,
+            signedMessages: signedMessages,
+          ),
+        MigrationRunIntent.migrating => await () async {
+          final security = ref.read(appSecurityProvider.notifier);
+          final password = security.requireSessionPasswordForNativeSecretUse();
+          final saltBase64 = await security
+              .requireSecretPayloadSaltForNativeSecretUse();
+          return rust_sync.completeOrchardMigrationBatchPczt(
+            dbPath: dbPath,
+            network: endpoint.walletNetworkName,
+            accountUuid: accountUuid,
+            requestId: requestId,
+            signedMessages: signedMessages,
+            password: password,
+            saltBase64: saltBase64,
+          );
+        }(),
+        _ => throw const _KeystoneMigrationError(
+          'Unsupported Keystone migration step.',
+        ),
+      };
+    } finally {
+      syncNotifier.resumeAfterWalletMutation(syncPause);
+    }
+
+    log(
+      'MigrationScreen: Keystone intent=${intent.name} '
+      'txids=${result.txids} status=${result.status} '
+      'broadcasted=${result.broadcastedCount}/${result.totalCount} '
+      'fee=${result.feeZatoshi} migrated=${result.migratedZatoshi}',
+    );
+
+    final firstTxid = _firstTxid(result.txids);
+    if (result.totalCount > 0 && firstTxid != null) {
+      ref
+          .read(migrationExpectedTransferCountProvider.notifier)
+          .setCount(accountUuid, result.totalCount, firstTxid: firstTxid);
+    }
+
+    if (!migrationRunAdvanced(result)) {
+      throw _KeystoneMigrationError(
+        result.message ?? MigrationCopy.partialBroadcastError,
+      );
+    }
+
+    await ref
+        .read(syncProvider.notifier)
+        .refreshAfterSend(
+          transactionHistoryLimit: migrationProgressTransactionHistoryLimit,
+        );
+    ref.invalidate(activeOrchardMigrationStatusProvider);
+
+    if (!mounted) return;
+    _cancelKeystoneMigration();
+  }
+
+  void _cancelKeystoneMigration() {
+    if (!mounted) return;
+    setState(() {
+      _keystonePhase = null;
+      _keystoneError = null;
+      _keystoneUrParts = const [];
+      _keystoneRequest = null;
+      _keystoneIntent = null;
+    });
+  }
+
+  String? _firstTxid(String txids) {
+    for (final txid in txids.split(',')) {
+      final trimmed = txid.trim();
+      if (trimmed.isNotEmpty) return trimmed.toLowerCase();
+    }
+    return null;
+  }
+
+  String _friendlyKeystoneError(Object error) {
+    if (error is _KeystoneMigrationError) return error.message;
+    final lower = error.toString().toLowerCase();
+    if (lower.contains('insufficient') || lower.contains('spendable')) {
+      return 'Receive enough Orchard funds, let Vizor sync, then try again.';
+    }
+    if (lower.contains('sync') || lower.contains('scan required')) {
+      return 'Sync the wallet before migrating.';
+    }
+    if (lower.contains('unexpected ur type')) {
+      return 'Open the signed migration QR on Keystone, then scan again.';
+    }
+    return '${error.runtimeType}: $error';
   }
 
   Widget _stepOneCard(
@@ -198,6 +525,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     rust_sync.MigrationStatus? status,
     MigrationRunState runState,
     SyncState sync,
+    bool isHardware,
   ) {
     final errorBanner = runState.errorIntent == MigrationRunIntent.preparing
         ? runState.error
@@ -222,9 +550,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         errorBanner: errorBanner,
         body: [_readyAmount(sync)],
         ctaLabel: MigrationCopy.stepOneCta,
-        onCta: () => ref
-            .read(migrationRunControllerProvider.notifier)
-            .advance(MigrationRunIntent.preparing),
+        onCta: () => unawaited(
+          _advanceMigration(MigrationRunIntent.preparing, isHardware),
+        ),
       ),
       MigrationStepOneState.running => const MigrationStepCard(
         stepNumber: 1,
@@ -265,9 +593,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         statusIsError: true,
         errorBanner: errorBanner,
         ctaLabel: MigrationCopy.retryCta,
-        onCta: () => ref
-            .read(migrationRunControllerProvider.notifier)
-            .advance(MigrationRunIntent.preparing),
+        onCta: () => unawaited(
+          _advanceMigration(MigrationRunIntent.preparing, isHardware),
+        ),
       ),
     };
   }
@@ -281,14 +609,14 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     List<rust_sync.TransactionInfo> currentRunMigrationTransactions,
     int? effectiveExpectedCount,
     DateTime? scheduleStartedAt,
+    bool isHardware,
   ) {
     final errorBanner = runState.errorIntent == MigrationRunIntent.migrating
         ? runState.error
         : null;
     final total = status?.totalCount ?? 0;
-    void startMigration() => ref
-        .read(migrationRunControllerProvider.notifier)
-        .advance(MigrationRunIntent.migrating);
+    void startMigration() =>
+        unawaited(_advanceMigration(MigrationRunIntent.migrating, isHardware));
 
     return switch (steps.stepTwo) {
       MigrationStepTwoState.locked => MigrationStepCard(
@@ -727,6 +1055,15 @@ String _durationUntilLabel(DateTime future, DateTime now) {
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');
 
+class _KeystoneMigrationError {
+  const _KeystoneMigrationError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// Compact title/body note used for the pre-card loading and status-error
 /// branches.
 class _StatusNote extends StatelessWidget {
@@ -775,34 +1112,6 @@ class _StatusNote extends StatelessWidget {
             child: const Text(MigrationCopy.retryCta),
           ),
         ],
-      ],
-    );
-  }
-}
-
-class _SoftwareRequiredView extends StatelessWidget {
-  const _SoftwareRequiredView();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          MigrationCopy.softwareRequiredTitle,
-          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
-        ),
-        const SizedBox(height: AppSpacing.s),
-        _Card(
-          child: Text(
-            MigrationCopy.softwareRequiredBody,
-            key: const ValueKey('migration_software_required'),
-            style: AppTypography.bodyMedium.copyWith(
-              color: colors.text.secondary,
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -930,24 +1239,6 @@ class _MigrationTransferRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  const _Card({required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: context.colors.background.neutralSubtleOpacity,
-        borderRadius: BorderRadius.circular(AppRadii.xSmall),
-      ),
-      child: child,
     );
   }
 }
