@@ -1,5 +1,47 @@
-/// Which of the Migration tab's four resting states to render.
-enum MigrationViewState { softwareRequired, idle, inProgress, complete }
+/// Which migration phase the tab should render.
+enum MigrationViewState {
+  softwareRequired,
+  noOrchardFunds,
+  waitingForSpendableOrchard,
+  planningDenominations,
+  preparingDenominations,
+  waitingDenomConfirmations,
+  readyToMigrate,
+  buildingSigningBatch,
+  signingBatch,
+  broadcastScheduled,
+  broadcasting,
+  waitingMigrationConfirmations,
+  complete,
+  paused,
+  failedRecoverable,
+  failedTerminal,
+  abandoned,
+}
+
+extension MigrationViewStateX on MigrationViewState {
+  bool get hasActiveRun => switch (this) {
+    MigrationViewState.preparingDenominations ||
+    MigrationViewState.waitingDenomConfirmations ||
+    MigrationViewState.readyToMigrate ||
+    MigrationViewState.buildingSigningBatch ||
+    MigrationViewState.signingBatch ||
+    MigrationViewState.broadcastScheduled ||
+    MigrationViewState.broadcasting ||
+    MigrationViewState.waitingMigrationConfirmations ||
+    MigrationViewState.paused ||
+    MigrationViewState.failedRecoverable => true,
+    _ => false,
+  };
+
+  bool get shouldPollProgress => switch (this) {
+    MigrationViewState.waitingDenomConfirmations ||
+    MigrationViewState.broadcastScheduled ||
+    MigrationViewState.broadcasting ||
+    MigrationViewState.waitingMigrationConfirmations => true,
+    _ => false,
+  };
+}
 
 final _txidHexPattern = RegExp(r'^[0-9a-f]{64}$');
 
@@ -7,18 +49,51 @@ final _txidHexPattern = RegExp(r'^[0-9a-f]{64}$');
 /// testable without stubbing the account/sync provider stack.
 MigrationViewState migrationViewState({
   required bool isHardware,
+  String? rustPhase,
   required bool hasPendingMigration,
   required bool hasCompletedMigration,
   required BigInt orchardBalance,
   required BigInt ironwoodBalance,
 }) {
   if (isHardware) return MigrationViewState.softwareRequired;
-  if (hasPendingMigration) return MigrationViewState.inProgress;
-  if (orchardBalance > BigInt.zero) return MigrationViewState.idle;
+  final phaseState = migrationViewStateFromRustPhase(rustPhase);
+  if (phaseState != null) return phaseState;
+  if (hasPendingMigration) {
+    return MigrationViewState.waitingMigrationConfirmations;
+  }
+  if (orchardBalance > BigInt.zero) {
+    return MigrationViewState.planningDenominations;
+  }
   if (hasCompletedMigration || ironwoodBalance > BigInt.zero) {
     return MigrationViewState.complete;
   }
-  return MigrationViewState.idle;
+  return MigrationViewState.noOrchardFunds;
+}
+
+MigrationViewState? migrationViewStateFromRustPhase(String? phase) {
+  return switch (phase) {
+    'no_orchard_funds' => MigrationViewState.noOrchardFunds,
+    'waiting_for_spendable_orchard' =>
+      MigrationViewState.waitingForSpendableOrchard,
+    'ready_to_prepare' => MigrationViewState.planningDenominations,
+    'planning_denominations' => MigrationViewState.planningDenominations,
+    'preparing_denominations' => MigrationViewState.preparingDenominations,
+    'waiting_denom_confirmations' =>
+      MigrationViewState.waitingDenomConfirmations,
+    'ready_to_migrate' => MigrationViewState.readyToMigrate,
+    'building_signing_batch' => MigrationViewState.buildingSigningBatch,
+    'signing_batch' => MigrationViewState.signingBatch,
+    'broadcast_scheduled' => MigrationViewState.broadcastScheduled,
+    'broadcasting' => MigrationViewState.broadcasting,
+    'waiting_migration_confirmations' =>
+      MigrationViewState.waitingMigrationConfirmations,
+    'complete' => MigrationViewState.complete,
+    'paused' => MigrationViewState.paused,
+    'failed_recoverable' => MigrationViewState.failedRecoverable,
+    'failed_terminal' => MigrationViewState.failedTerminal,
+    'abandoned' => MigrationViewState.abandoned,
+    _ => null,
+  };
 }
 
 int migrationFirstTransactionIndex({

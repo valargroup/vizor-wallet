@@ -124,6 +124,13 @@ class AppSecureStore {
     return password;
   }
 
+  Future<String> requireSecretPayloadSaltForNativeSecretUse() {
+    if (_sessionPassword == null) {
+      throw StateError('Secret storage requires an unlocked session.');
+    }
+    return _getOrCreateSaltBase64();
+  }
+
   Future<String> ensureWalletDbName() async {
     final existing = await readPlain(kWalletDbNameKey);
     if (existing != null && existing.isNotEmpty) {

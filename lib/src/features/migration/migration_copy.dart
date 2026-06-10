@@ -5,26 +5,76 @@ abstract final class MigrationCopy {
   // Idle / landing
   static const idleTitle = 'Migration';
   static const idleBody =
-      "Move your shielded ZEC to Ironwood, Zcash's next-generation shielded "
-      'pool. This software-wallet test path creates real Ironwood migration '
-      'transactions on the selected testnet endpoint.';
+      'Prepare Orchard funds as standard note amounts, then migrate those '
+      'notes to Ironwood over a short submission window.';
   static const fromPoolName = 'Orchard';
   static const fromPoolTag = 'Current pool';
   static const toPoolName = 'Ironwood';
   static const toPoolTag = 'New pool';
-  static const readyToMigrateLabel = 'Ready to migrate';
+  static const readyToMigrateLabel = 'Ready to prepare';
   static const poolFlow = 'Orchard pool → Ironwood pool';
   static const bullet1 =
-      'Software wallet migration sends Orchard funds to Ironwood.';
-  static const bullet2 = 'Use a testnet endpoint that understands NU7 blocks.';
-  static const bullet3 = 'Keystone and PCZT migration support will come later.';
-  static const startCta = 'Start migration';
+      'Vizor first creates standard Orchard denomination notes.';
+  static const bullet2 =
+      'Once those notes confirm, Vizor migrates them to Ironwood.';
+  static const bullet3 =
+      'Signed migration transactions are submitted over about one minute.';
+  static const startCta = 'Start preparation';
 
   // Hardware-account state
   static const softwareRequiredTitle = 'Migration';
   static const softwareRequiredBody =
       'Migration is available for software accounts in this build. Switch to '
-      'a software account to test it.';
+      'a software account to test it. Keystone migration stays disabled until '
+      'Ironwood PCZT support is proven.';
+
+  // Status
+  static const checkingTitle = 'Checking migration';
+  static const checkingBody = 'Checking the current Orchard migration state.';
+  static const noOrchardFundsTitle = 'No Orchard funds to migrate';
+  static const noOrchardFundsBody =
+      'This account has no Orchard funds that need migration.';
+  static const waitingForSpendableTitle = 'Waiting for Orchard funds';
+  static const waitingForSpendableBody =
+      'Orchard funds are present but not spendable yet. Sync until they confirm.';
+  static const preparingDenominationsTitle = 'Preparing denominations';
+  static const preparingDenominationsBody =
+      'Vizor is creating standard Orchard note amounts for this migration run.';
+  static const waitingDenomTitle = 'Waiting for denomination confirmations';
+  static const waitingDenomBody =
+      'The denomination transaction was submitted. Sync until the prepared '
+      'Orchard notes are spendable.';
+  static const readyPreparedTitle = 'Prepared notes are ready';
+  static const readyPreparedBody =
+      'Vizor can now sign and submit the prepared migration transactions over '
+      'the broadcast window.';
+  static const readyPreparedCta = 'Resume migration';
+  static const buildingBatchTitle = 'Building signing batch';
+  static const buildingBatchBody =
+      'Vizor is building the migration signing batch for the prepared notes.';
+  static const signingBatchTitle = 'Signing migration batch';
+  static const signingBatchBody =
+      'Vizor is signing the prepared migration transactions.';
+  static const broadcastScheduledTitle = 'Broadcast scheduled';
+  static const broadcastScheduledBody =
+      'Signed migration transactions are scheduled across the broadcast window.';
+  static const broadcastingStatusTitle = 'Broadcasting migration';
+  static const broadcastingStatusBody =
+      'Vizor is submitting scheduled migration transactions.';
+  static const pausedTitle = 'Migration paused';
+  static const pausedBody =
+      'This migration run is paused and can be resumed from this account.';
+  static const retryCta = 'Retry migration';
+  static const failedRecoverableTitle = 'Migration needs attention';
+  static const failedRecoverableBody =
+      'This migration run can be retried after the wallet is synced.';
+  static const failedTerminalTitle = 'Migration stopped';
+  static const failedTerminalBody =
+      'This migration run cannot continue automatically.';
+  static const abandonedTitle = 'Migration abandoned';
+  static const abandonedBody =
+      'This migration run was abandoned. Future starts will reconcile wallet '
+      'state from scratch.';
 
   // Broadcast
   static const signTitle = 'Starting migration';
@@ -57,7 +107,7 @@ abstract final class MigrationCopy {
   // In progress
   static const inProgressTitle = 'Migration in progress';
   static const inProgressBody =
-      'Your funds are moving from Orchard to Ironwood.';
+      'Prepared notes are being submitted and confirmed on Ironwood.';
   static String migratingAmount(String amount) => 'Migrating $amount';
   static String transferLabel(int index, int total) =>
       'Transfer $index of $total';

@@ -265,6 +265,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
 
   @protected
+  Uint64List dco_decode_list_prim_u_64_strict(dynamic raw);
+
+  @protected
   List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
 
   @protected
@@ -345,6 +348,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ZcashBatchSignedMessage> dco_decode_list_zcash_batch_signed_message(
     dynamic raw,
   );
+
+  @protected
+  MigrationStatus dco_decode_migration_status(dynamic raw);
 
   @protected
   NextStepView dco_decode_next_step_view(dynamic raw);
@@ -843,6 +849,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
 
   @protected
+  Uint64List sse_decode_list_prim_u_64_strict(SseDeserializer deserializer);
+
+  @protected
   List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
 
   @protected
@@ -939,6 +948,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ZcashBatchSignedMessage> sse_decode_list_zcash_batch_signed_message(
     SseDeserializer deserializer,
   );
+
+  @protected
+  MigrationStatus sse_decode_migration_status(SseDeserializer deserializer);
 
   @protected
   NextStepView sse_decode_next_step_view(SseDeserializer deserializer);
@@ -1555,6 +1567,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_prim_u_64_strict(
+    Uint64List self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
 
   @protected
@@ -1674,6 +1692,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_zcash_batch_signed_message(
     List<ZcashBatchSignedMessage> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_migration_status(
+    MigrationStatus self,
     SseSerializer serializer,
   );
 

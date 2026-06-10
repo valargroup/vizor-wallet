@@ -96,12 +96,13 @@ class _MigrationSigningOverlayState
 
       final dbPath = await getWalletDbPath();
       final migrationNetworkName = endpoint.walletNetworkName;
+      final security = ref.read(appSecurityProvider.notifier);
+      final password = security.requireSessionPasswordForNativeSecretUse();
+      final saltBase64 = await security
+          .requireSecretPayloadSaltForNativeSecretUse();
       late final rust_sync.IronwoodMigrationResult result;
 
       if (Platform.isMacOS && !kDebugMode) {
-        final password = ref
-            .read(appSecurityProvider.notifier)
-            .requireSessionPasswordForNativeSecretUse();
         try {
           result = await rust_sync
               .migrateOrchardToIronwoodWithMacosStoredMnemonic(
@@ -110,6 +111,7 @@ class _MigrationSigningOverlayState
                 network: migrationNetworkName,
                 accountUuid: accountUuid,
                 password: password,
+                saltBase64: saltBase64,
               );
         } catch (e) {
           final message = e.toString().toLowerCase();
@@ -126,6 +128,8 @@ class _MigrationSigningOverlayState
             lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
             network: migrationNetworkName,
             accountUuid: accountUuid,
+            password: password,
+            saltBase64: saltBase64,
           );
         }
       } else {
@@ -134,6 +138,8 @@ class _MigrationSigningOverlayState
           lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
           network: migrationNetworkName,
           accountUuid: accountUuid,
+          password: password,
+          saltBase64: saltBase64,
         );
       }
 
@@ -264,6 +270,8 @@ class _MigrationSigningOverlayState
     required String lightwalletdUrl,
     required String network,
     required String accountUuid,
+    required String password,
+    required String saltBase64,
   }) async {
     final mnemonicBytes = await ref
         .read(accountProvider.notifier)
@@ -279,6 +287,8 @@ class _MigrationSigningOverlayState
         network: network,
         accountUuid: accountUuid,
         mnemonicBytes: mnemonicBytes,
+        password: password,
+        saltBase64: saltBase64,
       );
     } finally {
       mnemonicBytes.fillRange(0, mnemonicBytes.length, 0);

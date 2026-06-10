@@ -16,6 +16,7 @@ import '../../../rust/api/sync.dart' as rust_sync;
 import '../migration_copy.dart';
 import '../models/migration_view_state.dart';
 import '../providers/migration_expected_transfer_count_provider.dart';
+import '../providers/orchard_migration_status_provider.dart';
 import '../widgets/migration_signing_overlay.dart';
 
 class MigrationScreen extends ConsumerStatefulWidget {
@@ -33,6 +34,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   void _cancelSigning() => setState(() => _signing = false);
 
   void _completeSigning(MigrationSigningCompletion completion) {
+    ref.invalidate(activeOrchardMigrationStatusProvider);
     final totalCount = completion.result.totalCount;
     if (totalCount > 0 && completion.firstTxid != null) {
       ref
@@ -97,37 +99,146 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     final hasCompletedMigration = migrationTransactions.any(
       _isCompletedMigration,
     );
-
-    final viewState = migrationViewState(
-      isHardware: isHardware,
-      hasPendingMigration: hasPendingMigration,
-      hasCompletedMigration: hasCompletedMigration,
-      orchardBalance: sync.orchardBalance,
-      ironwoodBalance: sync.ironwoodBalance,
+    final migrationStatusAsync = ref.watch(
+      activeOrchardMigrationStatusProvider,
     );
+    final migrationStatus = migrationStatusAsync.value;
+    final statusIsLoading =
+        !isHardware &&
+        accountUuid != null &&
+        migrationStatus == null &&
+        migrationStatusAsync.isLoading;
+    final statusError = migrationStatusAsync.error;
 
-    final Widget body = switch (viewState) {
-      MigrationViewState.softwareRequired => const _SoftwareRequiredView(),
-      MigrationViewState.idle => _IdleView(
-        onStart: _startSigning,
+    late final Widget body;
+    MigrationViewState? viewState;
+    if (statusIsLoading) {
+      body = const _PhaseStatusView(
+        title: MigrationCopy.checkingTitle,
+        body: MigrationCopy.checkingBody,
+      );
+    } else if (!isHardware &&
+        accountUuid != null &&
+        statusError != null &&
+        migrationStatus == null) {
+      body = _PhaseStatusView(
+        title: MigrationCopy.failedRecoverableTitle,
+        body: MigrationCopy.failedRecoverableBody,
+        details: statusError.toString(),
+        actionLabel: MigrationCopy.retryCta,
+        onAction: () => ref.invalidate(activeOrchardMigrationStatusProvider),
+      );
+      viewState = MigrationViewState.failedRecoverable;
+    } else {
+      viewState = migrationViewState(
+        isHardware: isHardware,
+        rustPhase: migrationStatus?.phase,
+        hasPendingMigration: hasPendingMigration,
+        hasCompletedMigration: hasCompletedMigration,
         orchardBalance: sync.orchardBalance,
-      ),
-      MigrationViewState.inProgress => _InProgressView(
-        migrationTransactions: currentRunMigrationTransactions,
-        expectedTransferCount: scopedExpectedCount,
-        amountZatoshi: _migrationDisplayAmount(
-          sync,
-          currentRunMigrationTransactions,
-        ),
-      ),
-      MigrationViewState.complete => const _CompleteView(),
-    };
+        ironwoodBalance: sync.ironwoodBalance,
+      );
+      final effectiveExpectedCount =
+          migrationStatus != null && migrationStatus.totalCount > 0
+          ? migrationStatus.totalCount
+          : scopedExpectedCount;
 
-    _syncMigrationProgressPolling(hasPendingMigration);
+      body = switch (viewState) {
+        MigrationViewState.softwareRequired => const _SoftwareRequiredView(),
+        MigrationViewState.noOrchardFunds => const _PhaseStatusView(
+          title: MigrationCopy.noOrchardFundsTitle,
+          body: MigrationCopy.noOrchardFundsBody,
+        ),
+        MigrationViewState.waitingForSpendableOrchard => const _PhaseStatusView(
+          title: MigrationCopy.waitingForSpendableTitle,
+          body: MigrationCopy.waitingForSpendableBody,
+        ),
+        MigrationViewState.planningDenominations => _IdleView(
+          onStart: _startSigning,
+          orchardBalance: sync.orchardBalance,
+        ),
+        MigrationViewState.preparingDenominations => _PhaseStatusView(
+          title: MigrationCopy.preparingDenominationsTitle,
+          body: MigrationCopy.preparingDenominationsBody,
+          status: migrationStatus,
+        ),
+        MigrationViewState.waitingDenomConfirmations => _PhaseStatusView(
+          title: MigrationCopy.waitingDenomTitle,
+          body: MigrationCopy.waitingDenomBody,
+          status: migrationStatus,
+        ),
+        MigrationViewState.readyToMigrate => _PhaseStatusView(
+          title: MigrationCopy.readyPreparedTitle,
+          body: MigrationCopy.readyPreparedBody,
+          status: migrationStatus,
+          actionLabel: MigrationCopy.readyPreparedCta,
+          onAction: _startSigning,
+        ),
+        MigrationViewState.buildingSigningBatch => _PhaseStatusView(
+          title: MigrationCopy.buildingBatchTitle,
+          body: MigrationCopy.buildingBatchBody,
+          status: migrationStatus,
+        ),
+        MigrationViewState.signingBatch => _PhaseStatusView(
+          title: MigrationCopy.signingBatchTitle,
+          body: MigrationCopy.signingBatchBody,
+          status: migrationStatus,
+        ),
+        MigrationViewState.broadcastScheduled => _PhaseStatusView(
+          title: MigrationCopy.broadcastScheduledTitle,
+          body: MigrationCopy.broadcastScheduledBody,
+          status: migrationStatus,
+        ),
+        MigrationViewState.broadcasting => _PhaseStatusView(
+          title: MigrationCopy.broadcastingStatusTitle,
+          body: MigrationCopy.broadcastingStatusBody,
+          status: migrationStatus,
+        ),
+        MigrationViewState.waitingMigrationConfirmations => _InProgressView(
+          migrationTransactions: currentRunMigrationTransactions,
+          expectedTransferCount: effectiveExpectedCount,
+          amountZatoshi: _migrationDisplayAmount(
+            sync,
+            currentRunMigrationTransactions,
+          ),
+        ),
+        MigrationViewState.complete => const _CompleteView(),
+        MigrationViewState.paused => _PhaseStatusView(
+          title: MigrationCopy.pausedTitle,
+          body: MigrationCopy.pausedBody,
+          status: migrationStatus,
+          actionLabel: MigrationCopy.readyPreparedCta,
+          onAction: _startSigning,
+        ),
+        MigrationViewState.failedRecoverable => _PhaseStatusView(
+          title: MigrationCopy.failedRecoverableTitle,
+          body: MigrationCopy.failedRecoverableBody,
+          details: migrationStatus?.message,
+          status: migrationStatus,
+          actionLabel: MigrationCopy.retryCta,
+          onAction: _startSigning,
+        ),
+        MigrationViewState.failedTerminal => _PhaseStatusView(
+          title: MigrationCopy.failedTerminalTitle,
+          body: MigrationCopy.failedTerminalBody,
+          details: migrationStatus?.message,
+          status: migrationStatus,
+        ),
+        MigrationViewState.abandoned => const _PhaseStatusView(
+          title: MigrationCopy.abandonedTitle,
+          body: MigrationCopy.abandonedBody,
+        ),
+      };
+    }
+
+    _syncMigrationProgressPolling(
+      hasPendingMigration || (viewState?.shouldPollProgress ?? false),
+    );
     _clearExpiredExpectedTransferCount(
       accountUuid: accountUuid,
       expectedTransferCount: scopedExpectedTransferCount,
-      hasPendingMigration: hasUnconfirmedMigration,
+      hasPendingMigration:
+          hasUnconfirmedMigration || (viewState?.hasActiveRun ?? false),
     );
 
     return AppDesktopShell(
@@ -243,6 +354,139 @@ BigInt _migrationDisplayAmount(
   );
   if (txAmount > BigInt.zero) return txAmount;
   return sync.orchardBalance;
+}
+
+class _PhaseStatusView extends StatelessWidget {
+  const _PhaseStatusView({
+    required this.title,
+    required this.body,
+    this.details,
+    this.status,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String title;
+  final String body;
+  final String? details;
+  final rust_sync.MigrationStatus? status;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          body,
+          style: AppTypography.bodyMedium.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppIcon(
+                    AppIcons.time,
+                    size: AppIconSize.medium,
+                    color: colors.icon.muted,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      _statusSummary(status),
+                      key: const ValueKey('migration_phase_summary'),
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: colors.text.accent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (status != null) ...[
+                const SizedBox(height: AppSpacing.s),
+                _MigrationRunCounts(status: status!),
+              ],
+              if (details != null && details!.trim().isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.s),
+                Text(
+                  details!,
+                  style: AppTypography.bodyExtraSmall.copyWith(
+                    color: colors.text.secondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (actionLabel != null && onAction != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          AppButton(
+            onPressed: onAction,
+            leading: const AppIcon(AppIcons.doubleArrowVertical),
+            child: Text(actionLabel!),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _statusSummary(rust_sync.MigrationStatus? status) {
+    if (status == null) return 'No active migration run.';
+    final total = status.totalCount;
+    if (total == 0) return 'Run ${status.activeRunId ?? ''}'.trim();
+    return '${status.broadcastedTxCount} of $total migration transactions submitted.';
+  }
+}
+
+class _MigrationRunCounts extends StatelessWidget {
+  const _MigrationRunCounts({required this.status});
+
+  final rust_sync.MigrationStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final total = status.totalCount;
+    final rows = <String>[
+      if (total > 0) 'Prepared notes: ${status.preparedNoteCount} of $total',
+      if (status.pendingTxCount > 0)
+        'Scheduled transactions: ${status.pendingTxCount}',
+      if (total > 0)
+        'Broadcasted transactions: ${status.broadcastedTxCount} of $total',
+      if (status.confirmedTxCount > 0)
+        'Confirmed transactions: ${status.confirmedTxCount} of $total',
+      'Signing batch limit: ${status.signingBatchLimit}',
+      'Broadcast window: ${status.broadcastWindowSeconds}s',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final row in rows) ...[
+          Text(
+            row,
+            style: AppTypography.bodyExtraSmall.copyWith(
+              color: colors.text.secondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xxs),
+        ],
+      ],
+    );
+  }
 }
 
 class _IdleView extends StatelessWidget {

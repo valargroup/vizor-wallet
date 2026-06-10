@@ -23,6 +23,7 @@ use crate::wallet::{
     network::WalletNetwork,
 };
 
+mod migration;
 mod pczt;
 mod send;
 mod transactions;
@@ -36,6 +37,7 @@ mod transactions;
 // reachable from anywhere in the crate but not re-exported to
 // downstream consumers, which matches the pre-refactor surface
 // exactly).
+pub(crate) use migration::migration_status;
 pub use pczt::{
     add_proofs_to_pczt, create_pczt_from_proposal, discard_proposal, extract_and_broadcast_pczt,
     redact_pczt_for_signer, ExtractAndBroadcastPcztResult,

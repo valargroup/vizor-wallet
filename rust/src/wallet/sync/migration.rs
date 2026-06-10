@@ -1,0 +1,1117 @@
+use std::collections::BTreeSet;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use rand::{rngs::OsRng, Rng};
+use rusqlite::{params, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
+
+use crate::wallet::db::{open_readonly_conn_with_timeout, open_wallet_raw_conn_with_timeout};
+use crate::wallet::keystone::ZCASH_SIGN_BATCH_MAX_MESSAGES;
+use crate::wallet::network::WalletNetwork;
+use crate::wallet::secret_payload;
+
+use super::READ_DB_BUSY_TIMEOUT;
+
+pub(crate) const ZATOSHIS_PER_ZEC: u64 = 100_000_000;
+pub(crate) const MIGRATION_BROADCAST_WINDOW_SECS: u64 = 60;
+pub(crate) const MIGRATION_MAX_PREPARED_NOTES_PER_RUN: usize = 64;
+pub(crate) const MIGRATION_SIGNING_BATCH_LIMIT: usize = ZCASH_SIGN_BATCH_MAX_MESSAGES;
+
+const RUNS_TABLE: &str = "vizor_migration_runs";
+const PREPARED_NOTES_TABLE: &str = "vizor_migration_prepared_notes";
+const PENDING_TXS_TABLE: &str = "vizor_migration_pending_txs";
+
+pub(crate) const PHASE_NO_ORCHARD_FUNDS: &str = "no_orchard_funds";
+pub(crate) const PHASE_WAITING_FOR_SPENDABLE_ORCHARD: &str = "waiting_for_spendable_orchard";
+pub(crate) const PHASE_READY_TO_PREPARE: &str = "ready_to_prepare";
+pub(crate) const PHASE_PREPARING_DENOMINATIONS: &str = "preparing_denominations";
+pub(crate) const PHASE_WAITING_DENOM_CONFIRMATIONS: &str = "waiting_denom_confirmations";
+pub(crate) const PHASE_READY_TO_MIGRATE: &str = "ready_to_migrate";
+pub(crate) const PHASE_BROADCAST_SCHEDULED: &str = "broadcast_scheduled";
+pub(crate) const PHASE_BROADCASTING: &str = "broadcasting";
+pub(crate) const PHASE_WAITING_MIGRATION_CONFIRMATIONS: &str = "waiting_migration_confirmations";
+pub(crate) const PHASE_COMPLETE: &str = "complete";
+pub(crate) const PHASE_PAUSED: &str = "paused";
+pub(crate) const PHASE_FAILED_RECOVERABLE: &str = "failed_recoverable";
+pub(crate) const PHASE_FAILED_TERMINAL: &str = "failed_terminal";
+pub(crate) const PHASE_ABANDONED: &str = "abandoned";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DenominationPlan {
+    pub migration_outputs: Vec<u64>,
+    pub orchard_change: Option<u64>,
+    pub prep_fee_zatoshi: u64,
+    pub migration_fee_zatoshi: u64,
+    pub total_input_zatoshi: u64,
+    pub total_migratable_zatoshi: u64,
+}
+
+pub(crate) fn plan_denominations(
+    total_input_zatoshi: u64,
+    prep_fee_zatoshi: u64,
+    migration_fee_zatoshi: u64,
+    minimum_output_zatoshi: u64,
+) -> Result<DenominationPlan, String> {
+    if total_input_zatoshi <= prep_fee_zatoshi {
+        return Ok(DenominationPlan {
+            migration_outputs: Vec::new(),
+            orchard_change: None,
+            prep_fee_zatoshi: total_input_zatoshi,
+            migration_fee_zatoshi,
+            total_input_zatoshi,
+            total_migratable_zatoshi: 0,
+        });
+    }
+
+    let available = total_input_zatoshi
+        .checked_sub(prep_fee_zatoshi)
+        .ok_or("Denomination prep fee underflow")?;
+    let whole_zec = available / ZATOSHIS_PER_ZEC;
+    let mut remainder = available % ZATOSHIS_PER_ZEC;
+    let mut outputs = Vec::new();
+
+    let mut denom = 1u64;
+    while denom <= whole_zec / 10 {
+        denom = denom.checked_mul(10).ok_or("Denomination overflow")?;
+    }
+
+    let mut remaining_whole = whole_zec;
+    while denom > 0 {
+        while remaining_whole >= denom {
+            outputs.push(
+                denom
+                    .checked_mul(ZATOSHIS_PER_ZEC)
+                    .ok_or("Denomination zatoshi overflow")?,
+            );
+            remaining_whole -= denom;
+        }
+        denom /= 10;
+    }
+
+    let migratable_residual_threshold = migration_fee_zatoshi
+        .checked_add(minimum_output_zatoshi)
+        .ok_or("Residual fee threshold overflow")?;
+    let orchard_change = if remainder > migratable_residual_threshold {
+        outputs.push(remainder);
+        None
+    } else if remainder >= minimum_output_zatoshi {
+        Some(remainder)
+    } else {
+        remainder = 0;
+        None
+    };
+
+    if outputs.len() > MIGRATION_MAX_PREPARED_NOTES_PER_RUN {
+        return Err(format!(
+            "Migration plan would create {} prepared notes, above the {} note limit",
+            outputs.len(),
+            MIGRATION_MAX_PREPARED_NOTES_PER_RUN
+        ));
+    }
+
+    let total_migratable_zatoshi = outputs.iter().try_fold(0u64, |acc, value| {
+        acc.checked_add(*value)
+            .ok_or("Migratable total overflow".to_string())
+    })?;
+
+    // When `remainder` is below minimum output it intentionally becomes extra
+    // transaction fee. Keep the variable assignment explicit so tests can lock
+    // the policy.
+    let _dust_remainder_added_to_fee = remainder < minimum_output_zatoshi;
+
+    Ok(DenominationPlan {
+        migration_outputs: outputs,
+        orchard_change,
+        prep_fee_zatoshi,
+        migration_fee_zatoshi,
+        total_input_zatoshi,
+        total_migratable_zatoshi,
+    })
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct PreparedOrchardNoteRef {
+    pub txid_hex: String,
+    pub output_index: u32,
+    pub value_zatoshi: u64,
+    pub note_version: u8,
+    pub nullifier_hex: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct PendingMigrationTxMetadata {
+    pub tx_kind: String,
+    pub funding_account_uuid: String,
+    pub selected_note: PreparedOrchardNoteRef,
+}
+
+pub(crate) struct PendingMigrationTxInsert {
+    pub txid_hex: String,
+    pub raw_tx: Vec<u8>,
+    pub target_height: u32,
+    pub expiry_height: u32,
+    pub value_zatoshi: u64,
+    pub fee_zatoshi: u64,
+    pub selected_note: PreparedOrchardNoteRef,
+    pub metadata: PendingMigrationTxMetadata,
+}
+
+pub(crate) struct DuePendingMigrationTx {
+    pub txid_hex: String,
+    pub raw_tx: Vec<u8>,
+}
+
+pub(crate) struct PendingMigrationTotals {
+    pub txids: Vec<String>,
+    pub value_zatoshi: u64,
+    pub fee_zatoshi: u64,
+    pub total_count: u32,
+    pub broadcasted_count: u32,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct MigrationStatus {
+    pub phase: String,
+    pub active_run_id: Option<String>,
+    pub target_values_zatoshi: Vec<u64>,
+    pub prepared_note_count: u32,
+    pub pending_tx_count: u32,
+    pub broadcasted_tx_count: u32,
+    pub confirmed_tx_count: u32,
+    pub total_count: u32,
+    pub message: Option<String>,
+    pub can_abandon: bool,
+    pub signing_batch_limit: u32,
+    pub broadcast_window_seconds: u64,
+    pub max_prepared_notes_per_run: u32,
+}
+
+pub(crate) fn migration_status(
+    db_path: &str,
+    network: WalletNetwork,
+    account_uuid: &str,
+    orchard_spendable: u64,
+    orchard_pending: u64,
+    ironwood_spendable: u64,
+) -> Result<MigrationStatus, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+
+    if let Some(run) = active_run(&conn, account_uuid, network)? {
+        reconcile_run_confirmations(&conn, &run.run_id)?;
+        return status_for_run(&conn, run);
+    }
+
+    let phase = if orchard_spendable > 0 {
+        PHASE_READY_TO_PREPARE
+    } else if orchard_pending > 0 {
+        PHASE_WAITING_FOR_SPENDABLE_ORCHARD
+    } else if ironwood_spendable > 0 {
+        PHASE_COMPLETE
+    } else {
+        PHASE_NO_ORCHARD_FUNDS
+    };
+
+    Ok(MigrationStatus {
+        phase: phase.to_string(),
+        active_run_id: None,
+        target_values_zatoshi: Vec::new(),
+        prepared_note_count: 0,
+        pending_tx_count: 0,
+        broadcasted_tx_count: 0,
+        confirmed_tx_count: 0,
+        total_count: 0,
+        message: None,
+        can_abandon: false,
+        signing_batch_limit: MIGRATION_SIGNING_BATCH_LIMIT as u32,
+        broadcast_window_seconds: MIGRATION_BROADCAST_WINDOW_SECS,
+        max_prepared_notes_per_run: MIGRATION_MAX_PREPARED_NOTES_PER_RUN as u32,
+    })
+}
+
+#[derive(Debug)]
+pub(crate) struct ActiveRun {
+    pub run_id: String,
+    pub phase: String,
+    pub target_values_zatoshi: Vec<u64>,
+    pub last_error: Option<String>,
+}
+
+pub(crate) fn active_migration_run(
+    db_path: &str,
+    account_uuid: &str,
+    network: WalletNetwork,
+) -> Result<Option<ActiveRun>, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    active_run(&conn, account_uuid, network)
+}
+
+pub(crate) fn create_run(
+    db_path: &str,
+    account_uuid: &str,
+    network: WalletNetwork,
+    plan: &DenominationPlan,
+) -> Result<String, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    if let Some(run) = active_run(&conn, account_uuid, network)? {
+        return Err(format!("Migration already active: {}", run.run_id));
+    }
+
+    let run_id = new_run_id(account_uuid);
+    let now = now_ms()?;
+    let target_values_json = serde_json::to_string(&plan.migration_outputs)
+        .map_err(|e| format!("Encode migration targets: {e}"))?;
+    conn.execute(
+        &format!(
+            "INSERT INTO {RUNS_TABLE}
+             (run_id, account_uuid, network, db_fingerprint, phase, created_at_ms,
+              updated_at_ms, target_values_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7)"
+        ),
+        params![
+            run_id,
+            account_uuid,
+            network_name(network),
+            db_path,
+            PHASE_PREPARING_DENOMINATIONS,
+            now,
+            target_values_json,
+        ],
+    )
+    .map_err(|e| format!("Create migration run: {e}"))?;
+    Ok(run_id)
+}
+
+pub(crate) fn mark_run_phase(
+    db_path: &str,
+    run_id: &str,
+    phase: &str,
+    message: Option<&str>,
+) -> Result<(), String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let now = now_ms()?;
+    conn.execute(
+        &format!(
+            "UPDATE {RUNS_TABLE}
+             SET phase = ?1, updated_at_ms = ?2, last_error = ?3
+             WHERE run_id = ?4"
+        ),
+        params![phase, now, message, run_id],
+    )
+    .map_err(|e| format!("Update migration run phase: {e}"))?;
+    Ok(())
+}
+
+pub(crate) fn mark_prep_broadcast(
+    db_path: &str,
+    run_id: &str,
+    prep_txid: &str,
+) -> Result<(), String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let now = now_ms()?;
+    conn.execute(
+        &format!(
+            "UPDATE {RUNS_TABLE}
+             SET phase = ?1, prep_txid = ?2, updated_at_ms = ?3, last_error = NULL
+             WHERE run_id = ?4"
+        ),
+        params![PHASE_WAITING_DENOM_CONFIRMATIONS, prep_txid, now, run_id],
+    )
+    .map_err(|e| format!("Mark denomination prep broadcast: {e}"))?;
+    Ok(())
+}
+
+pub(crate) fn prepared_notes_for_run(
+    db_path: &str,
+    run_id: &str,
+) -> Result<Vec<PreparedOrchardNoteRef>, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT txid_hex, output_index, value_zatoshi, note_version, nullifier_hex
+             FROM {PREPARED_NOTES_TABLE}
+             WHERE run_id = ?1
+             ORDER BY value_zatoshi DESC, txid_hex, output_index"
+        ))
+        .map_err(|e| format!("Prepare prepared-note query: {e}"))?;
+    let rows = stmt
+        .query_map(params![run_id], |row| {
+            Ok(PreparedOrchardNoteRef {
+                txid_hex: row.get(0)?,
+                output_index: row.get(1)?,
+                value_zatoshi: row.get(2)?,
+                note_version: row.get(3)?,
+                nullifier_hex: row.get(4)?,
+            })
+        })
+        .map_err(|e| format!("Query prepared notes: {e}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Read prepared notes: {e}"))
+}
+
+pub(crate) fn insert_prepared_notes(
+    db_path: &str,
+    run_id: &str,
+    notes: &[PreparedOrchardNoteRef],
+    locked: bool,
+) -> Result<(), String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let lock_state = if locked { "locked" } else { "unlocked" };
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Begin prepared-note insert: {e}"))?;
+    for note in notes {
+        tx.execute(
+            &format!(
+                "INSERT OR REPLACE INTO {PREPARED_NOTES_TABLE}
+                 (run_id, txid_hex, output_index, value_zatoshi, note_version,
+                  nullifier_hex, lock_state)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+            ),
+            params![
+                run_id,
+                note.txid_hex,
+                note.output_index,
+                note.value_zatoshi,
+                note.note_version,
+                note.nullifier_hex,
+                lock_state,
+            ],
+        )
+        .map_err(|e| format!("Insert prepared migration note: {e}"))?;
+    }
+    tx.commit()
+        .map_err(|e| format!("Commit prepared-note insert: {e}"))?;
+    Ok(())
+}
+
+pub(crate) fn insert_pending_txs(
+    db_path: &str,
+    run_id: &str,
+    pending_txs: Vec<PendingMigrationTxInsert>,
+    password: &[u8],
+    salt_base64: &str,
+) -> Result<(), String> {
+    if pending_txs.is_empty() {
+        return Ok(());
+    }
+
+    let offsets = random_schedule_offsets(pending_txs.len());
+    let scheduled_start_ms = now_ms()?;
+    let salt = secret_payload::decode_base64(salt_base64.as_bytes(), "migration pending salt")?;
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Begin migration pending insert: {e}"))?;
+
+    for (pending, offset_seconds) in pending_txs.into_iter().zip(offsets.into_iter()) {
+        let encrypted_raw_tx = secret_payload::encrypt_payload(
+            Zeroizing::new(pending.raw_tx),
+            password,
+            salt.as_slice(),
+        )?;
+        let metadata_json = serde_json::to_string(&pending.metadata)
+            .map_err(|e| format!("Encode migration pending metadata: {e}"))?;
+        let scheduled_at_ms = scheduled_start_ms
+            .checked_add(
+                i64::try_from(offset_seconds)
+                    .map_err(|_| "Migration schedule offset overflow".to_string())?
+                    .saturating_mul(1000),
+            )
+            .ok_or("Migration scheduled time overflow")?;
+
+        tx.execute(
+            &format!(
+                "INSERT OR IGNORE INTO {PENDING_TXS_TABLE}
+                 (run_id, txid_hex, encrypted_raw_tx, target_height, expiry_height,
+                  value_zatoshi, fee_zatoshi, selected_note_txid,
+                  selected_note_output_index, selected_note_value, scheduled_at_ms,
+                  status, metadata_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12)"
+            ),
+            params![
+                run_id,
+                pending.txid_hex,
+                encrypted_raw_tx,
+                pending.target_height,
+                pending.expiry_height,
+                pending.value_zatoshi,
+                pending.fee_zatoshi,
+                pending.selected_note.txid_hex,
+                pending.selected_note.output_index,
+                pending.selected_note.value_zatoshi,
+                scheduled_at_ms,
+                metadata_json,
+            ],
+        )
+        .map_err(|e| format!("Insert pending migration tx: {e}"))?;
+    }
+
+    let now = now_ms()?;
+    tx.execute(
+        &format!(
+            "UPDATE {RUNS_TABLE}
+             SET phase = ?1, updated_at_ms = ?2, last_error = NULL
+             WHERE run_id = ?3"
+        ),
+        params![PHASE_BROADCAST_SCHEDULED, now, run_id],
+    )
+    .map_err(|e| format!("Mark migration broadcast scheduled: {e}"))?;
+
+    tx.commit()
+        .map_err(|e| format!("Commit migration pending insert: {e}"))?;
+    Ok(())
+}
+
+pub(crate) fn due_pending_txs(
+    db_path: &str,
+    run_id: &str,
+    password: &[u8],
+    salt_base64: &str,
+) -> Result<Vec<DuePendingMigrationTx>, String> {
+    let salt = secret_payload::decode_base64(salt_base64.as_bytes(), "migration pending salt")?;
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let now = now_ms()?;
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT txid_hex, encrypted_raw_tx
+             FROM {PENDING_TXS_TABLE}
+             WHERE run_id = ?1 AND status = 'scheduled' AND scheduled_at_ms <= ?2
+             ORDER BY scheduled_at_ms ASC, txid_hex ASC"
+        ))
+        .map_err(|e| format!("Prepare due migration tx query: {e}"))?;
+    let rows = stmt
+        .query_map(params![run_id, now], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| format!("Query due migration txs: {e}"))?;
+
+    let mut due = Vec::new();
+    for row in rows {
+        let (txid_hex, encrypted_raw_tx) =
+            row.map_err(|e| format!("Read due migration tx: {e}"))?;
+        let raw_tx = secret_payload::decrypt_payload(
+            encrypted_raw_tx.as_bytes(),
+            password,
+            salt.as_slice(),
+        )?;
+        due.push(DuePendingMigrationTx {
+            txid_hex,
+            raw_tx: raw_tx.to_vec(),
+        });
+    }
+    Ok(due)
+}
+
+pub(crate) fn next_scheduled_delay_ms(db_path: &str, run_id: &str) -> Result<Option<u64>, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let next_scheduled_at_ms = conn
+        .query_row(
+            &format!(
+                "SELECT MIN(scheduled_at_ms)
+                 FROM {PENDING_TXS_TABLE}
+                 WHERE run_id = ?1 AND status = 'scheduled'"
+            ),
+            params![run_id],
+            |row| row.get::<_, Option<i64>>(0),
+        )
+        .map_err(|e| format!("Read next migration schedule: {e}"))?;
+
+    let Some(next_scheduled_at_ms) = next_scheduled_at_ms else {
+        return Ok(None);
+    };
+    let now = now_ms()?;
+    if next_scheduled_at_ms <= now {
+        Ok(Some(0))
+    } else {
+        u64::try_from(next_scheduled_at_ms - now)
+            .map(Some)
+            .map_err(|_| "Migration schedule delay overflow".to_string())
+    }
+}
+
+pub(crate) fn mark_pending_broadcasted(
+    db_path: &str,
+    run_id: &str,
+    txid_hex: &str,
+) -> Result<(), String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let now = now_ms()?;
+    conn.execute(
+        &format!(
+            "UPDATE {PENDING_TXS_TABLE}
+             SET status = 'broadcasted'
+             WHERE run_id = ?1 AND txid_hex = ?2"
+        ),
+        params![run_id, txid_hex],
+    )
+    .map_err(|e| format!("Mark pending migration tx broadcasted: {e}"))?;
+    conn.execute(
+        &format!(
+            "UPDATE {RUNS_TABLE}
+             SET phase = ?1, updated_at_ms = ?2, last_error = NULL
+             WHERE run_id = ?3"
+        ),
+        params![PHASE_WAITING_MIGRATION_CONFIRMATIONS, now, run_id],
+    )
+    .map_err(|e| format!("Mark migration waiting confirmations: {e}"))?;
+    Ok(())
+}
+
+pub(crate) fn scheduled_pending_count(db_path: &str, run_id: &str) -> Result<u32, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    count_pending_with_status(&conn, run_id, "scheduled")
+}
+
+pub(crate) fn pending_totals_for_run(
+    db_path: &str,
+    run_id: &str,
+) -> Result<PendingMigrationTotals, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT txid_hex, value_zatoshi, fee_zatoshi, status
+             FROM {PENDING_TXS_TABLE}
+             WHERE run_id = ?1
+             ORDER BY scheduled_at_ms ASC, txid_hex ASC"
+        ))
+        .map_err(|e| format!("Prepare migration pending totals query: {e}"))?;
+    let rows = stmt
+        .query_map(params![run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, u64>(1)?,
+                row.get::<_, u64>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })
+        .map_err(|e| format!("Query migration pending totals: {e}"))?;
+
+    let mut txids = Vec::new();
+    let mut value_zatoshi = 0u64;
+    let mut fee_zatoshi = 0u64;
+    let mut broadcasted_count = 0u32;
+    for row in rows {
+        let (txid, value, fee, status) =
+            row.map_err(|e| format!("Read migration pending totals: {e}"))?;
+        txids.push(txid);
+        value_zatoshi = value_zatoshi
+            .checked_add(value)
+            .ok_or("Migration pending value overflow")?;
+        fee_zatoshi = fee_zatoshi
+            .checked_add(fee)
+            .ok_or("Migration pending fee overflow")?;
+        if status == "broadcasted" || status == "confirmed" {
+            broadcasted_count = broadcasted_count
+                .checked_add(1)
+                .ok_or("Migration broadcast count overflow")?;
+        }
+    }
+
+    Ok(PendingMigrationTotals {
+        total_count: txids.len() as u32,
+        txids,
+        value_zatoshi,
+        fee_zatoshi,
+        broadcasted_count,
+    })
+}
+
+pub(crate) fn locked_migration_note_refs(
+    db_path: &str,
+    account_uuid: &str,
+) -> Result<BTreeSet<(String, u32)>, String> {
+    let conn = match open_readonly_conn_with_timeout(db_path, Some(READ_DB_BUSY_TIMEOUT)) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log::warn!("migration locks: failed to open readonly DB: {e}");
+            return Ok(BTreeSet::new());
+        }
+    };
+    if !table_exists(&conn, PREPARED_NOTES_TABLE)? {
+        return Ok(BTreeSet::new());
+    }
+
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT lower(pn.txid_hex), pn.output_index
+             FROM {PREPARED_NOTES_TABLE} pn
+             INNER JOIN {RUNS_TABLE} r ON r.run_id = pn.run_id
+             WHERE r.account_uuid = ?1
+               AND pn.lock_state = 'locked'
+               AND r.phase NOT IN ('{PHASE_COMPLETE}', '{PHASE_FAILED_TERMINAL}', '{PHASE_ABANDONED}')"
+        ))
+        .map_err(|e| format!("Prepare migration lock query: {e}"))?;
+    let rows = stmt
+        .query_map(params![account_uuid], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| format!("Query migration locks: {e}"))?;
+
+    rows.collect::<Result<BTreeSet<_>, _>>()
+        .map_err(|e| format!("Read migration locks: {e}"))
+}
+
+fn status_for_run(conn: &rusqlite::Connection, run: ActiveRun) -> Result<MigrationStatus, String> {
+    let prepared_note_count = count_for_run(conn, PREPARED_NOTES_TABLE, &run.run_id)?;
+    let pending_tx_count = count_for_run(conn, PENDING_TXS_TABLE, &run.run_id)?;
+    let broadcasted_tx_count = count_pending_with_status(conn, &run.run_id, "broadcasted")?;
+    let confirmed_tx_count = count_pending_with_status(conn, &run.run_id, "confirmed")?;
+    let total_count = run.target_values_zatoshi.len() as u32;
+    let phase = if total_count > 0 && confirmed_tx_count >= total_count {
+        PHASE_COMPLETE.to_string()
+    } else {
+        run.phase
+    };
+    let can_abandon = matches!(
+        phase.as_str(),
+        PHASE_PREPARING_DENOMINATIONS
+            | PHASE_WAITING_DENOM_CONFIRMATIONS
+            | PHASE_READY_TO_MIGRATE
+            | PHASE_FAILED_RECOVERABLE
+            | PHASE_PAUSED
+    ) && pending_tx_count == 0;
+
+    Ok(MigrationStatus {
+        phase,
+        active_run_id: Some(run.run_id),
+        target_values_zatoshi: run.target_values_zatoshi,
+        prepared_note_count,
+        pending_tx_count,
+        broadcasted_tx_count,
+        confirmed_tx_count,
+        total_count,
+        message: run.last_error,
+        can_abandon,
+        signing_batch_limit: MIGRATION_SIGNING_BATCH_LIMIT as u32,
+        broadcast_window_seconds: MIGRATION_BROADCAST_WINDOW_SECS,
+        max_prepared_notes_per_run: MIGRATION_MAX_PREPARED_NOTES_PER_RUN as u32,
+    })
+}
+
+fn active_run(
+    conn: &rusqlite::Connection,
+    account_uuid: &str,
+    network: WalletNetwork,
+) -> Result<Option<ActiveRun>, String> {
+    if !table_exists(conn, RUNS_TABLE)? {
+        return Ok(None);
+    }
+
+    conn.query_row(
+        &format!(
+            "SELECT run_id, phase, target_values_json, last_error
+             FROM {RUNS_TABLE}
+             WHERE account_uuid = ?1
+               AND network = ?2
+               AND phase NOT IN ('{PHASE_NO_ORCHARD_FUNDS}', '{PHASE_COMPLETE}',
+                                 '{PHASE_FAILED_TERMINAL}', '{PHASE_ABANDONED}')
+             ORDER BY created_at_ms DESC
+             LIMIT 1"
+        ),
+        params![account_uuid, network_name(network)],
+        |row| {
+            let target_values_json: String = row.get(2)?;
+            let target_values_zatoshi =
+                serde_json::from_str::<Vec<u64>>(&target_values_json).unwrap_or_default();
+            Ok(ActiveRun {
+                run_id: row.get(0)?,
+                phase: row.get(1)?,
+                target_values_zatoshi,
+                last_error: row.get(3)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(|e| format!("Read active migration run: {e}"))
+}
+
+fn reconcile_run_confirmations(conn: &rusqlite::Connection, run_id: &str) -> Result<(), String> {
+    if !table_exists(conn, "transactions")? || !table_exists(conn, PENDING_TXS_TABLE)? {
+        return Ok(());
+    }
+
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT txid_hex
+             FROM {PENDING_TXS_TABLE}
+             WHERE run_id = ?1 AND status IN ('scheduled', 'broadcasted')"
+        ))
+        .map_err(|e| format!("Prepare migration confirmation query: {e}"))?;
+    let rows = stmt
+        .query_map(params![run_id], |row| row.get::<_, String>(0))
+        .map_err(|e| format!("Query migration confirmation txs: {e}"))?;
+    let txids = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Read migration confirmation txs: {e}"))?;
+
+    for txid_hex in txids {
+        if local_transaction_is_confirmed(conn, &txid_hex)? {
+            conn.execute(
+                &format!(
+                    "UPDATE {PENDING_TXS_TABLE}
+                     SET status = 'confirmed'
+                     WHERE run_id = ?1 AND txid_hex = ?2"
+                ),
+                params![run_id, txid_hex],
+            )
+            .map_err(|e| format!("Mark migration tx confirmed: {e}"))?;
+        }
+    }
+
+    let total_count = count_for_run(conn, PENDING_TXS_TABLE, run_id)?;
+    let confirmed_count = count_pending_with_status(conn, run_id, "confirmed")?;
+    if total_count > 0 && confirmed_count >= total_count {
+        let now = now_ms()?;
+        conn.execute(
+            &format!(
+                "UPDATE {RUNS_TABLE}
+                 SET phase = ?1, updated_at_ms = ?2, last_error = NULL
+                 WHERE run_id = ?3"
+            ),
+            params![PHASE_COMPLETE, now, run_id],
+        )
+        .map_err(|e| format!("Mark migration run complete: {e}"))?;
+        conn.execute(
+            &format!(
+                "UPDATE {PREPARED_NOTES_TABLE}
+                 SET lock_state = 'unlocked'
+                 WHERE run_id = ?1"
+            ),
+            params![run_id],
+        )
+        .map_err(|e| format!("Release migration note locks: {e}"))?;
+    }
+
+    Ok(())
+}
+
+fn local_transaction_is_confirmed(
+    conn: &rusqlite::Connection,
+    txid_hex: &str,
+) -> Result<bool, String> {
+    for txid_blob in txid_blob_variants(txid_hex)? {
+        let mined = conn
+            .query_row(
+                "SELECT mined_height IS NOT NULL FROM transactions WHERE txid = ?1",
+                params![txid_blob],
+                |row| row.get::<_, bool>(0),
+            )
+            .optional()
+            .map_err(|e| format!("Read migration tx confirmation state: {e}"))?;
+        if mined.unwrap_or(false) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn txid_blob_variants(txid_hex: &str) -> Result<Vec<Vec<u8>>, String> {
+    let bytes = hex::decode(txid_hex).map_err(|e| format!("Bad migration txid hex: {e}"))?;
+    if bytes.len() != 32 {
+        return Err("Migration txid must be 32 bytes".to_string());
+    }
+    let mut variants = vec![bytes.clone()];
+    let mut reversed = bytes;
+    reversed.reverse();
+    if reversed != variants[0] {
+        variants.push(reversed);
+    }
+    Ok(variants)
+}
+
+fn count_for_run(conn: &rusqlite::Connection, table: &str, run_id: &str) -> Result<u32, String> {
+    if !table_exists(conn, table)? {
+        return Ok(0);
+    }
+    let count = conn
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {table} WHERE run_id = ?1"),
+            params![run_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|e| format!("Count migration table {table}: {e}"))?;
+    u32::try_from(count).map_err(|_| "Migration count overflow".to_string())
+}
+
+fn count_pending_with_status(
+    conn: &rusqlite::Connection,
+    run_id: &str,
+    status: &str,
+) -> Result<u32, String> {
+    if !table_exists(conn, PENDING_TXS_TABLE)? {
+        return Ok(0);
+    }
+    let count = conn
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {PENDING_TXS_TABLE} WHERE run_id = ?1 AND status = ?2"),
+            params![run_id, status],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|e| format!("Count migration pending txs: {e}"))?;
+    u32::try_from(count).map_err(|_| "Migration count overflow".to_string())
+}
+
+pub(crate) fn random_schedule_offsets(count: usize) -> Vec<u64> {
+    let mut offsets = (0..count)
+        .map(|_| OsRng.gen_range(0..=MIGRATION_BROADCAST_WINDOW_SECS))
+        .collect::<Vec<_>>();
+    offsets.sort_unstable();
+    offsets
+}
+
+fn ensure_schema(conn: &rusqlite::Connection) -> Result<(), String> {
+    conn.execute_batch(&format!(
+        "
+        CREATE TABLE IF NOT EXISTS {RUNS_TABLE} (
+            run_id TEXT PRIMARY KEY,
+            account_uuid TEXT NOT NULL,
+            network TEXT NOT NULL,
+            db_fingerprint TEXT NOT NULL,
+            phase TEXT NOT NULL,
+            created_at_ms INTEGER NOT NULL,
+            updated_at_ms INTEGER NOT NULL,
+            prep_txid TEXT,
+            target_values_json TEXT NOT NULL DEFAULT '[]',
+            last_error TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_vizor_migration_runs_active
+            ON {RUNS_TABLE}(account_uuid, network, phase, created_at_ms);
+
+        CREATE TABLE IF NOT EXISTS {PREPARED_NOTES_TABLE} (
+            run_id TEXT NOT NULL,
+            txid_hex TEXT NOT NULL,
+            output_index INTEGER NOT NULL,
+            value_zatoshi INTEGER NOT NULL,
+            note_version INTEGER NOT NULL,
+            nullifier_hex TEXT,
+            lock_state TEXT NOT NULL DEFAULT 'locked',
+            PRIMARY KEY (run_id, txid_hex, output_index)
+        );
+
+        CREATE TABLE IF NOT EXISTS {PENDING_TXS_TABLE} (
+            run_id TEXT NOT NULL,
+            txid_hex TEXT PRIMARY KEY,
+            encrypted_raw_tx TEXT NOT NULL,
+            target_height INTEGER NOT NULL,
+            expiry_height INTEGER NOT NULL,
+            value_zatoshi INTEGER NOT NULL,
+            fee_zatoshi INTEGER NOT NULL,
+            selected_note_txid TEXT NOT NULL,
+            selected_note_output_index INTEGER NOT NULL,
+            selected_note_value INTEGER NOT NULL,
+            scheduled_at_ms INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            metadata_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_vizor_migration_pending_due
+            ON {PENDING_TXS_TABLE}(status, scheduled_at_ms);
+        "
+    ))
+    .map_err(|e| format!("Initialize migration schema: {e}"))
+}
+
+fn table_exists(conn: &rusqlite::Connection, table: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        params![table],
+        |_| Ok(()),
+    )
+    .optional()
+    .map(|row| row.is_some())
+    .map_err(|e| format!("Check migration table {table}: {e}"))
+}
+
+fn now_ms() -> Result<i64, String> {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("System clock before Unix epoch: {e}"))?;
+    i64::try_from(duration.as_millis()).map_err(|_| "Timestamp overflow".to_string())
+}
+
+fn new_run_id(account_uuid: &str) -> String {
+    let nonce: u64 = OsRng.gen();
+    format!(
+        "{account_uuid}-{}-{nonce:016x}",
+        now_ms().unwrap_or_default()
+    )
+}
+
+fn network_name(network: WalletNetwork) -> &'static str {
+    match network {
+        WalletNetwork::Main => "main",
+        WalletNetwork::Test => "test",
+        WalletNetwork::LocalIronwoodTestnet => "local_ironwood_testnet",
+        WalletNetwork::Regtest => "regtest",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn planner_noops_when_prep_fee_consumes_balance() {
+        let plan = plan_denominations(5_000, 10_000, 10_000, 1).unwrap();
+
+        assert!(plan.migration_outputs.is_empty());
+        assert_eq!(plan.total_migratable_zatoshi, 0);
+        assert_eq!(plan.prep_fee_zatoshi, 5_000);
+    }
+
+    #[test]
+    fn planner_creates_decimal_denominations_and_fee_positive_residual() {
+        let plan = plan_denominations(1_234_500_000, 0, 10_000, MINIMUM_OUTPUT_FOR_TEST).unwrap();
+
+        assert_eq!(
+            plan.migration_outputs,
+            vec![1_000_000_000, 100_000_000, 100_000_000, 34_500_000]
+        );
+        assert_eq!(plan.orchard_change, None);
+        assert_eq!(plan.total_migratable_zatoshi, 1_234_500_000);
+    }
+
+    #[test]
+    fn planner_keeps_non_fee_positive_residual_as_orchard_change() {
+        let plan = plan_denominations(100_010_000, 0, 10_000, MINIMUM_OUTPUT_FOR_TEST).unwrap();
+
+        assert_eq!(plan.migration_outputs, vec![100_000_000]);
+        assert_eq!(plan.orchard_change, Some(10_000));
+    }
+
+    #[test]
+    fn planner_reserves_prep_fee_before_decomposition() {
+        let plan = plan_denominations(1_000_000_000, 10_000, 10_000, 1).unwrap();
+
+        assert_eq!(
+            plan.migration_outputs,
+            vec![
+                100_000_000,
+                100_000_000,
+                100_000_000,
+                100_000_000,
+                100_000_000,
+                100_000_000,
+                100_000_000,
+                100_000_000,
+                100_000_000,
+                99_990_000,
+            ]
+        );
+    }
+
+    #[test]
+    fn planner_rejects_more_than_max_prepared_outputs() {
+        let err = plan_denominations(1_999_999_950_000_000, 0, 10_000, 1).unwrap_err();
+
+        assert!(err.contains("above the 64 note limit"));
+    }
+
+    #[test]
+    fn schedule_offsets_are_sorted_and_within_window() {
+        let offsets = random_schedule_offsets(32);
+
+        assert_eq!(offsets.len(), 32);
+        assert!(offsets.windows(2).all(|w| w[0] <= w[1]));
+        assert!(offsets.iter().all(|offset| *offset <= 60));
+    }
+
+    #[test]
+    fn confirmation_reconciliation_completes_run_and_releases_locks() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        conn.execute(
+            "CREATE TABLE transactions (txid BLOB PRIMARY KEY, mined_height INTEGER)",
+            [],
+        )
+        .unwrap();
+
+        let run_id = "run-1";
+        let txid_hex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        conn.execute(
+            &format!(
+                "INSERT INTO {RUNS_TABLE}
+                 (run_id, account_uuid, network, db_fingerprint, phase,
+                  created_at_ms, updated_at_ms, target_values_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 1, 1, ?6)"
+            ),
+            params![
+                run_id,
+                "account-1",
+                "test",
+                "db",
+                PHASE_WAITING_MIGRATION_CONFIRMATIONS,
+                "[100000000]",
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            &format!(
+                "INSERT INTO {PREPARED_NOTES_TABLE}
+                 (run_id, txid_hex, output_index, value_zatoshi, note_version,
+                  nullifier_hex, lock_state)
+                 VALUES (?1, ?2, 0, 100000000, 2, NULL, 'locked')"
+            ),
+            params![run_id, txid_hex],
+        )
+        .unwrap();
+        conn.execute(
+            &format!(
+                "INSERT INTO {PENDING_TXS_TABLE}
+                 (run_id, txid_hex, encrypted_raw_tx, target_height,
+                  expiry_height, value_zatoshi, fee_zatoshi, selected_note_txid,
+                  selected_note_output_index, selected_note_value,
+                  scheduled_at_ms, status, metadata_json)
+                 VALUES (?1, ?2, 'encrypted', 10, 30, 99990000, 10000,
+                         ?2, 0, 100000000, 1, 'broadcasted', '{{}}')"
+            ),
+            params![run_id, txid_hex],
+        )
+        .unwrap();
+
+        let mut txid_blob = hex::decode(txid_hex).unwrap();
+        txid_blob.reverse();
+        conn.execute(
+            "INSERT INTO transactions (txid, mined_height) VALUES (?1, 20)",
+            params![txid_blob],
+        )
+        .unwrap();
+
+        reconcile_run_confirmations(&conn, run_id).unwrap();
+        let status = status_for_run(
+            &conn,
+            ActiveRun {
+                run_id: run_id.to_string(),
+                phase: PHASE_WAITING_MIGRATION_CONFIRMATIONS.to_string(),
+                target_values_zatoshi: vec![100_000_000],
+                last_error: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(status.phase, PHASE_COMPLETE);
+        assert_eq!(status.confirmed_tx_count, 1);
+        let lock_state: String = conn
+            .query_row(
+                &format!("SELECT lock_state FROM {PREPARED_NOTES_TABLE} WHERE run_id = ?1"),
+                params![run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(lock_state, "unlocked");
+    }
+
+    const MINIMUM_OUTPUT_FOR_TEST: u64 = 1;
+}

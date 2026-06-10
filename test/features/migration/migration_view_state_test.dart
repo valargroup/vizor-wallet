@@ -6,6 +6,7 @@ void main() {
     expect(
       migrationViewState(
         isHardware: true,
+        rustPhase: 'ready_to_prepare',
         hasPendingMigration: true,
         hasCompletedMigration: false,
         orchardBalance: BigInt.from(1),
@@ -15,29 +16,31 @@ void main() {
     );
   });
 
-  test('software account with no migration shows idle', () {
+  test('software account with Orchard funds plans denominations', () {
     expect(
       migrationViewState(
         isHardware: false,
+        rustPhase: null,
         hasPendingMigration: false,
         hasCompletedMigration: false,
         orchardBalance: BigInt.from(1),
         ironwoodBalance: BigInt.zero,
       ),
-      MigrationViewState.idle,
+      MigrationViewState.planningDenominations,
     );
   });
 
-  test('software account with a pending migration shows inProgress', () {
+  test('software account with a pending migration shows confirmation wait', () {
     expect(
       migrationViewState(
         isHardware: false,
+        rustPhase: null,
         hasPendingMigration: true,
         hasCompletedMigration: false,
         orchardBalance: BigInt.zero,
         ironwoodBalance: BigInt.zero,
       ),
-      MigrationViewState.inProgress,
+      MigrationViewState.waitingMigrationConfirmations,
     );
   });
 
@@ -45,6 +48,7 @@ void main() {
     expect(
       migrationViewState(
         isHardware: false,
+        rustPhase: null,
         hasPendingMigration: false,
         hasCompletedMigration: true,
         orchardBalance: BigInt.zero,
@@ -58,6 +62,7 @@ void main() {
     expect(
       migrationViewState(
         isHardware: false,
+        rustPhase: null,
         hasPendingMigration: false,
         hasCompletedMigration: false,
         orchardBalance: BigInt.zero,
@@ -73,15 +78,49 @@ void main() {
       expect(
         migrationViewState(
           isHardware: false,
+          rustPhase: null,
           hasPendingMigration: false,
           hasCompletedMigration: true,
           orchardBalance: BigInt.from(1),
           ironwoodBalance: BigInt.from(1),
         ),
-        MigrationViewState.idle,
+        MigrationViewState.planningDenominations,
       );
     },
   );
+
+  test('software account with no orchard or ironwood funds shows no-op', () {
+    expect(
+      migrationViewState(
+        isHardware: false,
+        rustPhase: null,
+        hasPendingMigration: false,
+        hasCompletedMigration: false,
+        orchardBalance: BigInt.zero,
+        ironwoodBalance: BigInt.zero,
+      ),
+      MigrationViewState.noOrchardFunds,
+    );
+  });
+
+  test('rust phase mapping covers explicit migration phases', () {
+    expect(
+      migrationViewStateFromRustPhase('waiting_for_spendable_orchard'),
+      MigrationViewState.waitingForSpendableOrchard,
+    );
+    expect(
+      migrationViewStateFromRustPhase('ready_to_prepare'),
+      MigrationViewState.planningDenominations,
+    );
+    expect(
+      migrationViewStateFromRustPhase('broadcast_scheduled'),
+      MigrationViewState.broadcastScheduled,
+    );
+    expect(
+      migrationViewStateFromRustPhase('failed_terminal'),
+      MigrationViewState.failedTerminal,
+    );
+  });
 
   test('migration txid matching accepts reversed byte order', () {
     const broadcastOrder =

@@ -321,12 +321,26 @@ Future<IronwoodMigrationResult> migrateOrchardToIronwood({
   required String network,
   required String accountUuid,
   required List<int> mnemonicBytes,
+  required String password,
+  required String saltBase64,
 }) => RustLib.instance.api.crateApiSyncMigrateOrchardToIronwood(
   dbPath: dbPath,
   lightwalletdUrl: lightwalletdUrl,
   network: network,
   accountUuid: accountUuid,
   mnemonicBytes: mnemonicBytes,
+  password: password,
+  saltBase64: saltBase64,
+);
+
+Future<MigrationStatus> getOrchardMigrationStatus({
+  required String dbPath,
+  required String network,
+  required String accountUuid,
+}) => RustLib.instance.api.crateApiSyncGetOrchardMigrationStatus(
+  dbPath: dbPath,
+  network: network,
+  accountUuid: accountUuid,
 );
 
 Future<IronwoodMigrationResult>
@@ -336,6 +350,7 @@ migrateOrchardToIronwoodWithMacosStoredMnemonic({
   required String network,
   required String accountUuid,
   required String password,
+  required String saltBase64,
 }) => RustLib.instance.api
     .crateApiSyncMigrateOrchardToIronwoodWithMacosStoredMnemonic(
       dbPath: dbPath,
@@ -343,6 +358,7 @@ migrateOrchardToIronwoodWithMacosStoredMnemonic({
       network: network,
       accountUuid: accountUuid,
       password: password,
+      saltBase64: saltBase64,
     );
 
 /// Dry-run transparent shielding without creating or broadcasting a transaction.
@@ -828,6 +844,73 @@ class IronwoodMigrationResult {
           message == other.message &&
           feeZatoshi == other.feeZatoshi &&
           migratedZatoshi == other.migratedZatoshi;
+}
+
+class MigrationStatus {
+  final String phase;
+  final String? activeRunId;
+  final Uint64List targetValuesZatoshi;
+  final int preparedNoteCount;
+  final int pendingTxCount;
+  final int broadcastedTxCount;
+  final int confirmedTxCount;
+  final int totalCount;
+  final String? message;
+  final bool canAbandon;
+  final int signingBatchLimit;
+  final BigInt broadcastWindowSeconds;
+  final int maxPreparedNotesPerRun;
+
+  const MigrationStatus({
+    required this.phase,
+    this.activeRunId,
+    required this.targetValuesZatoshi,
+    required this.preparedNoteCount,
+    required this.pendingTxCount,
+    required this.broadcastedTxCount,
+    required this.confirmedTxCount,
+    required this.totalCount,
+    this.message,
+    required this.canAbandon,
+    required this.signingBatchLimit,
+    required this.broadcastWindowSeconds,
+    required this.maxPreparedNotesPerRun,
+  });
+
+  @override
+  int get hashCode =>
+      phase.hashCode ^
+      activeRunId.hashCode ^
+      targetValuesZatoshi.hashCode ^
+      preparedNoteCount.hashCode ^
+      pendingTxCount.hashCode ^
+      broadcastedTxCount.hashCode ^
+      confirmedTxCount.hashCode ^
+      totalCount.hashCode ^
+      message.hashCode ^
+      canAbandon.hashCode ^
+      signingBatchLimit.hashCode ^
+      broadcastWindowSeconds.hashCode ^
+      maxPreparedNotesPerRun.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MigrationStatus &&
+          runtimeType == other.runtimeType &&
+          phase == other.phase &&
+          activeRunId == other.activeRunId &&
+          targetValuesZatoshi == other.targetValuesZatoshi &&
+          preparedNoteCount == other.preparedNoteCount &&
+          pendingTxCount == other.pendingTxCount &&
+          broadcastedTxCount == other.broadcastedTxCount &&
+          confirmedTxCount == other.confirmedTxCount &&
+          totalCount == other.totalCount &&
+          message == other.message &&
+          canAbandon == other.canAbandon &&
+          signingBatchLimit == other.signingBatchLimit &&
+          broadcastWindowSeconds == other.broadcastWindowSeconds &&
+          maxPreparedNotesPerRun == other.maxPreparedNotesPerRun;
 }
 
 class ProposalResult {

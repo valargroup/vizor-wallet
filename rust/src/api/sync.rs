@@ -642,6 +642,22 @@ pub struct IronwoodMigrationResult {
     pub migrated_zatoshi: u64,
 }
 
+pub struct MigrationStatus {
+    pub phase: String,
+    pub active_run_id: Option<String>,
+    pub target_values_zatoshi: Vec<u64>,
+    pub prepared_note_count: u32,
+    pub pending_tx_count: u32,
+    pub broadcasted_tx_count: u32,
+    pub confirmed_tx_count: u32,
+    pub total_count: u32,
+    pub message: Option<String>,
+    pub can_abandon: bool,
+    pub signing_batch_limit: u32,
+    pub broadcast_window_seconds: u64,
+    pub max_prepared_notes_per_run: u32,
+}
+
 pub struct ExtractAndBroadcastPcztResult {
     pub txid: String,
     pub status: String,
@@ -880,9 +896,12 @@ pub fn migrate_orchard_to_ironwood(
     network: String,
     account_uuid: String,
     mnemonic_bytes: Vec<u8>,
+    password: String,
+    salt_base64: String,
 ) -> Result<IronwoodMigrationResult, String> {
     catch(|| {
         let mnemonic_bytes = Zeroizing::new(mnemonic_bytes);
+        let password = Zeroizing::new(password.into_bytes());
         let network = parse_network_and_migrate(&db_path, &network)?;
         let seed = keys::mnemonic_bytes_to_seed(mnemonic_bytes.as_slice())?;
         drop(mnemonic_bytes);
@@ -894,6 +913,8 @@ pub fn migrate_orchard_to_ironwood(
             network,
             &account_uuid,
             seed,
+            password,
+            &salt_base64,
         ))?;
         Ok(IronwoodMigrationResult {
             txids: r.txids,
@@ -907,17 +928,56 @@ pub fn migrate_orchard_to_ironwood(
     })
 }
 
+pub fn get_orchard_migration_status(
+    db_path: String,
+    network: String,
+    account_uuid: String,
+) -> Result<MigrationStatus, String> {
+    catch(|| {
+        let network = parse_network_and_migrate(&db_path, &network)?;
+        let balance = wallet_sync::get_wallet_balance(&db_path, network, &account_uuid)?;
+        let status = wallet_sync::migration_status(
+            &db_path,
+            network,
+            &account_uuid,
+            balance.orchard,
+            balance.orchard_pending,
+            balance.ironwood,
+        )?;
+        Ok(MigrationStatus {
+            phase: status.phase,
+            active_run_id: status.active_run_id,
+            target_values_zatoshi: status.target_values_zatoshi,
+            prepared_note_count: status.prepared_note_count,
+            pending_tx_count: status.pending_tx_count,
+            broadcasted_tx_count: status.broadcasted_tx_count,
+            confirmed_tx_count: status.confirmed_tx_count,
+            total_count: status.total_count,
+            message: status.message,
+            can_abandon: status.can_abandon,
+            signing_batch_limit: status.signing_batch_limit,
+            broadcast_window_seconds: status.broadcast_window_seconds,
+            max_prepared_notes_per_run: status.max_prepared_notes_per_run,
+        })
+    })
+}
+
 pub fn migrate_orchard_to_ironwood_with_macos_stored_mnemonic(
     db_path: String,
     lightwalletd_url: String,
     network: String,
     account_uuid: String,
     password: String,
+    salt_base64: String,
 ) -> Result<IronwoodMigrationResult, String> {
     catch(|| {
         let network = parse_network_and_migrate(&db_path, &network)?;
-        let password = Zeroizing::new(password.into_bytes());
-        let seed = secret_store::seed_from_macos_stored_mnemonic(network, &account_uuid, password)?;
+        let password_bytes = password.into_bytes();
+        let seed = secret_store::seed_from_macos_stored_mnemonic(
+            network,
+            &account_uuid,
+            Zeroizing::new(password_bytes.clone()),
+        )?;
 
         let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
         let r = rt.block_on(wallet_sync::migrate_orchard_to_ironwood(
@@ -926,6 +986,8 @@ pub fn migrate_orchard_to_ironwood_with_macos_stored_mnemonic(
             network,
             &account_uuid,
             seed,
+            Zeroizing::new(password_bytes),
+            &salt_base64,
         ))?;
         Ok(IronwoodMigrationResult {
             txids: r.txids,
