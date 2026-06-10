@@ -846,7 +846,7 @@ async fn resume_active_migration_run(
             }
 
             let mut pending = Vec::with_capacity(prepared_notes.len());
-            for (index, note_ref) in prepared_notes.iter().enumerate() {
+            for note_ref in &prepared_notes {
                 let tx = with_wallet_db_write_lock("send.migration.create_exact_note", || {
                     create_orchard_to_ironwood_transaction_from_note(
                         db_path,
@@ -854,7 +854,6 @@ async fn resume_active_migration_run(
                         usk,
                         account_uuid,
                         note_ref,
-                        (index + 1) as u32,
                     )
                 })?;
                 let Some(tx) = tx else {
@@ -1118,7 +1117,7 @@ fn create_orchard_denomination_split_transaction(
                 note: Box::new(note),
             },
             zatoshi,
-            Some(memo.clone()),
+            None,
         ));
         if logical_index < migration_output_count {
             prepared_refs.push(super::migration::PreparedOrchardNoteRef {
@@ -1168,7 +1167,6 @@ fn create_orchard_to_ironwood_transaction_from_note(
     usk: &UnifiedSpendingKey,
     account_uuid: &str,
     note_ref: &super::migration::PreparedOrchardNoteRef,
-    migration_index: u32,
 ) -> Result<Option<CreatedPendingMigrationTx>, String> {
     if note_ref.note_version != 2 {
         return Err("Prepared migration note is not an Orchard V2 note".to_string());
@@ -1191,10 +1189,7 @@ fn create_orchard_to_ironwood_transaction_from_note(
         .cloned()
         .ok_or("Orchard spending key not available")?;
     let recipient = orchard_fvk.address_at(0u32, orchard::keys::Scope::Internal);
-    let memo_text = format!("Ironwood migration {migration_index}");
-    let memo = MemoBytes::from(
-        Memo::from_bytes(memo_text.as_bytes()).map_err(|e| format!("Bad migration memo: {e}"))?,
-    );
+    let memo = MemoBytes::empty();
 
     let (target_height, anchor_height) = db
         .get_target_and_anchor_heights(ConfirmationsPolicy::default().trusted())

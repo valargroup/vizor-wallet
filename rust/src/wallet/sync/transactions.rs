@@ -2199,7 +2199,7 @@ mod tests {
             true,
             None,
             Some(1),
-            Some(b"Ironwood migration 1"),
+            None,
         );
         insert_received_note_version(&db, &migration_tx, output_index, IRONWOOD_NOTE_VERSION);
         insert_spent_note_version(&db, &migration_tx, ORCHARD_NOTE_VERSION);
@@ -2248,7 +2248,7 @@ mod tests {
             true,
             None,
             Some(1),
-            Some(b"Ironwood migration 1"),
+            None,
         );
         insert_spent_note_version(&db, &migration_tx, ORCHARD_NOTE_VERSION);
 
