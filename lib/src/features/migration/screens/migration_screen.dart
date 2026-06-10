@@ -14,10 +14,12 @@ import '../../../providers/account_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../migration_copy.dart';
+import '../models/migration_step_state.dart';
 import '../models/migration_view_state.dart';
 import '../providers/migration_expected_transfer_count_provider.dart';
+import '../providers/migration_run_controller.dart';
 import '../providers/orchard_migration_status_provider.dart';
-import '../widgets/migration_signing_overlay.dart';
+import '../widgets/migration_step_card.dart';
 
 class MigrationScreen extends ConsumerStatefulWidget {
   const MigrationScreen({super.key});
@@ -27,26 +29,7 @@ class MigrationScreen extends ConsumerStatefulWidget {
 }
 
 class _MigrationScreenState extends ConsumerState<MigrationScreen> {
-  bool _signing = false;
   Timer? _progressRefreshTimer;
-
-  void _startSigning() => setState(() => _signing = true);
-  void _cancelSigning() => setState(() => _signing = false);
-
-  void _completeSigning(MigrationSigningCompletion completion) {
-    ref.invalidate(activeOrchardMigrationStatusProvider);
-    final totalCount = completion.result.totalCount;
-    if (totalCount > 0 && completion.firstTxid != null) {
-      ref
-          .read(migrationExpectedTransferCountProvider.notifier)
-          .setCount(
-            completion.accountUuid,
-            totalCount,
-            firstTxid: completion.firstTxid!,
-          );
-    }
-    setState(() => _signing = false);
-  }
 
   @override
   void dispose() {
@@ -103,6 +86,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       activeOrchardMigrationStatusProvider,
     );
     final migrationStatus = migrationStatusAsync.value;
+    final runState = ref.watch(migrationRunControllerProvider);
     final statusIsLoading =
         !isHardware &&
         accountUuid != null &&
@@ -113,7 +97,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     late final Widget body;
     MigrationViewState? viewState;
     if (statusIsLoading) {
-      body = const _PhaseStatusView(
+      body = const _StatusNote(
         title: MigrationCopy.checkingTitle,
         body: MigrationCopy.checkingBody,
       );
@@ -121,12 +105,11 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         accountUuid != null &&
         statusError != null &&
         migrationStatus == null) {
-      body = _PhaseStatusView(
+      body = _StatusNote(
         title: MigrationCopy.failedRecoverableTitle,
         body: MigrationCopy.failedRecoverableBody,
         details: statusError.toString(),
-        actionLabel: MigrationCopy.retryCta,
-        onAction: () => ref.invalidate(activeOrchardMigrationStatusProvider),
+        onRetry: () => ref.invalidate(activeOrchardMigrationStatusProvider),
       );
       viewState = MigrationViewState.failedRecoverable;
     } else {
@@ -138,97 +121,58 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         orchardBalance: sync.orchardBalance,
         ironwoodBalance: sync.ironwoodBalance,
       );
-      final effectiveExpectedCount =
-          migrationStatus != null && migrationStatus.totalCount > 0
-          ? migrationStatus.totalCount
-          : scopedExpectedCount;
 
-      body = switch (viewState) {
-        MigrationViewState.softwareRequired => const _SoftwareRequiredView(),
-        MigrationViewState.noOrchardFunds => const _PhaseStatusView(
-          title: MigrationCopy.noOrchardFundsTitle,
-          body: MigrationCopy.noOrchardFundsBody,
-        ),
-        MigrationViewState.waitingForSpendableOrchard => const _PhaseStatusView(
-          title: MigrationCopy.waitingForSpendableTitle,
-          body: MigrationCopy.waitingForSpendableBody,
-        ),
-        MigrationViewState.planningDenominations => _IdleView(
-          onStart: _startSigning,
-          orchardBalance: sync.orchardBalance,
-        ),
-        MigrationViewState.preparingDenominations => _PhaseStatusView(
-          title: MigrationCopy.preparingDenominationsTitle,
-          body: MigrationCopy.preparingDenominationsBody,
+      if (viewState == MigrationViewState.softwareRequired) {
+        body = const _SoftwareRequiredView();
+      } else {
+        final steps = migrationStepsModel(
+          viewState: viewState,
           status: migrationStatus,
-        ),
-        MigrationViewState.waitingDenomConfirmations => _PhaseStatusView(
-          title: MigrationCopy.waitingDenomTitle,
-          body: MigrationCopy.waitingDenomBody,
-          status: migrationStatus,
-        ),
-        MigrationViewState.readyToMigrate => _PhaseStatusView(
-          title: MigrationCopy.readyPreparedTitle,
-          body: MigrationCopy.readyPreparedBody,
-          status: migrationStatus,
-          actionLabel: MigrationCopy.readyPreparedCta,
-          onAction: _startSigning,
-        ),
-        MigrationViewState.buildingSigningBatch => _PhaseStatusView(
-          title: MigrationCopy.buildingBatchTitle,
-          body: MigrationCopy.buildingBatchBody,
-          status: migrationStatus,
-        ),
-        MigrationViewState.signingBatch => _PhaseStatusView(
-          title: MigrationCopy.signingBatchTitle,
-          body: MigrationCopy.signingBatchBody,
-          status: migrationStatus,
-        ),
-        MigrationViewState.broadcastScheduled => _PhaseStatusView(
-          title: MigrationCopy.broadcastScheduledTitle,
-          body: MigrationCopy.broadcastScheduledBody,
-          status: migrationStatus,
-        ),
-        MigrationViewState.broadcasting => _PhaseStatusView(
-          title: MigrationCopy.broadcastingStatusTitle,
-          body: MigrationCopy.broadcastingStatusBody,
-          status: migrationStatus,
-        ),
-        MigrationViewState.waitingMigrationConfirmations => _InProgressView(
-          migrationTransactions: currentRunMigrationTransactions,
-          expectedTransferCount: effectiveExpectedCount,
-          amountZatoshi: _migrationDisplayAmount(
-            sync,
-            currentRunMigrationTransactions,
-          ),
-        ),
-        MigrationViewState.complete => const _CompleteView(),
-        MigrationViewState.paused => _PhaseStatusView(
-          title: MigrationCopy.pausedTitle,
-          body: MigrationCopy.pausedBody,
-          status: migrationStatus,
-          actionLabel: MigrationCopy.readyPreparedCta,
-          onAction: _startSigning,
-        ),
-        MigrationViewState.failedRecoverable => _PhaseStatusView(
-          title: MigrationCopy.failedRecoverableTitle,
-          body: MigrationCopy.failedRecoverableBody,
-          details: migrationStatus?.message,
-          status: migrationStatus,
-          actionLabel: MigrationCopy.retryCta,
-          onAction: _startSigning,
-        ),
-        MigrationViewState.failedTerminal => _PhaseStatusView(
-          title: MigrationCopy.failedTerminalTitle,
-          body: MigrationCopy.failedTerminalBody,
-          details: migrationStatus?.message,
-          status: migrationStatus,
-        ),
-        MigrationViewState.abandoned => const _PhaseStatusView(
-          title: MigrationCopy.abandonedTitle,
-          body: MigrationCopy.abandonedBody,
-        ),
-      };
+          runInFlight: runState.inFlight,
+          intent: runState.intent,
+        );
+        final effectiveExpectedCount =
+            migrationStatus != null && migrationStatus.totalCount > 0
+            ? migrationStatus.totalCount
+            : scopedExpectedCount;
+
+        body = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              MigrationCopy.idleTitle,
+              style: AppTypography.displaySmall.copyWith(
+                color: context.colors.text.accent,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              MigrationCopy.idleBody,
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.colors.text.secondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const _PoolTransition(),
+            const SizedBox(height: AppSpacing.md),
+            _stepOneCard(steps, viewState, migrationStatus, runState, sync),
+            const SizedBox(height: AppSpacing.s),
+            _stepTwoCard(
+              steps,
+              viewState,
+              migrationStatus,
+              runState,
+              sync,
+              currentRunMigrationTransactions,
+              effectiveExpectedCount,
+            ),
+            if (migrationStatus != null && migrationStatus.totalCount > 0) ...[
+              const SizedBox(height: AppSpacing.s),
+              _RunDetails(status: migrationStatus),
+            ],
+          ],
+        );
+      }
     }
 
     _syncMigrationProgressPolling(
@@ -245,21 +189,261 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       sidebar: const AppMainSidebar(),
       pane: AppDesktopPane(
         padding: EdgeInsets.zero,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: body,
-            ),
-            if (_signing)
-              MigrationSigningOverlay(
-                onCancel: _cancelSigning,
-                onComplete: _completeSigning,
-              ),
-          ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: body,
         ),
       ),
+    );
+  }
+
+  Widget _stepOneCard(
+    MigrationStepsModel steps,
+    MigrationViewState viewState,
+    rust_sync.MigrationStatus? status,
+    MigrationRunState runState,
+    SyncState sync,
+  ) {
+    final errorBanner = runState.errorIntent == MigrationRunIntent.preparing
+        ? runState.error
+        : null;
+
+    return switch (steps.stepOne) {
+      MigrationStepOneState.blocked => MigrationStepCard(
+        stepNumber: 1,
+        title: MigrationCopy.stepOneTitle,
+        isDimmed: true,
+        statusLine: viewState == MigrationViewState.noOrchardFunds
+            ? MigrationCopy.stepOneNoFunds
+            : MigrationCopy.stepOneUnspendable,
+        errorBanner: errorBanner,
+        ctaLabel: MigrationCopy.stepOneCta,
+        onCta: null,
+      ),
+      MigrationStepOneState.active => MigrationStepCard(
+        stepNumber: 1,
+        title: MigrationCopy.stepOneTitle,
+        statusLine: MigrationCopy.stepOneBody,
+        errorBanner: errorBanner,
+        body: [_readyAmount(sync)],
+        ctaLabel: MigrationCopy.stepOneCta,
+        onCta: () => ref
+            .read(migrationRunControllerProvider.notifier)
+            .advance(MigrationRunIntent.preparing),
+      ),
+      MigrationStepOneState.running => const MigrationStepCard(
+        stepNumber: 1,
+        title: MigrationCopy.stepOneTitle,
+        showSpinner: true,
+        statusLine: MigrationCopy.stepOneRunning,
+      ),
+      MigrationStepOneState.waiting => MigrationStepCard(
+        stepNumber: 1,
+        title: MigrationCopy.stepOneTitle,
+        statusLine: MigrationCopy.stepOneWaiting,
+        errorBanner: errorBanner,
+        body: [
+          if (status != null && status.totalCount > 0)
+            Text(
+              MigrationCopy.stepOnePreparedCounts(
+                status.preparedNoteCount,
+                status.totalCount,
+              ),
+              style: AppTypography.bodyExtraSmall.copyWith(
+                color: context.colors.text.secondary,
+              ),
+            ),
+        ],
+      ),
+      MigrationStepOneState.done => MigrationStepCard(
+        stepNumber: 1,
+        title: MigrationCopy.stepOneTitle,
+        isDone: true,
+        statusLine: status != null && status.totalCount > 0
+            ? MigrationCopy.stepOneDone(status.totalCount)
+            : MigrationCopy.stepOneDoneGeneric,
+      ),
+      MigrationStepOneState.error => MigrationStepCard(
+        stepNumber: 1,
+        title: MigrationCopy.stepOneTitle,
+        statusLine: status?.message ?? MigrationCopy.failedRecoverableBody,
+        statusIsError: true,
+        errorBanner: errorBanner,
+        ctaLabel: MigrationCopy.retryCta,
+        onCta: () => ref
+            .read(migrationRunControllerProvider.notifier)
+            .advance(MigrationRunIntent.preparing),
+      ),
+    };
+  }
+
+  Widget _stepTwoCard(
+    MigrationStepsModel steps,
+    MigrationViewState viewState,
+    rust_sync.MigrationStatus? status,
+    MigrationRunState runState,
+    SyncState sync,
+    List<rust_sync.TransactionInfo> currentRunMigrationTransactions,
+    int? effectiveExpectedCount,
+  ) {
+    final errorBanner = runState.errorIntent == MigrationRunIntent.migrating
+        ? runState.error
+        : null;
+    final total = status?.totalCount ?? 0;
+    void startMigration() => ref
+        .read(migrationRunControllerProvider.notifier)
+        .advance(MigrationRunIntent.migrating);
+
+    return switch (steps.stepTwo) {
+      MigrationStepTwoState.locked => MigrationStepCard(
+        stepNumber: 2,
+        title: MigrationCopy.stepTwoTitle,
+        isDimmed: true,
+        statusLine: MigrationCopy.stepTwoLocked,
+        errorBanner: errorBanner,
+        ctaLabel: MigrationCopy.stepTwoCta,
+        onCta: null,
+      ),
+      MigrationStepTwoState.ready => MigrationStepCard(
+        stepNumber: 2,
+        title: MigrationCopy.stepTwoTitle,
+        statusLine: MigrationCopy.stepTwoReady(
+          total,
+          MigrationCopy.migrationWindowText(
+            (status?.broadcastWindowSeconds ?? BigInt.from(60)).toInt(),
+          ),
+        ),
+        errorBanner: errorBanner,
+        body: [
+          if (viewState == MigrationViewState.paused)
+            Text(
+              MigrationCopy.stepTwoPausedNote,
+              style: AppTypography.bodyExtraSmall.copyWith(
+                color: context.colors.text.secondary,
+              ),
+            ),
+        ],
+        ctaLabel: MigrationCopy.stepTwoCta,
+        onCta: startMigration,
+      ),
+      MigrationStepTwoState.running => MigrationStepCard(
+        stepNumber: 2,
+        title: MigrationCopy.stepTwoTitle,
+        showSpinner: true,
+        statusLine: _stepTwoRunningLine(status),
+        progress: total > 0
+            ? (status?.broadcastedTxCount ?? 0).clamp(0, total) / total
+            : null,
+        body: [_warningRow(MigrationCopy.stepTwoKeepOpen)],
+      ),
+      MigrationStepTwoState.confirming => MigrationStepCard(
+        stepNumber: 2,
+        title: MigrationCopy.stepTwoTitle,
+        statusLine: MigrationCopy.inProgressBody,
+        body: [
+          _MigrationTransfersList(
+            migrationTransactions: currentRunMigrationTransactions,
+            expectedTransferCount: effectiveExpectedCount,
+            amountZatoshi: _migrationDisplayAmount(
+              sync,
+              currentRunMigrationTransactions,
+            ),
+          ),
+          _warningRow(MigrationCopy.keepOpenWarning),
+        ],
+      ),
+      MigrationStepTwoState.done => MigrationStepCard(
+        stepNumber: 2,
+        title: MigrationCopy.stepTwoTitle,
+        isDone: true,
+        statusLine: MigrationCopy.doneBody,
+      ),
+      MigrationStepTwoState.error => MigrationStepCard(
+        stepNumber: 2,
+        title: MigrationCopy.stepTwoTitle,
+        statusLine: switch (viewState) {
+          MigrationViewState.failedTerminal =>
+            status?.message ?? MigrationCopy.failedTerminalBody,
+          MigrationViewState.abandoned => MigrationCopy.abandonedBody,
+          _ => status?.message ?? MigrationCopy.failedRecoverableBody,
+        },
+        statusIsError: true,
+        errorBanner: errorBanner,
+        ctaLabel: viewState == MigrationViewState.failedRecoverable
+            ? MigrationCopy.retryCta
+            : null,
+        onCta: viewState == MigrationViewState.failedRecoverable
+            ? startMigration
+            : null,
+      ),
+    };
+  }
+
+  String _stepTwoRunningLine(rust_sync.MigrationStatus? status) {
+    final total = status?.totalCount ?? 0;
+    final isSubmitting =
+        status?.phase == 'broadcasting' ||
+        status?.phase == 'broadcast_scheduled';
+    if (isSubmitting && total > 0) {
+      final next = ((status?.broadcastedTxCount ?? 0) + 1).clamp(1, total);
+      return MigrationCopy.stepTwoSubmitting(next, total);
+    }
+    return MigrationCopy.stepTwoSigning;
+  }
+
+  Widget _readyAmount(SyncState sync) {
+    final amount = ZecAmount.fromZatoshi(
+      sync.orchardBalance,
+    ).pretty(denomStyle: ZecDenomStyle.upper).toString();
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          MigrationCopy.readyToMigrateLabel,
+          style: AppTypography.labelLarge.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xxs),
+        Text(
+          amount,
+          key: const ValueKey('migration_ready_amount'),
+          style: AppTypography.displaySmall.copyWith(
+            color: colors.text.accent,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xxs),
+        Text(
+          MigrationCopy.poolFlow,
+          style: AppTypography.bodyExtraSmall.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _warningRow(String text) {
+    final colors = context.colors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppIcon(
+          AppIcons.warning,
+          size: AppIconSize.medium,
+          color: colors.icon.muted,
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: Text(
+            text,
+            style: AppTypography.bodyExtraSmall.copyWith(
+              color: colors.text.secondary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -356,22 +540,20 @@ BigInt _migrationDisplayAmount(
   return sync.orchardBalance;
 }
 
-class _PhaseStatusView extends StatelessWidget {
-  const _PhaseStatusView({
+/// Compact title/body note used for the pre-card loading and status-error
+/// branches.
+class _StatusNote extends StatelessWidget {
+  const _StatusNote({
     required this.title,
     required this.body,
     this.details,
-    this.status,
-    this.actionLabel,
-    this.onAction,
+    this.onRetry,
   });
 
   final String title;
   final String body;
   final String? details;
-  final rust_sync.MigrationStatus? status;
-  final String? actionLabel;
-  final VoidCallback? onAction;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -390,69 +572,30 @@ class _PhaseStatusView extends StatelessWidget {
             color: colors.text.secondary,
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
-        _Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AppIcon(
-                    AppIcons.time,
-                    size: AppIconSize.medium,
-                    color: colors.icon.muted,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: Text(
-                      _statusSummary(status),
-                      key: const ValueKey('migration_phase_summary'),
-                      style: AppTypography.bodyMedium.copyWith(
-                        color: colors.text.accent,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (status != null) ...[
-                const SizedBox(height: AppSpacing.s),
-                _MigrationRunCounts(status: status!),
-              ],
-              if (details != null && details!.trim().isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.s),
-                Text(
-                  details!,
-                  style: AppTypography.bodyExtraSmall.copyWith(
-                    color: colors.text.secondary,
-                  ),
-                ),
-              ],
-            ],
+        if (details != null && details!.trim().isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.s),
+          Text(
+            details!,
+            style: AppTypography.bodyExtraSmall.copyWith(
+              color: colors.text.secondary,
+            ),
           ),
-        ),
-        if (actionLabel != null && onAction != null) ...[
+        ],
+        if (onRetry != null) ...[
           const SizedBox(height: AppSpacing.md),
           AppButton(
-            onPressed: onAction,
-            leading: const AppIcon(AppIcons.doubleArrowVertical),
-            child: Text(actionLabel!),
+            onPressed: onRetry,
+            child: const Text(MigrationCopy.retryCta),
           ),
         ],
       ],
     );
   }
-
-  String _statusSummary(rust_sync.MigrationStatus? status) {
-    if (status == null) return 'No active migration run.';
-    final total = status.totalCount;
-    if (total == 0) return 'Run ${status.activeRunId ?? ''}'.trim();
-    return '${status.broadcastedTxCount} of $total migration transactions submitted.';
-  }
 }
 
-class _MigrationRunCounts extends StatelessWidget {
-  const _MigrationRunCounts({required this.status});
+/// Small-print run details below the cards (batch limit, window, counts).
+class _RunDetails extends StatelessWidget {
+  const _RunDetails({required this.status});
 
   final rust_sync.MigrationStatus status;
 
@@ -472,90 +615,21 @@ class _MigrationRunCounts extends StatelessWidget {
       'Broadcast window: ${status.broadcastWindowSeconds}s',
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final row in rows) ...[
-          Text(
-            row,
-            style: AppTypography.bodyExtraSmall.copyWith(
-              color: colors.text.secondary,
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final row in rows) ...[
+            Text(
+              row,
+              style: AppTypography.bodyExtraSmall.copyWith(
+                color: colors.text.secondary,
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.xxs),
+            const SizedBox(height: AppSpacing.xxs),
+          ],
         ],
-      ],
-    );
-  }
-}
-
-class _IdleView extends StatelessWidget {
-  const _IdleView({required this.onStart, required this.orchardBalance});
-  final VoidCallback onStart;
-  final BigInt orchardBalance;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final amount = ZecAmount.fromZatoshi(
-      orchardBalance,
-    ).pretty(denomStyle: ZecDenomStyle.upper).toString();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          MigrationCopy.idleTitle,
-          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          MigrationCopy.idleBody,
-          style: AppTypography.bodyMedium.copyWith(
-            color: colors.text.secondary,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        const _PoolTransition(),
-        const SizedBox(height: AppSpacing.md),
-        _Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                MigrationCopy.readyToMigrateLabel,
-                style: AppTypography.labelLarge.copyWith(
-                  color: colors.text.secondary,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xxs),
-              Text(
-                amount,
-                key: const ValueKey('migration_ready_amount'),
-                style: AppTypography.displaySmall.copyWith(
-                  color: colors.text.accent,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xxs),
-              Text(
-                MigrationCopy.poolFlow,
-                style: AppTypography.bodyExtraSmall.copyWith(
-                  color: colors.text.secondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.s),
-        const _Bullets(),
-        const SizedBox(height: AppSpacing.md),
-        AppButton(
-          key: const ValueKey('migration_start_button'),
-          onPressed: onStart,
-          leading: const AppIcon(AppIcons.doubleArrowVertical),
-          child: const Text(MigrationCopy.startCta),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -588,12 +662,14 @@ class _SoftwareRequiredView extends StatelessWidget {
   }
 }
 
-class _InProgressView extends StatelessWidget {
-  const _InProgressView({
+/// Transfer list shown inside step 2 while migration transactions confirm.
+class _MigrationTransfersList extends StatelessWidget {
+  const _MigrationTransfersList({
     required this.migrationTransactions,
     required this.expectedTransferCount,
     required this.amountZatoshi,
   });
+
   final List<rust_sync.TransactionInfo> migrationTransactions;
   final int? expectedTransferCount;
   final BigInt amountZatoshi;
@@ -619,88 +695,40 @@ class _InProgressView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          MigrationCopy.inProgressTitle,
-          key: const ValueKey('migration_in_progress_title'),
-          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          MigrationCopy.inProgressBody,
-          style: AppTypography.bodyMedium.copyWith(
+          MigrationCopy.migratingAmount(amount),
+          style: AppTypography.labelLarge.copyWith(
             color: colors.text.secondary,
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
-        _Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                MigrationCopy.migratingAmount(amount),
-                style: AppTypography.labelLarge.copyWith(
-                  color: colors.text.secondary,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.s),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadii.full),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 8,
-                  backgroundColor: colors.background.neutralSubtleOpacity,
-                  color: colors.icon.success,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                '$completed of $total confirmed',
-                style: AppTypography.bodyExtraSmall.copyWith(
-                  color: colors.text.secondary,
-                ),
-              ),
-            ],
+        const SizedBox(height: AppSpacing.s),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadii.full),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 8,
+            backgroundColor: colors.background.neutralSubtleOpacity,
+            color: colors.icon.success,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          '$completed of $total confirmed',
+          style: AppTypography.bodyExtraSmall.copyWith(
+            color: colors.text.secondary,
           ),
         ),
         const SizedBox(height: AppSpacing.s),
-        _Card(
-          child: Column(
-            children: [
-              for (var i = 0; i < total; i++) ...[
-                if (i > 0)
-                  Divider(height: AppSpacing.md, color: colors.border.subtle),
-                _MigrationTransferRow(
-                  index: i,
-                  total: total,
-                  transaction: i < transferTransactions.length
-                      ? transferTransactions[i]
-                      : null,
-                ),
-              ],
-            ],
+        for (var i = 0; i < total; i++) ...[
+          if (i > 0)
+            Divider(height: AppSpacing.md, color: colors.border.subtle),
+          _MigrationTransferRow(
+            index: i,
+            total: total,
+            transaction: i < transferTransactions.length
+                ? transferTransactions[i]
+                : null,
           ),
-        ),
-        const SizedBox(height: AppSpacing.s),
-        _Card(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AppIcon(
-                AppIcons.warning,
-                size: AppIconSize.medium,
-                color: colors.icon.muted,
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: Text(
-                  MigrationCopy.keepOpenWarning,
-                  style: AppTypography.bodyExtraSmall.copyWith(
-                    color: colors.text.secondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -751,32 +779,6 @@ class _MigrationTransferRow extends StatelessWidget {
         ),
         Text(
           statusText,
-          style: AppTypography.bodyMedium.copyWith(
-            color: colors.text.secondary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CompleteView extends StatelessWidget {
-  const _CompleteView();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          MigrationCopy.doneTitle,
-          key: const ValueKey('migration_done_title'),
-          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          MigrationCopy.doneBody,
           style: AppTypography.bodyMedium.copyWith(
             color: colors.text.secondary,
           ),
@@ -842,45 +844,6 @@ class _PoolTransition extends StatelessWidget {
             ),
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _Bullets extends StatelessWidget {
-  const _Bullets();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    Widget bullet(String text) => Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '›  ',
-            style: AppTypography.bodyMedium.copyWith(
-              color: colors.text.secondary,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              text,
-              style: AppTypography.bodyMedium.copyWith(
-                color: colors.text.secondary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        bullet(MigrationCopy.bullet1),
-        bullet(MigrationCopy.bullet2),
-        bullet(MigrationCopy.bullet3),
       ],
     );
   }
