@@ -1,6 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart' show Colors, Scaffold;
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../main.dart' show log;
+import '../../features/migration/migration_copy.dart';
+import '../../features/migration/providers/migration_expected_transfer_count_provider.dart';
+import '../../features/migration/providers/migration_run_controller.dart';
+import '../../features/migration/providers/orchard_migration_status_provider.dart';
+import '../../providers/sync_provider.dart';
+import '../../rust/api/sync.dart' as rust_sync;
 import '../theme/app_theme.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/app_toast.dart';
@@ -29,12 +39,138 @@ class AppDesktopShell extends StatelessWidget {
             children: [
               SizedBox(width: sidebarWidth, child: sidebar),
               const SizedBox(width: AppSpacing.xs),
-              Expanded(child: pane),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const _GlobalMigrationWarningBanner(),
+                    Expanded(child: pane),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+class _GlobalMigrationWarningBanner extends ConsumerStatefulWidget {
+  const _GlobalMigrationWarningBanner();
+
+  @override
+  ConsumerState<_GlobalMigrationWarningBanner> createState() =>
+      _GlobalMigrationWarningBannerState();
+}
+
+class _GlobalMigrationWarningBannerState
+    extends ConsumerState<_GlobalMigrationWarningBanner> {
+  Timer? _migrationTickTimer;
+
+  @override
+  void dispose() {
+    _migrationTickTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = ref.watch(activeOrchardMigrationStatusProvider).value;
+    final visible = _showsMigrationWarning(status);
+    _syncMigrationTick(visible);
+
+    if (!visible) return const SizedBox.shrink();
+
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s,
+          vertical: AppSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: colors.background.neutralSubtleOpacity,
+          borderRadius: BorderRadius.circular(AppRadii.xSmall),
+          border: Border.all(color: colors.border.subtle),
+        ),
+        child: Row(
+          children: [
+            AppIcon(
+              AppIcons.warning,
+              size: AppIconSize.medium,
+              color: colors.icon.warning,
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                MigrationCopy.globalKeepOpenWarning,
+                style: AppTypography.bodyExtraSmall.copyWith(
+                  color: colors.text.warning,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _syncMigrationTick(bool enabled) {
+    if (enabled && _migrationTickTimer == null) {
+      _migrationTickTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        unawaited(_tickMigrationActivity());
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_tickMigrationActivity());
+      });
+      return;
+    }
+
+    if (!enabled && _migrationTickTimer != null) {
+      _migrationTickTimer?.cancel();
+      _migrationTickTimer = null;
+    }
+  }
+
+  Future<void> _tickMigrationActivity() async {
+    try {
+      final status = ref.read(activeOrchardMigrationStatusProvider).value;
+      if (!_showsMigrationWarning(status)) return;
+
+      if (_hasScheduledPendingBroadcasts(status)) {
+        await ref
+            .read(migrationRunControllerProvider.notifier)
+            .broadcastDueScheduled();
+      } else {
+        await ref
+            .read(syncProvider.notifier)
+            .refreshAfterSend(
+              transactionHistoryLimit: migrationProgressTransactionHistoryLimit,
+            );
+        ref.invalidate(activeOrchardMigrationStatusProvider);
+      }
+    } catch (e) {
+      log('GlobalMigrationWarningBanner: migration activity tick failed: $e');
+    }
+  }
+
+  bool _showsMigrationWarning(rust_sync.MigrationStatus? status) {
+    return switch (status?.phase) {
+      'broadcast_scheduled' ||
+      'broadcasting' ||
+      'waiting_migration_confirmations' => true,
+      _ => false,
+    };
+  }
+
+  bool _hasScheduledPendingBroadcasts(rust_sync.MigrationStatus? status) {
+    return status?.scheduledBroadcasts.any(
+          (broadcast) => broadcast.status == 'scheduled',
+        ) ??
+        false;
   }
 }
 

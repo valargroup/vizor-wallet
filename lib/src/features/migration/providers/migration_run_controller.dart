@@ -37,11 +37,14 @@ class MigrationRunState {
 /// True when the Rust call advanced the run. Successful stage outcomes
 /// report run-phase strings, not 'broadcasted': stage 1 returns
 /// waiting_denom_confirmations, stage 2 returns
-/// waiting_migration_confirmations (and its benign "notes not spendable
-/// yet" no-op also returns waiting_denom_confirmations).
+/// broadcast_scheduled once transactions are signed and scheduled, then
+/// waiting_migration_confirmations after the last scheduled broadcast
+/// submission (and its benign "notes not spendable yet" no-op also returns
+/// waiting_denom_confirmations).
 bool migrationRunAdvanced(rust_sync.IronwoodMigrationResult result) {
   return switch (result.status) {
     'broadcasted' ||
+    'broadcast_scheduled' ||
     'waiting_denom_confirmations' ||
     'waiting_migration_confirmations' => true,
     'partial_broadcast' =>
@@ -52,6 +55,7 @@ bool migrationRunAdvanced(rust_sync.IronwoodMigrationResult result) {
 
 class MigrationRunController extends Notifier<MigrationRunState> {
   Timer? _progressTimer;
+  bool _dueBroadcastInFlight = false;
 
   @override
   MigrationRunState build() {
@@ -64,8 +68,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
 
   /// Advances the migration run one stage. The Rust entry point is
   /// stage-aware: with no active run it splits notes into denominations;
-  /// with an active run it signs and submits the migration transactions
-  /// over the broadcast window.
+  /// with an active run it signs and schedules the migration transactions.
   Future<void> advance(MigrationRunIntent intent) async {
     if (state.inFlight) return;
     state = MigrationRunState(intent: intent, inFlight: true);
@@ -99,61 +102,15 @@ class MigrationRunController extends Notifier<MigrationRunState> {
       final password = security.requireSessionPasswordForNativeSecretUse();
       final saltBase64 = await security
           .requireSecretPayloadSaltForNativeSecretUse();
-      late final rust_sync.IronwoodMigrationResult result;
-      final syncNotifier = ref.read(syncProvider.notifier);
-      final syncPause = await syncNotifier.pauseForWalletMutation(
-        onStoppingSync: () {
-          log(
-            'MigrationRunController: pausing sync before migration wallet '
-            'mutation',
-          );
-        },
+      final result = await _runMigrationWithPrepareRetry(
+        intent: intent,
+        dbPath: dbPath,
+        lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+        network: migrationNetworkName,
+        accountUuid: accountUuid,
+        password: password,
+        saltBase64: saltBase64,
       );
-
-      try {
-        if (Platform.isMacOS && !kDebugMode) {
-          try {
-            result = await rust_sync
-                .migrateOrchardToIronwoodWithMacosStoredMnemonic(
-                  dbPath: dbPath,
-                  lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-                  network: migrationNetworkName,
-                  accountUuid: accountUuid,
-                  password: password,
-                  saltBase64: saltBase64,
-                );
-          } catch (e) {
-            final message = e.toString().toLowerCase();
-            if (!message.contains('secure storage salt not found') &&
-                !message.contains('mnemonic not found for account')) {
-              rethrow;
-            }
-            log(
-              'MigrationRunController: native macOS mnemonic unavailable, '
-              'falling back to Dart mnemonic storage: $e',
-            );
-            result = await _migrateWithMnemonicBytes(
-              dbPath: dbPath,
-              lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-              network: migrationNetworkName,
-              accountUuid: accountUuid,
-              password: password,
-              saltBase64: saltBase64,
-            );
-          }
-        } else {
-          result = await _migrateWithMnemonicBytes(
-            dbPath: dbPath,
-            lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-            network: migrationNetworkName,
-            accountUuid: accountUuid,
-            password: password,
-            saltBase64: saltBase64,
-          );
-        }
-      } finally {
-        syncNotifier.resumeAfterWalletMutation(syncPause);
-      }
 
       log(
         'MigrationRunController: intent=${intent.name} '
@@ -163,9 +120,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
       );
 
       final firstTxid = _firstTxid(result.txids);
-      if (result.broadcastedCount > 0 &&
-          result.totalCount > 0 &&
-          firstTxid != null) {
+      if (result.totalCount > 0 && firstTxid != null) {
         ref
             .read(migrationExpectedTransferCountProvider.notifier)
             .setCount(accountUuid, result.totalCount, firstTxid: firstTxid);
@@ -204,6 +159,186 @@ class MigrationRunController extends Notifier<MigrationRunState> {
     } finally {
       _progressTimer?.cancel();
       _progressTimer = null;
+      ref.invalidate(activeOrchardMigrationStatusProvider);
+    }
+  }
+
+  Future<rust_sync.IronwoodMigrationResult> _runMigrationWithPrepareRetry({
+    required MigrationRunIntent intent,
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required String accountUuid,
+    required String password,
+    required String saltBase64,
+  }) async {
+    try {
+      return await _runMigrationNative(
+        dbPath: dbPath,
+        lightwalletdUrl: lightwalletdUrl,
+        network: network,
+        accountUuid: accountUuid,
+        password: password,
+        saltBase64: saltBase64,
+      );
+    } catch (e) {
+      if (intent != MigrationRunIntent.preparing ||
+          !_isTransientPrepareSpendabilityError(e)) {
+        rethrow;
+      }
+
+      log(
+        'MigrationRunController: prepare saw transient spendability error; '
+        'refreshing wallet state and retrying once: $e',
+      );
+      await _refreshIfAccountStillActive(accountUuid);
+      ref.invalidate(activeOrchardMigrationStatusProvider);
+
+      return _runMigrationNative(
+        dbPath: dbPath,
+        lightwalletdUrl: lightwalletdUrl,
+        network: network,
+        accountUuid: accountUuid,
+        password: password,
+        saltBase64: saltBase64,
+      );
+    }
+  }
+
+  Future<rust_sync.IronwoodMigrationResult> _runMigrationNative({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required String network,
+    required String accountUuid,
+    required String password,
+    required String saltBase64,
+  }) async {
+    final syncNotifier = ref.read(syncProvider.notifier);
+    final syncPause = await syncNotifier.pauseForWalletMutation(
+      onStoppingSync: () {
+        log(
+          'MigrationRunController: pausing sync before migration wallet '
+          'mutation',
+        );
+      },
+    );
+
+    try {
+      if (Platform.isMacOS && !kDebugMode) {
+        try {
+          return await rust_sync
+              .migrateOrchardToIronwoodWithMacosStoredMnemonic(
+                dbPath: dbPath,
+                lightwalletdUrl: lightwalletdUrl,
+                network: network,
+                accountUuid: accountUuid,
+                password: password,
+                saltBase64: saltBase64,
+              );
+        } catch (e) {
+          final message = e.toString().toLowerCase();
+          if (!message.contains('secure storage salt not found') &&
+              !message.contains('mnemonic not found for account')) {
+            rethrow;
+          }
+          log(
+            'MigrationRunController: native macOS mnemonic unavailable, '
+            'falling back to Dart mnemonic storage: $e',
+          );
+          return await _migrateWithMnemonicBytes(
+            dbPath: dbPath,
+            lightwalletdUrl: lightwalletdUrl,
+            network: network,
+            accountUuid: accountUuid,
+            password: password,
+            saltBase64: saltBase64,
+          );
+        }
+      }
+
+      return await _migrateWithMnemonicBytes(
+        dbPath: dbPath,
+        lightwalletdUrl: lightwalletdUrl,
+        network: network,
+        accountUuid: accountUuid,
+        password: password,
+        saltBase64: saltBase64,
+      );
+    } finally {
+      syncNotifier.resumeAfterWalletMutation(syncPause);
+    }
+  }
+
+  /// Submits any already signed migration transactions whose scheduled time
+  /// has arrived. This keeps the migration page responsive after stage 2 has
+  /// signed and scheduled the batch.
+  Future<void> broadcastDueScheduled() async {
+    if (_dueBroadcastInFlight || state.inFlight) return;
+    _dueBroadcastInFlight = true;
+
+    String? accountUuid;
+    try {
+      final accountState = ref.read(accountProvider).value;
+      final account = accountState?.activeAccount;
+      accountUuid = accountState?.activeAccountUuid;
+      if (account == null || accountUuid == null || account.isHardware) return;
+
+      final endpoint = ref.read(rpcEndpointProvider);
+      if (endpoint.network != ZcashNetwork.testnet) return;
+
+      final dbPath = await getWalletDbPath();
+      final security = ref.read(appSecurityProvider.notifier);
+      final password = security.requireSessionPasswordForNativeSecretUse();
+      final saltBase64 = await security
+          .requireSecretPayloadSaltForNativeSecretUse();
+      final syncNotifier = ref.read(syncProvider.notifier);
+      final syncPause = await syncNotifier.pauseForWalletMutation(
+        onStoppingSync: () {
+          log(
+            'MigrationRunController: pausing sync before due migration '
+            'broadcast',
+          );
+        },
+      );
+
+      late final rust_sync.IronwoodMigrationResult result;
+      try {
+        result = await rust_sync.broadcastDueOrchardMigrationTransactions(
+          dbPath: dbPath,
+          lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+          network: endpoint.walletNetworkName,
+          accountUuid: accountUuid,
+          password: password,
+          saltBase64: saltBase64,
+        );
+      } finally {
+        syncNotifier.resumeAfterWalletMutation(syncPause);
+      }
+
+      log(
+        'MigrationRunController: due broadcast status=${result.status} '
+        'broadcasted=${result.broadcastedCount}/${result.totalCount}',
+      );
+
+      final firstTxid = _firstTxid(result.txids);
+      if (result.totalCount > 0 && firstTxid != null) {
+        ref
+            .read(migrationExpectedTransferCountProvider.notifier)
+            .setCount(accountUuid, result.totalCount, firstTxid: firstTxid);
+      }
+
+      await _refreshIfAccountStillActive(accountUuid);
+    } catch (e, st) {
+      if (_isActiveMigrationError(e)) {
+        log(
+          'MigrationRunController.broadcastDueScheduled: migration already '
+          'active; skipping this tick',
+        );
+      } else {
+        log('MigrationRunController.broadcastDueScheduled: ERROR: $e\n$st');
+      }
+    } finally {
+      _dueBroadcastInFlight = false;
       ref.invalidate(activeOrchardMigrationStatusProvider);
     }
   }
@@ -275,6 +410,13 @@ class MigrationRunController extends Notifier<MigrationRunState> {
     return error.toString().toLowerCase().contains(
       'ironwood migration is already running',
     );
+  }
+
+  bool _isTransientPrepareSpendabilityError(Object error) {
+    final lower = error.toString().toLowerCase();
+    return lower.contains('insufficient spendable orchard funds') ||
+        (lower.contains('insufficient') && lower.contains('orchard')) ||
+        lower.contains('spendable');
   }
 }
 

@@ -258,6 +258,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<MigrationScheduledBroadcast>
+  dco_decode_list_migration_scheduled_broadcast(dynamic raw);
+
+  @protected
   List<NextStepView> dco_decode_list_next_step_view(dynamic raw);
 
   @protected
@@ -348,6 +352,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ZcashBatchSignedMessage> dco_decode_list_zcash_batch_signed_message(
+    dynamic raw,
+  );
+
+  @protected
+  MigrationScheduledBroadcast dco_decode_migration_scheduled_broadcast(
     dynamic raw,
   );
 
@@ -840,6 +849,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<MigrationScheduledBroadcast>
+  sse_decode_list_migration_scheduled_broadcast(SseDeserializer deserializer);
+
+  @protected
   List<NextStepView> sse_decode_list_next_step_view(
     SseDeserializer deserializer,
   );
@@ -948,6 +961,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ZcashBatchSignedMessage> sse_decode_list_zcash_batch_signed_message(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MigrationScheduledBroadcast sse_decode_migration_scheduled_broadcast(
     SseDeserializer deserializer,
   );
 
@@ -1551,6 +1569,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_migration_scheduled_broadcast(
+    List<MigrationScheduledBroadcast> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_next_step_view(
     List<NextStepView> self,
     SseSerializer serializer,
@@ -1694,6 +1718,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_zcash_batch_signed_message(
     List<ZcashBatchSignedMessage> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_migration_scheduled_broadcast(
+    MigrationScheduledBroadcast self,
     SseSerializer serializer,
   );
 

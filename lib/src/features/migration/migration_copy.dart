@@ -5,10 +5,6 @@ abstract final class MigrationCopy {
   static const idleBody =
       'Prepare Orchard funds as standard note amounts, then migrate those '
       'notes to Ironwood over a short submission window.';
-  static const fromPoolName = 'Orchard';
-  static const fromPoolTag = 'Current pool';
-  static const toPoolName = 'Ironwood';
-  static const toPoolTag = 'New pool';
   static const readyToMigrateLabel = 'Ready to prepare';
   static const poolFlow = 'Orchard pool → Ironwood pool';
 
@@ -19,7 +15,7 @@ abstract final class MigrationCopy {
       'transaction.';
   static const stepOneCta = 'Prepare denominations';
   static const stepOneRunning =
-      'Creating and submitting the denomination transaction...';
+      'Creating, signing, and submitting the denomination transaction...';
   static const stepOneWaiting =
       'Denomination transaction submitted. The prepared notes need to '
       'confirm before migration can start.';
@@ -36,14 +32,16 @@ abstract final class MigrationCopy {
       'Vizor signs $count migration transactions and submits them over '
       '$window.';
   static const stepTwoCta = 'Start migration';
-  static const stepTwoSigning = 'Signing migration transactions...';
+  static const stepTwoSigning =
+      'Preparing and signing migration transactions...';
+  static String stepTwoScheduled(String remaining) =>
+      'Migration transactions are signed. Next submission $remaining.';
+  static const stepTwoScheduledWaiting =
+      'Migration transactions are signed and scheduled.';
   static String stepTwoSubmitting(int index, int total) =>
       'Submitting migration transaction $index of $total...';
   static const stepTwoPausedNote =
       'Migration paused. Start migration to resume this run.';
-  static const stepTwoKeepOpen =
-      'Keep Vizor open while the migration transactions are created and '
-      'broadcast.';
   static const partialBroadcastError =
       'Migration transactions were created locally but not fully broadcast. '
       'Keep Vizor open and do not start another migration.';
@@ -89,8 +87,10 @@ abstract final class MigrationCopy {
   static String migratingAmount(String amount) => 'Migrating $amount';
   static String transferLabel(int index, int total) =>
       'Transfer $index of $total';
-  static const keepOpenWarning =
-      'Keep Vizor connected to the Ironwood testnet while these transactions confirm.';
+  static String scheduledSubmissionLabel(int index, int total) =>
+      'Submission $index of $total';
+  static const globalKeepOpenWarning =
+      'Migration is in progress. Keep Vizor open until the Ironwood migration finishes.';
 
   // Done
   static const doneBody = 'Your migration transactions have finished.';

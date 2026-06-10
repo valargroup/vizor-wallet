@@ -43,13 +43,14 @@ pub use pczt::{
     redact_pczt_for_signer, ExtractAndBroadcastPcztResult,
 };
 pub(crate) use send::estimate_send_max;
+pub use send::{
+    broadcast_due_orchard_migration_transactions, estimate_fee, execute_proposal,
+    execute_proposal_with_seed_loader, migrate_orchard_to_ironwood, propose_send,
+    ExecuteProposalResult, IronwoodMigrationResult,
+};
 pub(crate) use send::{
     create_reserved_pczt_batch, create_shield_transparent_pczt, get_shield_transparent_status,
     shield_transparent_balance,
-};
-pub use send::{
-    estimate_fee, execute_proposal, execute_proposal_with_seed_loader, migrate_orchard_to_ironwood,
-    propose_send, ExecuteProposalResult, IronwoodMigrationResult,
 };
 // Internal-only re-export for `sync_engine::run_sync_impl`'s
 // auto-resubmit pass. Not part of the `wallet::sync` public surface.

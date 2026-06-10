@@ -642,6 +642,12 @@ pub struct IronwoodMigrationResult {
     pub migrated_zatoshi: u64,
 }
 
+pub struct MigrationScheduledBroadcast {
+    pub txid_hex: String,
+    pub scheduled_at_ms: i64,
+    pub status: String,
+}
+
 pub struct MigrationStatus {
     pub phase: String,
     pub active_run_id: Option<String>,
@@ -656,6 +662,7 @@ pub struct MigrationStatus {
     pub signing_batch_limit: u32,
     pub broadcast_window_seconds: u64,
     pub max_prepared_notes_per_run: u32,
+    pub scheduled_broadcasts: Vec<MigrationScheduledBroadcast>,
 }
 
 pub struct ExtractAndBroadcastPcztResult {
@@ -958,6 +965,47 @@ pub fn get_orchard_migration_status(
             signing_batch_limit: status.signing_batch_limit,
             broadcast_window_seconds: status.broadcast_window_seconds,
             max_prepared_notes_per_run: status.max_prepared_notes_per_run,
+            scheduled_broadcasts: status
+                .scheduled_broadcasts
+                .into_iter()
+                .map(|broadcast| MigrationScheduledBroadcast {
+                    txid_hex: broadcast.txid_hex,
+                    scheduled_at_ms: broadcast.scheduled_at_ms,
+                    status: broadcast.status,
+                })
+                .collect(),
+        })
+    })
+}
+
+pub fn broadcast_due_orchard_migration_transactions(
+    db_path: String,
+    lightwalletd_url: String,
+    network: String,
+    account_uuid: String,
+    password: String,
+    salt_base64: String,
+) -> Result<IronwoodMigrationResult, String> {
+    catch(|| {
+        let network = parse_network_and_migrate(&db_path, &network)?;
+        let password = Zeroizing::new(password.into_bytes());
+        let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
+        let r = rt.block_on(wallet_sync::broadcast_due_orchard_migration_transactions(
+            &db_path,
+            &lightwalletd_url,
+            network,
+            &account_uuid,
+            password,
+            &salt_base64,
+        ))?;
+        Ok(IronwoodMigrationResult {
+            txids: r.txids,
+            status: r.status,
+            broadcasted_count: r.broadcasted_count,
+            total_count: r.total_count,
+            message: r.message,
+            fee_zatoshi: r.fee_zatoshi,
+            migrated_zatoshi: r.migrated_zatoshi,
         })
     })
 }

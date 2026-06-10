@@ -7,16 +7,15 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::wallet::db::{open_readonly_conn_with_timeout, open_wallet_raw_conn_with_timeout};
-use crate::wallet::keystone::ZCASH_SIGN_BATCH_MAX_MESSAGES;
 use crate::wallet::network::WalletNetwork;
 use crate::wallet::secret_payload;
 
 use super::READ_DB_BUSY_TIMEOUT;
 
 pub(crate) const ZATOSHIS_PER_ZEC: u64 = 100_000_000;
-pub(crate) const MIGRATION_BROADCAST_WINDOW_SECS: u64 = 60;
+pub(crate) const MIGRATION_BROADCAST_WINDOW_SECS: u64 = 180;
 pub(crate) const MIGRATION_MAX_PREPARED_NOTES_PER_RUN: usize = 64;
-pub(crate) const MIGRATION_SIGNING_BATCH_LIMIT: usize = ZCASH_SIGN_BATCH_MAX_MESSAGES;
+pub(crate) const MIGRATION_SIGNING_BATCH_LIMIT: usize = 25;
 
 const RUNS_TABLE: &str = "vizor_migration_runs";
 const PREPARED_NOTES_TABLE: &str = "vizor_migration_prepared_notes";
@@ -171,6 +170,13 @@ pub(crate) struct PendingMigrationTotals {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct ScheduledMigrationBroadcast {
+    pub txid_hex: String,
+    pub scheduled_at_ms: i64,
+    pub status: String,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct MigrationStatus {
     pub phase: String,
     pub active_run_id: Option<String>,
@@ -185,6 +191,7 @@ pub(crate) struct MigrationStatus {
     pub signing_batch_limit: u32,
     pub broadcast_window_seconds: u64,
     pub max_prepared_notes_per_run: u32,
+    pub scheduled_broadcasts: Vec<ScheduledMigrationBroadcast>,
 }
 
 pub(crate) fn migration_status(
@@ -228,6 +235,7 @@ pub(crate) fn migration_status(
         signing_batch_limit: MIGRATION_SIGNING_BATCH_LIMIT as u32,
         broadcast_window_seconds: MIGRATION_BROADCAST_WINDOW_SECS,
         max_prepared_notes_per_run: MIGRATION_MAX_PREPARED_NOTES_PER_RUN as u32,
+        scheduled_broadcasts: Vec::new(),
     })
 }
 
@@ -559,13 +567,19 @@ pub(crate) fn mark_pending_broadcasted(
         params![run_id, txid_hex],
     )
     .map_err(|e| format!("Mark pending migration tx broadcasted: {e}"))?;
+    let scheduled_remaining = count_pending_with_status(&conn, run_id, "scheduled")?;
+    let next_phase = if scheduled_remaining > 0 {
+        PHASE_BROADCAST_SCHEDULED
+    } else {
+        PHASE_WAITING_MIGRATION_CONFIRMATIONS
+    };
     conn.execute(
         &format!(
             "UPDATE {RUNS_TABLE}
              SET phase = ?1, updated_at_ms = ?2, last_error = NULL
              WHERE run_id = ?3"
         ),
-        params![PHASE_WAITING_MIGRATION_CONFIRMATIONS, now, run_id],
+        params![next_phase, now, run_id],
     )
     .map_err(|e| format!("Mark migration waiting confirmations: {e}"))?;
     Ok(())
@@ -632,6 +646,35 @@ pub(crate) fn pending_totals_for_run(
     })
 }
 
+fn scheduled_broadcasts_for_run(
+    conn: &rusqlite::Connection,
+    run_id: &str,
+) -> Result<Vec<ScheduledMigrationBroadcast>, String> {
+    if !table_exists(conn, PENDING_TXS_TABLE)? {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT txid_hex, scheduled_at_ms, status
+             FROM {PENDING_TXS_TABLE}
+             WHERE run_id = ?1
+             ORDER BY scheduled_at_ms ASC, txid_hex ASC"
+        ))
+        .map_err(|e| format!("Prepare migration schedule query: {e}"))?;
+    let rows = stmt
+        .query_map(params![run_id], |row| {
+            Ok(ScheduledMigrationBroadcast {
+                txid_hex: row.get(0)?,
+                scheduled_at_ms: row.get(1)?,
+                status: row.get(2)?,
+            })
+        })
+        .map_err(|e| format!("Query migration schedule: {e}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Read migration schedule: {e}"))
+}
+
 pub(crate) fn locked_migration_note_refs(
     db_path: &str,
     account_uuid: &str,
@@ -670,6 +713,7 @@ fn status_for_run(conn: &rusqlite::Connection, run: ActiveRun) -> Result<Migrati
     let pending_tx_count = count_for_run(conn, PENDING_TXS_TABLE, &run.run_id)?;
     let broadcasted_tx_count = count_pending_with_status(conn, &run.run_id, "broadcasted")?;
     let confirmed_tx_count = count_pending_with_status(conn, &run.run_id, "confirmed")?;
+    let scheduled_broadcasts = scheduled_broadcasts_for_run(conn, &run.run_id)?;
     let total_count = run.target_values_zatoshi.len() as u32;
     let phase = if total_count > 0 && confirmed_tx_count >= total_count {
         PHASE_COMPLETE.to_string()
@@ -699,6 +743,7 @@ fn status_for_run(conn: &rusqlite::Connection, run: ActiveRun) -> Result<Migrati
         signing_batch_limit: MIGRATION_SIGNING_BATCH_LIMIT as u32,
         broadcast_window_seconds: MIGRATION_BROADCAST_WINDOW_SECS,
         max_prepared_notes_per_run: MIGRATION_MAX_PREPARED_NOTES_PER_RUN as u32,
+        scheduled_broadcasts,
     })
 }
 
@@ -1120,7 +1165,9 @@ mod tests {
 
         assert_eq!(offsets.len(), 32);
         assert!(offsets.windows(2).all(|w| w[0] <= w[1]));
-        assert!(offsets.iter().all(|offset| *offset <= 60));
+        assert!(offsets
+            .iter()
+            .all(|offset| *offset <= MIGRATION_BROADCAST_WINDOW_SECS));
     }
 
     #[test]

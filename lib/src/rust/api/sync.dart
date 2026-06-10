@@ -343,6 +343,22 @@ Future<MigrationStatus> getOrchardMigrationStatus({
   accountUuid: accountUuid,
 );
 
+Future<IronwoodMigrationResult> broadcastDueOrchardMigrationTransactions({
+  required String dbPath,
+  required String lightwalletdUrl,
+  required String network,
+  required String accountUuid,
+  required String password,
+  required String saltBase64,
+}) => RustLib.instance.api.crateApiSyncBroadcastDueOrchardMigrationTransactions(
+  dbPath: dbPath,
+  lightwalletdUrl: lightwalletdUrl,
+  network: network,
+  accountUuid: accountUuid,
+  password: password,
+  saltBase64: saltBase64,
+);
+
 Future<IronwoodMigrationResult>
 migrateOrchardToIronwoodWithMacosStoredMnemonic({
   required String dbPath,
@@ -846,6 +862,31 @@ class IronwoodMigrationResult {
           migratedZatoshi == other.migratedZatoshi;
 }
 
+class MigrationScheduledBroadcast {
+  final String txidHex;
+  final PlatformInt64 scheduledAtMs;
+  final String status;
+
+  const MigrationScheduledBroadcast({
+    required this.txidHex,
+    required this.scheduledAtMs,
+    required this.status,
+  });
+
+  @override
+  int get hashCode =>
+      txidHex.hashCode ^ scheduledAtMs.hashCode ^ status.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MigrationScheduledBroadcast &&
+          runtimeType == other.runtimeType &&
+          txidHex == other.txidHex &&
+          scheduledAtMs == other.scheduledAtMs &&
+          status == other.status;
+}
+
 class MigrationStatus {
   final String phase;
   final String? activeRunId;
@@ -860,6 +901,7 @@ class MigrationStatus {
   final int signingBatchLimit;
   final BigInt broadcastWindowSeconds;
   final int maxPreparedNotesPerRun;
+  final List<MigrationScheduledBroadcast> scheduledBroadcasts;
 
   const MigrationStatus({
     required this.phase,
@@ -875,6 +917,7 @@ class MigrationStatus {
     required this.signingBatchLimit,
     required this.broadcastWindowSeconds,
     required this.maxPreparedNotesPerRun,
+    required this.scheduledBroadcasts,
   });
 
   @override
@@ -891,7 +934,8 @@ class MigrationStatus {
       canAbandon.hashCode ^
       signingBatchLimit.hashCode ^
       broadcastWindowSeconds.hashCode ^
-      maxPreparedNotesPerRun.hashCode;
+      maxPreparedNotesPerRun.hashCode ^
+      scheduledBroadcasts.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -910,7 +954,8 @@ class MigrationStatus {
           canAbandon == other.canAbandon &&
           signingBatchLimit == other.signingBatchLimit &&
           broadcastWindowSeconds == other.broadcastWindowSeconds &&
-          maxPreparedNotesPerRun == other.maxPreparedNotesPerRun;
+          maxPreparedNotesPerRun == other.maxPreparedNotesPerRun &&
+          scheduledBroadcasts == other.scheduledBroadcasts;
 }
 
 class ProposalResult {

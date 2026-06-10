@@ -38,7 +38,6 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
 
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::{QueryError, ShardTreeError};
@@ -786,6 +785,40 @@ pub async fn migrate_orchard_to_ironwood(
     ))
 }
 
+pub async fn broadcast_due_orchard_migration_transactions(
+    db_path: &str,
+    lightwalletd_url: &str,
+    network: WalletNetwork,
+    account_uuid: &str,
+    pending_password: zeroize::Zeroizing<Vec<u8>>,
+    pending_salt_base64: &str,
+) -> Result<IronwoodMigrationResult, String> {
+    let _migration_guard = ActiveIronwoodMigration::acquire(db_path, account_uuid)?;
+    let Some(run) = super::migration::active_migration_run(db_path, account_uuid, network)? else {
+        return Ok(IronwoodMigrationResult {
+            txids: String::new(),
+            status: super::migration::PHASE_COMPLETE.to_string(),
+            broadcasted_count: 0,
+            total_count: 0,
+            message: None,
+            fee_zatoshi: 0,
+            migrated_zatoshi: 0,
+        });
+    };
+
+    broadcast_due_scheduled_migration_txs(
+        db_path,
+        lightwalletd_url,
+        network,
+        &run.run_id,
+        pending_password.as_slice(),
+        pending_salt_base64,
+        run.target_values_zatoshi.len() as u32,
+        run.target_values_zatoshi.iter().sum(),
+    )
+    .await
+}
+
 async fn resume_active_migration_run(
     db_path: &str,
     lightwalletd_url: &str,
@@ -796,14 +829,17 @@ async fn resume_active_migration_run(
     pending_password: &[u8],
     pending_salt_base64: &str,
 ) -> Result<IronwoodMigrationResult, String> {
+    let fallback_total_count = run.target_values_zatoshi.len() as u32;
+    let fallback_migrated_zatoshi = run.target_values_zatoshi.iter().sum();
+
     if matches!(
         run.phase.as_str(),
         super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS
             | super::migration::PHASE_READY_TO_MIGRATE
             | super::migration::PHASE_FAILED_RECOVERABLE
     ) {
-        let scheduled_count = super::migration::scheduled_pending_count(db_path, &run.run_id)?;
-        if scheduled_count == 0 {
+        let pending_totals = super::migration::pending_totals_for_run(db_path, &run.run_id)?;
+        if pending_totals.total_count == 0 {
             let prepared_notes = super::migration::prepared_notes_for_run(db_path, &run.run_id)?;
             if prepared_notes.is_empty() {
                 return Err("Migration run has no prepared denomination notes".to_string());
@@ -868,18 +904,29 @@ async fn resume_active_migration_run(
                 pending_password,
                 pending_salt_base64,
             )?;
+            let totals = super::migration::pending_totals_for_run(db_path, &run.run_id)?;
+            return Ok(migration_result_from_pending_totals(
+                totals,
+                super::migration::PHASE_BROADCAST_SCHEDULED,
+                Some(
+                    "Migration transactions were signed and scheduled for delayed broadcast."
+                        .to_string(),
+                ),
+                fallback_total_count,
+                fallback_migrated_zatoshi,
+            ));
         }
     }
 
-    let result = broadcast_scheduled_migration_txs(
+    let result = broadcast_due_scheduled_migration_txs(
         db_path,
         lightwalletd_url,
         network,
         &run.run_id,
         pending_password,
         pending_salt_base64,
-        run.target_values_zatoshi.len() as u32,
-        run.target_values_zatoshi.iter().sum(),
+        fallback_total_count,
+        fallback_migrated_zatoshi,
     )
     .await?;
     Ok(result)
@@ -1800,7 +1847,7 @@ fn proposal_shielded_zatoshi(proposal: &Proposal<WalletFeeRule, Infallible>) -> 
         .sum()
 }
 
-async fn broadcast_scheduled_migration_txs(
+async fn broadcast_due_scheduled_migration_txs(
     db_path: &str,
     lightwalletd_url: &str,
     network: WalletNetwork,
@@ -1810,6 +1857,34 @@ async fn broadcast_scheduled_migration_txs(
     fallback_total_count: u32,
     fallback_migrated_zatoshi: u64,
 ) -> Result<IronwoodMigrationResult, String> {
+    let totals_before = super::migration::pending_totals_for_run(db_path, run_id)?;
+    if totals_before.total_count == 0 {
+        return Ok(migration_result_from_pending_totals(
+            totals_before,
+            super::migration::PHASE_READY_TO_MIGRATE,
+            Some("No signed migration transactions are scheduled yet.".to_string()),
+            fallback_total_count,
+            fallback_migrated_zatoshi,
+        ));
+    }
+
+    let due =
+        super::migration::due_pending_txs(db_path, run_id, pending_password, pending_salt_base64)?;
+    if due.is_empty() {
+        let status = if super::migration::next_scheduled_delay_ms(db_path, run_id)?.is_some() {
+            super::migration::PHASE_BROADCAST_SCHEDULED
+        } else {
+            super::migration::PHASE_WAITING_MIGRATION_CONFIRMATIONS
+        };
+        return Ok(migration_result_from_pending_totals(
+            totals_before,
+            status,
+            Some("Migration transactions are scheduled for delayed broadcast.".to_string()),
+            fallback_total_count,
+            fallback_migrated_zatoshi,
+        ));
+    }
+
     let mut client = match crate::wallet::sync_engine::open_lwd_channel(lightwalletd_url).await {
         Ok(client) => client,
         Err(e) => {
@@ -1832,80 +1907,81 @@ async fn broadcast_scheduled_migration_txs(
         }
     };
 
-    loop {
-        let due = super::migration::due_pending_txs(
-            db_path,
-            run_id,
-            pending_password,
-            pending_salt_base64,
-        )?;
-        if due.is_empty() {
-            match super::migration::next_scheduled_delay_ms(db_path, run_id)? {
-                Some(0) => continue,
-                Some(delay_ms) => {
-                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                    continue;
-                }
-                None => break,
-            }
-        }
-
-        super::migration::mark_run_phase(
-            db_path,
-            run_id,
-            super::migration::PHASE_BROADCASTING,
-            None,
-        )?;
-        for pending in due {
-            if let Err(e) = broadcast_raw_transaction(&mut client, &pending.raw_tx).await {
-                let message = format!(
-                    "Migration broadcast failed for {}. Error: {e}",
-                    pending.txid_hex
-                );
-                super::migration::mark_run_phase(
-                    db_path,
-                    run_id,
-                    super::migration::PHASE_FAILED_RECOVERABLE,
-                    Some(&message),
-                )?;
-                let totals = super::migration::pending_totals_for_run(db_path, run_id)?;
-                return Ok(IronwoodMigrationResult {
-                    txids: totals.txids.join(","),
-                    status: super::migration::PHASE_FAILED_RECOVERABLE.to_string(),
-                    broadcasted_count: totals.broadcasted_count,
-                    total_count: totals.total_count.max(fallback_total_count),
-                    message: Some(message),
-                    fee_zatoshi: totals.fee_zatoshi,
-                    migrated_zatoshi: totals.value_zatoshi.max(fallback_migrated_zatoshi),
-                });
-            }
-
-            if let Err(e) = super::transactions::decrypt_and_store_transaction(
+    super::migration::mark_run_phase(db_path, run_id, super::migration::PHASE_BROADCASTING, None)?;
+    for pending in due {
+        if let Err(e) = broadcast_raw_transaction(&mut client, &pending.raw_tx).await {
+            let message = format!(
+                "Migration broadcast failed for {}. Error: {e}",
+                pending.txid_hex
+            );
+            super::migration::mark_run_phase(
                 db_path,
-                network,
-                &pending.raw_tx,
-                None,
-            ) {
-                log::warn!(
-                    "migration: broadcast {} but fallback wallet storage failed: {e}",
-                    pending.txid_hex
-                );
-            }
-            super::migration::mark_pending_broadcasted(db_path, run_id, &pending.txid_hex)?;
-            log::info!("migration: broadcast scheduled tx {}", pending.txid_hex);
+                run_id,
+                super::migration::PHASE_FAILED_RECOVERABLE,
+                Some(&message),
+            )?;
+            let totals = super::migration::pending_totals_for_run(db_path, run_id)?;
+            return Ok(migration_result_from_pending_totals(
+                totals,
+                super::migration::PHASE_FAILED_RECOVERABLE,
+                Some(message),
+                fallback_total_count,
+                fallback_migrated_zatoshi,
+            ));
         }
+
+        if let Err(e) = super::transactions::decrypt_and_store_transaction(
+            db_path,
+            network,
+            &pending.raw_tx,
+            None,
+        ) {
+            log::warn!(
+                "migration: broadcast {} but fallback wallet storage failed: {e}",
+                pending.txid_hex
+            );
+        }
+        super::migration::mark_pending_broadcasted(db_path, run_id, &pending.txid_hex)?;
+        log::info!("migration: broadcast scheduled tx {}", pending.txid_hex);
     }
 
     let totals = super::migration::pending_totals_for_run(db_path, run_id)?;
-    Ok(IronwoodMigrationResult {
+    let scheduled_remaining = super::migration::scheduled_pending_count(db_path, run_id)?;
+    let status = if scheduled_remaining > 0 {
+        super::migration::PHASE_BROADCAST_SCHEDULED
+    } else {
+        super::migration::PHASE_WAITING_MIGRATION_CONFIRMATIONS
+    };
+    let message = if scheduled_remaining > 0 {
+        "Due migration transactions were submitted. More are scheduled.".to_string()
+    } else {
+        "Migration transactions were broadcast on the saved schedule.".to_string()
+    };
+    Ok(migration_result_from_pending_totals(
+        totals,
+        status,
+        Some(message),
+        fallback_total_count,
+        fallback_migrated_zatoshi,
+    ))
+}
+
+fn migration_result_from_pending_totals(
+    totals: super::migration::PendingMigrationTotals,
+    status: &str,
+    message: Option<String>,
+    fallback_total_count: u32,
+    fallback_migrated_zatoshi: u64,
+) -> IronwoodMigrationResult {
+    IronwoodMigrationResult {
         txids: totals.txids.join(","),
-        status: super::migration::PHASE_WAITING_MIGRATION_CONFIRMATIONS.to_string(),
+        status: status.to_string(),
         broadcasted_count: totals.broadcasted_count,
         total_count: totals.total_count.max(fallback_total_count),
-        message: Some("Migration transactions were broadcast on the saved schedule.".to_string()),
+        message,
         fee_zatoshi: totals.fee_zatoshi,
         migrated_zatoshi: totals.value_zatoshi.max(fallback_migrated_zatoshi),
-    })
+    }
 }
 
 #[derive(Debug)]

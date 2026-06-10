@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/wallet_paths.dart';
 
-const _migrationDelayedBroadcastInterval = Duration(seconds: 60);
+const _migrationDelayedBroadcastWindow = Duration(minutes: 3);
 const _migrationExpectedTransferCountBuffer = Duration(seconds: 45);
 const _migrationExpectedTransferCountFile =
     'migration_expected_transfer_counts_v1.json';
@@ -53,13 +53,8 @@ class MigrationExpectedTransferCount {
   }
 
   Duration get _ttl {
-    final delayedTransferCount = count > 1 ? count - 1 : 1;
-    return Duration(
-      seconds:
-          (_migrationDelayedBroadcastInterval.inSeconds *
-              delayedTransferCount) +
-          _migrationExpectedTransferCountBuffer.inSeconds,
-    );
+    return _migrationDelayedBroadcastWindow +
+        _migrationExpectedTransferCountBuffer;
   }
 }
 

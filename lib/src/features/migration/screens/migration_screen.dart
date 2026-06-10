@@ -153,8 +153,6 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            const _PoolTransition(),
-            const SizedBox(height: AppSpacing.md),
             _stepOneCard(steps, viewState, migrationStatus, runState, sync),
             const SizedBox(height: AppSpacing.s),
             _stepTwoCard(
@@ -165,11 +163,8 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
               sync,
               currentRunMigrationTransactions,
               effectiveExpectedCount,
+              freshExpectedTransferCount?.startedAt,
             ),
-            if (migrationStatus != null && migrationStatus.totalCount > 0) ...[
-              const SizedBox(height: AppSpacing.s),
-              _RunDetails(status: migrationStatus),
-            ],
           ],
         );
       }
@@ -285,6 +280,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     SyncState sync,
     List<rust_sync.TransactionInfo> currentRunMigrationTransactions,
     int? effectiveExpectedCount,
+    DateTime? scheduleStartedAt,
   ) {
     final errorBanner = runState.errorIntent == MigrationRunIntent.migrating
         ? runState.error
@@ -329,12 +325,17 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       MigrationStepTwoState.running => MigrationStepCard(
         stepNumber: 2,
         title: MigrationCopy.stepTwoTitle,
-        showSpinner: true,
+        showSpinner: _stepTwoShowsSpinner(status, runState),
         statusLine: _stepTwoRunningLine(status),
-        progress: total > 0
-            ? (status?.broadcastedTxCount ?? 0).clamp(0, total) / total
-            : null,
-        body: [_warningRow(MigrationCopy.stepTwoKeepOpen)],
+        progress:
+            _scheduleSubmissionProgress(status, scheduleStartedAt) ??
+            (total > 0
+                ? (status?.broadcastedTxCount ?? 0).clamp(0, total) / total
+                : null),
+        body: [
+          if (status != null && status.scheduledBroadcasts.isNotEmpty)
+            _ScheduledBroadcastsList(broadcasts: status.scheduledBroadcasts),
+        ],
       ),
       MigrationStepTwoState.confirming => MigrationStepCard(
         stepNumber: 2,
@@ -349,7 +350,6 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
               currentRunMigrationTransactions,
             ),
           ),
-          _warningRow(MigrationCopy.keepOpenWarning),
         ],
       ),
       MigrationStepTwoState.done => MigrationStepCard(
@@ -381,14 +381,76 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
 
   String _stepTwoRunningLine(rust_sync.MigrationStatus? status) {
     final total = status?.totalCount ?? 0;
-    final isSubmitting =
-        status?.phase == 'broadcasting' ||
-        status?.phase == 'broadcast_scheduled';
-    if (isSubmitting && total > 0) {
+    if (status?.phase == 'broadcast_scheduled') {
+      final nextScheduled = _nextScheduledBroadcast(status);
+      if (nextScheduled == null) return MigrationCopy.stepTwoScheduledWaiting;
+      final scheduledAt = DateTime.fromMillisecondsSinceEpoch(
+        nextScheduled.scheduledAtMs.toInt(),
+      );
+      return MigrationCopy.stepTwoScheduled(
+        _remainingSubmissionText(scheduledAt),
+      );
+    }
+    if (status?.phase == 'broadcasting' && total > 0) {
       final next = ((status?.broadcastedTxCount ?? 0) + 1).clamp(1, total);
       return MigrationCopy.stepTwoSubmitting(next, total);
     }
     return MigrationCopy.stepTwoSigning;
+  }
+
+  bool _stepTwoShowsSpinner(
+    rust_sync.MigrationStatus? status,
+    MigrationRunState runState,
+  ) {
+    if (runState.inFlight) return true;
+    return status?.phase == 'building_signing_batch' ||
+        status?.phase == 'signing_batch' ||
+        status?.phase == 'broadcasting';
+  }
+
+  rust_sync.MigrationScheduledBroadcast? _nextScheduledBroadcast(
+    rust_sync.MigrationStatus? status,
+  ) {
+    final scheduled = status?.scheduledBroadcasts.where(
+      (broadcast) => broadcast.status == 'scheduled',
+    );
+    if (scheduled == null || scheduled.isEmpty) return null;
+    return scheduled.first;
+  }
+
+  String _remainingSubmissionText(DateTime scheduledAt) {
+    final remaining = scheduledAt.difference(DateTime.now());
+    if (remaining.inSeconds <= 0) return 'now';
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds.remainder(60);
+    if (minutes <= 0) return 'in ${seconds}s';
+    return 'in ${minutes}m ${seconds}s';
+  }
+
+  double? _scheduleSubmissionProgress(
+    rust_sync.MigrationStatus? status,
+    DateTime? startedAt,
+  ) {
+    final broadcasts = status?.scheduledBroadcasts;
+    if (broadcasts == null || broadcasts.isEmpty) return null;
+    final scheduledTimes = broadcasts
+        .map(
+          (broadcast) => DateTime.fromMillisecondsSinceEpoch(
+            broadcast.scheduledAtMs.toInt(),
+          ),
+        )
+        .toList(growable: false);
+    final firstScheduledAt = scheduledTimes.reduce(
+      (a, b) => a.isBefore(b) ? a : b,
+    );
+    final lastScheduledAt = scheduledTimes.reduce(
+      (a, b) => a.isAfter(b) ? a : b,
+    );
+    final start = startedAt ?? firstScheduledAt;
+    final total = lastScheduledAt.difference(start).inMilliseconds;
+    if (total <= 0) return 1;
+    final elapsed = DateTime.now().difference(start).inMilliseconds;
+    return (elapsed / total).clamp(0, 1).toDouble();
   }
 
   Widget _readyAmount(SyncState sync) {
@@ -409,38 +471,13 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         Text(
           amount,
           key: const ValueKey('migration_ready_amount'),
-          style: AppTypography.displaySmall.copyWith(
-            color: colors.text.accent,
-          ),
+          style: AppTypography.displaySmall.copyWith(color: colors.text.accent),
         ),
         const SizedBox(height: AppSpacing.xxs),
         Text(
           MigrationCopy.poolFlow,
           style: AppTypography.bodyExtraSmall.copyWith(
             color: colors.text.secondary,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _warningRow(String text) {
-    final colors = context.colors;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AppIcon(
-          AppIcons.warning,
-          size: AppIconSize.medium,
-          color: colors.icon.muted,
-        ),
-        const SizedBox(width: AppSpacing.xs),
-        Expanded(
-          child: Text(
-            text,
-            style: AppTypography.bodyExtraSmall.copyWith(
-              color: colors.text.secondary,
-            ),
           ),
         ),
       ],
@@ -540,6 +577,156 @@ BigInt _migrationDisplayAmount(
   return sync.orchardBalance;
 }
 
+class _ScheduledBroadcastsList extends StatelessWidget {
+  const _ScheduledBroadcastsList({required this.broadcasts});
+
+  final List<rust_sync.MigrationScheduledBroadcast> broadcasts;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final now = DateTime.now();
+    final total = broadcasts.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < total; i++) ...[
+          if (i > 0)
+            Divider(height: AppSpacing.md, color: colors.border.subtle),
+          _ScheduledBroadcastRow(
+            index: i,
+            total: total,
+            broadcast: broadcasts[i],
+            now: now,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ScheduledBroadcastRow extends StatelessWidget {
+  const _ScheduledBroadcastRow({
+    required this.index,
+    required this.total,
+    required this.broadcast,
+    required this.now,
+  });
+
+  final int index;
+  final int total;
+  final rust_sync.MigrationScheduledBroadcast broadcast;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final scheduledAt = DateTime.fromMillisecondsSinceEpoch(
+      broadcast.scheduledAtMs.toInt(),
+    );
+    final status = _scheduledBroadcastStatus(broadcast.status, scheduledAt);
+    final icon = switch (status.kind) {
+      _ScheduledBroadcastKind.scheduled => AppIcons.time,
+      _ScheduledBroadcastKind.submitted => AppIcons.checkCircle,
+      _ScheduledBroadcastKind.confirmed => AppIcons.checkCircle,
+      _ScheduledBroadcastKind.failed => AppIcons.warning,
+    };
+    final iconColor = switch (status.kind) {
+      _ScheduledBroadcastKind.scheduled => colors.icon.muted,
+      _ScheduledBroadcastKind.submitted => colors.icon.success,
+      _ScheduledBroadcastKind.confirmed => colors.icon.success,
+      _ScheduledBroadcastKind.failed => colors.icon.destructive,
+    };
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppIcon(icon, size: AppIconSize.medium, color: iconColor),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                MigrationCopy.scheduledSubmissionLabel(index + 1, total),
+                style: AppTypography.bodyMedium.copyWith(
+                  color: colors.text.accent,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxs),
+              Text(
+                'Scheduled for ${_clockTime(scheduledAt)}',
+                style: AppTypography.bodyExtraSmall.copyWith(
+                  color: colors.text.secondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.s),
+        Text(
+          status.label,
+          style: AppTypography.bodyMedium.copyWith(
+            color: colors.text.secondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  _ScheduledBroadcastStatus _scheduledBroadcastStatus(
+    String status,
+    DateTime scheduledAt,
+  ) {
+    return switch (status) {
+      'scheduled' => _ScheduledBroadcastStatus(
+        scheduledAt.isAfter(now)
+            ? _durationUntilLabel(scheduledAt, now)
+            : 'Due now',
+        _ScheduledBroadcastKind.scheduled,
+      ),
+      'broadcasted' => const _ScheduledBroadcastStatus(
+        'Submitted',
+        _ScheduledBroadcastKind.submitted,
+      ),
+      'confirmed' => const _ScheduledBroadcastStatus(
+        'Confirmed',
+        _ScheduledBroadcastKind.confirmed,
+      ),
+      _ => const _ScheduledBroadcastStatus(
+        'Needs attention',
+        _ScheduledBroadcastKind.failed,
+      ),
+    };
+  }
+}
+
+enum _ScheduledBroadcastKind { scheduled, submitted, confirmed, failed }
+
+class _ScheduledBroadcastStatus {
+  const _ScheduledBroadcastStatus(this.label, this.kind);
+
+  final String label;
+  final _ScheduledBroadcastKind kind;
+}
+
+String _clockTime(DateTime time) {
+  return '${_twoDigits(time.hour)}:${_twoDigits(time.minute)}:'
+      '${_twoDigits(time.second)}';
+}
+
+String _durationUntilLabel(DateTime future, DateTime now) {
+  final remaining = future.difference(now);
+  if (remaining.inSeconds <= 0) return 'Due now';
+  final minutes = remaining.inMinutes;
+  final seconds = remaining.inSeconds.remainder(60);
+  if (minutes <= 0) return 'in ${seconds}s';
+  return 'in ${minutes}m ${seconds}s';
+}
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
 /// Compact title/body note used for the pre-card loading and status-error
 /// branches.
 class _StatusNote extends StatelessWidget {
@@ -589,47 +776,6 @@ class _StatusNote extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// Small-print run details below the cards (batch limit, window, counts).
-class _RunDetails extends StatelessWidget {
-  const _RunDetails({required this.status});
-
-  final rust_sync.MigrationStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final total = status.totalCount;
-    final rows = <String>[
-      if (total > 0) 'Prepared notes: ${status.preparedNoteCount} of $total',
-      if (status.pendingTxCount > 0)
-        'Scheduled transactions: ${status.pendingTxCount}',
-      if (total > 0)
-        'Broadcasted transactions: ${status.broadcastedTxCount} of $total',
-      if (status.confirmedTxCount > 0)
-        'Confirmed transactions: ${status.confirmedTxCount} of $total',
-      'Signing batch limit: ${status.signingBatchLimit}',
-      'Broadcast window: ${status.broadcastWindowSeconds}s',
-    ];
-
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final row in rows) ...[
-            Text(
-              row,
-              style: AppTypography.bodyExtraSmall.copyWith(
-                color: colors.text.secondary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xxs),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -781,67 +927,6 @@ class _MigrationTransferRow extends StatelessWidget {
           statusText,
           style: AppTypography.bodyMedium.copyWith(
             color: colors.text.secondary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _PoolTransition extends StatelessWidget {
-  const _PoolTransition();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Row(
-      children: [
-        Expanded(
-          child: _Card(
-            child: Column(
-              children: [
-                Text(
-                  MigrationCopy.fromPoolName,
-                  style: AppTypography.bodyLarge.copyWith(
-                    color: colors.text.accent,
-                  ),
-                ),
-                Text(
-                  MigrationCopy.fromPoolTag,
-                  style: AppTypography.bodyExtraSmall.copyWith(
-                    color: colors.text.secondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
-          child: AppIcon(
-            AppIcons.arrowForwardIos,
-            size: AppIconSize.medium,
-            color: colors.icon.muted,
-          ),
-        ),
-        Expanded(
-          child: _Card(
-            child: Column(
-              children: [
-                Text(
-                  MigrationCopy.toPoolName,
-                  style: AppTypography.bodyLarge.copyWith(
-                    color: colors.text.accent,
-                  ),
-                ),
-                Text(
-                  MigrationCopy.toPoolTag,
-                  style: AppTypography.bodyExtraSmall.copyWith(
-                    color: colors.text.secondary,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ],
