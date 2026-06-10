@@ -199,6 +199,7 @@ pub(crate) fn migration_status(
     ensure_schema(&conn)?;
 
     if let Some(run) = active_run(&conn, account_uuid, network)? {
+        reconcile_denomination_confirmations(&conn, &run)?;
         reconcile_run_confirmations(&conn, &run.run_id)?;
         return status_for_run(&conn, run);
     }
@@ -798,6 +799,100 @@ fn reconcile_run_confirmations(conn: &rusqlite::Connection, run_id: &str) -> Res
     Ok(())
 }
 
+fn reconcile_denomination_confirmations(
+    conn: &rusqlite::Connection,
+    run: &ActiveRun,
+) -> Result<(), String> {
+    if run.phase != PHASE_WAITING_DENOM_CONFIRMATIONS {
+        return Ok(());
+    }
+    if !table_exists(conn, "transactions")?
+        || !table_exists(conn, "orchard_received_notes")?
+        || !table_exists(conn, PREPARED_NOTES_TABLE)?
+    {
+        return Ok(());
+    }
+
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT txid_hex, output_index, value_zatoshi, note_version
+             FROM {PREPARED_NOTES_TABLE}
+             WHERE run_id = ?1"
+        ))
+        .map_err(|e| format!("Prepare denomination confirmation query: {e}"))?;
+    let rows = stmt
+        .query_map(params![run.run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, u32>(1)?,
+                row.get::<_, u64>(2)?,
+                row.get::<_, u8>(3)?,
+            ))
+        })
+        .map_err(|e| format!("Query denomination confirmation notes: {e}"))?;
+    let notes = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Read denomination confirmation notes: {e}"))?;
+    if notes.is_empty() {
+        return Ok(());
+    }
+
+    let mut confirmed = Vec::with_capacity(notes.len());
+    for (txid_hex, output_index, value_zatoshi, note_version) in notes {
+        let mut nf_hex = None;
+        for txid_blob in txid_blob_variants(&txid_hex)? {
+            nf_hex = conn
+                .query_row(
+                    "SELECT lower(hex(n.nf))
+                     FROM orchard_received_notes n
+                     INNER JOIN transactions t ON t.id_tx = n.transaction_id
+                     WHERE t.txid = ?1
+                       AND t.mined_height IS NOT NULL
+                       AND n.action_index = ?2
+                       AND n.value = ?3
+                       AND n.note_version = ?4
+                       AND n.nf IS NOT NULL",
+                    params![txid_blob, output_index, value_zatoshi, note_version],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|e| format!("Read prepared denomination note confirmation: {e}"))?;
+            if nf_hex.is_some() {
+                break;
+            }
+        }
+
+        let Some(nf_hex) = nf_hex else {
+            return Ok(());
+        };
+        confirmed.push((txid_hex, output_index, nf_hex));
+    }
+
+    let now = now_ms()?;
+    for (txid_hex, output_index, nf_hex) in confirmed {
+        conn.execute(
+            &format!(
+                "UPDATE {PREPARED_NOTES_TABLE}
+                 SET nullifier_hex = ?1
+                 WHERE run_id = ?2 AND txid_hex = ?3 AND output_index = ?4"
+            ),
+            params![nf_hex, run.run_id, txid_hex, output_index],
+        )
+        .map_err(|e| format!("Update prepared denomination note nullifier: {e}"))?;
+    }
+    conn.execute(
+        &format!(
+            "UPDATE {RUNS_TABLE}
+             SET phase = ?1, updated_at_ms = ?2, last_error = NULL
+             WHERE run_id = ?3"
+        ),
+        params![PHASE_READY_TO_MIGRATE, now, run.run_id],
+    )
+    .map_err(|e| format!("Mark denomination notes ready: {e}"))?;
+
+    Ok(())
+}
+
 fn local_transaction_is_confirmed(
     conn: &rusqlite::Connection,
     txid_hex: &str,
@@ -1111,6 +1206,103 @@ mod tests {
             )
             .unwrap();
         assert_eq!(lock_state, "unlocked");
+    }
+
+    #[test]
+    fn denomination_reconciliation_marks_confirmed_notes_ready_to_migrate() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        conn.execute(
+            "CREATE TABLE transactions (
+                id_tx INTEGER PRIMARY KEY,
+                txid BLOB NOT NULL,
+                mined_height INTEGER
+             )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "CREATE TABLE orchard_received_notes (
+                transaction_id INTEGER NOT NULL,
+                action_index INTEGER NOT NULL,
+                value INTEGER NOT NULL,
+                note_version INTEGER NOT NULL,
+                nf BLOB
+             )",
+            [],
+        )
+        .unwrap();
+
+        let run_id = "run-1";
+        let txid_hex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        conn.execute(
+            &format!(
+                "INSERT INTO {RUNS_TABLE}
+                 (run_id, account_uuid, network, db_fingerprint, phase,
+                  created_at_ms, updated_at_ms, target_values_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 1, 1, ?6)"
+            ),
+            params![
+                run_id,
+                "account-1",
+                "test",
+                "db",
+                PHASE_WAITING_DENOM_CONFIRMATIONS,
+                "[100000000]",
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            &format!(
+                "INSERT INTO {PREPARED_NOTES_TABLE}
+                 (run_id, txid_hex, output_index, value_zatoshi, note_version,
+                  nullifier_hex, lock_state)
+                 VALUES (?1, ?2, 0, 100000000, 2, NULL, 'locked')"
+            ),
+            params![run_id, txid_hex],
+        )
+        .unwrap();
+
+        let mut txid_blob = hex::decode(txid_hex).unwrap();
+        txid_blob.reverse();
+        let nf = vec![0xabu8; 32];
+        conn.execute(
+            "INSERT INTO transactions (id_tx, txid, mined_height) VALUES (1, ?1, 20)",
+            params![txid_blob],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO orchard_received_notes
+             (transaction_id, action_index, value, note_version, nf)
+             VALUES (1, 0, 100000000, 2, ?1)",
+            params![nf],
+        )
+        .unwrap();
+
+        let run = ActiveRun {
+            run_id: run_id.to_string(),
+            phase: PHASE_WAITING_DENOM_CONFIRMATIONS.to_string(),
+            target_values_zatoshi: vec![100_000_000],
+            last_error: None,
+        };
+        reconcile_denomination_confirmations(&conn, &run).unwrap();
+
+        let phase: String = conn
+            .query_row(
+                &format!("SELECT phase FROM {RUNS_TABLE} WHERE run_id = ?1"),
+                params![run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(phase, PHASE_READY_TO_MIGRATE);
+        let nullifier_hex: String = conn
+            .query_row(
+                &format!("SELECT nullifier_hex FROM {PREPARED_NOTES_TABLE} WHERE run_id = ?1"),
+                params![run_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(nullifier_hex, "ab".repeat(32));
     }
 
     const MINIMUM_OUTPUT_FOR_TEST: u64 = 1;

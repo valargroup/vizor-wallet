@@ -100,28 +100,48 @@ class MigrationRunController extends Notifier<MigrationRunState> {
       final saltBase64 = await security
           .requireSecretPayloadSaltForNativeSecretUse();
       late final rust_sync.IronwoodMigrationResult result;
-
-      if (Platform.isMacOS && !kDebugMode) {
-        try {
-          result = await rust_sync
-              .migrateOrchardToIronwoodWithMacosStoredMnemonic(
-                dbPath: dbPath,
-                lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-                network: migrationNetworkName,
-                accountUuid: accountUuid,
-                password: password,
-                saltBase64: saltBase64,
-              );
-        } catch (e) {
-          final message = e.toString().toLowerCase();
-          if (!message.contains('secure storage salt not found') &&
-              !message.contains('mnemonic not found for account')) {
-            rethrow;
-          }
+      final syncNotifier = ref.read(syncProvider.notifier);
+      final syncPause = await syncNotifier.pauseForWalletMutation(
+        onStoppingSync: () {
           log(
-            'MigrationRunController: native macOS mnemonic unavailable, '
-            'falling back to Dart mnemonic storage: $e',
+            'MigrationRunController: pausing sync before migration wallet '
+            'mutation',
           );
+        },
+      );
+
+      try {
+        if (Platform.isMacOS && !kDebugMode) {
+          try {
+            result = await rust_sync
+                .migrateOrchardToIronwoodWithMacosStoredMnemonic(
+                  dbPath: dbPath,
+                  lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+                  network: migrationNetworkName,
+                  accountUuid: accountUuid,
+                  password: password,
+                  saltBase64: saltBase64,
+                );
+          } catch (e) {
+            final message = e.toString().toLowerCase();
+            if (!message.contains('secure storage salt not found') &&
+                !message.contains('mnemonic not found for account')) {
+              rethrow;
+            }
+            log(
+              'MigrationRunController: native macOS mnemonic unavailable, '
+              'falling back to Dart mnemonic storage: $e',
+            );
+            result = await _migrateWithMnemonicBytes(
+              dbPath: dbPath,
+              lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+              network: migrationNetworkName,
+              accountUuid: accountUuid,
+              password: password,
+              saltBase64: saltBase64,
+            );
+          }
+        } else {
           result = await _migrateWithMnemonicBytes(
             dbPath: dbPath,
             lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
@@ -131,15 +151,8 @@ class MigrationRunController extends Notifier<MigrationRunState> {
             saltBase64: saltBase64,
           );
         }
-      } else {
-        result = await _migrateWithMnemonicBytes(
-          dbPath: dbPath,
-          lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-          network: migrationNetworkName,
-          accountUuid: accountUuid,
-          password: password,
-          saltBase64: saltBase64,
-        );
+      } finally {
+        syncNotifier.resumeAfterWalletMutation(syncPause);
       }
 
       log(

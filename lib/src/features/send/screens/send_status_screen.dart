@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -122,6 +123,9 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
     if (lower.contains('proposal not found') ||
         lower.contains('send flow mismatch')) {
       return 'Transaction expired before it could be sent.';
+    }
+    if (lower.contains('mnemonic not found')) {
+      return 'Mnemonic not found for the proposal account.';
     }
     return "Transaction couldn't be sent. Go back to your wallet and check "
         'the latest status.';
@@ -337,56 +341,11 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
             : _pcztBroadcastStatusMessage(result);
         broadcastMessageForFallback = result.message;
       } else {
-        late final rust_sync.ExecuteProposalResult result;
-        if (Platform.isMacOS) {
-          final password = ref
-              .read(appSecurityProvider.notifier)
-              .requireSessionPasswordForNativeSecretUse();
-          result = await rust_sync.executeProposalWithMacosStoredMnemonic(
-            dbPath: dbPath,
-            lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-            proposalId: widget.args.proposalId,
-            sendFlowId: widget.args.sendFlowId,
-            password: password,
-            spendParamsPath: widget.args.needsSaplingParams
-                ? saplingParams.spendPath
-                : null,
-            outputParamsPath: widget.args.needsSaplingParams
-                ? saplingParams.outputPath
-                : null,
-          );
-        } else {
-          final mnemonicBytes = await accountNotifier
-              .getMnemonicBytesForAccount(widget.args.proposalAccountUuid);
-          if (mnemonicBytes == null || mnemonicBytes.isEmpty) {
-            if (await _abortIfUnmounted()) return;
-            setState(() {
-              _phase = _SendStatusPhase.failed;
-              _error = 'Mnemonic not found for the proposal account.';
-            });
-            return;
-          }
-
-          late final Future<rust_sync.ExecuteProposalResult> resultFuture;
-          try {
-            resultFuture = rust_sync.executeProposal(
-              dbPath: dbPath,
-              lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-              proposalId: widget.args.proposalId,
-              sendFlowId: widget.args.sendFlowId,
-              mnemonicBytes: mnemonicBytes,
-              spendParamsPath: widget.args.needsSaplingParams
-                  ? saplingParams.spendPath
-                  : null,
-              outputParamsPath: widget.args.needsSaplingParams
-                  ? saplingParams.outputPath
-                  : null,
-            );
-          } finally {
-            mnemonicBytes.fillRange(0, mnemonicBytes.length, 0);
-          }
-          result = await resultFuture;
-        }
+        final result = await _executeSoftwareProposal(
+          dbPath: dbPath,
+          lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+          saplingParams: saplingParams,
+        );
         _proposalConsumed = true;
         txids = result.txids;
         broadcastComplete = result.status == 'broadcasted';
@@ -463,6 +422,82 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
         _statusMessage = null;
       });
     }
+  }
+
+  Future<rust_sync.ExecuteProposalResult> _executeSoftwareProposal({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required SaplingParamsStatus saplingParams,
+  }) async {
+    final syncNotifier = ref.read(syncProvider.notifier);
+    final syncPause = await syncNotifier.pauseForWalletMutation(
+      onStoppingSync: () {
+        log('SendStatus: pausing sync before send wallet mutation');
+      },
+    );
+
+    try {
+      if (Platform.isMacOS && !kDebugMode) {
+        final password = ref
+            .read(appSecurityProvider.notifier)
+            .requireSessionPasswordForNativeSecretUse();
+        return await rust_sync.executeProposalWithMacosStoredMnemonic(
+          dbPath: dbPath,
+          lightwalletdUrl: lightwalletdUrl,
+          proposalId: widget.args.proposalId,
+          sendFlowId: widget.args.sendFlowId,
+          password: password,
+          spendParamsPath: widget.args.needsSaplingParams
+              ? saplingParams.spendPath
+              : null,
+          outputParamsPath: widget.args.needsSaplingParams
+              ? saplingParams.outputPath
+              : null,
+        );
+      }
+
+      return await _executeSoftwareProposalWithMnemonicBytes(
+        dbPath: dbPath,
+        lightwalletdUrl: lightwalletdUrl,
+        saplingParams: saplingParams,
+      );
+    } finally {
+      syncNotifier.resumeAfterWalletMutation(syncPause);
+    }
+  }
+
+  Future<rust_sync.ExecuteProposalResult>
+  _executeSoftwareProposalWithMnemonicBytes({
+    required String dbPath,
+    required String lightwalletdUrl,
+    required SaplingParamsStatus saplingParams,
+  }) async {
+    final mnemonicBytes = await ref
+        .read(accountProvider.notifier)
+        .getMnemonicBytesForAccount(widget.args.proposalAccountUuid);
+    if (mnemonicBytes == null || mnemonicBytes.isEmpty) {
+      throw StateError('Mnemonic not found for the proposal account.');
+    }
+
+    late final Future<rust_sync.ExecuteProposalResult> resultFuture;
+    try {
+      resultFuture = rust_sync.executeProposal(
+        dbPath: dbPath,
+        lightwalletdUrl: lightwalletdUrl,
+        proposalId: widget.args.proposalId,
+        sendFlowId: widget.args.sendFlowId,
+        mnemonicBytes: mnemonicBytes,
+        spendParamsPath: widget.args.needsSaplingParams
+            ? saplingParams.spendPath
+            : null,
+        outputParamsPath: widget.args.needsSaplingParams
+            ? saplingParams.outputPath
+            : null,
+      );
+    } finally {
+      mnemonicBytes.fillRange(0, mnemonicBytes.length, 0);
+    }
+    return resultFuture;
   }
 
   Widget _buildKeystoneSubmittingScreen(BuildContext context) {

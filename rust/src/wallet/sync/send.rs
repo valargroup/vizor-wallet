@@ -1290,9 +1290,10 @@ fn create_orchard_to_ironwood_transaction_from_note(
 
 fn parse_txid_hex(txid_hex: &str) -> Result<TxId, String> {
     let bytes = hex::decode(txid_hex).map_err(|e| format!("Bad migration txid hex: {e}"))?;
-    let bytes: [u8; 32] = bytes
+    let mut bytes: [u8; 32] = bytes
         .try_into()
         .map_err(|_| "Migration txid must be 32 bytes".to_string())?;
+    bytes.reverse();
     Ok(TxId::from_bytes(bytes))
 }
 
@@ -2079,7 +2080,7 @@ async fn broadcast_raw_transaction(
         .await
         .map_err(|e| format!("SendTransaction gRPC failed: {e}"))?;
 
-    if resp.error_code != 0 {
+    if resp.error_code != 0 && !broadcast_rejection_is_already_committed(&resp.error_message) {
         return Err(format!(
             "Broadcast rejected: {} (code {})",
             resp.error_message, resp.error_code
@@ -2087,6 +2088,11 @@ async fn broadcast_raw_transaction(
     }
 
     Ok(())
+}
+
+fn broadcast_rejection_is_already_committed(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("transaction was committed to the best chain")
 }
 
 // ======================== Auto-Resubmit ========================
@@ -2401,6 +2407,14 @@ mod tests {
 
     fn receiver(value: u64, scope: TransparentKeyScope) -> (TransparentKeyOrigin, Balance) {
         (TransparentKeyOrigin::Derived { scope }, balance(value))
+    }
+
+    #[test]
+    fn parse_txid_hex_accepts_display_order_hex() {
+        let txid_hex = "838813428b78712263511ed5c6fb9a108c939038a440b74f72bee6caedf602fd";
+        let txid = parse_txid_hex(txid_hex).unwrap();
+
+        assert_eq!(format!("{txid}"), txid_hex);
     }
 
     #[test]
