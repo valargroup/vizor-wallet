@@ -947,12 +947,10 @@ pub(crate) async fn complete_orchard_migration_denominations_pczt(
         status: super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS.to_string(),
         broadcasted_count: if result.status == "broadcasted" { 1 } else { 0 },
         total_count: prepared_refs.len() as u32,
-        message: Some(
-            result.message.unwrap_or_else(|| {
-                "Denomination notes were created. Sync until they are spendable, then resume migration."
-                    .to_string()
-            }),
-        ),
+        message: Some(result.message.unwrap_or_else(|| {
+            "Denomination notes were created. Sync until they are spendable, then resume migration."
+                .to_string()
+        })),
         fee_zatoshi: stored.fee_zatoshi,
         migrated_zatoshi: stored.total_migratable_zatoshi,
     })
@@ -990,7 +988,7 @@ pub(crate) fn prepare_orchard_migration_batch_pczt(
 
     let mut created = Vec::with_capacity(prepared_notes.len());
     for (index, note_ref) in prepared_notes.iter().enumerate() {
-        let pczt = with_wallet_db_write_lock("send.migration.prepare_exact_note_pczt", || {
+        let pczt = match with_wallet_db_write_lock("send.migration.prepare_exact_note_pczt", || {
             create_orchard_to_ironwood_pczt_from_note(
                 db_path,
                 network,
@@ -998,16 +996,23 @@ pub(crate) fn prepare_orchard_migration_batch_pczt(
                 note_ref,
                 (index + 1) as u32,
             )
-        })?;
+        }) {
+            Ok(pczt) => pczt,
+            Err(e) if is_orchard_witness_not_ready_error(&e) => {
+                mark_prepared_notes_waiting(db_path, &run.run_id)?;
+                return Err(
+                    "Prepared denomination notes are not spendable yet. Sync and try again."
+                        .to_string(),
+                );
+            }
+            Err(e) => return Err(e),
+        };
         let Some(pczt) = pczt else {
-            super::migration::mark_run_phase(
-                db_path,
-                &run.run_id,
-                super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS,
-                Some("Prepared denomination notes are not spendable yet."),
-            )?;
-            return Err("Prepared denomination notes are not spendable yet. Sync and try again."
-                .to_string());
+            mark_prepared_notes_waiting(db_path, &run.run_id)?;
+            return Err(
+                "Prepared denomination notes are not spendable yet. Sync and try again."
+                    .to_string(),
+            );
         };
         created.push(pczt);
     }
@@ -1148,7 +1153,7 @@ async fn resume_active_migration_run(
 
             let mut pending = Vec::with_capacity(prepared_notes.len());
             for note_ref in &prepared_notes {
-                let tx = with_wallet_db_write_lock("send.migration.create_exact_note", || {
+                let tx = match with_wallet_db_write_lock("send.migration.create_exact_note", || {
                     create_orchard_to_ironwood_transaction_from_note(
                         db_path,
                         network,
@@ -1156,26 +1161,23 @@ async fn resume_active_migration_run(
                         account_uuid,
                         note_ref,
                     )
-                })?;
+                }) {
+                    Ok(tx) => tx,
+                    Err(e) if is_orchard_witness_not_ready_error(&e) => {
+                        mark_prepared_notes_waiting(db_path, &run.run_id)?;
+                        return Ok(prepared_notes_not_spendable_result(
+                            fallback_total_count,
+                            fallback_migrated_zatoshi,
+                        ));
+                    }
+                    Err(e) => return Err(e),
+                };
                 let Some(tx) = tx else {
-                    super::migration::mark_run_phase(
-                        db_path,
-                        &run.run_id,
-                        super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS,
-                        Some("Prepared denomination notes are not spendable yet."),
-                    )?;
-                    return Ok(IronwoodMigrationResult {
-                        txids: String::new(),
-                        status: super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS.to_string(),
-                        broadcasted_count: 0,
-                        total_count: run.target_values_zatoshi.len() as u32,
-                        message: Some(
-                            "Prepared denomination notes are not spendable yet. Sync and try again."
-                                .to_string(),
-                        ),
-                        fee_zatoshi: 0,
-                        migrated_zatoshi: run.target_values_zatoshi.iter().sum(),
-                    });
+                    mark_prepared_notes_waiting(db_path, &run.run_id)?;
+                    return Ok(prepared_notes_not_spendable_result(
+                        fallback_total_count,
+                        fallback_migrated_zatoshi,
+                    ));
                 };
                 pending.push(tx);
             }
@@ -1230,6 +1232,40 @@ async fn resume_active_migration_run(
     )
     .await?;
     Ok(result)
+}
+
+fn is_orchard_witness_not_ready_error(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("read orchard witnesses")
+        && (lower.contains("notcontained")
+            || lower.contains("checkpoint")
+            || lower.contains("commitmenttree"))
+}
+
+fn mark_prepared_notes_waiting(db_path: &str, run_id: &str) -> Result<(), String> {
+    super::migration::mark_run_phase(
+        db_path,
+        run_id,
+        super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS,
+        Some("Prepared denomination notes are not spendable yet."),
+    )
+}
+
+fn prepared_notes_not_spendable_result(
+    total_count: u32,
+    migrated_zatoshi: u64,
+) -> IronwoodMigrationResult {
+    IronwoodMigrationResult {
+        txids: String::new(),
+        status: super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS.to_string(),
+        broadcasted_count: 0,
+        total_count,
+        message: Some(
+            "Prepared denomination notes are not spendable yet. Sync and try again.".to_string(),
+        ),
+        fee_zatoshi: 0,
+        migrated_zatoshi,
+    }
 }
 
 struct CreatedDenominationSplitTx {
@@ -1325,7 +1361,10 @@ fn signed_migration_messages_by_id(
         if message.signed_pczt.is_empty() {
             return Err(format!("Keystone signed message {} is empty", message.id));
         }
-        if by_id.insert(message.id.clone(), message.signed_pczt).is_some() {
+        if by_id
+            .insert(message.id.clone(), message.signed_pczt)
+            .is_some()
+        {
             return Err(format!("Duplicate signed Keystone message {}", message.id));
         }
     }
@@ -1344,8 +1383,7 @@ fn pczt_from_build_result(
     let orchard_spends = (0..orchard_spend_count)
         .filter_map(|i| build_result.orchard_meta.spend_action_index(i))
         .collect::<HashSet<_>>();
-    let created =
-        Creator::build_from_parts(build_result.pczt_parts).ok_or("Build PCZT failed")?;
+    let created = Creator::build_from_parts(build_result.pczt_parts).ok_or("Build PCZT failed")?;
     let io_finalized = IoFinalizer::new(created)
         .finalize_io()
         .map_err(|e| format!("Finalize PCZT IO: {e:?}"))?;
@@ -1360,10 +1398,8 @@ fn pczt_from_build_result(
                                 derivation.seed_fingerprint().to_bytes(),
                                 vec![
                                     zip32::ChildIndex::hardened(32).index(),
-                                    zip32::ChildIndex::hardened(
-                                        network.network_type().coin_type(),
-                                    )
-                                    .index(),
+                                    zip32::ChildIndex::hardened(network.network_type().coin_type())
+                                        .index(),
                                     zip32::ChildIndex::hardened(u32::from(
                                         derivation.account_index(),
                                     ))
@@ -1402,7 +1438,8 @@ fn create_orchard_denomination_split_pczt(
         .orchard()
         .cloned()
         .ok_or("Orchard viewing key not available")?;
-    let recipient = orchard_fvk.address_at(0u32, orchard::keys::Scope::Internal);
+    let recipient_scope = orchard::keys::Scope::External;
+    let recipient = orchard_fvk.address_at(0u32, recipient_scope);
     let internal_ovk = None;
     let memo = MemoBytes::empty();
 
@@ -1561,7 +1598,8 @@ fn create_orchard_denomination_split_transaction(
         .orchard()
         .cloned()
         .ok_or("Orchard spending key not available")?;
-    let recipient = orchard_fvk.address_at(0u32, orchard::keys::Scope::Internal);
+    let recipient_scope = orchard::keys::Scope::External;
+    let recipient = orchard_fvk.address_at(0u32, recipient_scope);
     let internal_ovk = None;
     let memo = MemoBytes::empty();
 
@@ -1696,10 +1734,7 @@ fn create_orchard_denomination_split_transaction(
             .orchard_bundle()
             .and_then(|bundle| {
                 bundle
-                    .decrypt_output_with_key(
-                        action_index,
-                        &orchard_fvk.to_ivk(orchard::keys::Scope::Internal),
-                    )
+                    .decrypt_output_with_key(action_index, &orchard_fvk.to_ivk(recipient_scope))
                     .map(|(note, _, _)| Note::Orchard(note))
             })
             .ok_or("Wallet-internal denomination output did not decrypt")?;

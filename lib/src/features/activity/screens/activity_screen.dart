@@ -322,6 +322,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       if (canRenderTransactions)
         for (final tx in transactions)
           _ActivityEntry(
+            pendingRank: _transactionPendingRank(tx),
             timestamp: _transactionActivityTimestamp(tx),
             row: buildTransactionActivityRow(
               context: context,
@@ -332,6 +333,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           ),
       for (final item in swapItems)
         _ActivityEntry(
+          pendingRank: 0,
           timestamp: item.activityTimestamp,
           row: buildSwapActivityRow(
             context: context,
@@ -524,19 +526,30 @@ class _ActivityPane extends StatelessWidget {
 }
 
 class _ActivityEntry {
-  const _ActivityEntry({required this.timestamp, required this.row});
+  const _ActivityEntry({
+    required this.pendingRank,
+    required this.timestamp,
+    required this.row,
+  });
 
+  final int pendingRank;
   final DateTime? timestamp;
   final ActivityRowData row;
 }
 
 int _compareActivityEntries(_ActivityEntry a, _ActivityEntry b) {
+  final pendingComparison = b.pendingRank.compareTo(a.pendingRank);
+  if (pendingComparison != 0) return pendingComparison;
   final aTime = a.timestamp;
   final bTime = b.timestamp;
   if (aTime == null && bTime == null) return 0;
   if (aTime == null) return 1;
   if (bTime == null) return -1;
   return bTime.compareTo(aTime);
+}
+
+int _transactionPendingRank(rust_sync.TransactionInfo tx) {
+  return tx.minedHeight == BigInt.zero && !tx.expiredUnmined ? 1 : 0;
 }
 
 DateTime? _transactionActivityTimestamp(rust_sync.TransactionInfo tx) {

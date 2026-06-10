@@ -40,6 +40,7 @@ class MigrationScreen extends ConsumerStatefulWidget {
 
 class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   Timer? _progressRefreshTimer;
+  Timer? _submissionProgressTimer;
   KeystoneSigningModalPhase? _keystonePhase;
   String? _keystoneError;
   List<String> _keystoneUrParts = const [];
@@ -49,6 +50,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   @override
   void dispose() {
     _progressRefreshTimer?.cancel();
+    _submissionProgressTimer?.cancel();
     super.dispose();
   }
 
@@ -179,7 +181,6 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
             sync,
             currentRunMigrationTransactions,
             effectiveExpectedCount,
-            freshExpectedTransferCount?.startedAt,
             isHardware,
           ),
         ],
@@ -188,6 +189,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
 
     _syncMigrationProgressPolling(
       hasPendingMigration || (viewState?.shouldPollProgress ?? false),
+    );
+    _syncSubmissionProgressTicker(
+      _shouldTickSubmissionProgress(migrationStatus),
     );
     _clearExpiredExpectedTransferCount(
       accountUuid: accountUuid,
@@ -608,13 +612,13 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     SyncState sync,
     List<rust_sync.TransactionInfo> currentRunMigrationTransactions,
     int? effectiveExpectedCount,
-    DateTime? scheduleStartedAt,
     bool isHardware,
   ) {
     final errorBanner = runState.errorIntent == MigrationRunIntent.migrating
         ? runState.error
         : null;
     final total = status?.totalCount ?? 0;
+    final submissionProgress = _scheduleSubmissionProgress(status);
     void startMigration() =>
         unawaited(_advanceMigration(MigrationRunIntent.migrating, isHardware));
 
@@ -655,11 +659,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         title: MigrationCopy.stepTwoTitle,
         showSpinner: _stepTwoShowsSpinner(status, runState),
         statusLine: _stepTwoRunningLine(status),
-        progress:
-            _scheduleSubmissionProgress(status, scheduleStartedAt) ??
-            (total > 0
-                ? (status?.broadcastedTxCount ?? 0).clamp(0, total) / total
-                : null),
+        progress: submissionProgress,
         body: [
           if (status != null && status.scheduledBroadcasts.isNotEmpty)
             _ScheduledBroadcastsList(broadcasts: status.scheduledBroadcasts),
@@ -669,6 +669,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         stepNumber: 2,
         title: MigrationCopy.stepTwoTitle,
         statusLine: MigrationCopy.inProgressBody,
+        progress: submissionProgress ?? 1,
         body: [
           _MigrationTransfersList(
             migrationTransactions: currentRunMigrationTransactions,
@@ -755,10 +756,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     return 'in ${minutes}m ${seconds}s';
   }
 
-  double? _scheduleSubmissionProgress(
-    rust_sync.MigrationStatus? status,
-    DateTime? startedAt,
-  ) {
+  double? _scheduleSubmissionProgress(rust_sync.MigrationStatus? status) {
     final broadcasts = status?.scheduledBroadcasts;
     if (broadcasts == null || broadcasts.isEmpty) return null;
     final scheduledTimes = broadcasts
@@ -774,10 +772,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     final lastScheduledAt = scheduledTimes.reduce(
       (a, b) => a.isAfter(b) ? a : b,
     );
-    final start = startedAt ?? firstScheduledAt;
-    final total = lastScheduledAt.difference(start).inMilliseconds;
+    final total = lastScheduledAt.difference(firstScheduledAt).inMilliseconds;
     if (total <= 0) return 1;
-    final elapsed = DateTime.now().difference(start).inMilliseconds;
+    final elapsed = DateTime.now().difference(firstScheduledAt).inMilliseconds;
     return (elapsed / total).clamp(0, 1).toDouble();
   }
 
@@ -828,6 +825,28 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       _progressRefreshTimer?.cancel();
       _progressRefreshTimer = null;
     }
+  }
+
+  void _syncSubmissionProgressTicker(bool enabled) {
+    if (enabled && _submissionProgressTimer == null) {
+      _submissionProgressTimer = Timer.periodic(const Duration(seconds: 1), (
+        _,
+      ) {
+        if (!mounted) return;
+        setState(() {});
+      });
+      return;
+    }
+
+    if (!enabled && _submissionProgressTimer != null) {
+      _submissionProgressTimer?.cancel();
+      _submissionProgressTimer = null;
+    }
+  }
+
+  bool _shouldTickSubmissionProgress(rust_sync.MigrationStatus? status) {
+    final progress = _scheduleSubmissionProgress(status);
+    return progress != null && progress < 1;
   }
 
   Future<void> _refreshMigrationProgress() async {
@@ -1144,7 +1163,6 @@ class _MigrationTransfersList extends StatelessWidget {
       growable: false,
     );
     final completed = transferTransactions.where(_isCompletedMigration).length;
-    final progress = migrationTransactions.isEmpty ? null : completed / total;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1153,16 +1171,6 @@ class _MigrationTransfersList extends StatelessWidget {
           MigrationCopy.migratingAmount(amount),
           style: AppTypography.labelLarge.copyWith(
             color: colors.text.secondary,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.s),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadii.full),
-          child: LinearProgressIndicator(
-            value: progress,
-            minHeight: 8,
-            backgroundColor: colors.background.neutralSubtleOpacity,
-            color: colors.icon.success,
           ),
         ),
         const SizedBox(height: AppSpacing.xs),
