@@ -218,8 +218,9 @@ List<rust_sync.TransactionInfo> _currentRunMigrationTransactions(
   final firstTxid = expectedTransferCount?.firstTxid.toLowerCase();
   if (firstTxid == null) return migrationTransactions;
 
-  final firstTxIndex = migrationTransactions.indexWhere(
-    (tx) => tx.txidHex.toLowerCase() == firstTxid,
+  final firstTxIndex = migrationFirstTransactionIndex(
+    transactionTxids: migrationTransactions.map((tx) => tx.txidHex),
+    firstTxid: firstTxid,
   );
   if (firstTxIndex < 0) return const [];
 

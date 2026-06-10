@@ -21,6 +21,7 @@ const _passwordVerifierKey = 'zcash_password_verifier';
 const _passwordVerifierSaltKey = 'zcash_password_verifier_salt';
 const _rotationInProgressKey = 'zcash_rotation_in_progress';
 const _migrationCompleteKey = 'zcash_mnemonic_storage_migrated_v1';
+const _accountsKey = 'zcash_accounts';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -587,7 +588,10 @@ void main() {
     () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       final operations = <String>[];
-      final regularStorage = _MapStorage('regular', operations: operations);
+      final regularStorage = _FailingMapStorage(
+        'regular',
+        operations: operations,
+      );
       final mnemonicStorage = _MapStorage('mnemonic', operations: operations);
       store = AppSecureStore.testing(
         storage: regularStorage,
@@ -596,18 +600,21 @@ void main() {
 
       await store.configurePassword(_oldPassword);
       await store.writeAccountMnemonic(_accountUuid, _mnemonic);
+      await store.writeString(_accountsKey, jsonEncode([_softwareAccountJson]));
       expect(regularStorage.valueFor(_mnemonicKey), isNull);
       expect(mnemonicStorage.valueFor(_mnemonicKey), isNotNull);
 
       store.clearSessionPassword();
       operations.clear();
+      regularStorage.failNextReadAll();
 
       expect(await store.verifyPassword(_oldPassword), isTrue);
       expect(await store.readAccountMnemonic(_accountUuid), _mnemonic);
       expect(regularStorage.valueFor(_mnemonicKey), isNull);
       expect(mnemonicStorage.valueFor(_mnemonicKey), isNotNull);
       expect(regularStorage.valueFor(_migrationCompleteKey), 'true');
-      expect(operations, contains('regular.readAll'));
+      expect(operations, contains('mnemonic.read $_mnemonicKey'));
+      expect(operations, isNot(contains('regular.readAll')));
       expect(operations, isNot(contains('mnemonic.write $_mnemonicKey')));
       expect(operations, isNot(contains('regular.delete $_mnemonicKey')));
     },
@@ -925,10 +932,11 @@ class _MapStorage extends FlutterSecureStorage {
 }
 
 class _FailingMapStorage extends _MapStorage {
-  _FailingMapStorage(super.name);
+  _FailingMapStorage(super.name, {super.operations});
 
   final _failNextWrite = <String>{};
   final _failNextDelete = <String>{};
+  bool _failNextReadAll = false;
 
   void failNextWriteFor(String key) {
     _failNextWrite.add(key);
@@ -936,6 +944,10 @@ class _FailingMapStorage extends _MapStorage {
 
   void failNextDeleteFor(String key) {
     _failNextDelete.add(key);
+  }
+
+  void failNextReadAll() {
+    _failNextReadAll = true;
   }
 
   @override
@@ -987,7 +999,39 @@ class _FailingMapStorage extends _MapStorage {
       wOptions: wOptions,
     );
   }
+
+  @override
+  Future<Map<String, String>> readAll({
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    if (_failNextReadAll) {
+      _failNextReadAll = false;
+      throw StateError('forced map readAll failure');
+    }
+    return super.readAll(
+      iOptions: iOptions,
+      aOptions: aOptions,
+      lOptions: lOptions,
+      webOptions: webOptions,
+      mOptions: mOptions,
+      wOptions: wOptions,
+    );
+  }
 }
+
+const _softwareAccountJson = {
+  'uuid': _accountUuid,
+  'name': 'Account 1',
+  'order': 0,
+  'isHardware': false,
+  'isSeedAnchor': true,
+  'profilePictureId': 'profile-1',
+};
 
 class _BlockingWriteStorage extends FlutterSecureStorage {
   _BlockingWriteStorage({required this.blockKey});

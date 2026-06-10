@@ -22,6 +22,7 @@ const kThemeModeKey = 'zcash_theme_mode';
 const kPrivacyModeEnabledKey = 'zcash_privacy_mode_enabled';
 const kRpcEndpointUrlKey = 'zcash_rpc_endpoint_url';
 const kRpcEndpointPresetKey = 'zcash_rpc_endpoint_preset';
+const _accountsKey = 'zcash_accounts';
 const _secureStoreSaltKey = 'zcash_secure_store_salt';
 const _passwordVerifierKey = 'zcash_password_verifier';
 const _passwordVerifierSaltKey = 'zcash_password_verifier_salt';
@@ -742,6 +743,10 @@ class AppSecureStore {
     if (await readPlain(_accountMnemonicMigrationCompleteKey) == 'true') {
       return _AccountMnemonicMigrationResult.complete;
     }
+    if (await _storedSoftwareMnemonicsAlreadyUseMnemonicStorage()) {
+      await writePlain(_accountMnemonicMigrationCompleteKey, 'true');
+      return _AccountMnemonicMigrationResult.complete;
+    }
 
     final legacyValues = await _runStorageOperation(
       'read legacy secure storage values',
@@ -801,6 +806,35 @@ class AppSecureStore {
       mnemonicsAvailable: mnemonicsAvailable,
       legacyCleanupComplete: legacyCleanupComplete,
     );
+  }
+
+  Future<bool> _storedSoftwareMnemonicsAlreadyUseMnemonicStorage() async {
+    final accountsJson = await readPlain(_accountsKey);
+    if (accountsJson == null || accountsJson.isEmpty) return false;
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(accountsJson);
+    } catch (_) {
+      return false;
+    }
+    if (decoded is! List || decoded.isEmpty) return false;
+
+    for (final account in decoded) {
+      if (account is! Map) return false;
+
+      final uuid = account['uuid'];
+      if (uuid is! String || uuid.isEmpty) return false;
+      if (account['isHardware'] == true) continue;
+
+      final existing = await _runStorageOperation(
+        'read migrated account mnemonic "$uuid"',
+        () => _mnemonicStorage.read(key: _accountMnemonicKey(uuid)),
+      );
+      if (existing == null || existing.isEmpty) return false;
+    }
+
+    return true;
   }
 
   Future<void> _deleteLegacyAccountMnemonicBestEffort(String key) async {

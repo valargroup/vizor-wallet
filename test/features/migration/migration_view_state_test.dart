@@ -82,4 +82,41 @@ void main() {
       );
     },
   );
+
+  test('migration txid matching accepts reversed byte order', () {
+    const broadcastOrder =
+        '24fccdf39b619967ac5904743cb0f4a33b0b4d4b67b84dcee0f4ba0dc2887725';
+    const historyOrder =
+        '257788c20dbaf4e0ce4db8674b4d0b3ba3f4b03c740459ac6799619bf3cdfc24';
+
+    expect(migrationTxidsMatch(historyOrder, broadcastOrder), isTrue);
+  });
+
+  test('migration first transaction index accepts reversed txid order', () {
+    const firstBroadcastTxid =
+        '24fccdf39b619967ac5904743cb0f4a33b0b4d4b67b84dcee0f4ba0dc2887725';
+    const firstHistoryTxid =
+        '257788c20dbaf4e0ce4db8674b4d0b3ba3f4b03c740459ac6799619bf3cdfc24';
+
+    expect(
+      migrationFirstTransactionIndex(
+        transactionTxids: [
+          '617b461a369552df0cda9c1764dadb542e240acc433de17660fc20bc0328bf81',
+          firstHistoryTxid,
+        ],
+        firstTxid: firstBroadcastTxid,
+      ),
+      1,
+    );
+  });
+
+  test('migration txid matching rejects invalid and unrelated txids', () {
+    const txid =
+        '24fccdf39b619967ac5904743cb0f4a33b0b4d4b67b84dcee0f4ba0dc2887725';
+    const unrelated =
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    expect(migrationTxidsMatch(txid, 'not-a-txid'), isFalse);
+    expect(migrationTxidsMatch(txid, unrelated), isFalse);
+  });
 }
