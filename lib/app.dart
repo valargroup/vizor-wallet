@@ -29,6 +29,7 @@ import 'src/features/address_book/screens/address_book_screen.dart';
 import 'src/features/home/screens/home_screen.dart';
 import 'src/features/migration/screens/migration_screen.dart';
 import 'src/features/migration/screens/migration_scan_screen.dart';
+import 'src/features/migration/widgets/migration_close_guard.dart';
 import 'src/features/about/screens/about_screen.dart';
 import 'src/features/onboarding/create/address_types_screen.dart';
 import 'src/features/onboarding/create/intro_zcash_screen.dart';
@@ -786,27 +787,29 @@ class ZcashWalletApp extends ConsumerWidget {
           // events over empty regions while descendant GestureDetectors
           // (buttons, TextFields) win the gesture arena first, keeping
           // focused buttons focused when re-clicked.
-          child: _LinuxUpdateNoticeListener(
-            child: _WindowsUpdateStartupCheck(
-              child: _WindowsUpdatePromptHost(
-                router: router,
-                child: _RpcEndpointFailoverToastListener(
-                  child: _LinuxOpaqueWindowBackground(
-                    child: DesktopWindowTitlebarSafeArea(
-                      child: GestureDetector(
-                        onTap: () {
-                          // Leaf-only: skip when the primary focus is a
-                          // `FocusScopeNode` rather than a concrete `FocusNode`.
-                          // Unfocusing the scope itself strips the scope's
-                          // "most-recently-focused child" memory, which leaves the
-                          // next Tab with no deterministic starting point.
-                          final primary = FocusManager.instance.primaryFocus;
-                          if (primary != null && primary is! FocusScopeNode) {
-                            primary.unfocus();
-                          }
-                        },
-                        behavior: HitTestBehavior.translucent,
-                        child: child!,
+          child: MigrationCloseGuard(
+            child: _LinuxUpdateNoticeListener(
+              child: _WindowsUpdateStartupCheck(
+                child: _WindowsUpdatePromptHost(
+                  router: router,
+                  child: _RpcEndpointFailoverToastListener(
+                    child: _LinuxOpaqueWindowBackground(
+                      child: DesktopWindowTitlebarSafeArea(
+                        child: GestureDetector(
+                          onTap: () {
+                            // Leaf-only: skip when the primary focus is a
+                            // `FocusScopeNode` rather than a concrete `FocusNode`.
+                            // Unfocusing the scope itself strips the scope's
+                            // "most-recently-focused child" memory, which leaves the
+                            // next Tab with no deterministic starting point.
+                            final primary = FocusManager.instance.primaryFocus;
+                            if (primary != null && primary is! FocusScopeNode) {
+                              primary.unfocus();
+                            }
+                          },
+                          behavior: HitTestBehavior.translucent,
+                          child: child!,
+                        ),
                       ),
                     ),
                   ),

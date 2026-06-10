@@ -220,4 +220,40 @@ void main() {
       '1d 2h 3m 4s',
     );
   });
+
+  test('migration close warning uses scheduled and confirming work', () {
+    final now = DateTime.fromMillisecondsSinceEpoch(10_000);
+    final scheduled = _status(
+      phase: 'broadcast_scheduled',
+      scheduledBroadcasts: const [
+        rust_sync.MigrationScheduledBroadcast(
+          txidHex: 'first',
+          scheduledAtMs: 12_000,
+          status: 'scheduled',
+        ),
+        rust_sync.MigrationScheduledBroadcast(
+          txidHex: 'last',
+          scheduledAtMs: 15_000,
+          status: 'scheduled',
+        ),
+      ],
+    );
+
+    expect(migrationShouldWarnBeforeClose(scheduled), isTrue);
+    expect(
+      migrationRemainingScheduledSubmissionTime(scheduled, now),
+      const Duration(seconds: 5),
+    );
+
+    final confirming = _status(
+      phase: 'waiting_migration_confirmations',
+      broadcastedTxCount: 1,
+    );
+    expect(migrationShouldWarnBeforeClose(confirming), isTrue);
+    expect(migrationRemainingScheduledSubmissionTime(confirming, now), isNull);
+
+    final complete = _status(phase: 'complete', confirmedTxCount: 2);
+    expect(migrationShouldWarnBeforeClose(complete), isFalse);
+    expect(migrationRemainingScheduledSubmissionTime(complete, now), isNull);
+  });
 }

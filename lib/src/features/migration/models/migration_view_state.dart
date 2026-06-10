@@ -141,6 +141,30 @@ bool migrationHasBroadcastedUnconfirmedTransactions(
   return (status?.broadcastedTxCount ?? 0) > 0;
 }
 
+bool migrationShouldWarnBeforeClose(rust_sync.MigrationStatus? status) {
+  return migrationHasScheduledPendingBroadcasts(status) ||
+      migrationHasBroadcastedUnconfirmedTransactions(status);
+}
+
+Duration? migrationRemainingScheduledSubmissionTime(
+  rust_sync.MigrationStatus? status,
+  DateTime now,
+) {
+  final scheduledBroadcasts = status?.scheduledBroadcasts.where(
+    (broadcast) => broadcast.status == 'scheduled',
+  );
+  if (scheduledBroadcasts == null || scheduledBroadcasts.isEmpty) return null;
+
+  final latestScheduledAtMs = scheduledBroadcasts
+      .map((broadcast) => broadcast.scheduledAtMs.toInt())
+      .reduce((a, b) => a > b ? a : b);
+  final latestScheduledAt = DateTime.fromMillisecondsSinceEpoch(
+    latestScheduledAtMs,
+  );
+  final remaining = latestScheduledAt.difference(now);
+  return remaining.isNegative ? Duration.zero : remaining;
+}
+
 String migrationCountdownLabel(Duration remaining) {
   if (remaining.inSeconds <= 0) return '0s';
 
