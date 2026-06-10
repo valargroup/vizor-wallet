@@ -1597,15 +1597,14 @@ async fn run_sync_impl(
         // We deliberately re-fetch the chain tip via
         // `get_latest_block` before each pass instead of reusing
         // `tip.height` captured once at the top of `run_sync_impl`.
-        // `get_resubmittable_txs` decides "still inside expiry
-        // window" with `expiry_height > current_height`; using the
-        // stale top-of-sync tip meant a long catch-up session
-        // (several thousand blocks) could keep rebroadcasting txs
-        // whose expiry had already passed against the real chain
-        // tip. Refreshing here is one extra unary gRPC per batch,
+        // `get_resubmittable_txs` decides "still relayable" with
+        // `expiry_height = 0 OR expiry_height > current_height`.
+        // Using the stale top-of-sync tip meant a long catch-up
+        // session (several thousand blocks) could keep rebroadcasting
+        // expiring txs whose expiry had already passed against the real
+        // chain tip. Refreshing here is one extra unary gRPC per batch,
         // which is cheap compared to the batch download itself and
-        // closes the "resubmit expired tx forever" regression
-        // caught by Codex 2nd-round review finding 2.
+        // closes the "resubmit expired tx forever" regression.
         //
         // Pre-flight guard matches the one at the startup resubmit
         // call site — if cancel or mode-change landed during

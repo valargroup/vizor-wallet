@@ -69,7 +69,7 @@ use zcash_client_backend::{
 use zcash_client_sqlite::{wallet::commitment_tree, AccountUuid, ReceivedNoteId};
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_primitives::transaction::{
-    builder::{BuildConfig, Builder, DEFAULT_TX_EXPIRY_DELTA},
+    builder::{BuildConfig, Builder},
     fees::{
         transparent::InputSize as TransparentInputSize, zip317::P2PKH_STANDARD_INPUT_SIZE, FeeRule,
     },
@@ -185,6 +185,7 @@ pub(crate) struct KeystoneSignedMigrationMessage {
 
 const SHIELDING_THRESHOLD_ZATOSHI: u64 = 100_000;
 const MIN_IRONWOOD_MIGRATION_OUTPUT_ZATOSHI: u64 = 1;
+const MIGRATION_NO_EXPIRY_HEIGHT: u32 = 0;
 static ACTIVE_IRONWOOD_MIGRATIONS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static KEYSTONE_DENOMINATION_REQUESTS: OnceLock<Mutex<HashMap<String, StoredDenominationPczt>>> =
     OnceLock::new();
@@ -1843,7 +1844,8 @@ fn create_orchard_to_ironwood_transaction_from_note(
                 orchard_anchor: Some(orchard_anchor),
                 ironwood_anchor: Some(orchard::Anchor::empty_tree()),
             },
-        );
+        )
+        .with_expiry_height(BlockHeight::from(MIGRATION_NO_EXPIRY_HEIGHT));
 
         for (note, merkle_path) in orchard_inputs.iter() {
             builder
@@ -1909,9 +1911,7 @@ fn create_orchard_to_ironwood_transaction_from_note(
         .write(&mut raw_tx)
         .map_err(|e| format!("Serialize exact-note migration TX failed: {e}"))?;
     let target_height_u32: u32 = target_height.into();
-    let expiry_height = target_height_u32
-        .checked_add(DEFAULT_TX_EXPIRY_DELTA)
-        .ok_or("Migration expiry height overflow")?;
+    let expiry_height = u32::from(build_result.transaction().expiry_height());
 
     Ok(Some(CreatedPendingMigrationTx {
         txid_hex: format!("{txid}"),
@@ -2008,7 +2008,8 @@ fn create_orchard_to_ironwood_pczt_from_note(
                 orchard_anchor: Some(orchard_anchor),
                 ironwood_anchor: Some(orchard::Anchor::empty_tree()),
             },
-        );
+        )
+        .with_expiry_height(BlockHeight::from(MIGRATION_NO_EXPIRY_HEIGHT));
 
         for (note, merkle_path) in orchard_inputs.iter() {
             builder
@@ -2054,6 +2055,7 @@ fn create_orchard_to_ironwood_pczt_from_note(
     let build_result = builder
         .build_for_pczt(rand_core::OsRng, &fee_rule)
         .map_err(|e| format!("Build exact-note migration PCZT failed: {e}"))?;
+    let expiry_height = u32::from(build_result.pczt_parts.expiry_height);
     let pczt_bytes = pczt_from_build_result(
         build_result,
         network,
@@ -2063,9 +2065,6 @@ fn create_orchard_to_ironwood_pczt_from_note(
     let pczt_with_proofs = super::pczt::add_proofs_to_pczt(&pczt_bytes, None, None)?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&pczt_bytes)?;
     let target_height_u32: u32 = target_height.into();
-    let expiry_height = target_height_u32
-        .checked_add(DEFAULT_TX_EXPIRY_DELTA)
-        .ok_or("Migration expiry height overflow")?;
 
     Ok(Some(CreatedMigrationPczt {
         id: format!("migration-{migration_index}"),
@@ -2155,7 +2154,8 @@ fn make_orchard_split_builder(
             orchard_anchor: Some(orchard_anchor),
             ironwood_anchor: Some(orchard::Anchor::empty_tree()),
         },
-    );
+    )
+    .with_expiry_height(BlockHeight::from(MIGRATION_NO_EXPIRY_HEIGHT));
 
     for (note, merkle_path) in orchard_inputs {
         builder
@@ -2941,8 +2941,8 @@ pub(crate) struct ResubmitStats {
 ///   * The candidate list comes from
 ///     [`crate::wallet::sync::transactions::get_resubmittable_txs`]
 ///     — the same SQL predicate the SDK uses
-///     (`mined_height IS NULL AND expiry_height > current_tip AND
-///     account_balance_delta < 0`).
+///     (`mined_height IS NULL AND (expiry_height = 0 OR expiry_height
+///     > current_tip) AND account_balance_delta < 0`).
 ///   * Each failed broadcast retries exactly **once**, matching
 ///     `TRANSACTION_RESUBMIT_RETRIES = 1` in the SDK. After that we
 ///     log and move on rather than aborting the whole pass — a
