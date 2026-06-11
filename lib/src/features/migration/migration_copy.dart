@@ -16,9 +16,8 @@ abstract final class MigrationCopy {
   static const stepOneCta = 'Prepare denominations';
   static const stepOneRunning =
       'Creating, signing, and submitting the denomination transaction...';
-  static const stepOneWaiting =
-      'Denomination transaction submitted. The prepared notes need to '
-      'confirm before migration can start.';
+  static String stepOneWaitingConfirmations(int count, int target) =>
+      'Waiting for $target confirmations. Confirmation $count of $target.';
   static String stepOneDone(int count) => '$count prepared notes ready.';
   static const stepOneDoneGeneric = 'Prepared notes ready.';
   static String stepOnePreparedCounts(int prepared, int total) =>

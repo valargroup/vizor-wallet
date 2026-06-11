@@ -1011,6 +1011,8 @@ class MigrationStatus {
   final String? activeRunId;
   final Uint64List targetValuesZatoshi;
   final int preparedNoteCount;
+  final int denominationConfirmationCount;
+  final int denominationConfirmationTarget;
   final int pendingTxCount;
   final int broadcastedTxCount;
   final int confirmedTxCount;
@@ -1027,6 +1029,8 @@ class MigrationStatus {
     this.activeRunId,
     required this.targetValuesZatoshi,
     required this.preparedNoteCount,
+    required this.denominationConfirmationCount,
+    required this.denominationConfirmationTarget,
     required this.pendingTxCount,
     required this.broadcastedTxCount,
     required this.confirmedTxCount,
@@ -1045,6 +1049,8 @@ class MigrationStatus {
       activeRunId.hashCode ^
       targetValuesZatoshi.hashCode ^
       preparedNoteCount.hashCode ^
+      denominationConfirmationCount.hashCode ^
+      denominationConfirmationTarget.hashCode ^
       pendingTxCount.hashCode ^
       broadcastedTxCount.hashCode ^
       confirmedTxCount.hashCode ^
@@ -1065,6 +1071,10 @@ class MigrationStatus {
           activeRunId == other.activeRunId &&
           targetValuesZatoshi == other.targetValuesZatoshi &&
           preparedNoteCount == other.preparedNoteCount &&
+          denominationConfirmationCount ==
+              other.denominationConfirmationCount &&
+          denominationConfirmationTarget ==
+              other.denominationConfirmationTarget &&
           pendingTxCount == other.pendingTxCount &&
           broadcastedTxCount == other.broadcastedTxCount &&
           confirmedTxCount == other.confirmedTxCount &&

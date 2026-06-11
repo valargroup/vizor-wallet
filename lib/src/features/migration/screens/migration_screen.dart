@@ -39,12 +39,19 @@ class MigrationScreen extends ConsumerStatefulWidget {
 }
 
 class _MigrationScreenState extends ConsumerState<MigrationScreen> {
+  static const _keystoneMigrationBatchMaxMessages = 25;
+  static const _keystoneMigrationBatchMaxFragmentLen = 140;
+
   Timer? _progressRefreshTimer;
   Timer? _submissionProgressTimer;
   KeystoneSigningModalPhase? _keystonePhase;
   String? _keystoneError;
   List<String> _keystoneUrParts = const [];
   rust_sync.KeystoneMigrationSigningRequest? _keystoneRequest;
+  List<rust_sync.KeystoneSignedMigrationMessage> _keystoneSignedMessages =
+      const [];
+  int _keystoneChunkIndex = 0;
+  int _keystoneChunkTotal = 0;
   MigrationRunIntent? _keystoneIntent;
 
   @override
@@ -219,13 +226,13 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
                   urParts: _keystoneUrParts,
                   error: _keystoneError,
                   title: _keystoneModalTitle,
-                  subtitle: 'Scan the QR code to sign',
+                  subtitle: _keystoneModalSubtitle,
                   instruction: _keystonePhase == KeystoneSigningModalPhase.ready
-                      ? 'After you scanned, click Get Signature.'
+                      ? _keystoneModalInstruction
                       : null,
                   primaryLabel:
                       _keystonePhase == KeystoneSigningModalPhase.ready
-                      ? 'Get Signature'
+                      ? _keystonePrimaryLabel
                       : null,
                   onPrimary: _keystonePhase == KeystoneSigningModalPhase.ready
                       ? () => unawaited(_getKeystoneMigrationSignature())
@@ -244,11 +251,43 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   }
 
   String get _keystoneModalTitle {
+    final chunkLabel = _keystoneChunkLabel;
     return switch (_keystoneIntent) {
       MigrationRunIntent.preparing => 'Sign split on your Keystone',
+      MigrationRunIntent.migrating when chunkLabel != null =>
+        'Sign migration $chunkLabel',
       MigrationRunIntent.migrating => 'Sign migration on your Keystone',
       _ => 'Sign on your Keystone',
     };
+  }
+
+  String get _keystoneModalSubtitle {
+    final chunkLabel = _keystoneChunkLabel;
+    if (_keystoneIntent == MigrationRunIntent.migrating && chunkLabel != null) {
+      return 'Keystone QR $chunkLabel';
+    }
+    return 'Scan the QR code to sign';
+  }
+
+  String get _keystoneModalInstruction {
+    final chunkLabel = _keystoneChunkLabel;
+    if (_keystoneIntent == MigrationRunIntent.migrating && chunkLabel != null) {
+      return 'After this signature is ready, scan it back into Vizor.';
+    }
+    return 'After you scanned, click Get Signature.';
+  }
+
+  String get _keystonePrimaryLabel {
+    final chunkLabel = _keystoneChunkLabel;
+    if (_keystoneIntent == MigrationRunIntent.migrating && chunkLabel != null) {
+      return 'Get signature $chunkLabel';
+    }
+    return 'Get Signature';
+  }
+
+  String? get _keystoneChunkLabel {
+    if (_keystoneChunkTotal <= 1) return null;
+    return '${_keystoneChunkIndex + 1} of $_keystoneChunkTotal';
   }
 
   Future<void> _advanceMigration(
@@ -270,6 +309,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       _keystoneError = null;
       _keystoneUrParts = const [];
       _keystoneRequest = null;
+      _keystoneSignedMessages = const [];
+      _keystoneChunkIndex = 0;
+      _keystoneChunkTotal = 0;
       _keystoneIntent = intent;
     });
     unawaited(_prepareKeystoneMigration(intent));
@@ -327,28 +369,35 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         syncNotifier.resumeAfterWalletMutation(syncPause);
       }
 
-      final urParts = await rust_keystone.encodeZcashSignBatchUrParts(
-        requestId: request.requestId,
-        messages: request.messages
-            .map(
-              (message) => rust_keystone_wallet.ZcashBatchMessageInput(
-                id: message.id,
-                pcztBytes: message.redactedPczt,
-              ),
-            )
-            .toList(growable: false),
-        maxFragmentLen: BigInt.from(140),
+      final chunkTotal = _keystoneChunkCount(request.messages.length);
+      if (chunkTotal == 0) {
+        throw const _KeystoneMigrationError(
+          'Keystone migration request has no messages.',
+        );
+      }
+      final urParts = await _encodeKeystoneMigrationChunk(request, 0);
+      log(
+        'MigrationScreen: encoded Keystone migration batch '
+        '1/$chunkTotal with ${_keystoneChunkMessages(request, 0).length} '
+        'of ${request.messages.length} messages into ${urParts.length} UR parts',
       );
 
-      if (!mounted) return;
+      if (!mounted || _keystoneIntent != intent || _keystonePhase == null) {
+        return;
+      }
       setState(() {
         _keystonePhase = KeystoneSigningModalPhase.ready;
         _keystoneRequest = request;
+        _keystoneSignedMessages = const [];
+        _keystoneChunkIndex = 0;
+        _keystoneChunkTotal = chunkTotal;
         _keystoneUrParts = urParts;
       });
     } catch (e, st) {
       log('MigrationScreen._prepareKeystoneMigration: ERROR: $e\n$st');
-      if (!mounted) return;
+      if (!mounted || _keystoneIntent != intent || _keystonePhase == null) {
+        return;
+      }
       setState(() {
         _keystonePhase = KeystoneSigningModalPhase.failed;
         _keystoneError = _friendlyKeystoneError(e);
@@ -365,6 +414,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       return;
     }
 
+    final chunkIndex = _keystoneChunkIndex;
     final cbor = await context.push<Uint8List>('/migration/scan');
     if (cbor == null || !mounted) return;
 
@@ -389,14 +439,60 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
           )
           .toList(growable: false);
 
+      final signedForChunk = _validateKeystoneSignedChunk(
+        request: request,
+        chunkIndex: chunkIndex,
+        signedMessages: signedMessages,
+      );
+      final allSignedMessages = [..._keystoneSignedMessages, ...signedForChunk];
+      final nextChunkIndex = chunkIndex + 1;
+      if (nextChunkIndex < _keystoneChunkTotal) {
+        if (!mounted) return;
+        setState(() {
+          _keystonePhase = KeystoneSigningModalPhase.preparing;
+          _keystoneError = null;
+          _keystoneUrParts = const [];
+          _keystoneSignedMessages = allSignedMessages;
+          _keystoneChunkIndex = nextChunkIndex;
+        });
+
+        final nextUrParts = await _encodeKeystoneMigrationChunk(
+          request,
+          nextChunkIndex,
+        );
+        log(
+          'MigrationScreen: encoded Keystone migration batch '
+          '${nextChunkIndex + 1}/$_keystoneChunkTotal with '
+          '${_keystoneChunkMessages(request, nextChunkIndex).length} '
+          'of ${request.messages.length} messages into '
+          '${nextUrParts.length} UR parts',
+        );
+        if (!mounted ||
+            _keystoneRequest?.requestId != request.requestId ||
+            _keystoneIntent != intent ||
+            _keystonePhase == null) {
+          return;
+        }
+        setState(() {
+          _keystonePhase = KeystoneSigningModalPhase.ready;
+          _keystoneUrParts = nextUrParts;
+        });
+        return;
+      }
+
       await _completeKeystoneMigration(
         intent: intent,
         requestId: request.requestId,
-        signedMessages: signedMessages,
+        signedMessages: allSignedMessages,
       );
     } catch (e, st) {
       log('MigrationScreen._getKeystoneMigrationSignature: ERROR: $e\n$st');
-      if (!mounted) return;
+      if (!mounted ||
+          _keystoneRequest?.requestId != request.requestId ||
+          _keystoneIntent != intent ||
+          _keystonePhase == null) {
+        return;
+      }
       setState(() {
         _keystonePhase = KeystoneSigningModalPhase.failed;
         _keystoneError = _friendlyKeystoneError(e);
@@ -496,8 +592,84 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       _keystoneError = null;
       _keystoneUrParts = const [];
       _keystoneRequest = null;
+      _keystoneSignedMessages = const [];
+      _keystoneChunkIndex = 0;
+      _keystoneChunkTotal = 0;
       _keystoneIntent = null;
     });
+  }
+
+  int _keystoneChunkCount(int messageCount) {
+    if (messageCount <= 0) return 0;
+    return ((messageCount - 1) ~/ _keystoneMigrationBatchMaxMessages) + 1;
+  }
+
+  List<rust_sync.KeystoneMigrationMessage> _keystoneChunkMessages(
+    rust_sync.KeystoneMigrationSigningRequest request,
+    int chunkIndex,
+  ) {
+    final start = chunkIndex * _keystoneMigrationBatchMaxMessages;
+    if (start < 0 || start >= request.messages.length) {
+      throw _KeystoneMigrationError(
+        'Keystone migration batch ${chunkIndex + 1} is out of range.',
+      );
+    }
+    final uncappedEnd = start + _keystoneMigrationBatchMaxMessages;
+    final end = uncappedEnd > request.messages.length
+        ? request.messages.length
+        : uncappedEnd;
+    return request.messages.sublist(start, end);
+  }
+
+  Future<List<String>> _encodeKeystoneMigrationChunk(
+    rust_sync.KeystoneMigrationSigningRequest request,
+    int chunkIndex,
+  ) {
+    final messages = _keystoneChunkMessages(request, chunkIndex);
+    return rust_keystone.encodeZcashSignBatchUrParts(
+      requestId: request.requestId,
+      messages: messages
+          .map(
+            (message) => rust_keystone_wallet.ZcashBatchMessageInput(
+              id: message.id,
+              pcztBytes: message.redactedPczt,
+            ),
+          )
+          .toList(growable: false),
+      maxFragmentLen: BigInt.from(_keystoneMigrationBatchMaxFragmentLen),
+    );
+  }
+
+  List<rust_sync.KeystoneSignedMigrationMessage> _validateKeystoneSignedChunk({
+    required rust_sync.KeystoneMigrationSigningRequest request,
+    required int chunkIndex,
+    required List<rust_sync.KeystoneSignedMigrationMessage> signedMessages,
+  }) {
+    final expectedIds = _keystoneChunkMessages(
+      request,
+      chunkIndex,
+    ).map((message) => message.id).toSet();
+    if (signedMessages.length != expectedIds.length) {
+      throw _KeystoneMigrationError(
+        'Keystone returned ${signedMessages.length} signed messages for '
+        '${expectedIds.length} requested messages.',
+      );
+    }
+
+    final seenIds = <String>{};
+    for (final message in signedMessages) {
+      if (!expectedIds.contains(message.id)) {
+        throw _KeystoneMigrationError(
+          'Keystone returned an unexpected signed migration message.',
+        );
+      }
+      if (!seenIds.add(message.id)) {
+        throw _KeystoneMigrationError(
+          'Keystone returned duplicate signed migration message ${message.id}.',
+        );
+      }
+    }
+    return signedMessages;
   }
 
   String? _firstTxid(String txids) {
@@ -567,7 +739,11 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       MigrationStepOneState.waiting => MigrationStepCard(
         stepNumber: 1,
         title: MigrationCopy.stepOneTitle,
-        statusLine: MigrationCopy.stepOneWaiting,
+        showSpinner: true,
+        statusLine: MigrationCopy.stepOneWaitingConfirmations(
+          _boundedConfirmationCount(status),
+          _denominationConfirmationTarget(status),
+        ),
         errorBanner: errorBanner,
         body: [
           if (status != null && status.totalCount > 0)
@@ -602,6 +778,17 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         ),
       ),
     };
+  }
+
+  int _denominationConfirmationTarget(rust_sync.MigrationStatus? status) {
+    final target = status?.denominationConfirmationTarget ?? 3;
+    return target <= 0 ? 3 : target;
+  }
+
+  int _boundedConfirmationCount(rust_sync.MigrationStatus? status) {
+    final target = _denominationConfirmationTarget(status);
+    final count = status?.denominationConfirmationCount ?? 0;
+    return count.clamp(0, target).toInt();
   }
 
   Widget _stepTwoCard(

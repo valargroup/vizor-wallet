@@ -182,6 +182,8 @@ Future<void> runZcashWalletApp() async {
   }
 }
 
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final _routerProvider = Provider<GoRouter>((ref) {
   final bootstrap = ref.watch(appBootstrapProvider);
   final refresh = ref.watch(routerRefreshProvider);
@@ -195,6 +197,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
   log('router: initialized');
 
   return GoRouter(
+    navigatorKey: _rootNavigatorKey,
     initialLocation: bootstrap.initialLocation,
     refreshListenable: refresh,
     redirect: (context, state) {
@@ -788,6 +791,7 @@ class ZcashWalletApp extends ConsumerWidget {
           // (buttons, TextFields) win the gesture arena first, keeping
           // focused buttons focused when re-clicked.
           child: MigrationCloseGuard(
+            navigatorKey: _rootNavigatorKey,
             child: _LinuxUpdateNoticeListener(
               child: _WindowsUpdateStartupCheck(
                 child: _WindowsUpdatePromptHost(

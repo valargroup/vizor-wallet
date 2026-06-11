@@ -968,14 +968,6 @@ pub(crate) fn prepare_orchard_migration_batch_pczt(
     if prepared_notes.is_empty() {
         return Err("Migration run has no prepared denomination notes".to_string());
     }
-    if prepared_notes.len() > crate::wallet::keystone::ZCASH_SIGN_BATCH_MAX_MESSAGES {
-        return Err(format!(
-            "Keystone migration batch has {} messages, above the {} message limit",
-            prepared_notes.len(),
-            crate::wallet::keystone::ZCASH_SIGN_BATCH_MAX_MESSAGES
-        ));
-    }
-
     let mut pending_totals = super::migration::pending_totals_for_run(db_path, &run.run_id)?;
     if pending_totals.total_count > 0
         && super::migration::clear_retriable_pending_txs(db_path, &run)?

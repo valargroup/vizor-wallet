@@ -15,6 +15,8 @@ rust_sync.MigrationStatus _status({
     phase: phase,
     targetValuesZatoshi: Uint64List(0),
     preparedNoteCount: 0,
+    denominationConfirmationCount: 0,
+    denominationConfirmationTarget: 3,
     pendingTxCount: pendingTxCount,
     broadcastedTxCount: broadcastedTxCount,
     confirmedTxCount: confirmedTxCount,

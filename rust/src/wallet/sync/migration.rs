@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rand::{rngs::OsRng, Rng};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use zcash_client_backend::data_api::wallet::ConfirmationsPolicy;
 use zeroize::Zeroizing;
 
 use crate::wallet::db::{open_readonly_conn_with_timeout, open_wallet_raw_conn_with_timeout};
@@ -182,6 +183,8 @@ pub(crate) struct MigrationStatus {
     pub active_run_id: Option<String>,
     pub target_values_zatoshi: Vec<u64>,
     pub prepared_note_count: u32,
+    pub denomination_confirmation_count: u32,
+    pub denomination_confirmation_target: u32,
     pub pending_tx_count: u32,
     pub broadcasted_tx_count: u32,
     pub confirmed_tx_count: u32,
@@ -228,6 +231,8 @@ pub(crate) fn migration_status(
         active_run_id: None,
         target_values_zatoshi: Vec::new(),
         prepared_note_count: 0,
+        denomination_confirmation_count: 0,
+        denomination_confirmation_target: denomination_confirmations_required(),
         pending_tx_count: 0,
         broadcasted_tx_count: 0,
         confirmed_tx_count: 0,
@@ -791,6 +796,18 @@ fn status_for_run(conn: &rusqlite::Connection, run: ActiveRun) -> Result<Migrati
     } else {
         run.phase
     };
+    let denomination_confirmation_target = denomination_confirmations_required();
+    let denomination_confirmation_count = if phase == PHASE_WAITING_DENOM_CONFIRMATIONS {
+        denomination_confirmation_count_for_run(conn, &run.run_id)?
+    } else if prepared_note_count > 0
+        && phase != PHASE_PREPARING_DENOMINATIONS
+        && phase != PHASE_FAILED_TERMINAL
+        && phase != PHASE_ABANDONED
+    {
+        denomination_confirmation_target
+    } else {
+        0
+    };
     let can_abandon = matches!(
         phase.as_str(),
         PHASE_PREPARING_DENOMINATIONS
@@ -805,6 +822,8 @@ fn status_for_run(conn: &rusqlite::Connection, run: ActiveRun) -> Result<Migrati
         active_run_id: Some(run.run_id),
         target_values_zatoshi: run.target_values_zatoshi,
         prepared_note_count,
+        denomination_confirmation_count,
+        denomination_confirmation_target,
         pending_tx_count,
         broadcasted_tx_count,
         confirmed_tx_count,
@@ -922,71 +941,17 @@ fn reconcile_denomination_confirmations(
     if run.phase != PHASE_WAITING_DENOM_CONFIRMATIONS {
         return Ok(());
     }
-    if !table_exists(conn, "transactions")?
-        || !table_exists(conn, "orchard_received_notes")?
-        || !table_exists(conn, PREPARED_NOTES_TABLE)?
-    {
+    let Some(confirmed) = confirmed_prepared_denomination_notes(conn, &run.run_id)? else {
         return Ok(());
-    }
-
-    let mut stmt = conn
-        .prepare_cached(&format!(
-            "SELECT txid_hex, output_index, value_zatoshi, note_version
-             FROM {PREPARED_NOTES_TABLE}
-             WHERE run_id = ?1"
-        ))
-        .map_err(|e| format!("Prepare denomination confirmation query: {e}"))?;
-    let rows = stmt
-        .query_map(params![run.run_id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, u32>(1)?,
-                row.get::<_, u64>(2)?,
-                row.get::<_, u8>(3)?,
-            ))
-        })
-        .map_err(|e| format!("Query denomination confirmation notes: {e}"))?;
-    let notes = rows
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Read denomination confirmation notes: {e}"))?;
-    if notes.is_empty() {
+    };
+    if confirmed.is_empty() {
         return Ok(());
-    }
-
-    let mut confirmed = Vec::with_capacity(notes.len());
-    for (txid_hex, output_index, value_zatoshi, note_version) in notes {
-        let mut spendable_metadata = None;
-        for txid_blob in txid_blob_variants(&txid_hex)? {
-            spendable_metadata = conn
-                .query_row(
-                    "SELECT lower(hex(n.nf)), t.mined_height
-                     FROM orchard_received_notes n
-                     INNER JOIN transactions t ON t.id_tx = n.transaction_id
-                     WHERE t.txid = ?1
-                       AND t.mined_height IS NOT NULL
-                       AND n.action_index = ?2
-                       AND n.value = ?3
-                       AND n.note_version = ?4
-                       AND n.nf IS NOT NULL
-                       AND n.commitment_tree_position IS NOT NULL",
-                    params![txid_blob, output_index, value_zatoshi, note_version],
-                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?)),
-                )
-                .optional()
-                .map_err(|e| format!("Read prepared denomination note confirmation: {e}"))?;
-            if spendable_metadata.is_some() {
-                break;
-            }
-        }
-
-        let Some((nf_hex, mined_height)) = spendable_metadata else {
-            return Ok(());
-        };
-        confirmed.push((txid_hex, output_index, nf_hex, mined_height));
     }
 
     if let Some(max_mined_height) = confirmed.iter().map(|(_, _, _, height)| *height).max() {
-        if !has_orchard_checkpoint_after(conn, max_mined_height)? {
+        if synced_orchard_confirmation_count(conn, max_mined_height)?
+            < denomination_confirmations_required()
+        {
             return Ok(());
         }
     }
@@ -1016,9 +981,104 @@ fn reconcile_denomination_confirmations(
     Ok(())
 }
 
-fn has_orchard_checkpoint_after(conn: &rusqlite::Connection, height: u32) -> Result<bool, String> {
+fn denomination_confirmations_required() -> u32 {
+    ConfirmationsPolicy::default().trusted().get()
+}
+
+fn denomination_confirmation_count_for_run(
+    conn: &rusqlite::Connection,
+    run_id: &str,
+) -> Result<u32, String> {
+    let Some(confirmed) = confirmed_prepared_denomination_notes(conn, run_id)? else {
+        return Ok(0);
+    };
+    if confirmed.is_empty() {
+        return Ok(0);
+    }
+    let max_mined_height = confirmed
+        .iter()
+        .map(|(_, _, _, height)| *height)
+        .max()
+        .unwrap_or(0);
+    synced_orchard_confirmation_count(conn, max_mined_height)
+}
+
+fn confirmed_prepared_denomination_notes(
+    conn: &rusqlite::Connection,
+    run_id: &str,
+) -> Result<Option<Vec<(String, u32, String, u32)>>, String> {
+    if !table_exists(conn, "transactions")?
+        || !table_exists(conn, "orchard_received_notes")?
+        || !table_exists(conn, PREPARED_NOTES_TABLE)?
+    {
+        return Ok(None);
+    }
+
+    let mut stmt = conn
+        .prepare_cached(&format!(
+            "SELECT txid_hex, output_index, value_zatoshi, note_version
+             FROM {PREPARED_NOTES_TABLE}
+             WHERE run_id = ?1"
+        ))
+        .map_err(|e| format!("Prepare denomination confirmation query: {e}"))?;
+    let rows = stmt
+        .query_map(params![run_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, u32>(1)?,
+                row.get::<_, u64>(2)?,
+                row.get::<_, u8>(3)?,
+            ))
+        })
+        .map_err(|e| format!("Query denomination confirmation notes: {e}"))?;
+    let notes = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Read denomination confirmation notes: {e}"))?;
+    if notes.is_empty() {
+        return Ok(Some(Vec::new()));
+    }
+
+    let mut confirmed = Vec::with_capacity(notes.len());
+    for (txid_hex, output_index, value_zatoshi, note_version) in notes {
+        let mut spendable_metadata = None;
+        for txid_blob in txid_blob_variants(&txid_hex)? {
+            spendable_metadata = conn
+                .query_row(
+                    "SELECT lower(hex(n.nf)), t.mined_height
+                     FROM orchard_received_notes n
+                     INNER JOIN transactions t ON t.id_tx = n.transaction_id
+                     WHERE t.txid = ?1
+                       AND t.mined_height IS NOT NULL
+                       AND n.action_index = ?2
+                       AND n.value = ?3
+                       AND n.note_version = ?4
+                       AND n.nf IS NOT NULL
+                       AND n.commitment_tree_position IS NOT NULL",
+                    params![txid_blob, output_index, value_zatoshi, note_version],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?)),
+                )
+                .optional()
+                .map_err(|e| format!("Read prepared denomination note confirmation: {e}"))?;
+            if spendable_metadata.is_some() {
+                break;
+            }
+        }
+
+        let Some((nf_hex, mined_height)) = spendable_metadata else {
+            return Ok(None);
+        };
+        confirmed.push((txid_hex, output_index, nf_hex, mined_height));
+    }
+
+    Ok(Some(confirmed))
+}
+
+fn synced_orchard_confirmation_count(
+    conn: &rusqlite::Connection,
+    height: u32,
+) -> Result<u32, String> {
     if !table_exists(conn, "orchard_tree_checkpoints")? {
-        return Ok(true);
+        return Ok(denomination_confirmations_required());
     }
 
     let latest_checkpoint = conn
@@ -1029,7 +1089,16 @@ fn has_orchard_checkpoint_after(conn: &rusqlite::Connection, height: u32) -> Res
         )
         .map_err(|e| format!("Read latest Orchard checkpoint: {e}"))?;
 
-    Ok(latest_checkpoint.is_some_and(|checkpoint| checkpoint > height))
+    Ok(latest_checkpoint
+        .map(|checkpoint| {
+            if checkpoint < height {
+                0
+            } else {
+                checkpoint - height + 1
+            }
+        })
+        .unwrap_or(0)
+        .min(denomination_confirmations_required()))
 }
 
 fn local_transaction_is_confirmed(
@@ -1448,7 +1517,7 @@ mod tests {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO orchard_tree_checkpoints (checkpoint_id, position) VALUES (21, 0)",
+            "INSERT INTO orchard_tree_checkpoints (checkpoint_id, position) VALUES (22, 0)",
             [],
         )
         .unwrap();
@@ -1477,6 +1546,119 @@ mod tests {
             )
             .unwrap();
         assert_eq!(nullifier_hex, "ab".repeat(32));
+    }
+
+    #[test]
+    fn denomination_reconciliation_waits_for_trusted_confirmations() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        conn.execute(
+            "CREATE TABLE transactions (
+                id_tx INTEGER PRIMARY KEY,
+                txid BLOB NOT NULL,
+                mined_height INTEGER
+             )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "CREATE TABLE orchard_received_notes (
+                transaction_id INTEGER NOT NULL,
+                action_index INTEGER NOT NULL,
+                value INTEGER NOT NULL,
+                note_version INTEGER NOT NULL,
+                nf BLOB,
+                commitment_tree_position INTEGER
+             )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "CREATE TABLE orchard_tree_checkpoints (
+                checkpoint_id INTEGER PRIMARY KEY,
+                position INTEGER
+             )",
+            [],
+        )
+        .unwrap();
+
+        let run_id = "run-1";
+        let txid_hex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        conn.execute(
+            &format!(
+                "INSERT INTO {RUNS_TABLE}
+                 (run_id, account_uuid, network, db_fingerprint, phase,
+                  created_at_ms, updated_at_ms, target_values_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 1, 1, ?6)"
+            ),
+            params![
+                run_id,
+                "account-1",
+                "test",
+                "db",
+                PHASE_WAITING_DENOM_CONFIRMATIONS,
+                "[100000000]",
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            &format!(
+                "INSERT INTO {PREPARED_NOTES_TABLE}
+                 (run_id, txid_hex, output_index, value_zatoshi, note_version,
+                  nullifier_hex, lock_state)
+                 VALUES (?1, ?2, 0, 100000000, 2, NULL, 'locked')"
+            ),
+            params![run_id, txid_hex],
+        )
+        .unwrap();
+
+        let mut txid_blob = hex::decode(txid_hex).unwrap();
+        txid_blob.reverse();
+        let nf = vec![0xabu8; 32];
+        conn.execute(
+            "INSERT INTO transactions (id_tx, txid, mined_height) VALUES (1, ?1, 20)",
+            params![txid_blob],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO orchard_received_notes
+             (transaction_id, action_index, value, note_version, nf, commitment_tree_position)
+             VALUES (1, 0, 100000000, 2, ?1, 0)",
+            params![nf],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO orchard_tree_checkpoints (checkpoint_id, position) VALUES (21, 0)",
+            [],
+        )
+        .unwrap();
+
+        let run = ActiveRun {
+            run_id: run_id.to_string(),
+            phase: PHASE_WAITING_DENOM_CONFIRMATIONS.to_string(),
+            target_values_zatoshi: vec![100_000_000],
+            last_error: None,
+        };
+        reconcile_denomination_confirmations(&conn, &run).unwrap();
+
+        let (phase, nullifier_hex): (String, Option<String>) = conn
+            .query_row(
+                &format!(
+                    "SELECT r.phase, pn.nullifier_hex
+                     FROM {RUNS_TABLE} r
+                     JOIN {PREPARED_NOTES_TABLE} pn ON pn.run_id = r.run_id
+                     WHERE r.run_id = ?1"
+                ),
+                params![run_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(phase, PHASE_WAITING_DENOM_CONFIRMATIONS);
+        assert!(nullifier_hex.is_none());
+
+        let status = status_for_run(&conn, run).unwrap();
+        assert_eq!(status.denomination_confirmation_count, 2);
+        assert_eq!(status.denomination_confirmation_target, 3);
     }
 
     #[test]

@@ -13,9 +13,14 @@ import '../models/migration_view_state.dart';
 import '../providers/orchard_migration_status_provider.dart';
 
 class MigrationCloseGuard extends ConsumerStatefulWidget {
-  const MigrationCloseGuard({required this.child, super.key});
+  const MigrationCloseGuard({
+    required this.child,
+    required this.navigatorKey,
+    super.key,
+  });
 
   final Widget child;
+  final GlobalKey<NavigatorState> navigatorKey;
 
   @override
   ConsumerState<MigrationCloseGuard> createState() =>
@@ -55,24 +60,55 @@ class _MigrationCloseGuardState extends ConsumerState<MigrationCloseGuard>
     if (!mounted) return;
 
     if (!migrationShouldWarnBeforeClose(status)) {
-      await windowManager.destroy();
+      await _closeWindow();
       return;
     }
 
-    _dialogVisible = true;
     final remaining = migrationRemainingScheduledSubmissionTime(
       status,
       DateTime.now(),
     );
-    final shouldClose = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _MigrationCloseWarningDialog(remaining: remaining),
-    );
-    _dialogVisible = false;
+    final dialogContext = _dialogContext();
+    if (dialogContext == null) {
+      debugPrint('MigrationCloseGuard: no navigator context for close warning');
+      await _closeWindow();
+      return;
+    }
+    if (!dialogContext.mounted) return;
+
+    bool shouldClose = false;
+    _dialogVisible = true;
+    try {
+      shouldClose =
+          await showDialog<bool>(
+            context: dialogContext,
+            barrierDismissible: false,
+            builder: (_) => _MigrationCloseWarningDialog(remaining: remaining),
+          ) ??
+          false;
+    } finally {
+      _dialogVisible = false;
+    }
     if (!mounted || shouldClose != true) return;
 
-    await windowManager.destroy();
+    await _closeWindow();
+  }
+
+  BuildContext? _dialogContext() {
+    final navigatorContext = widget.navigatorKey.currentContext;
+    if (navigatorContext != null) return navigatorContext;
+
+    final overlayContext = widget.navigatorKey.currentState?.overlay?.context;
+    if (overlayContext != null) return overlayContext;
+
+    return Navigator.maybeOf(context, rootNavigator: true) == null
+        ? null
+        : context;
+  }
+
+  Future<void> _closeWindow() async {
+    await windowManager.setPreventClose(false);
+    await windowManager.close();
   }
 
   Future<rust_sync.MigrationStatus?> _readMigrationStatus() async {

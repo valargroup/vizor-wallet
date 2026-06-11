@@ -12,9 +12,10 @@ void main() {
 
   test('step copy formatters interpolate counts', () {
     expect(MigrationCopy.stepOneDone(8), '8 prepared notes ready.');
+    expect(MigrationCopy.stepOnePreparedCounts(3, 8), 'Prepared notes: 3 of 8');
     expect(
-      MigrationCopy.stepOnePreparedCounts(3, 8),
-      'Prepared notes: 3 of 8',
+      MigrationCopy.stepOneWaitingConfirmations(2, 3),
+      'Waiting for 3 confirmations. Confirmation 2 of 3.',
     );
     expect(
       MigrationCopy.stepTwoReady(8, 'about one minute'),
