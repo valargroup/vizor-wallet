@@ -650,11 +650,20 @@ pub struct KeystoneMigrationMessage {
 pub struct KeystoneMigrationSigningRequest {
     pub request_id: String,
     pub messages: Vec<KeystoneMigrationMessage>,
+    pub signing_batch_limit: u32,
 }
 
 pub struct KeystoneSignedMigrationMessage {
     pub id: String,
     pub signed_pczt: Vec<u8>,
+}
+
+pub struct KeystoneMigrationProofStatus {
+    pub ready_count: u32,
+    pub total_count: u32,
+    pub is_ready: bool,
+    pub is_failed: bool,
+    pub message: Option<String>,
 }
 
 pub struct MigrationScheduledBroadcast {
@@ -1043,6 +1052,7 @@ pub fn prepare_orchard_migration_denominations_pczt(
         )?;
         Ok(KeystoneMigrationSigningRequest {
             request_id: request.request_id,
+            signing_batch_limit: request.signing_batch_limit,
             messages: request
                 .messages
                 .into_iter()
@@ -1102,6 +1112,7 @@ pub fn prepare_orchard_migration_batch_pczt(
             wallet_sync::prepare_orchard_migration_batch_pczt(&db_path, network, &account_uuid)?;
         Ok(KeystoneMigrationSigningRequest {
             request_id: request.request_id,
+            signing_batch_limit: request.signing_batch_limit,
             messages: request
                 .messages
                 .into_iter()
@@ -1112,6 +1123,25 @@ pub fn prepare_orchard_migration_batch_pczt(
                 .collect(),
         })
     })
+}
+
+pub fn keystone_migration_proof_status(
+    request_id: String,
+) -> Result<KeystoneMigrationProofStatus, String> {
+    catch(|| {
+        let status = wallet_sync::keystone_migration_proof_status(&request_id)?;
+        Ok(KeystoneMigrationProofStatus {
+            ready_count: status.ready_count,
+            total_count: status.total_count,
+            is_ready: status.is_ready,
+            is_failed: status.is_failed,
+            message: status.message,
+        })
+    })
+}
+
+pub fn discard_keystone_migration_request(request_id: String) -> Result<(), String> {
+    catch(|| wallet_sync::discard_keystone_migration_request(&request_id))
 }
 
 pub fn complete_orchard_migration_batch_pczt(

@@ -2,24 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/migration/models/migration_view_state.dart';
 
 void main() {
-  test('hardware account shows softwareRequired', () {
+  test('account with Orchard funds plans denominations', () {
     expect(
       migrationViewState(
-        isHardware: true,
-        rustPhase: 'ready_to_prepare',
-        hasPendingMigration: true,
-        hasCompletedMigration: false,
-        orchardBalance: BigInt.from(1),
-        ironwoodBalance: BigInt.zero,
-      ),
-      MigrationViewState.softwareRequired,
-    );
-  });
-
-  test('software account with Orchard funds plans denominations', () {
-    expect(
-      migrationViewState(
-        isHardware: false,
         rustPhase: null,
         hasPendingMigration: false,
         hasCompletedMigration: false,
@@ -30,10 +15,9 @@ void main() {
     );
   });
 
-  test('software account with a pending migration shows confirmation wait', () {
+  test('account with a pending migration shows confirmation wait', () {
     expect(
       migrationViewState(
-        isHardware: false,
         rustPhase: null,
         hasPendingMigration: true,
         hasCompletedMigration: false,
@@ -44,10 +28,9 @@ void main() {
     );
   });
 
-  test('software account with a mined migration shows complete', () {
+  test('account with a mined migration shows complete', () {
     expect(
       migrationViewState(
-        isHardware: false,
         rustPhase: null,
         hasPendingMigration: false,
         hasCompletedMigration: true,
@@ -58,10 +41,9 @@ void main() {
     );
   });
 
-  test('software account with migrated ironwood balance shows complete', () {
+  test('account with migrated ironwood balance shows complete', () {
     expect(
       migrationViewState(
-        isHardware: false,
         rustPhase: null,
         hasPendingMigration: false,
         hasCompletedMigration: false,
@@ -72,27 +54,22 @@ void main() {
     );
   });
 
-  test(
-    'software account with remaining orchard funds stays idle after completion',
-    () {
-      expect(
-        migrationViewState(
-          isHardware: false,
-          rustPhase: null,
-          hasPendingMigration: false,
-          hasCompletedMigration: true,
-          orchardBalance: BigInt.from(1),
-          ironwoodBalance: BigInt.from(1),
-        ),
-        MigrationViewState.planningDenominations,
-      );
-    },
-  );
-
-  test('software account with no orchard or ironwood funds shows no-op', () {
+  test('account with remaining orchard funds stays idle after completion', () {
     expect(
       migrationViewState(
-        isHardware: false,
+        rustPhase: null,
+        hasPendingMigration: false,
+        hasCompletedMigration: true,
+        orchardBalance: BigInt.from(1),
+        ironwoodBalance: BigInt.from(1),
+      ),
+      MigrationViewState.planningDenominations,
+    );
+  });
+
+  test('account with no orchard or ironwood funds shows no-op', () {
+    expect(
+      migrationViewState(
         rustPhase: null,
         hasPendingMigration: false,
         hasCompletedMigration: false,

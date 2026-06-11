@@ -70,6 +70,7 @@
 //!    cancelled, exception before the consume call, etc.).
 
 use std::convert::Infallible;
+use std::sync::OnceLock;
 
 use zcash_primitives::transaction::{Transaction, TxId};
 use zcash_proofs::prover::LocalTxProver;
@@ -119,6 +120,11 @@ pub(crate) struct ExtractedPcztTransaction {
     pub txid: TxId,
     pub raw_tx: Vec<u8>,
     pub tx: Transaction,
+}
+
+fn orchard_proving_key() -> &'static orchard::circuit::ProvingKey {
+    static ORCHARD_PROVING_KEY: OnceLock<orchard::circuit::ProvingKey> = OnceLock::new();
+    ORCHARD_PROVING_KEY.get_or_init(orchard::circuit::ProvingKey::build)
 }
 
 /// Create a PCZT from a stored proposal (for hardware wallet signing).
@@ -197,14 +203,14 @@ pub fn add_proofs_to_pczt(
 
     if prover.requires_orchard_proof() {
         prover = prover
-            .create_orchard_proof(&orchard::circuit::ProvingKey::build())
+            .create_orchard_proof(orchard_proving_key())
             .map_err(|e| format!("Orchard proof: {e:?}"))?;
     }
 
     #[cfg(zcash_unstable = "nu7")]
     if prover.requires_ironwood_proof() {
         prover = prover
-            .create_ironwood_proof(&orchard::circuit::ProvingKey::build())
+            .create_ironwood_proof(orchard_proving_key())
             .map_err(|e| format!("Ironwood proof: {e:?}"))?;
     }
 
