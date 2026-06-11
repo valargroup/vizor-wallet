@@ -207,6 +207,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   KeystoneMigrationMessage dco_decode_keystone_migration_message(dynamic raw);
 
   @protected
+  KeystoneMigrationProofStatus dco_decode_keystone_migration_proof_status(
+    dynamic raw,
+  );
+
+  @protected
   KeystoneMigrationSigningRequest dco_decode_keystone_migration_signing_request(
     dynamic raw,
   );
@@ -804,6 +809,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   KeystoneMigrationMessage sse_decode_keystone_migration_message(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  KeystoneMigrationProofStatus sse_decode_keystone_migration_proof_status(
     SseDeserializer deserializer,
   );
 
@@ -1532,6 +1542,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_keystone_migration_message(
     KeystoneMigrationMessage self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_keystone_migration_proof_status(
+    KeystoneMigrationProofStatus self,
     SseSerializer serializer,
   );
 

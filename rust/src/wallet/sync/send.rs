@@ -38,6 +38,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 use std::sync::{Mutex, OnceLock};
+use std::thread;
+use std::time::Instant;
 
 use rand::{rngs::OsRng, Rng};
 use secrecy::{ExposeSecret, SecretVec};
@@ -85,6 +87,7 @@ use zcash_protocol::{
 
 use crate::wallet::db::with_wallet_db_write_lock;
 use crate::wallet::keys::parse_account_uuid;
+use crate::wallet::keystone::ZCASH_SIGN_BATCH_MAX_MESSAGES;
 use crate::wallet::network::WalletNetwork;
 
 use super::{
@@ -176,11 +179,20 @@ pub(crate) struct KeystoneMigrationMessage {
 pub(crate) struct KeystoneMigrationSigningRequest {
     pub request_id: String,
     pub messages: Vec<KeystoneMigrationMessage>,
+    pub signing_batch_limit: u32,
 }
 
 pub(crate) struct KeystoneSignedMigrationMessage {
     pub id: String,
     pub signed_pczt: Vec<u8>,
+}
+
+pub(crate) struct KeystoneMigrationProofStatus {
+    pub ready_count: u32,
+    pub total_count: u32,
+    pub is_ready: bool,
+    pub is_failed: bool,
+    pub message: Option<String>,
 }
 
 const SHIELDING_THRESHOLD_ZATOSHI: u64 = 100_000;
@@ -849,6 +861,12 @@ pub(crate) fn prepare_orchard_migration_denominations_pczt(
     if super::migration::active_migration_run(db_path, account_uuid, network)?.is_some() {
         return Err("Migration already has an active run. Start migration next.".to_string());
     }
+    {
+        let mut request_store = keystone_denomination_requests()
+            .lock()
+            .map_err(|e| format!("Lock Keystone denomination request store: {e}"))?;
+        ensure_no_live_denomination_request(&mut request_store, account_uuid, network)?;
+    }
 
     let split = with_wallet_db_write_lock("send.migration.prepare_denominations_pczt", || {
         create_orchard_denomination_split_pczt(db_path, network, account_uuid)
@@ -862,28 +880,36 @@ pub(crate) fn prepare_orchard_migration_denominations_pczt(
 
     let request_id = new_keystone_migration_request_id("denominations");
     let message_id = "denominations".to_string();
-    keystone_denomination_requests()
+    let worker_base_pczt = split.base_pczt.clone();
+    let messages = vec![KeystoneMigrationMessage {
+        id: message_id,
+        redacted_pczt: split.redacted_pczt,
+    }];
+    validate_keystone_migration_messages(&messages)?;
+    let mut request_store = keystone_denomination_requests()
         .lock()
-        .map_err(|e| format!("Lock Keystone denomination request store: {e}"))?
-        .insert(
-            request_id.clone(),
-            StoredDenominationPczt {
-                account_uuid: account_uuid.to_string(),
-                network,
-                pczt_with_proofs: split.pczt_with_proofs,
-                fee_zatoshi: split.fee_zatoshi,
-                migrated_outputs: split.migrated_outputs,
-                total_migratable_zatoshi: split.total_migratable_zatoshi,
-                plan: split.plan,
-            },
-        );
+        .map_err(|e| format!("Lock Keystone denomination request store: {e}"))?;
+    request_store.insert(
+        request_id.clone(),
+        StoredDenominationPczt {
+            account_uuid: account_uuid.to_string(),
+            network,
+            state: KeystoneMigrationRequestState::Proofing,
+            pczt_with_proofs: None,
+            proof_error: None,
+            fee_zatoshi: split.fee_zatoshi,
+            migrated_outputs: split.migrated_outputs,
+            total_migratable_zatoshi: split.total_migratable_zatoshi,
+            plan: split.plan,
+        },
+    );
+    drop(request_store);
+    spawn_denomination_proof_worker(request_id.clone(), worker_base_pczt);
 
     Ok(KeystoneMigrationSigningRequest {
         request_id,
-        messages: vec![KeystoneMigrationMessage {
-            id: message_id,
-            redacted_pczt: split.redacted_pczt,
-        }],
+        messages,
+        signing_batch_limit: ZCASH_SIGN_BATCH_MAX_MESSAGES as u32,
     })
 }
 
@@ -896,17 +922,6 @@ pub(crate) async fn complete_orchard_migration_denominations_pczt(
     signed_messages: Vec<KeystoneSignedMigrationMessage>,
 ) -> Result<IronwoodMigrationResult, String> {
     let _migration_guard = ActiveIronwoodMigration::acquire(db_path, account_uuid)?;
-    let stored = keystone_denomination_requests()
-        .lock()
-        .map_err(|e| format!("Lock Keystone denomination request store: {e}"))?
-        .remove(request_id)
-        .ok_or_else(|| {
-            format!("Keystone denomination request {request_id} was not found or was already used")
-        })?;
-
-    if stored.account_uuid != account_uuid || stored.network != network {
-        return Err("Signed denomination request does not match the active account".to_string());
-    }
     let signed_by_id = signed_migration_messages_by_id(request_id, signed_messages)?;
     let signed_pczt = signed_by_id
         .get("denominations")
@@ -914,8 +929,55 @@ pub(crate) async fn complete_orchard_migration_denominations_pczt(
     if signed_by_id.len() != 1 {
         return Err("Keystone denomination result contained unexpected messages".to_string());
     }
+    if super::migration::active_migration_run(db_path, account_uuid, network)?.is_some() {
+        return Err(
+            "Migration already has an active run. Reject this Keystone request.".to_string(),
+        );
+    }
 
-    let result = super::pczt::extract_and_broadcast_pczt(
+    let stored = {
+        let mut store = keystone_denomination_requests()
+            .lock()
+            .map_err(|e| format!("Lock Keystone denomination request store: {e}"))?;
+        let stored = store.get_mut(request_id).ok_or_else(|| {
+            format!("Keystone denomination request {request_id} was not found or was already used")
+        })?;
+        if stored.account_uuid != account_uuid || stored.network != network {
+            return Err(
+                "Signed denomination request does not match the active account".to_string(),
+            );
+        }
+        match stored.state {
+            KeystoneMigrationRequestState::Proofing => {
+                return Err(
+                    "Vizor is still finishing migration proofs. Try again shortly.".to_string(),
+                );
+            }
+            KeystoneMigrationRequestState::ProofFailed => {
+                return Err(stored.proof_error.clone().unwrap_or_else(|| {
+                    "Vizor proof generation failed. Reject and prepare a new request.".to_string()
+                }));
+            }
+            KeystoneMigrationRequestState::Completing => {
+                return Err("Keystone denomination request is already completing".to_string());
+            }
+            KeystoneMigrationRequestState::ProofReady => {}
+        }
+        let pczt_with_proofs = stored
+            .pczt_with_proofs
+            .clone()
+            .ok_or("Keystone denomination proofs are not ready")?;
+        stored.state = KeystoneMigrationRequestState::Completing;
+        StoredDenominationCompletion {
+            pczt_with_proofs,
+            fee_zatoshi: stored.fee_zatoshi,
+            migrated_outputs: stored.migrated_outputs.clone(),
+            total_migratable_zatoshi: stored.total_migratable_zatoshi,
+            plan: stored.plan.clone(),
+        }
+    };
+
+    let result = match super::pczt::extract_and_broadcast_pczt(
         db_path,
         lightwalletd_url,
         network,
@@ -924,13 +986,19 @@ pub(crate) async fn complete_orchard_migration_denominations_pczt(
         None,
         None,
     )
-    .await?;
+    .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            reset_denomination_request_after_failed_completion(request_id);
+            return Err(e);
+        }
+    };
 
     let txid = result.txid.clone();
-    let run_id = super::migration::create_run(db_path, account_uuid, network, &stored.plan)?;
     let prepared_refs = stored
         .migrated_outputs
-        .into_iter()
+        .iter()
         .map(|output| super::migration::PreparedOrchardNoteRef {
             txid_hex: txid.clone(),
             output_index: output.output_index,
@@ -939,8 +1007,22 @@ pub(crate) async fn complete_orchard_migration_denominations_pczt(
             nullifier_hex: None,
         })
         .collect::<Vec<_>>();
-    super::migration::insert_prepared_notes(db_path, &run_id, &prepared_refs, true)?;
-    super::migration::mark_prep_broadcast(db_path, &run_id, &txid)?;
+
+    let finalize_result = (|| -> Result<(), String> {
+        let run_id = super::migration::create_run(db_path, account_uuid, network, &stored.plan)?;
+        super::migration::insert_prepared_notes(db_path, &run_id, &prepared_refs, true)?;
+        super::migration::mark_prep_broadcast(db_path, &run_id, &txid)
+    })();
+    match finalize_result {
+        Ok(()) => {}
+        Err(e) => {
+            fail_denomination_request_after_post_broadcast_error(request_id, &e);
+            return Err(e);
+        }
+    };
+    if let Ok(mut store) = keystone_denomination_requests().lock() {
+        store.remove(request_id);
+    }
 
     Ok(IronwoodMigrationResult {
         txids: txid,
@@ -976,6 +1058,12 @@ pub(crate) fn prepare_orchard_migration_batch_pczt(
     }
     if pending_totals.total_count > 0 {
         return Err("Migration transactions are already signed and scheduled".to_string());
+    }
+    {
+        let mut request_store = keystone_migration_requests()
+            .lock()
+            .map_err(|e| format!("Lock Keystone migration request store: {e}"))?;
+        ensure_no_live_migration_request(&mut request_store, account_uuid, network, &run.run_id)?;
     }
 
     let mut created = Vec::with_capacity(prepared_notes.len());
@@ -1017,24 +1105,34 @@ pub(crate) fn prepare_orchard_migration_batch_pczt(
             redacted_pczt: message.redacted_pczt.clone(),
         })
         .collect::<Vec<_>>();
-    keystone_migration_requests()
+    validate_keystone_migration_messages(&messages)?;
+    let proof_worker_messages = created
+        .iter()
+        .map(|message| (message.id.clone(), message.base_pczt.clone()))
+        .collect::<Vec<_>>();
+    let mut request_store = keystone_migration_requests()
         .lock()
-        .map_err(|e| format!("Lock Keystone migration request store: {e}"))?
-        .insert(
-            request_id.clone(),
-            StoredMigrationPcztBatch {
-                account_uuid: account_uuid.to_string(),
-                network,
-                run_id: run.run_id,
-                fallback_total_count: run.target_values_zatoshi.len() as u32,
-                fallback_migrated_zatoshi: run.target_values_zatoshi.iter().sum(),
-                messages: created,
-            },
-        );
+        .map_err(|e| format!("Lock Keystone migration request store: {e}"))?;
+    request_store.insert(
+        request_id.clone(),
+        StoredMigrationPcztBatch {
+            account_uuid: account_uuid.to_string(),
+            network,
+            run_id: run.run_id,
+            fallback_total_count: run.target_values_zatoshi.len() as u32,
+            fallback_migrated_zatoshi: run.target_values_zatoshi.iter().sum(),
+            state: KeystoneMigrationRequestState::Proofing,
+            proof_error: None,
+            messages: created,
+        },
+    );
+    drop(request_store);
+    spawn_migration_proof_worker(request_id.clone(), proof_worker_messages);
 
     Ok(KeystoneMigrationSigningRequest {
         request_id,
         messages,
+        signing_batch_limit: ZCASH_SIGN_BATCH_MAX_MESSAGES as u32,
     })
 }
 
@@ -1048,61 +1146,124 @@ pub(crate) fn complete_orchard_migration_batch_pczt(
     pending_salt_base64: &str,
 ) -> Result<IronwoodMigrationResult, String> {
     let _migration_guard = ActiveIronwoodMigration::acquire(db_path, account_uuid)?;
-    let stored = keystone_migration_requests()
-        .lock()
-        .map_err(|e| format!("Lock Keystone migration request store: {e}"))?
-        .remove(request_id)
-        .ok_or_else(|| {
+    let signed_by_id = signed_migration_messages_by_id(request_id, signed_messages)?;
+    let stored = {
+        let mut store = keystone_migration_requests()
+            .lock()
+            .map_err(|e| format!("Lock Keystone migration request store: {e}"))?;
+        let stored = store.get_mut(request_id).ok_or_else(|| {
             format!("Keystone migration request {request_id} was not found or was already used")
         })?;
+        if stored.account_uuid != account_uuid || stored.network != network {
+            return Err("Signed migration request does not match the active account".to_string());
+        }
+        if signed_by_id.len() != stored.messages.len() {
+            return Err(format!(
+                "Keystone returned {} signed messages for {} requested messages",
+                signed_by_id.len(),
+                stored.messages.len()
+            ));
+        }
+        match stored.state {
+            KeystoneMigrationRequestState::Proofing => {
+                return Err(
+                    "Vizor is still finishing migration proofs. Try again shortly.".to_string(),
+                );
+            }
+            KeystoneMigrationRequestState::ProofFailed => {
+                return Err(stored.proof_error.clone().unwrap_or_else(|| {
+                    "Vizor proof generation failed. Reject and prepare a new request.".to_string()
+                }));
+            }
+            KeystoneMigrationRequestState::Completing => {
+                return Err("Keystone migration request is already completing".to_string());
+            }
+            KeystoneMigrationRequestState::ProofReady => {}
+        }
+        if stored
+            .messages
+            .iter()
+            .any(|message| message.pczt_with_proofs.is_none())
+        {
+            return Err("Keystone migration proofs are not ready".to_string());
+        }
+        stored.state = KeystoneMigrationRequestState::Completing;
+        StoredMigrationBatchCompletion {
+            run_id: stored.run_id.clone(),
+            fallback_total_count: stored.fallback_total_count,
+            fallback_migrated_zatoshi: stored.fallback_migrated_zatoshi,
+            messages: stored.messages.clone(),
+        }
+    };
 
-    if stored.account_uuid != account_uuid || stored.network != network {
-        return Err("Signed migration request does not match the active account".to_string());
+    let run = super::migration::active_migration_run(db_path, account_uuid, network)?
+        .ok_or("No active migration run")?;
+    if run.run_id != stored.run_id {
+        reset_migration_request_after_failed_completion(request_id);
+        return Err("Signed migration request is for an old migration run".to_string());
     }
-    let signed_by_id = signed_migration_messages_by_id(request_id, signed_messages)?;
-    if signed_by_id.len() != stored.messages.len() {
-        return Err(format!(
-            "Keystone returned {} signed messages for {} requested messages",
-            signed_by_id.len(),
-            stored.messages.len()
-        ));
+    let current_prepared = super::migration::prepared_notes_for_run(db_path, &run.run_id)?;
+    let request_prepared = stored
+        .messages
+        .iter()
+        .map(|message| message.selected_note.clone())
+        .collect::<Vec<_>>();
+    if current_prepared != request_prepared {
+        reset_migration_request_after_failed_completion(request_id);
+        return Err("Prepared migration notes changed before completion".to_string());
+    }
+    if super::migration::pending_totals_for_run(db_path, &run.run_id)?.total_count > 0 {
+        reset_migration_request_after_failed_completion(request_id);
+        return Err("Migration transactions are already signed and scheduled".to_string());
     }
 
-    let mut pending_inserts = Vec::with_capacity(stored.messages.len());
-    for message in stored.messages {
-        let signed_pczt = signed_by_id
-            .get(&message.id)
-            .ok_or_else(|| format!("Keystone result missing {}", message.id))?;
-        let extracted = super::pczt::extract_transaction_from_pczt(
-            &message.pczt_with_proofs,
-            signed_pczt,
-            None,
-            None,
+    let completion_result = (|| -> Result<super::migration::PendingMigrationTotals, String> {
+        let mut pending_inserts = Vec::with_capacity(stored.messages.len());
+        for message in stored.messages.clone() {
+            let signed_pczt = signed_by_id
+                .get(&message.id)
+                .ok_or_else(|| format!("Keystone result missing {}", message.id))?;
+            let extracted = super::pczt::extract_transaction_from_pczt(
+                message
+                    .pczt_with_proofs
+                    .as_ref()
+                    .ok_or("Keystone migration proof missing")?,
+                signed_pczt,
+                None,
+                None,
+            )?;
+            pending_inserts.push(super::migration::PendingMigrationTxInsert {
+                txid_hex: extracted.txid.to_string(),
+                raw_tx: extracted.raw_tx,
+                target_height: message.target_height,
+                expiry_height: message.expiry_height,
+                value_zatoshi: message.migrated_zatoshi,
+                fee_zatoshi: message.fee_zatoshi,
+                selected_note: message.selected_note.clone(),
+                metadata: super::migration::PendingMigrationTxMetadata {
+                    tx_kind: "migration".to_string(),
+                    funding_account_uuid: account_uuid.to_string(),
+                    selected_note: message.selected_note,
+                },
+            });
+        }
+
+        super::migration::insert_pending_txs(
+            db_path,
+            &stored.run_id,
+            pending_inserts,
+            pending_password,
+            pending_salt_base64,
         )?;
-        pending_inserts.push(super::migration::PendingMigrationTxInsert {
-            txid_hex: extracted.txid.to_string(),
-            raw_tx: extracted.raw_tx,
-            target_height: message.target_height,
-            expiry_height: message.expiry_height,
-            value_zatoshi: message.migrated_zatoshi,
-            fee_zatoshi: message.fee_zatoshi,
-            selected_note: message.selected_note.clone(),
-            metadata: super::migration::PendingMigrationTxMetadata {
-                tx_kind: "migration".to_string(),
-                funding_account_uuid: account_uuid.to_string(),
-                selected_note: message.selected_note,
-            },
-        });
+        super::migration::pending_totals_for_run(db_path, &stored.run_id)
+    })();
+    if completion_result.is_err() {
+        reset_migration_request_after_failed_completion(request_id);
     }
-
-    super::migration::insert_pending_txs(
-        db_path,
-        &stored.run_id,
-        pending_inserts,
-        pending_password,
-        pending_salt_base64,
-    )?;
-    let totals = super::migration::pending_totals_for_run(db_path, &stored.run_id)?;
+    let totals = completion_result?;
+    if let Ok(mut store) = keystone_migration_requests().lock() {
+        store.remove(request_id);
+    }
     Ok(migration_result_from_pending_totals(
         totals,
         super::migration::PHASE_BROADCAST_SCHEDULED,
@@ -1278,13 +1439,22 @@ struct CreatedPendingMigrationTx {
     selected_note: super::migration::PreparedOrchardNoteRef,
 }
 
+#[derive(Clone)]
 struct DenominationOutputTemplate {
     output_index: u32,
     value_zatoshi: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KeystoneMigrationRequestState {
+    Proofing,
+    ProofReady,
+    ProofFailed,
+    Completing,
+}
+
 struct CreatedDenominationSplitPczt {
-    pczt_with_proofs: Vec<u8>,
+    base_pczt: Vec<u8>,
     redacted_pczt: Vec<u8>,
     fee_zatoshi: u64,
     migrated_outputs: Vec<DenominationOutputTemplate>,
@@ -1295,6 +1465,16 @@ struct CreatedDenominationSplitPczt {
 struct StoredDenominationPczt {
     account_uuid: String,
     network: WalletNetwork,
+    state: KeystoneMigrationRequestState,
+    pczt_with_proofs: Option<Vec<u8>>,
+    proof_error: Option<String>,
+    fee_zatoshi: u64,
+    migrated_outputs: Vec<DenominationOutputTemplate>,
+    total_migratable_zatoshi: u64,
+    plan: super::migration::DenominationPlan,
+}
+
+struct StoredDenominationCompletion {
     pczt_with_proofs: Vec<u8>,
     fee_zatoshi: u64,
     migrated_outputs: Vec<DenominationOutputTemplate>,
@@ -1302,9 +1482,11 @@ struct StoredDenominationPczt {
     plan: super::migration::DenominationPlan,
 }
 
+#[derive(Clone)]
 struct CreatedMigrationPczt {
     id: String,
-    pczt_with_proofs: Vec<u8>,
+    base_pczt: Vec<u8>,
+    pczt_with_proofs: Option<Vec<u8>>,
     redacted_pczt: Vec<u8>,
     target_height: u32,
     expiry_height: u32,
@@ -1316,6 +1498,15 @@ struct CreatedMigrationPczt {
 struct StoredMigrationPcztBatch {
     account_uuid: String,
     network: WalletNetwork,
+    run_id: String,
+    fallback_total_count: u32,
+    fallback_migrated_zatoshi: u64,
+    state: KeystoneMigrationRequestState,
+    proof_error: Option<String>,
+    messages: Vec<CreatedMigrationPczt>,
+}
+
+struct StoredMigrationBatchCompletion {
     run_id: String,
     fallback_total_count: u32,
     fallback_migrated_zatoshi: u64,
@@ -1333,6 +1524,359 @@ fn keystone_denomination_requests() -> &'static Mutex<HashMap<String, StoredDeno
 
 fn keystone_migration_requests() -> &'static Mutex<HashMap<String, StoredMigrationPcztBatch>> {
     KEYSTONE_MIGRATION_REQUESTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn prune_failed_denomination_requests(
+    store: &mut HashMap<String, StoredDenominationPczt>,
+    account_uuid: &str,
+    network: WalletNetwork,
+) {
+    store.retain(|_, stored| {
+        !(stored.account_uuid == account_uuid
+            && stored.network == network
+            && stored.state == KeystoneMigrationRequestState::ProofFailed)
+    });
+}
+
+fn ensure_no_live_denomination_request(
+    store: &mut HashMap<String, StoredDenominationPczt>,
+    account_uuid: &str,
+    network: WalletNetwork,
+) -> Result<(), String> {
+    prune_failed_denomination_requests(store, account_uuid, network);
+    if store
+        .values()
+        .any(|stored| stored.account_uuid == account_uuid && stored.network == network)
+    {
+        return Err(
+            "A Keystone denomination request is already in progress. Reject it before preparing a new one."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn prune_failed_migration_requests(
+    store: &mut HashMap<String, StoredMigrationPcztBatch>,
+    account_uuid: &str,
+    network: WalletNetwork,
+    run_id: &str,
+) {
+    store.retain(|_, stored| {
+        !(stored.account_uuid == account_uuid
+            && stored.network == network
+            && stored.run_id == run_id
+            && stored.state == KeystoneMigrationRequestState::ProofFailed)
+    });
+}
+
+fn ensure_no_live_migration_request(
+    store: &mut HashMap<String, StoredMigrationPcztBatch>,
+    account_uuid: &str,
+    network: WalletNetwork,
+    run_id: &str,
+) -> Result<(), String> {
+    prune_failed_migration_requests(store, account_uuid, network, run_id);
+    if store.values().any(|stored| {
+        stored.account_uuid == account_uuid && stored.network == network && stored.run_id == run_id
+    }) {
+        return Err(
+            "A Keystone migration request is already in progress. Reject it before preparing a new one."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_keystone_migration_messages(
+    messages: &[KeystoneMigrationMessage],
+) -> Result<(), String> {
+    if messages.is_empty() {
+        return Err("Keystone migration request has no messages".to_string());
+    }
+    let mut ids = HashSet::with_capacity(messages.len());
+    let mut payloads = HashSet::with_capacity(messages.len());
+    for message in messages {
+        if message.id.is_empty() {
+            return Err("Keystone migration message id is empty".to_string());
+        }
+        if message.redacted_pczt.is_empty() {
+            return Err(format!(
+                "Keystone migration message {} has an empty PCZT payload",
+                message.id
+            ));
+        }
+        if !ids.insert(message.id.as_bytes().to_vec()) {
+            return Err(format!(
+                "Duplicate Keystone migration message id {}",
+                message.id
+            ));
+        }
+        if !payloads.insert(message.redacted_pczt.clone()) {
+            return Err("Duplicate Keystone migration PCZT payload".to_string());
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn keystone_migration_proof_status(
+    request_id: &str,
+) -> Result<KeystoneMigrationProofStatus, String> {
+    if let Some(status) = keystone_denomination_requests()
+        .lock()
+        .map_err(|e| format!("Lock Keystone denomination request store: {e}"))?
+        .get(request_id)
+        .map(|stored| {
+            proof_status_from_counts(
+                if stored.pczt_with_proofs.is_some() {
+                    1
+                } else {
+                    0
+                },
+                1,
+                stored.state,
+                stored.proof_error.clone(),
+            )
+        })
+    {
+        return Ok(status);
+    }
+
+    keystone_migration_requests()
+        .lock()
+        .map_err(|e| format!("Lock Keystone migration request store: {e}"))?
+        .get(request_id)
+        .map(|stored| {
+            let ready_count = stored
+                .messages
+                .iter()
+                .filter(|message| message.pczt_with_proofs.is_some())
+                .count();
+            proof_status_from_counts(
+                ready_count,
+                stored.messages.len(),
+                stored.state,
+                stored.proof_error.clone(),
+            )
+        })
+        .ok_or_else(|| format!("Keystone migration request {request_id} was not found"))
+}
+
+pub(crate) fn discard_keystone_migration_request(request_id: &str) -> Result<(), String> {
+    {
+        let mut store = keystone_denomination_requests()
+            .lock()
+            .map_err(|e| format!("Lock Keystone denomination request store: {e}"))?;
+        if store
+            .get(request_id)
+            .is_some_and(|stored| stored.state == KeystoneMigrationRequestState::Completing)
+        {
+            return Ok(());
+        }
+        if store.remove(request_id).is_some() {
+            return Ok(());
+        }
+    }
+
+    let mut store = keystone_migration_requests()
+        .lock()
+        .map_err(|e| format!("Lock Keystone migration request store: {e}"))?;
+    if store
+        .get(request_id)
+        .is_some_and(|stored| stored.state == KeystoneMigrationRequestState::Completing)
+    {
+        return Ok(());
+    }
+    store.remove(request_id);
+    Ok(())
+}
+
+fn proof_status_from_counts(
+    ready_count: usize,
+    total_count: usize,
+    state: KeystoneMigrationRequestState,
+    message: Option<String>,
+) -> KeystoneMigrationProofStatus {
+    KeystoneMigrationProofStatus {
+        ready_count: ready_count as u32,
+        total_count: total_count as u32,
+        is_ready: state == KeystoneMigrationRequestState::ProofReady,
+        is_failed: state == KeystoneMigrationRequestState::ProofFailed,
+        message,
+    }
+}
+
+fn spawn_denomination_proof_worker(request_id: String, base_pczt: Vec<u8>) {
+    let builder = thread::Builder::new().name("keystone-denomination-proof".to_string());
+    let worker_request_id = request_id.clone();
+    if let Err(e) = builder.spawn(move || {
+        let started = Instant::now();
+        log::info!("migration proofs: denomination proof started");
+        let result = super::pczt::add_proofs_to_pczt(&base_pczt, None, None);
+        let elapsed = started.elapsed();
+        let mut store = match keystone_denomination_requests().lock() {
+            Ok(store) => store,
+            Err(e) => {
+                log::error!("migration proofs: denomination store lock failed: {e}");
+                return;
+            }
+        };
+        let Some(stored) = store.get_mut(&worker_request_id) else {
+            log::info!("migration proofs: denomination request was discarded");
+            return;
+        };
+        if stored.state == KeystoneMigrationRequestState::Completing {
+            return;
+        }
+        match result {
+            Ok(pczt_with_proofs) => {
+                stored.pczt_with_proofs = Some(pczt_with_proofs);
+                stored.state = KeystoneMigrationRequestState::ProofReady;
+                log::info!(
+                    "migration proofs: denomination proof ready in {}ms",
+                    elapsed.as_millis()
+                );
+            }
+            Err(e) => {
+                stored.proof_error = Some(e);
+                stored.state = KeystoneMigrationRequestState::ProofFailed;
+                log::warn!(
+                    "migration proofs: denomination proof failed after {}ms",
+                    elapsed.as_millis()
+                );
+            }
+        }
+    }) {
+        log::error!("migration proofs: failed to start denomination proof worker: {e}");
+        if let Ok(mut store) = keystone_denomination_requests().lock() {
+            if let Some(stored) = store.get_mut(&request_id) {
+                stored.state = KeystoneMigrationRequestState::ProofFailed;
+                stored.proof_error = Some(format!("Start proof worker: {e}"));
+            }
+        }
+    }
+}
+
+fn spawn_migration_proof_worker(request_id: String, messages: Vec<(String, Vec<u8>)>) {
+    let builder = thread::Builder::new().name("keystone-migration-proofs".to_string());
+    let worker_request_id = request_id.clone();
+    if let Err(e) = builder.spawn(move || {
+        let total = messages.len();
+        let started = Instant::now();
+        log::info!("migration proofs: batch proof worker started for {total} messages");
+
+        for (index, (id, base_pczt)) in messages.into_iter().enumerate() {
+            {
+                let store = match keystone_migration_requests().lock() {
+                    Ok(store) => store,
+                    Err(e) => {
+                        log::error!("migration proofs: migration store lock failed: {e}");
+                        return;
+                    }
+                };
+                if !store.contains_key(&worker_request_id) {
+                    log::info!("migration proofs: migration request was discarded");
+                    return;
+                }
+            }
+
+            let proof_started = Instant::now();
+            let result = super::pczt::add_proofs_to_pczt(&base_pczt, None, None);
+            let mut store = match keystone_migration_requests().lock() {
+                Ok(store) => store,
+                Err(e) => {
+                    log::error!("migration proofs: migration store lock failed: {e}");
+                    return;
+                }
+            };
+            let Some(stored) = store.get_mut(&worker_request_id) else {
+                return;
+            };
+            if stored.state == KeystoneMigrationRequestState::Completing {
+                return;
+            }
+            match result {
+                Ok(pczt_with_proofs) => {
+                    if let Some(message) = stored.messages.iter_mut().find(|m| m.id == id) {
+                        message.pczt_with_proofs = Some(pczt_with_proofs);
+                    }
+                    log::info!(
+                        "migration proofs: batch message {}/{} ready in {}ms",
+                        index + 1,
+                        total,
+                        proof_started.elapsed().as_millis()
+                    );
+                }
+                Err(e) => {
+                    stored.state = KeystoneMigrationRequestState::ProofFailed;
+                    stored.proof_error = Some(e);
+                    log::warn!(
+                        "migration proofs: batch message {}/{} failed after {}ms",
+                        index + 1,
+                        total,
+                        proof_started.elapsed().as_millis()
+                    );
+                    return;
+                }
+            }
+        }
+
+        let mut store = match keystone_migration_requests().lock() {
+            Ok(store) => store,
+            Err(e) => {
+                log::error!("migration proofs: migration store lock failed: {e}");
+                return;
+            }
+        };
+        if let Some(stored) = store.get_mut(&worker_request_id) {
+            if stored.state != KeystoneMigrationRequestState::Completing {
+                stored.state = KeystoneMigrationRequestState::ProofReady;
+                log::info!(
+                    "migration proofs: batch proofs ready in {}ms",
+                    started.elapsed().as_millis()
+                );
+            }
+        }
+    }) {
+        log::error!("migration proofs: failed to start batch proof worker: {e}");
+        if let Ok(mut store) = keystone_migration_requests().lock() {
+            if let Some(stored) = store.get_mut(&request_id) {
+                stored.state = KeystoneMigrationRequestState::ProofFailed;
+                stored.proof_error = Some(format!("Start proof worker: {e}"));
+            }
+        }
+    }
+}
+
+fn reset_migration_request_after_failed_completion(request_id: &str) {
+    if let Ok(mut store) = keystone_migration_requests().lock() {
+        if let Some(stored) = store.get_mut(request_id) {
+            if stored.state == KeystoneMigrationRequestState::Completing {
+                stored.state = KeystoneMigrationRequestState::ProofReady;
+            }
+        }
+    }
+}
+
+fn reset_denomination_request_after_failed_completion(request_id: &str) {
+    if let Ok(mut store) = keystone_denomination_requests().lock() {
+        if let Some(stored) = store.get_mut(request_id) {
+            if stored.state == KeystoneMigrationRequestState::Completing {
+                stored.state = KeystoneMigrationRequestState::ProofReady;
+            }
+        }
+    }
+}
+
+fn fail_denomination_request_after_post_broadcast_error(request_id: &str, error: &str) {
+    if let Ok(mut store) = keystone_denomination_requests().lock() {
+        if let Some(stored) = store.get_mut(request_id) {
+            stored.state = KeystoneMigrationRequestState::ProofFailed;
+            stored.proof_error = Some(format!(
+                "Denomination split may already be on the network, but Vizor could not finish local migration state: {error}. Refresh migration status before retrying."
+            ));
+        }
+    }
 }
 
 fn signed_migration_messages_by_id(
@@ -1546,11 +2090,10 @@ fn create_orchard_denomination_split_pczt(
         account_derivation,
         orchard_inputs.len(),
     )?;
-    let pczt_with_proofs = super::pczt::add_proofs_to_pczt(&pczt_bytes, None, None)?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&pczt_bytes)?;
 
     Ok(Some(CreatedDenominationSplitPczt {
-        pczt_with_proofs,
+        base_pczt: pczt_bytes,
         redacted_pczt,
         fee_zatoshi: u64::from(prep_fee),
         migrated_outputs,
@@ -2078,13 +2621,13 @@ fn create_orchard_to_ironwood_pczt_from_note(
         account_derivation,
         orchard_inputs.len(),
     )?;
-    let pczt_with_proofs = super::pczt::add_proofs_to_pczt(&pczt_bytes, None, None)?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&pczt_bytes)?;
     let target_height_u32: u32 = target_height.into();
 
     Ok(Some(CreatedMigrationPczt {
         id: format!("migration-{migration_index}"),
-        pczt_with_proofs,
+        base_pczt: pczt_bytes,
+        pczt_with_proofs: None,
         redacted_pczt,
         target_height: target_height_u32,
         expiry_height,

@@ -397,6 +397,17 @@ Future<KeystoneMigrationSigningRequest> prepareOrchardMigrationBatchPczt({
   accountUuid: accountUuid,
 );
 
+Future<KeystoneMigrationProofStatus> keystoneMigrationProofStatus({
+  required String requestId,
+}) => RustLib.instance.api.crateApiSyncKeystoneMigrationProofStatus(
+  requestId: requestId,
+);
+
+Future<void> discardKeystoneMigrationRequest({required String requestId}) =>
+    RustLib.instance.api.crateApiSyncDiscardKeystoneMigrationRequest(
+      requestId: requestId,
+    );
+
 Future<IronwoodMigrationResult> completeOrchardMigrationBatchPczt({
   required String dbPath,
   required String network,
@@ -939,17 +950,55 @@ class KeystoneMigrationMessage {
           redactedPczt == other.redactedPczt;
 }
 
+class KeystoneMigrationProofStatus {
+  final int readyCount;
+  final int totalCount;
+  final bool isReady;
+  final bool isFailed;
+  final String? message;
+
+  const KeystoneMigrationProofStatus({
+    required this.readyCount,
+    required this.totalCount,
+    required this.isReady,
+    required this.isFailed,
+    this.message,
+  });
+
+  @override
+  int get hashCode =>
+      readyCount.hashCode ^
+      totalCount.hashCode ^
+      isReady.hashCode ^
+      isFailed.hashCode ^
+      message.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is KeystoneMigrationProofStatus &&
+          runtimeType == other.runtimeType &&
+          readyCount == other.readyCount &&
+          totalCount == other.totalCount &&
+          isReady == other.isReady &&
+          isFailed == other.isFailed &&
+          message == other.message;
+}
+
 class KeystoneMigrationSigningRequest {
   final String requestId;
   final List<KeystoneMigrationMessage> messages;
+  final int signingBatchLimit;
 
   const KeystoneMigrationSigningRequest({
     required this.requestId,
     required this.messages,
+    required this.signingBatchLimit,
   });
 
   @override
-  int get hashCode => requestId.hashCode ^ messages.hashCode;
+  int get hashCode =>
+      requestId.hashCode ^ messages.hashCode ^ signingBatchLimit.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -957,7 +1006,8 @@ class KeystoneMigrationSigningRequest {
       other is KeystoneMigrationSigningRequest &&
           runtimeType == other.runtimeType &&
           requestId == other.requestId &&
-          messages == other.messages;
+          messages == other.messages &&
+          signingBatchLimit == other.signingBatchLimit;
 }
 
 class KeystoneSignedMigrationMessage {

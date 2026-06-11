@@ -8,6 +8,7 @@ use zcash_client_backend::data_api::wallet::ConfirmationsPolicy;
 use zeroize::Zeroizing;
 
 use crate::wallet::db::{open_readonly_conn_with_timeout, open_wallet_raw_conn_with_timeout};
+use crate::wallet::keystone::ZCASH_SIGN_BATCH_MAX_MESSAGES;
 use crate::wallet::network::WalletNetwork;
 use crate::wallet::secret_payload;
 
@@ -16,7 +17,6 @@ use super::READ_DB_BUSY_TIMEOUT;
 pub(crate) const ZATOSHIS_PER_ZEC: u64 = 100_000_000;
 pub(crate) const MIGRATION_BROADCAST_WINDOW_SECS: u64 = 180;
 pub(crate) const MIGRATION_MAX_PREPARED_NOTES_PER_RUN: usize = 64;
-pub(crate) const MIGRATION_SIGNING_BATCH_LIMIT: usize = 35;
 
 const RUNS_TABLE: &str = "vizor_migration_runs";
 const PREPARED_NOTES_TABLE: &str = "vizor_migration_prepared_notes";
@@ -130,7 +130,7 @@ pub(crate) fn plan_denominations(
     })
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct PreparedOrchardNoteRef {
     pub txid_hex: String,
     pub output_index: u32,
@@ -239,7 +239,7 @@ pub(crate) fn migration_status(
         total_count: 0,
         message: None,
         can_abandon: false,
-        signing_batch_limit: MIGRATION_SIGNING_BATCH_LIMIT as u32,
+        signing_batch_limit: ZCASH_SIGN_BATCH_MAX_MESSAGES as u32,
         broadcast_window_seconds: MIGRATION_BROADCAST_WINDOW_SECS,
         max_prepared_notes_per_run: MIGRATION_MAX_PREPARED_NOTES_PER_RUN as u32,
         scheduled_broadcasts: Vec::new(),
@@ -445,31 +445,35 @@ pub(crate) fn insert_pending_txs(
             )
             .ok_or("Migration scheduled time overflow")?;
 
-        tx.execute(
-            &format!(
-                "INSERT OR IGNORE INTO {PENDING_TXS_TABLE}
+        let inserted = tx
+            .execute(
+                &format!(
+                    "INSERT INTO {PENDING_TXS_TABLE}
                  (run_id, txid_hex, encrypted_raw_tx, target_height, expiry_height,
                   value_zatoshi, fee_zatoshi, selected_note_txid,
                   selected_note_output_index, selected_note_value, scheduled_at_ms,
                   status, metadata_json)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'scheduled', ?12)"
-            ),
-            params![
-                run_id,
-                pending.txid_hex,
-                encrypted_raw_tx,
-                pending.target_height,
-                pending.expiry_height,
-                pending.value_zatoshi,
-                pending.fee_zatoshi,
-                pending.selected_note.txid_hex,
-                pending.selected_note.output_index,
-                pending.selected_note.value_zatoshi,
-                scheduled_at_ms,
-                metadata_json,
-            ],
-        )
-        .map_err(|e| format!("Insert pending migration tx: {e}"))?;
+                ),
+                params![
+                    run_id,
+                    pending.txid_hex,
+                    encrypted_raw_tx,
+                    pending.target_height,
+                    pending.expiry_height,
+                    pending.value_zatoshi,
+                    pending.fee_zatoshi,
+                    pending.selected_note.txid_hex,
+                    pending.selected_note.output_index,
+                    pending.selected_note.value_zatoshi,
+                    scheduled_at_ms,
+                    metadata_json,
+                ],
+            )
+            .map_err(|e| format!("Insert pending migration tx: {e}"))?;
+        if inserted != 1 {
+            return Err("Insert pending migration tx affected no rows".to_string());
+        }
     }
 
     let now = now_ms()?;
@@ -830,7 +834,7 @@ fn status_for_run(conn: &rusqlite::Connection, run: ActiveRun) -> Result<Migrati
         total_count,
         message: run.last_error,
         can_abandon,
-        signing_batch_limit: MIGRATION_SIGNING_BATCH_LIMIT as u32,
+        signing_batch_limit: ZCASH_SIGN_BATCH_MAX_MESSAGES as u32,
         broadcast_window_seconds: MIGRATION_BROADCAST_WINDOW_SECS,
         max_prepared_notes_per_run: MIGRATION_MAX_PREPARED_NOTES_PER_RUN as u32,
         scheduled_broadcasts,
@@ -1239,6 +1243,7 @@ fn ensure_schema(conn: &rusqlite::Connection) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_vizor_migration_pending_due
             ON {PENDING_TXS_TABLE}(status, scheduled_at_ms);
+
         "
     ))
     .map_err(|e| format!("Initialize migration schema: {e}"))

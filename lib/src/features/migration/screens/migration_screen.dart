@@ -39,25 +39,35 @@ class MigrationScreen extends ConsumerStatefulWidget {
 }
 
 class _MigrationScreenState extends ConsumerState<MigrationScreen> {
-  static const _keystoneMigrationBatchMaxMessages = 35;
   static const _keystoneMigrationBatchMaxFragmentLen = 140;
 
   Timer? _progressRefreshTimer;
   Timer? _submissionProgressTimer;
+  Timer? _keystoneProofTimer;
   KeystoneSigningModalPhase? _keystonePhase;
   String? _keystoneError;
   List<String> _keystoneUrParts = const [];
+  List<List<String>> _keystoneChunkUrParts = const [];
+  _KeystoneMigrationSession? _keystoneSession;
   rust_sync.KeystoneMigrationSigningRequest? _keystoneRequest;
   List<rust_sync.KeystoneSignedMigrationMessage> _keystoneSignedMessages =
       const [];
   int _keystoneChunkIndex = 0;
   int _keystoneChunkTotal = 0;
-  MigrationRunIntent? _keystoneIntent;
+  bool _keystoneProofReady = false;
+  String? _keystoneProofProgress;
+  bool _keystoneCompleting = false;
+  int _keystoneSessionCounter = 0;
 
   @override
   void dispose() {
     _progressRefreshTimer?.cancel();
     _submissionProgressTimer?.cancel();
+    _keystoneProofTimer?.cancel();
+    final requestId = _keystoneRequestId;
+    if (requestId != null && !_keystoneCompleting) {
+      _discardKeystoneRequest(requestId);
+    }
     super.dispose();
   }
 
@@ -66,6 +76,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     final accountState = ref.watch(accountProvider).value;
     final account = accountState?.activeAccount;
     final accountUuid = accountState?.activeAccountUuid;
+    final endpoint = ref.watch(rpcEndpointProvider);
     final isHardware = account?.isHardware ?? false;
     final sync = (ref.watch(syncProvider).value ?? SyncState()).scopedToAccount(
       accountUuid,
@@ -206,6 +217,11 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       hasPendingMigration:
           hasUnconfirmedMigration || (viewState?.hasActiveRun ?? false),
     );
+    _syncKeystoneSessionContext(
+      accountUuid: accountUuid,
+      networkName: endpoint.walletNetworkName,
+      lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+    );
 
     return AppDesktopShell(
       sidebar: const AppMainSidebar(),
@@ -220,7 +236,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
             ),
             if (_keystonePhase != null)
               AppPaneModalOverlay(
-                onDismiss: _cancelKeystoneMigration,
+                onDismiss: _keystoneCanDismiss
+                    ? _cancelKeystoneMigration
+                    : () {},
                 child: KeystoneSigningModal(
                   phase: _keystonePhase!,
                   urParts: _keystoneUrParts,
@@ -234,11 +252,15 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
                       _keystonePhase == KeystoneSigningModalPhase.ready
                       ? _keystonePrimaryLabel
                       : null,
-                  onPrimary: _keystonePhase == KeystoneSigningModalPhase.ready
+                  onPrimary:
+                      _keystonePhase == KeystoneSigningModalPhase.ready &&
+                          _keystoneProofReady &&
+                          !_keystoneCompleting
                       ? () => unawaited(_getKeystoneMigrationSignature())
                       : null,
                   secondaryLabel:
-                      _keystonePhase == KeystoneSigningModalPhase.preparing
+                      _keystonePhase == KeystoneSigningModalPhase.preparing ||
+                          _keystoneCompleting
                       ? null
                       : 'Reject',
                   onSecondary: _cancelKeystoneMigration,
@@ -270,6 +292,12 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   }
 
   String get _keystoneModalInstruction {
+    if (!_keystoneProofReady) {
+      final progress = _keystoneProofProgress;
+      return progress == null
+          ? 'Scan now. Signature import unlocks after proofs are ready.'
+          : 'Scan now. Signature import unlocks after proofs are ready. $progress';
+    }
     final chunkLabel = _keystoneChunkLabel;
     if (_keystoneIntent == MigrationRunIntent.migrating && chunkLabel != null) {
       return 'After this signature is ready, scan it back into Vizor.';
@@ -278,6 +306,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   }
 
   String get _keystonePrimaryLabel {
+    if (!_keystoneProofReady) return 'Preparing';
     final chunkLabel = _keystoneChunkLabel;
     if (_keystoneIntent == MigrationRunIntent.migrating && chunkLabel != null) {
       return 'Get signature $chunkLabel';
@@ -285,9 +314,72 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     return 'Get Signature';
   }
 
+  bool get _keystoneCanDismiss => !_keystoneCompleting;
+
+  String? get _keystoneRequestId => _keystoneSession?.requestId;
+
+  MigrationRunIntent? get _keystoneIntent => _keystoneSession?.intent;
+
   String? get _keystoneChunkLabel {
     if (_keystoneChunkTotal <= 1) return null;
     return '${_keystoneChunkIndex + 1} of $_keystoneChunkTotal';
+  }
+
+  void _syncKeystoneSessionContext({
+    required String? accountUuid,
+    required String networkName,
+    required String lightwalletdUrl,
+  }) {
+    if (_keystonePhase == null || _keystoneCompleting) return;
+    final session = _keystoneSession;
+    if (session == null || !session.hasContext) return;
+    if (session.matchesContext(
+      accountUuid: accountUuid,
+      networkName: networkName,
+      lightwalletdUrl: lightwalletdUrl,
+    )) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _keystonePhase == null || _keystoneCompleting) return;
+      if (_keystoneSession?.generation == session.generation) {
+        _clearKeystoneMigration(discardRequest: true);
+      }
+    });
+  }
+
+  bool _keystoneSessionIdentityIsCurrent(_KeystoneMigrationSession expected) {
+    final session = _keystoneSession;
+    if (!mounted ||
+        _keystonePhase == null ||
+        session == null ||
+        !session.sameRun(expected)) {
+      return false;
+    }
+    if (!expected.hasContext) return true;
+    final currentAccountUuid = ref
+        .read(accountProvider)
+        .value
+        ?.activeAccountUuid;
+    final currentEndpoint = ref.read(rpcEndpointProvider);
+    return expected.matchesContext(
+      accountUuid: currentAccountUuid,
+      networkName: currentEndpoint.walletNetworkName,
+      lightwalletdUrl: currentEndpoint.normalizedLightwalletdUrl,
+    );
+  }
+
+  bool _keystoneSessionIsCurrent(_KeystoneMigrationSession expected) {
+    final session = _keystoneSession;
+    return expected.hasRequestContext &&
+        session != null &&
+        session.sameRequest(expected) &&
+        _keystoneSessionIdentityIsCurrent(expected);
+  }
+
+  void _discardKeystoneRequest(String requestId) {
+    unawaited(rust_sync.discardKeystoneMigrationRequest(requestId: requestId));
   }
 
   Future<void> _advanceMigration(
@@ -304,20 +396,33 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
 
   void _showKeystoneMigration(MigrationRunIntent intent) {
     if (_keystonePhase != null) return;
+    final session = _KeystoneMigrationSession(
+      generation: ++_keystoneSessionCounter,
+      intent: intent,
+    );
     setState(() {
       _keystonePhase = KeystoneSigningModalPhase.preparing;
       _keystoneError = null;
       _keystoneUrParts = const [];
+      _keystoneChunkUrParts = const [];
+      _keystoneSession = session;
       _keystoneRequest = null;
       _keystoneSignedMessages = const [];
       _keystoneChunkIndex = 0;
       _keystoneChunkTotal = 0;
-      _keystoneIntent = intent;
+      _keystoneProofReady = false;
+      _keystoneProofProgress = null;
+      _keystoneCompleting = false;
     });
-    unawaited(_prepareKeystoneMigration(intent));
+    unawaited(_prepareKeystoneMigration(session));
   }
 
-  Future<void> _prepareKeystoneMigration(MigrationRunIntent intent) async {
+  Future<void> _prepareKeystoneMigration(
+    _KeystoneMigrationSession session,
+  ) async {
+    final intent = session.intent;
+    var activeSession = session;
+    String? preparedRequestId;
     try {
       final accountState = ref.read(accountProvider).value;
       final account = accountState?.activeAccount;
@@ -337,6 +442,19 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
           'Select a testnet endpoint before migrating.',
         );
       }
+      final networkName = endpoint.walletNetworkName;
+      final lightwalletdUrl = endpoint.normalizedLightwalletdUrl;
+      if (!_keystoneSessionIdentityIsCurrent(session)) {
+        return;
+      }
+      activeSession = session.withContext(
+        accountUuid: accountUuid,
+        networkName: networkName,
+        lightwalletdUrl: lightwalletdUrl,
+      );
+      setState(() {
+        _keystoneSession = activeSession;
+      });
 
       final dbPath = await getWalletDbPath();
       final syncNotifier = ref.read(syncProvider.notifier);
@@ -352,13 +470,13 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
           MigrationRunIntent.preparing =>
             await rust_sync.prepareOrchardMigrationDenominationsPczt(
               dbPath: dbPath,
-              network: endpoint.walletNetworkName,
+              network: networkName,
               accountUuid: accountUuid,
             ),
           MigrationRunIntent.migrating =>
             await rust_sync.prepareOrchardMigrationBatchPczt(
               dbPath: dbPath,
-              network: endpoint.walletNetworkName,
+              network: networkName,
               accountUuid: accountUuid,
             ),
           _ => throw const _KeystoneMigrationError(
@@ -368,55 +486,143 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       } finally {
         syncNotifier.resumeAfterWalletMutation(syncPause);
       }
+      preparedRequestId = request.requestId;
+      final preparedSession = activeSession.withRequestId(request.requestId);
+      if (!_keystoneSessionIdentityIsCurrent(activeSession)) {
+        _discardKeystoneRequest(request.requestId);
+        return;
+      }
+      setState(() {
+        _keystoneSession = preparedSession;
+        _keystoneRequest = request;
+      });
 
-      final chunkTotal = _keystoneChunkCount(request.messages.length);
+      final chunkTotal = _keystoneChunkCount(request);
       if (chunkTotal == 0) {
         throw const _KeystoneMigrationError(
           'Keystone migration request has no messages.',
         );
       }
-      final urParts = await _encodeKeystoneMigrationChunk(request, 0);
+      final chunkUrParts = await _encodeKeystoneMigrationChunks(request);
+      final urParts = chunkUrParts.first;
       log(
         'MigrationScreen: encoded Keystone migration batch '
         '1/$chunkTotal with ${_keystoneChunkMessages(request, 0).length} '
         'of ${request.messages.length} messages into ${urParts.length} UR parts',
       );
 
-      if (!mounted || _keystoneIntent != intent || _keystonePhase == null) {
+      if (!_keystoneSessionIsCurrent(preparedSession)) {
+        _discardKeystoneRequest(request.requestId);
         return;
       }
       setState(() {
         _keystonePhase = KeystoneSigningModalPhase.ready;
-        _keystoneRequest = request;
         _keystoneSignedMessages = const [];
         _keystoneChunkIndex = 0;
         _keystoneChunkTotal = chunkTotal;
         _keystoneUrParts = urParts;
+        _keystoneChunkUrParts = chunkUrParts;
+        _keystoneProofReady = false;
+        _keystoneProofProgress = null;
       });
+      _startKeystoneProofPolling(preparedSession);
     } catch (e, st) {
       log('MigrationScreen._prepareKeystoneMigration: ERROR: $e\n$st');
-      if (!mounted || _keystoneIntent != intent || _keystonePhase == null) {
+      if (preparedRequestId != null && !_keystoneCompleting) {
+        _discardKeystoneRequest(preparedRequestId);
+      }
+      if (!_keystoneSessionIdentityIsCurrent(activeSession)) {
         return;
       }
       setState(() {
         _keystonePhase = KeystoneSigningModalPhase.failed;
+        _keystoneCompleting = false;
+        _keystoneSession = activeSession.withoutRequestId();
+        _keystoneRequest = null;
         _keystoneError = _friendlyKeystoneError(e);
       });
     }
   }
 
+  void _startKeystoneProofPolling(_KeystoneMigrationSession session) {
+    _keystoneProofTimer?.cancel();
+    final requestId = session.requestId;
+    if (requestId == null) return;
+
+    Future<void> poll() async {
+      try {
+        final status = await rust_sync.keystoneMigrationProofStatus(
+          requestId: requestId,
+        );
+        if (!_keystoneSessionIsCurrent(session)) {
+          return;
+        }
+
+        if (status.isFailed) {
+          _keystoneProofTimer?.cancel();
+          setState(() {
+            _keystonePhase = KeystoneSigningModalPhase.failed;
+            _keystoneProofReady = false;
+            _keystoneProofProgress = null;
+            _keystoneError =
+                status.message ??
+                'Vizor proof generation failed. Reject and prepare a new request.';
+          });
+          return;
+        }
+
+        if (status.isReady) {
+          _keystoneProofTimer?.cancel();
+          setState(() {
+            _keystoneProofReady = true;
+            _keystoneProofProgress = null;
+          });
+          return;
+        }
+
+        setState(() {
+          _keystoneProofProgress =
+              'Proofs ${status.readyCount} of ${status.totalCount}.';
+        });
+      } catch (e, st) {
+        log('MigrationScreen._startKeystoneProofPolling: ERROR: $e\n$st');
+        if (!_keystoneSessionIsCurrent(session)) {
+          return;
+        }
+        _keystoneProofTimer?.cancel();
+        setState(() {
+          _keystonePhase = KeystoneSigningModalPhase.failed;
+          _keystoneProofReady = false;
+          _keystoneProofProgress = null;
+          _keystoneError = _friendlyKeystoneError(e);
+        });
+      }
+    }
+
+    unawaited(poll());
+    _keystoneProofTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => unawaited(poll()),
+    );
+  }
+
   Future<void> _getKeystoneMigrationSignature() async {
     final request = _keystoneRequest;
-    final intent = _keystoneIntent;
+    final session = _keystoneSession;
     if (_keystonePhase != KeystoneSigningModalPhase.ready ||
         request == null ||
-        intent == null) {
+        session == null ||
+        !session.hasRequestContext ||
+        !_keystoneProofReady ||
+        _keystoneCompleting) {
       return;
     }
 
     final chunkIndex = _keystoneChunkIndex;
     final cbor = await context.push<Uint8List>('/migration/scan');
-    if (cbor == null || !mounted) return;
+    if (cbor == null || !_keystoneSessionIsCurrent(session)) {
+      return;
+    }
 
     setState(() {
       _keystonePhase = KeystoneSigningModalPhase.preparing;
@@ -425,6 +631,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
 
     try {
       final result = await rust_keystone.decodeZcashSignResultCbor(cbor: cbor);
+      if (!_keystoneSessionIsCurrent(session)) {
+        return;
+      }
       if (result.requestId != request.requestId) {
         throw _KeystoneMigrationError(
           'Signed result is for ${result.requestId}, expected ${request.requestId}.',
@@ -447,7 +656,10 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       final allSignedMessages = [..._keystoneSignedMessages, ...signedForChunk];
       final nextChunkIndex = chunkIndex + 1;
       if (nextChunkIndex < _keystoneChunkTotal) {
-        if (!mounted) return;
+        final nextUrParts = _keystoneChunkUrParts[nextChunkIndex];
+        if (!_keystoneSessionIsCurrent(session)) {
+          return;
+        }
         setState(() {
           _keystonePhase = KeystoneSigningModalPhase.preparing;
           _keystoneError = null;
@@ -456,10 +668,6 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
           _keystoneChunkIndex = nextChunkIndex;
         });
 
-        final nextUrParts = await _encodeKeystoneMigrationChunk(
-          request,
-          nextChunkIndex,
-        );
         log(
           'MigrationScreen: encoded Keystone migration batch '
           '${nextChunkIndex + 1}/$_keystoneChunkTotal with '
@@ -467,10 +675,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
           'of ${request.messages.length} messages into '
           '${nextUrParts.length} UR parts',
         );
-        if (!mounted ||
-            _keystoneRequest?.requestId != request.requestId ||
-            _keystoneIntent != intent ||
-            _keystonePhase == null) {
+        if (!_keystoneSessionIsCurrent(session)) {
           return;
         }
         setState(() {
@@ -481,52 +686,79 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       }
 
       await _completeKeystoneMigration(
-        intent: intent,
-        requestId: request.requestId,
+        session: session,
         signedMessages: allSignedMessages,
       );
     } catch (e, st) {
       log('MigrationScreen._getKeystoneMigrationSignature: ERROR: $e\n$st');
-      if (!mounted ||
-          _keystoneRequest?.requestId != request.requestId ||
-          _keystoneIntent != intent ||
-          _keystonePhase == null) {
+      if (!_keystoneSessionIsCurrent(session)) {
+        if (mounted &&
+            _keystoneCompleting &&
+            _keystoneSession?.sameRequest(session) == true) {
+          _clearKeystoneMigration(
+            discardRequest: true,
+            discardCompletingRequest: true,
+          );
+        }
         return;
       }
       setState(() {
         _keystonePhase = KeystoneSigningModalPhase.failed;
+        _keystoneCompleting = false;
         _keystoneError = _friendlyKeystoneError(e);
       });
     }
   }
 
   Future<void> _completeKeystoneMigration({
-    required MigrationRunIntent intent,
-    required String requestId,
+    required _KeystoneMigrationSession session,
     required List<rust_sync.KeystoneSignedMigrationMessage> signedMessages,
   }) async {
-    final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
-    if (accountUuid == null) {
-      throw const _KeystoneMigrationError('No active account.');
+    final requestId = session.requestId;
+    final accountUuid = session.accountUuid;
+    final networkName = session.networkName;
+    final lightwalletdUrl = session.lightwalletdUrl;
+    if (requestId == null ||
+        accountUuid == null ||
+        networkName == null ||
+        lightwalletdUrl == null) {
+      return;
     }
 
-    final endpoint = ref.read(rpcEndpointProvider);
     final dbPath = await getWalletDbPath();
+    if (!_keystoneSessionIsCurrent(session)) {
+      if (mounted && _keystoneSession?.sameRequest(session) == true) {
+        _clearKeystoneMigration(discardRequest: true);
+      }
+      return;
+    }
     final syncNotifier = ref.read(syncProvider.notifier);
     final syncPause = await syncNotifier.pauseForWalletMutation(
       onStoppingSync: () {
         log('MigrationScreen: pausing sync before Keystone migration commit');
       },
     );
+    if (!_keystoneSessionIsCurrent(session)) {
+      syncNotifier.resumeAfterWalletMutation(syncPause);
+      if (mounted && _keystoneSession?.sameRequest(session) == true) {
+        _clearKeystoneMigration(discardRequest: true);
+      }
+      return;
+    }
 
     late final rust_sync.IronwoodMigrationResult result;
+    setState(() {
+      _keystoneCompleting = true;
+      _keystonePhase = KeystoneSigningModalPhase.preparing;
+      _keystoneError = null;
+    });
     try {
-      result = switch (intent) {
+      result = switch (session.intent) {
         MigrationRunIntent.preparing =>
           await rust_sync.completeOrchardMigrationDenominationsPczt(
             dbPath: dbPath,
-            lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-            network: endpoint.walletNetworkName,
+            lightwalletdUrl: lightwalletdUrl,
+            network: networkName,
             accountUuid: accountUuid,
             requestId: requestId,
             signedMessages: signedMessages,
@@ -538,7 +770,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
               .requireSecretPayloadSaltForNativeSecretUse();
           return rust_sync.completeOrchardMigrationBatchPczt(
             dbPath: dbPath,
-            network: endpoint.walletNetworkName,
+            network: networkName,
             accountUuid: accountUuid,
             requestId: requestId,
             signedMessages: signedMessages,
@@ -553,9 +785,15 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     } finally {
       syncNotifier.resumeAfterWalletMutation(syncPause);
     }
+    if (!_keystoneSessionIsCurrent(session)) {
+      if (mounted && _keystoneSession?.sameRequest(session) == true) {
+        _clearKeystoneMigration(discardRequest: false);
+      }
+      return;
+    }
 
     log(
-      'MigrationScreen: Keystone intent=${intent.name} '
+      'MigrationScreen: Keystone intent=${session.intent.name} '
       'txids=${result.txids} status=${result.status} '
       'broadcasted=${result.broadcastedCount}/${result.totalCount} '
       'fee=${result.feeZatoshi} migrated=${result.migratedZatoshi}',
@@ -582,43 +820,86 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     ref.invalidate(activeOrchardMigrationStatusProvider);
 
     if (!mounted) return;
-    _cancelKeystoneMigration();
+    _clearKeystoneMigration(discardRequest: false);
   }
 
   void _cancelKeystoneMigration() {
     if (!mounted) return;
+    _clearKeystoneMigration(discardRequest: true);
+  }
+
+  void _clearKeystoneMigration({
+    required bool discardRequest,
+    bool discardCompletingRequest = false,
+  }) {
+    final requestId = _keystoneRequestId;
+    _keystoneProofTimer?.cancel();
+    _keystoneProofTimer = null;
+    _keystoneSessionCounter++;
+    if (discardRequest &&
+        requestId != null &&
+        (!_keystoneCompleting || discardCompletingRequest)) {
+      _discardKeystoneRequest(requestId);
+    }
     setState(() {
       _keystonePhase = null;
       _keystoneError = null;
       _keystoneUrParts = const [];
+      _keystoneChunkUrParts = const [];
+      _keystoneSession = null;
       _keystoneRequest = null;
       _keystoneSignedMessages = const [];
       _keystoneChunkIndex = 0;
       _keystoneChunkTotal = 0;
-      _keystoneIntent = null;
+      _keystoneProofReady = false;
+      _keystoneProofProgress = null;
+      _keystoneCompleting = false;
     });
   }
 
-  int _keystoneChunkCount(int messageCount) {
-    if (messageCount <= 0) return 0;
-    return ((messageCount - 1) ~/ _keystoneMigrationBatchMaxMessages) + 1;
+  int _keystoneBatchLimit(rust_sync.KeystoneMigrationSigningRequest request) {
+    final limit = request.signingBatchLimit;
+    if (limit <= 0) {
+      throw const _KeystoneMigrationError(
+        'Keystone migration request has an invalid signing batch limit.',
+      );
+    }
+    return limit;
+  }
+
+  int _keystoneChunkCount(rust_sync.KeystoneMigrationSigningRequest request) {
+    if (request.messages.isEmpty) return 0;
+    final limit = _keystoneBatchLimit(request);
+    return ((request.messages.length - 1) ~/ limit) + 1;
   }
 
   List<rust_sync.KeystoneMigrationMessage> _keystoneChunkMessages(
     rust_sync.KeystoneMigrationSigningRequest request,
     int chunkIndex,
   ) {
-    final start = chunkIndex * _keystoneMigrationBatchMaxMessages;
+    final limit = _keystoneBatchLimit(request);
+    final start = chunkIndex * limit;
     if (start < 0 || start >= request.messages.length) {
       throw _KeystoneMigrationError(
         'Keystone migration batch ${chunkIndex + 1} is out of range.',
       );
     }
-    final uncappedEnd = start + _keystoneMigrationBatchMaxMessages;
+    final uncappedEnd = start + limit;
     final end = uncappedEnd > request.messages.length
         ? request.messages.length
         : uncappedEnd;
     return request.messages.sublist(start, end);
+  }
+
+  Future<List<List<String>>> _encodeKeystoneMigrationChunks(
+    rust_sync.KeystoneMigrationSigningRequest request,
+  ) async {
+    final chunkTotal = _keystoneChunkCount(request);
+    final chunks = <List<String>>[];
+    for (var chunkIndex = 0; chunkIndex < chunkTotal; chunkIndex++) {
+      chunks.add(await _encodeKeystoneMigrationChunk(request, chunkIndex));
+    }
+    return chunks;
   }
 
   Future<List<String>> _encodeKeystoneMigrationChunk(
@@ -1262,6 +1543,87 @@ class _KeystoneMigrationError {
 
   @override
   String toString() => message;
+}
+
+class _KeystoneMigrationSession {
+  const _KeystoneMigrationSession({
+    required this.generation,
+    required this.intent,
+    this.requestId,
+    this.accountUuid,
+    this.networkName,
+    this.lightwalletdUrl,
+  });
+
+  final int generation;
+  final MigrationRunIntent intent;
+  final String? requestId;
+  final String? accountUuid;
+  final String? networkName;
+  final String? lightwalletdUrl;
+
+  bool get hasContext =>
+      accountUuid != null && networkName != null && lightwalletdUrl != null;
+
+  bool get hasRequestContext => requestId != null && hasContext;
+
+  _KeystoneMigrationSession withContext({
+    required String accountUuid,
+    required String networkName,
+    required String lightwalletdUrl,
+  }) {
+    return _KeystoneMigrationSession(
+      generation: generation,
+      intent: intent,
+      requestId: requestId,
+      accountUuid: accountUuid,
+      networkName: networkName,
+      lightwalletdUrl: lightwalletdUrl,
+    );
+  }
+
+  _KeystoneMigrationSession withRequestId(String requestId) {
+    return _KeystoneMigrationSession(
+      generation: generation,
+      intent: intent,
+      requestId: requestId,
+      accountUuid: accountUuid,
+      networkName: networkName,
+      lightwalletdUrl: lightwalletdUrl,
+    );
+  }
+
+  _KeystoneMigrationSession withoutRequestId() {
+    return _KeystoneMigrationSession(
+      generation: generation,
+      intent: intent,
+      accountUuid: accountUuid,
+      networkName: networkName,
+      lightwalletdUrl: lightwalletdUrl,
+    );
+  }
+
+  bool sameRun(_KeystoneMigrationSession other) {
+    return generation == other.generation && intent == other.intent;
+  }
+
+  bool sameRequest(_KeystoneMigrationSession other) {
+    return sameRun(other) &&
+        requestId == other.requestId &&
+        accountUuid == other.accountUuid &&
+        networkName == other.networkName &&
+        lightwalletdUrl == other.lightwalletdUrl;
+  }
+
+  bool matchesContext({
+    required String? accountUuid,
+    required String networkName,
+    required String lightwalletdUrl,
+  }) {
+    return this.accountUuid == accountUuid &&
+        this.networkName == networkName &&
+        this.lightwalletdUrl == lightwalletdUrl;
+  }
 }
 
 /// Compact title/body note used for the pre-card loading and status-error
