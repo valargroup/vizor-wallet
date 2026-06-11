@@ -44,7 +44,7 @@ const ZCASH_SIGN_BATCH_VERSION: u32 = 1;
 const ZCASH_SIGN_BATCH_NETWORK_MAINNET: u32 = 1;
 const ZCASH_SIGN_MESSAGE_KIND_PCZT_V1: u32 = 1;
 const ZCASH_SIGN_STATUS_SIGNED: u32 = 0;
-pub(crate) const ZCASH_SIGN_BATCH_MAX_MESSAGES: usize = 25;
+pub(crate) const ZCASH_SIGN_BATCH_MAX_MESSAGES: usize = 35;
 
 // ==================== UR Encoding/Decoding ====================
 

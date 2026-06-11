@@ -16,7 +16,7 @@ use super::READ_DB_BUSY_TIMEOUT;
 pub(crate) const ZATOSHIS_PER_ZEC: u64 = 100_000_000;
 pub(crate) const MIGRATION_BROADCAST_WINDOW_SECS: u64 = 180;
 pub(crate) const MIGRATION_MAX_PREPARED_NOTES_PER_RUN: usize = 64;
-pub(crate) const MIGRATION_SIGNING_BATCH_LIMIT: usize = 25;
+pub(crate) const MIGRATION_SIGNING_BATCH_LIMIT: usize = 35;
 
 const RUNS_TABLE: &str = "vizor_migration_runs";
 const PREPARED_NOTES_TABLE: &str = "vizor_migration_prepared_notes";

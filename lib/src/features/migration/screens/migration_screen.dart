@@ -39,7 +39,7 @@ class MigrationScreen extends ConsumerStatefulWidget {
 }
 
 class _MigrationScreenState extends ConsumerState<MigrationScreen> {
-  static const _keystoneMigrationBatchMaxMessages = 25;
+  static const _keystoneMigrationBatchMaxMessages = 35;
   static const _keystoneMigrationBatchMaxFragmentLen = 140;
 
   Timer? _progressRefreshTimer;
