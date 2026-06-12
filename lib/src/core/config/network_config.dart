@@ -72,7 +72,7 @@ enum ZcashNetwork {
 const kZcashDefaultNetworkEnvKey = 'ZCASH_DEFAULT_NETWORK';
 const kZcashDefaultNetworkRaw = String.fromEnvironment(
   kZcashDefaultNetworkEnvKey,
-  defaultValue: 'test',
+  defaultValue: 'main',
 );
 
 final String kZcashDefaultNetworkName = normalizeZcashNetworkName(

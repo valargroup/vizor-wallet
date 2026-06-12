@@ -110,23 +110,28 @@ void main() {
       );
     });
 
-    test('testnet presets include the default and community fallback', () {
-      final urls = kTestnetRpcEndpointPresets
+    test('testnet presets hide Local Ironwood by default', () {
+      final presets = rpcEndpointPresetsForNetwork('test');
+      final urls = presets
           .map((preset) => preset.url)
           .map((url) => normalizeRpcEndpointUrl(url, allowDefaultPort: true))
           .toSet();
 
       expect(urls, {
-        'https://174-138-65-204.sslip.io:9067',
         'https://testnet.zec.rocks:443',
         'https://zcash.mysideoftheweb.com:19067',
       });
       expect(
+        presets.map((preset) => preset.id),
+        isNot(contains(kLocalIronwoodTestnetRpcEndpointPresetId)),
+      );
+      expect(presets.where((preset) => preset.isDefault), hasLength(1));
+      expect(
         findRpcEndpointPresetByUrl(
           'https://174-138-65-204.sslip.io:9067',
           networkName: 'test',
-        )?.id,
-        kLocalIronwoodTestnetRpcEndpointPresetId,
+        ),
+        isNull,
       );
       expect(
         findRpcEndpointPresetByUrl(
@@ -134,6 +139,27 @@ void main() {
           networkName: 'test',
         )?.id,
         'mysideoftheweb-testnet',
+      );
+    });
+
+    test('Local Ironwood is available only with the explicit opt-in', () {
+      final presets = rpcEndpointPresetsForNetwork(
+        'test',
+        includeLocalIronwoodTestnet: true,
+      );
+      final localPreset = presets.firstWhere(
+        (preset) => preset.id == kLocalIronwoodTestnetRpcEndpointPresetId,
+      );
+
+      expect(localPreset.url, 'https://174-138-65-204.sslip.io:9067');
+      expect(localPreset.isDefault, isFalse);
+      expect(
+        findRpcEndpointPresetByUrl(
+          'https://174-138-65-204.sslip.io:9067',
+          networkName: 'test',
+          includeLocalIronwoodTestnet: true,
+        )?.id,
+        kLocalIronwoodTestnetRpcEndpointPresetId,
       );
     });
 
@@ -188,6 +214,46 @@ void main() {
         'https://us.zec.stardust.rest:443',
       );
       expect(defaultEndpoint.presetId, kDefaultRpcEndpointPresetId);
+    });
+
+    test('uses Zec Rocks as the ordinary testnet default endpoint', () {
+      final defaultEndpoint = defaultRpcEndpointConfig('test');
+
+      expect(defaultEndpoint.networkName, 'test');
+      expect(defaultEndpoint.lightwalletdUrl, 'https://testnet.zec.rocks:443');
+      expect(defaultEndpoint.presetId, 'default-testnet');
+    });
+
+    test('can explicitly select the Local Ironwood testnet preset', () {
+      final defaultEndpoint = defaultRpcEndpointConfig(
+        'test',
+        defaultPresetId: kLocalIronwoodTestnetRpcEndpointPresetId,
+        includeLocalIronwoodTestnet: true,
+      );
+
+      expect(defaultEndpoint.networkName, 'test');
+      expect(
+        defaultEndpoint.lightwalletdUrl,
+        'https://174-138-65-204.sslip.io:9067',
+      );
+      expect(
+        defaultEndpoint.presetId,
+        kLocalIronwoodTestnetRpcEndpointPresetId,
+      );
+      expect(
+        defaultEndpoint.walletNetworkName,
+        kLocalIronwoodTestnetWalletNetworkName,
+      );
+    });
+
+    test('ignores unavailable build-time default preset ids', () {
+      final defaultEndpoint = defaultRpcEndpointConfig(
+        'test',
+        defaultPresetId: kLocalIronwoodTestnetRpcEndpointPresetId,
+      );
+
+      expect(defaultEndpoint.lightwalletdUrl, 'https://testnet.zec.rocks:443');
+      expect(defaultEndpoint.presetId, 'default-testnet');
     });
 
     test('resolves stored default preset to the current default URL', () {
