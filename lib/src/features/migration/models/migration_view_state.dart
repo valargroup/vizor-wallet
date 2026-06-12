@@ -179,6 +179,18 @@ bool migrationShouldWarnBeforeClose(rust_sync.MigrationStatus? status) {
       status?.phase == 'signing_batch';
 }
 
+bool migrationShouldShowGlobalWarning(rust_sync.MigrationStatus? status) {
+  return migrationShouldWarnBeforeClose(status) ||
+      switch (status?.phase) {
+        'building_signing_batch' ||
+        'signing_batch' ||
+        'broadcast_scheduled' ||
+        'broadcasting' ||
+        'waiting_migration_confirmations' => true,
+        _ => false,
+      };
+}
+
 bool migrationShouldShowEntry({
   required MigrationViewState viewState,
   required bool keepsProgressVisible,

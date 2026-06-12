@@ -272,6 +272,55 @@ void main() {
     },
   );
 
+  test('global warning shows only while migration needs attention', () {
+    rust_sync.MigrationStatus status({
+      required String phase,
+      int pendingPrepTxCount = 0,
+      int signedChildPcztCount = 0,
+      int broadcastedTxCount = 0,
+      List<rust_sync.MigrationScheduledBroadcast> scheduledBroadcasts =
+          const [],
+    }) => rust_sync.MigrationStatus(
+      phase: phase,
+      targetValuesZatoshi: Uint64List(0),
+      preparedNoteCount: 0,
+      denominationConfirmationCount: 3,
+      denominationConfirmationTarget: 3,
+      pendingTxCount: 0,
+      signedChildPcztCount: signedChildPcztCount,
+      pendingPrepTxCount: pendingPrepTxCount,
+      broadcastedTxCount: broadcastedTxCount,
+      confirmedTxCount: 0,
+      totalCount: 4,
+      canAbandon: false,
+      signingBatchLimit: 8,
+      broadcastWindowSeconds: BigInt.from(180),
+      maxPreparedNotesPerRun: 64,
+      scheduledBroadcasts: scheduledBroadcasts,
+    );
+
+    expect(
+      migrationShouldShowGlobalWarning(status(phase: 'ready_to_prepare')),
+      isFalse,
+    );
+    expect(
+      migrationShouldShowGlobalWarning(status(phase: 'building_signing_batch')),
+      isTrue,
+    );
+    expect(
+      migrationShouldShowGlobalWarning(
+        status(phase: 'waiting_migration_confirmations'),
+      ),
+      isTrue,
+    );
+    expect(
+      migrationShouldShowGlobalWarning(
+        status(phase: 'ready_to_migrate', signedChildPcztCount: 1),
+      ),
+      isTrue,
+    );
+  });
+
   test('single-QR oversize error is detected for the staged fallback', () {
     expect(
       migrationIsSingleQrTooLargeError(
