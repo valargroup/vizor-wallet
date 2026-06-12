@@ -208,4 +208,62 @@ void main() {
       isFalse,
     );
   });
+
+  test('single-QR oversize error is detected for the staged fallback', () {
+    expect(
+      migrationIsSingleQrTooLargeError(
+        'Single Keystone migration signing supports at most 34 migration notes, '
+        'but this plan needs 50. Reduce the migration amount or use the staged flow.',
+      ),
+      isTrue,
+    );
+    expect(
+      migrationIsSingleQrTooLargeError('insufficient spendable funds'),
+      isFalse,
+    );
+  });
+
+  test('staged-fallback Send awaits a scan only before children are signed', () {
+    rust_sync.MigrationStatus status({int signedChildren = 0}) =>
+        rust_sync.MigrationStatus(
+          phase: 'ready_to_migrate',
+          targetValuesZatoshi: Uint64List(0),
+          preparedNoteCount: 0,
+          denominationConfirmationCount: 3,
+          denominationConfirmationTarget: 3,
+          pendingTxCount: 0,
+          signedChildPcztCount: signedChildren,
+          pendingPrepTxCount: 0,
+          broadcastedTxCount: 0,
+          confirmedTxCount: 0,
+          totalCount: 40,
+          canAbandon: false,
+          signingBatchLimit: 8,
+          broadcastWindowSeconds: BigInt.from(180),
+          maxPreparedNotesPerRun: 64,
+          scheduledBroadcasts: const [],
+        );
+
+    expect(
+      timelineSendIsAwaitingScan(
+        MigrationViewState.readyToMigrate,
+        status(),
+      ),
+      isTrue,
+    );
+    expect(
+      timelineSendIsAwaitingScan(
+        MigrationViewState.readyToMigrate,
+        status(signedChildren: 40),
+      ),
+      isFalse,
+    );
+    expect(
+      timelineSendIsAwaitingScan(
+        MigrationViewState.broadcasting,
+        status(),
+      ),
+      isFalse,
+    );
+  });
 }

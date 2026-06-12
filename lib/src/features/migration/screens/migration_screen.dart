@@ -59,6 +59,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
   String? _keystoneProofProgress;
   bool _keystoneCompleting = false;
   int _keystoneSessionCounter = 0;
+  bool _keystoneStagedFallback = false;
 
   @override
   void dispose() {
@@ -160,7 +161,10 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         status: migrationStatus,
         runInFlight: runState.inFlight,
         intent: runState.intent,
-        sendNeedsScan: false, // Task 7 sets this for the staged Keystone fallback
+        sendNeedsScan:
+            isHardware &&
+            _keystoneStagedFallback &&
+            timelineSendIsAwaitingScan(viewState, migrationStatus),
       );
       final effectiveExpectedCount =
           migrationStatus != null && migrationStatus.totalCount > 0
@@ -187,6 +191,8 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         ),
         onMigrate: () => unawaited(_startMigration(isHardware, migrationStatus)),
         onRetry: () => unawaited(_advanceMigration(retryIntent, isHardware)),
+        onScanSends: () =>
+            _showKeystoneMigration(MigrationRunIntent.migrating),
       );
     }
 
@@ -466,12 +472,29 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       late final rust_sync.KeystoneMigrationSigningRequest request;
       try {
         request = switch (intent) {
-          MigrationRunIntent.preparing =>
-            await rust_sync.prepareOrchardMigrationSingleQrPczt(
-              dbPath: dbPath,
-              network: networkName,
-              accountUuid: accountUuid,
-            ),
+          MigrationRunIntent.preparing => await () async {
+            try {
+              final single = await rust_sync.prepareOrchardMigrationSingleQrPczt(
+                dbPath: dbPath,
+                network: networkName,
+                accountUuid: accountUuid,
+              );
+              if (mounted) setState(() => _keystoneStagedFallback = false);
+              return single;
+            } catch (e) {
+              if (!migrationIsSingleQrTooLargeError(e)) rethrow;
+              log(
+                'MigrationScreen: migration too large for one QR; '
+                'falling back to staged denominations-only signing',
+              );
+              if (mounted) setState(() => _keystoneStagedFallback = true);
+              return rust_sync.prepareOrchardMigrationDenominationsPczt(
+                dbPath: dbPath,
+                network: networkName,
+                accountUuid: accountUuid,
+              );
+            }
+          }(),
           MigrationRunIntent.migrating =>
             await rust_sync.prepareOrchardMigrationBatchPczt(
               dbPath: dbPath,
@@ -754,6 +777,20 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     try {
       result = switch (session.intent) {
         MigrationRunIntent.preparing => await () async {
+          // Denominations-only completion (staged fallback) signs + broadcasts
+          // just the split and takes NO password/salt.
+          if (_keystoneStagedFallback) {
+            return rust_sync.completeOrchardMigrationDenominationsPczt(
+              dbPath: dbPath,
+              lightwalletdUrl: lightwalletdUrl,
+              network: networkName,
+              accountUuid: accountUuid,
+              requestId: requestId,
+              signedMessages: signedMessages,
+            );
+          }
+          // Single-QR completion stores presigned children, so it needs the
+          // session password + salt.
           final security = ref.read(appSecurityProvider.notifier);
           final password = security.requireSessionPasswordForNativeSecretUse();
           final saltBase64 = await security
@@ -1090,6 +1127,7 @@ class _MigrationBody extends StatelessWidget {
     required this.amountZatoshi,
     required this.onMigrate,
     required this.onRetry,
+    required this.onScanSends,
   });
 
   final MigrationViewState viewState;
@@ -1103,6 +1141,7 @@ class _MigrationBody extends StatelessWidget {
   final BigInt amountZatoshi;
   final VoidCallback onMigrate;
   final VoidCallback onRetry;
+  final VoidCallback onScanSends;
 
   bool get _isIdle =>
       viewState == MigrationViewState.noOrchardFunds ||
@@ -1138,6 +1177,7 @@ class _MigrationBody extends StatelessWidget {
             amountZatoshi: amountZatoshi,
             totalShares: totalShares,
             now: DateTime.now(),
+            onScanSends: onScanSends,
             confirming:
                 viewState == MigrationViewState.waitingMigrationConfirmations,
             onRetry: viewState == MigrationViewState.failedRecoverable

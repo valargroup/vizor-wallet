@@ -240,3 +240,23 @@ bool migrationShouldAutoAdvanceSoftware({
   }
   return status.phase == 'ready_to_migrate' && status.signedChildPcztCount == 0;
 }
+
+/// True when a single-QR Keystone signing request was rejected purely because
+/// the migration has more notes than one QR can carry. Used to fall back to the
+/// staged (denominations-only → batch) multi-QR flow.
+bool migrationIsSingleQrTooLargeError(Object error) {
+  final lower = error.toString().toLowerCase();
+  return lower.contains('single keystone migration signing supports at most') ||
+      (lower.contains('migration notes') && lower.contains('at most'));
+}
+
+/// Whether the staged Keystone fallback's Send stage is waiting on the user to
+/// scan the batch QR. The denomination split has confirmed (run reached
+/// `ready_to_migrate`) but no presigned children exist yet.
+bool timelineSendIsAwaitingScan(
+  MigrationViewState viewState,
+  rust_sync.MigrationStatus? status,
+) {
+  final atSend = viewState == MigrationViewState.readyToMigrate;
+  return atSend && (status?.signedChildPcztCount ?? 0) == 0;
+}
