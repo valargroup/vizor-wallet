@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/migration/models/migration_step_state.dart';
+import 'package:zcash_wallet/src/features/migration/models/migration_timeline_model.dart';
 import 'package:zcash_wallet/src/features/migration/providers/migration_run_controller.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
