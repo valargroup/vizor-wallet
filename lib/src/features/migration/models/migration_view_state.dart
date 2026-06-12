@@ -57,9 +57,13 @@ MigrationViewState migrationViewState({
   required bool hasCompletedMigration,
   required BigInt orchardBalance,
   required BigInt ironwoodBalance,
+  bool preparingInFlight = false,
+  bool migratingInFlight = false,
 }) {
   final phaseState = migrationViewStateFromRustPhase(rustPhase);
   if (phaseState != null) return phaseState;
+  if (preparingInFlight) return MigrationViewState.preparingDenominations;
+  if (migratingInFlight) return MigrationViewState.buildingSigningBatch;
   if (hasPendingMigration) {
     return MigrationViewState.waitingMigrationConfirmations;
   }
@@ -175,6 +179,23 @@ bool migrationShouldWarnBeforeClose(rust_sync.MigrationStatus? status) {
       status?.phase == 'signing_batch';
 }
 
+bool migrationShouldShowEntry({
+  required MigrationViewState viewState,
+  required bool keepsProgressVisible,
+}) {
+  if (keepsProgressVisible) return false;
+  return switch (viewState) {
+    MigrationViewState.noOrchardFunds ||
+    MigrationViewState.waitingForSpendableOrchard ||
+    MigrationViewState.planningDenominations => true,
+    _ => false,
+  };
+}
+
+bool migrationCanStartFromEntry(MigrationViewState viewState) {
+  return viewState == MigrationViewState.planningDenominations;
+}
+
 Duration? migrationRemainingScheduledSubmissionTime(
   rust_sync.MigrationStatus? status,
   DateTime now,
@@ -223,4 +244,40 @@ String _reverseTxidByteOrder(String txid) {
     reversed.write(txid.substring(i - 2, i));
   }
   return reversed.toString();
+}
+
+/// Whether the global migration tick should auto-fire software stage 2. Software
+/// reaches `ready_to_migrate` with no presigned children (those are a hardware
+/// concept), so the second stage must be kicked off for it. Hardware is excluded
+/// — its children are already presigned and promoted by the tick.
+bool migrationShouldAutoAdvanceSoftware({
+  required rust_sync.MigrationStatus? status,
+  required bool isHardware,
+  required bool runInFlight,
+  required bool alreadyAttempted,
+}) {
+  if (status == null || isHardware || runInFlight || alreadyAttempted) {
+    return false;
+  }
+  return status.phase == 'ready_to_migrate' && status.signedChildPcztCount == 0;
+}
+
+/// True when a single-QR Keystone signing request was rejected purely because
+/// the migration has more notes than one QR can carry. Used to fall back to the
+/// staged (denominations-only → batch) multi-QR flow.
+bool migrationIsSingleQrTooLargeError(Object error) {
+  final lower = error.toString().toLowerCase();
+  return lower.contains('single keystone migration signing supports at most') ||
+      (lower.contains('migration notes') && lower.contains('at most'));
+}
+
+/// Whether the staged Keystone fallback's Send stage is waiting on the user to
+/// scan the batch QR. The denomination split has confirmed (run reached
+/// `ready_to_migrate`) but no presigned children exist yet.
+bool timelineSendIsAwaitingScan(
+  MigrationViewState viewState,
+  rust_sync.MigrationStatus? status,
+) {
+  final atSend = viewState == MigrationViewState.readyToMigrate;
+  return atSend && (status?.signedChildPcztCount ?? 0) == 0;
 }

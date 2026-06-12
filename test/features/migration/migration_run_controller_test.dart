@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zcash_wallet/src/features/migration/models/migration_step_state.dart';
+import 'package:zcash_wallet/src/features/migration/models/migration_timeline_model.dart';
 import 'package:zcash_wallet/src/features/migration/providers/migration_run_controller.dart';
 import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
@@ -57,7 +57,28 @@ void main() {
     const state = MigrationRunState();
     expect(state.intent, MigrationRunIntent.none);
     expect(state.inFlight, isFalse);
+    expect(state.settling, isFalse);
+    expect(state.keepsProgressVisible, isFalse);
     expect(state.error, isNull);
     expect(state.errorIntent, isNull);
+  });
+
+  test('run state keeps progress visible while in flight or settling', () {
+    const inFlight = MigrationRunState(
+      intent: MigrationRunIntent.preparing,
+      inFlight: true,
+    );
+    const settling = MigrationRunState(
+      intent: MigrationRunIntent.preparing,
+      settling: true,
+    );
+    const errored = MigrationRunState(
+      intent: MigrationRunIntent.preparing,
+      error: 'failed',
+    );
+
+    expect(inFlight.keepsProgressVisible, isTrue);
+    expect(settling.keepsProgressVisible, isTrue);
+    expect(errored.keepsProgressVisible, isFalse);
   });
 }

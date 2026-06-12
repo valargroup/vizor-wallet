@@ -14,7 +14,7 @@ import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../migration_copy.dart';
 import '../models/migration_batch.dart';
-import '../models/migration_step_state.dart';
+import '../models/migration_timeline_model.dart';
 import 'migration_expected_transfer_count_provider.dart';
 import 'orchard_migration_status_provider.dart';
 
@@ -22,16 +22,22 @@ class MigrationRunState {
   const MigrationRunState({
     this.intent = MigrationRunIntent.none,
     this.inFlight = false,
+    this.settling = false,
     this.error,
     this.errorIntent,
   });
 
   final MigrationRunIntent intent;
   final bool inFlight;
+  final bool settling;
   final String? error;
 
   /// Which step card shows [error]. Null when there is no error.
   final MigrationRunIntent? errorIntent;
+
+  /// True while the UI should keep showing the stage progress view even if the
+  /// status provider has not caught up yet.
+  bool get keepsProgressVisible => inFlight || settling;
 }
 
 /// True when the Rust call advanced the run. Successful stage outcomes
@@ -55,6 +61,7 @@ bool migrationRunAdvanced(rust_sync.IronwoodMigrationResult result) {
 
 class MigrationRunController extends Notifier<MigrationRunState> {
   Timer? _progressTimer;
+  Timer? _settleTimer;
   bool _dueBroadcastInFlight = false;
 
   @override
@@ -62,6 +69,8 @@ class MigrationRunController extends Notifier<MigrationRunState> {
     ref.onDispose(() {
       _progressTimer?.cancel();
       _progressTimer = null;
+      _settleTimer?.cancel();
+      _settleTimer = null;
     });
     return const MigrationRunState();
   }
@@ -69,8 +78,10 @@ class MigrationRunController extends Notifier<MigrationRunState> {
   /// Advances the migration run one stage. The Rust entry point is
   /// stage-aware: with no active run it splits notes into denominations;
   /// with an active run it signs and schedules the migration transactions.
-  Future<void> advance(MigrationRunIntent intent) async {
-    if (state.inFlight) return;
+  Future<bool> advance(MigrationRunIntent intent) async {
+    if (state.inFlight) return false;
+    _settleTimer?.cancel();
+    _settleTimer = null;
     state = MigrationRunState(intent: intent, inFlight: true);
     _progressTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       ref.invalidate(activeOrchardMigrationStatusProvider);
@@ -126,8 +137,9 @@ class MigrationRunController extends Notifier<MigrationRunState> {
             .setCount(accountUuid, result.totalCount, firstTxid: firstTxid);
       }
 
-      if (migrationRunAdvanced(result)) {
-        state = const MigrationRunState();
+      final advanced = migrationRunAdvanced(result);
+      if (advanced) {
+        _showSettlingState(intent);
       } else {
         state = MigrationRunState(
           intent: intent,
@@ -141,6 +153,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
           log('MigrationRunController: refreshAfterSend failed: $e');
         }),
       );
+      return advanced;
     } catch (e, st) {
       if (_isActiveMigrationError(e)) {
         log(
@@ -148,6 +161,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
           'reconciling from status',
         );
         state = const MigrationRunState();
+        return true;
       } else {
         log('MigrationRunController.advance: ERROR: $e\n$st');
         state = MigrationRunState(
@@ -155,12 +169,30 @@ class MigrationRunController extends Notifier<MigrationRunState> {
           error: _friendlyError(e),
           errorIntent: intent,
         );
+        return false;
       }
     } finally {
       _progressTimer?.cancel();
       _progressTimer = null;
       ref.invalidate(activeOrchardMigrationStatusProvider);
     }
+  }
+
+  void settleAfterExternalAdvance(MigrationRunIntent intent) {
+    if (state.inFlight) return;
+    _showSettlingState(intent);
+  }
+
+  void _showSettlingState(MigrationRunIntent intent) {
+    _settleTimer?.cancel();
+    state = MigrationRunState(intent: intent, settling: true);
+    _settleTimer = Timer(const Duration(seconds: 5), () {
+      final current = state;
+      if (current.settling && current.intent == intent) {
+        state = const MigrationRunState();
+        ref.invalidate(activeOrchardMigrationStatusProvider);
+      }
+    });
   }
 
   Future<rust_sync.IronwoodMigrationResult> _runMigrationWithPrepareRetry({
