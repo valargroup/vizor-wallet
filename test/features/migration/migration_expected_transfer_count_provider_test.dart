@@ -26,8 +26,9 @@ void main() {
       startedAt: startedAt,
     );
 
-    expect(count.isExpired(startedAt.add(const Duration(seconds: 104))), false);
-    expect(count.isExpired(startedAt.add(const Duration(seconds: 106))), true);
+    // ttl = 3-minute delayed broadcast window + 45s buffer = 225s.
+    expect(count.isExpired(startedAt.add(const Duration(seconds: 224))), false);
+    expect(count.isExpired(startedAt.add(const Duration(seconds: 226))), true);
   });
 
   test('migration expected count rejects malformed persisted json', () {
