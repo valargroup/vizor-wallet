@@ -21,6 +21,7 @@ class MigrationTimelineModel {
     required this.confirm,
     required this.send,
     this.sendNeedsScan = false,
+    this.sendCanResume = false,
   });
 
   final MigrationNodeStatus split;
@@ -31,6 +32,7 @@ class MigrationTimelineModel {
   /// blocked on a manual "Scan to sign the sends" action rather than running
   /// automatically.
   final bool sendNeedsScan;
+  final bool sendCanResume;
 
   MigrationNodeStatus statusFor(MigrationNodeId id) => switch (id) {
     MigrationNodeId.split => split,
@@ -64,7 +66,8 @@ MigrationTimelineModel migrationTimelineModel({
   }
 
   final hasMigrationTxs =
-      (status?.pendingTxCount ?? 0) > 0 || (status?.broadcastedTxCount ?? 0) > 0;
+      (status?.pendingTxCount ?? 0) > 0 ||
+      (status?.broadcastedTxCount ?? 0) > 0;
 
   return switch (viewState) {
     MigrationViewState.noOrchardFunds ||
@@ -79,22 +82,28 @@ MigrationTimelineModel migrationTimelineModel({
       confirm: MigrationNodeStatus.pending,
       send: MigrationNodeStatus.pending,
     ),
-    MigrationViewState.waitingDenomConfirmations => const MigrationTimelineModel(
-      split: MigrationNodeStatus.done,
-      confirm: MigrationNodeStatus.active,
-      send: MigrationNodeStatus.pending,
-    ),
+    MigrationViewState.waitingDenomConfirmations =>
+      const MigrationTimelineModel(
+        split: MigrationNodeStatus.done,
+        confirm: MigrationNodeStatus.active,
+        send: MigrationNodeStatus.pending,
+      ),
     MigrationViewState.readyToMigrate ||
     MigrationViewState.buildingSigningBatch ||
     MigrationViewState.signingBatch ||
     MigrationViewState.broadcastScheduled ||
     MigrationViewState.broadcasting ||
-    MigrationViewState.waitingMigrationConfirmations ||
-    MigrationViewState.paused => MigrationTimelineModel(
+    MigrationViewState.waitingMigrationConfirmations => MigrationTimelineModel(
       split: MigrationNodeStatus.done,
       confirm: MigrationNodeStatus.done,
       send: MigrationNodeStatus.active,
       sendNeedsScan: sendNeedsScan,
+    ),
+    MigrationViewState.paused => MigrationTimelineModel(
+      split: MigrationNodeStatus.done,
+      confirm: MigrationNodeStatus.done,
+      send: MigrationNodeStatus.active,
+      sendCanResume: true,
     ),
     MigrationViewState.complete => const MigrationTimelineModel(
       split: MigrationNodeStatus.done,

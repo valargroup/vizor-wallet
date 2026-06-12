@@ -95,14 +95,28 @@ void main() {
 
   test('sendNeedsScan only flows through send-active states', () {
     expect(
-      _map(MigrationViewState.readyToMigrate, sendNeedsScan: true).sendNeedsScan,
+      _map(
+        MigrationViewState.readyToMigrate,
+        sendNeedsScan: true,
+      ).sendNeedsScan,
       isTrue,
     );
     expect(
-      _map(MigrationViewState.waitingDenomConfirmations, sendNeedsScan: true)
-          .sendNeedsScan,
+      _map(
+        MigrationViewState.waitingDenomConfirmations,
+        sendNeedsScan: true,
+      ).sendNeedsScan,
       isFalse,
     );
+  });
+
+  test('paused migrations expose a resume action', () {
+    final m = _map(MigrationViewState.paused);
+    expect(m.split, MigrationNodeStatus.done);
+    expect(m.confirm, MigrationNodeStatus.done);
+    expect(m.send, MigrationNodeStatus.active);
+    expect(m.sendCanResume, isTrue);
+    expect(m.sendNeedsScan, isFalse);
   });
 
   test('complete marks all nodes done', () {

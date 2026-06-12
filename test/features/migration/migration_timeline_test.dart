@@ -15,6 +15,7 @@ Future<void> _pump(
   int totalShares = 3,
   DateTime? now,
   VoidCallback? onScanSends,
+  VoidCallback? onRetry,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -30,6 +31,7 @@ Future<void> _pump(
               totalShares: totalShares,
               now: now ?? DateTime.fromMillisecondsSinceEpoch(0),
               onScanSends: onScanSends,
+              onRetry: onRetry,
             ),
           ),
         ),
@@ -88,6 +90,20 @@ void main() {
       onScanSends: () {},
     );
     expect(find.text(MigrationCopy.sendScanCta), findsOneWidget);
+  });
+
+  testWidgets('paused migration shows the resume action', (tester) async {
+    await _pump(
+      tester,
+      const MigrationTimelineModel(
+        split: MigrationNodeStatus.done,
+        confirm: MigrationNodeStatus.done,
+        send: MigrationNodeStatus.active,
+        sendCanResume: true,
+      ),
+      onRetry: () {},
+    );
+    expect(find.text(MigrationCopy.sendResumeCta), findsOneWidget);
   });
 
   testWidgets('only the next scheduled share row shows a countdown', (

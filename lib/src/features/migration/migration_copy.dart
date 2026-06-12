@@ -42,6 +42,7 @@ abstract final class MigrationCopy {
   static const sendTitle = 'Send shares';
   static const sendConfirmingTitle = 'Confirming shares';
   static const sendScanCta = 'Scan to sign the sends';
+  static const sendResumeCta = 'Resume migration';
   static String sendProgress(int confirmed, int total) =>
       '$confirmed of $total confirmed';
 

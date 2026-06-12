@@ -62,6 +62,21 @@ void main() {
     );
   });
 
+  test('entry CTA is enabled from the ready migration state', () {
+    expect(
+      migrationCanStartFromEntry(MigrationViewState.planningDenominations),
+      isTrue,
+    );
+    expect(
+      migrationCanStartFromEntry(MigrationViewState.noOrchardFunds),
+      isFalse,
+    );
+    expect(
+      migrationCanStartFromEntry(MigrationViewState.waitingForSpendableOrchard),
+      isFalse,
+    );
+  });
+
   test('account with a pending migration shows confirmation wait', () {
     expect(
       migrationViewState(
@@ -296,6 +311,13 @@ void main() {
 
       expect(
         timelineSendIsAwaitingScan(MigrationViewState.readyToMigrate, status()),
+        isTrue,
+      );
+      expect(
+        timelineSendIsAwaitingScan(
+          MigrationViewState.readyToMigrate,
+          status(signedChildren: 0),
+        ),
         isTrue,
       );
       expect(

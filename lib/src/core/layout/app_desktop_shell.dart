@@ -83,8 +83,7 @@ class _GlobalMigrationWarningBannerState
     final status = ref.watch(activeOrchardMigrationStatusProvider).value;
     final isHardware =
         ref.watch(accountProvider).value?.activeAccount?.isHardware ?? false;
-    final wantsAutoAdvance =
-        !isHardware && status?.phase == 'ready_to_migrate';
+    final wantsAutoAdvance = !isHardware && status?.phase == 'ready_to_migrate';
     final visible = _showsMigrationWarning(status);
     _syncMigrationTick(visible || wantsAutoAdvance);
 
@@ -210,11 +209,13 @@ class _GlobalMigrationWarningBannerState
     )) {
       return;
     }
-    if (runId != null) _autoAdvancedRunIds.add(runId);
-    log('GlobalMigrationWarningBanner: auto-advancing software migration stage 2');
-    await ref
+    log(
+      'GlobalMigrationWarningBanner: auto-advancing software migration stage 2',
+    );
+    final advanced = await ref
         .read(migrationRunControllerProvider.notifier)
         .advance(MigrationRunIntent.migrating);
+    if (advanced && runId != null) _autoAdvancedRunIds.add(runId);
     ref.invalidate(activeOrchardMigrationStatusProvider);
   }
 

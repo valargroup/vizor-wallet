@@ -192,6 +192,10 @@ bool migrationShouldShowEntry({
   };
 }
 
+bool migrationCanStartFromEntry(MigrationViewState viewState) {
+  return viewState == MigrationViewState.planningDenominations;
+}
+
 Duration? migrationRemainingScheduledSubmissionTime(
   rust_sync.MigrationStatus? status,
   DateTime now,

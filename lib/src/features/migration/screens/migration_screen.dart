@@ -170,7 +170,6 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         intent: runState.intent,
         sendNeedsScan:
             isHardware &&
-            _keystoneStagedFallback &&
             timelineSendIsAwaitingScan(viewState, migrationStatus),
       );
       final effectiveExpectedCount =
@@ -1192,7 +1191,9 @@ class _MigrationBody extends StatelessWidget {
             onScanSends: onScanSends,
             confirming:
                 viewState == MigrationViewState.waitingMigrationConfirmations,
-            onRetry: viewState == MigrationViewState.failedRecoverable
+            onRetry:
+                viewState == MigrationViewState.failedRecoverable ||
+                    viewState == MigrationViewState.paused
                 ? onRetry
                 : null,
           ),
@@ -1211,7 +1212,7 @@ class _MigrationBody extends StatelessWidget {
 
   Widget _entry(BuildContext context) {
     final colors = context.colors;
-    final hasFunds = sync.orchardBalance > BigInt.zero;
+    final canStart = migrationCanStartFromEntry(viewState);
     final amount = ZecAmount.fromZatoshi(
       sync.orchardBalance,
     ).pretty(denomStyle: ZecDenomStyle.upper).toString();
@@ -1268,7 +1269,7 @@ class _MigrationBody extends StatelessWidget {
         ],
         const SizedBox(height: AppSpacing.md),
         AppButton(
-          onPressed: hasFunds ? onMigrate : null,
+          onPressed: canStart ? onMigrate : null,
           child: const Text(MigrationCopy.migrateCta),
         ),
       ],

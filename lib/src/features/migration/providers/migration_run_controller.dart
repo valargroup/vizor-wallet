@@ -78,8 +78,8 @@ class MigrationRunController extends Notifier<MigrationRunState> {
   /// Advances the migration run one stage. The Rust entry point is
   /// stage-aware: with no active run it splits notes into denominations;
   /// with an active run it signs and schedules the migration transactions.
-  Future<void> advance(MigrationRunIntent intent) async {
-    if (state.inFlight) return;
+  Future<bool> advance(MigrationRunIntent intent) async {
+    if (state.inFlight) return false;
     _settleTimer?.cancel();
     _settleTimer = null;
     state = MigrationRunState(intent: intent, inFlight: true);
@@ -137,7 +137,8 @@ class MigrationRunController extends Notifier<MigrationRunState> {
             .setCount(accountUuid, result.totalCount, firstTxid: firstTxid);
       }
 
-      if (migrationRunAdvanced(result)) {
+      final advanced = migrationRunAdvanced(result);
+      if (advanced) {
         _showSettlingState(intent);
       } else {
         state = MigrationRunState(
@@ -152,6 +153,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
           log('MigrationRunController: refreshAfterSend failed: $e');
         }),
       );
+      return advanced;
     } catch (e, st) {
       if (_isActiveMigrationError(e)) {
         log(
@@ -159,6 +161,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
           'reconciling from status',
         );
         state = const MigrationRunState();
+        return true;
       } else {
         log('MigrationRunController.advance: ERROR: $e\n$st');
         state = MigrationRunState(
@@ -166,6 +169,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
           error: _friendlyError(e),
           errorIntent: intent,
         );
+        return false;
       }
     } finally {
       _progressTimer?.cancel();

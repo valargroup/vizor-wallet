@@ -264,6 +264,13 @@ class MigrationTimeline extends StatelessWidget {
             child: const Text(MigrationCopy.sendScanCta),
           ),
         ],
+        if (model.sendCanResume && onRetry != null) ...[
+          const SizedBox(height: AppSpacing.s),
+          AppButton(
+            onPressed: onRetry,
+            child: const Text(MigrationCopy.sendResumeCta),
+          ),
+        ],
         const SizedBox(height: AppSpacing.s),
         for (var i = 0; i < total; i++) ...[
           if (i > 0)
