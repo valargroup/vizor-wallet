@@ -6,28 +6,57 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/wallet_paths.dart';
 
-const _migrationDelayedBroadcastWindow = Duration(minutes: 3);
 const _migrationExpectedTransferCountBuffer = Duration(seconds: 45);
 const _migrationExpectedTransferCountFile =
     'migration_expected_transfer_counts_v1.json';
 const migrationProgressTransactionHistoryLimit = 1000;
+
+DateTime migrationExpectedTransferCountExpiresAt({
+  required DateTime startedAt,
+  required int broadcastWindowSeconds,
+}) {
+  final windowSeconds = broadcastWindowSeconds < 0 ? 0 : broadcastWindowSeconds;
+  return startedAt
+      .add(Duration(seconds: windowSeconds))
+      .add(_migrationExpectedTransferCountBuffer);
+}
 
 class MigrationExpectedTransferCount {
   const MigrationExpectedTransferCount({
     required this.count,
     required this.firstTxid,
     required this.startedAt,
+    required this.expiresAt,
   });
+
+  factory MigrationExpectedTransferCount.withBroadcastWindow({
+    required int count,
+    required String firstTxid,
+    required DateTime startedAt,
+    required int broadcastWindowSeconds,
+  }) {
+    return MigrationExpectedTransferCount(
+      count: count,
+      firstTxid: firstTxid,
+      startedAt: startedAt,
+      expiresAt: migrationExpectedTransferCountExpiresAt(
+        startedAt: startedAt,
+        broadcastWindowSeconds: broadcastWindowSeconds,
+      ),
+    );
+  }
 
   final int count;
   final String firstTxid;
   final DateTime startedAt;
+  final DateTime expiresAt;
 
   Map<String, Object?> toJson() {
     return {
       'count': count,
       'firstTxid': firstTxid,
       'startedAt': startedAt.toIso8601String(),
+      'expiresAt': expiresAt.toIso8601String(),
     };
   }
 
@@ -36,25 +65,24 @@ class MigrationExpectedTransferCount {
     final count = value['count'];
     final firstTxid = value['firstTxid'];
     final startedAt = value['startedAt'];
+    final expiresAt = value['expiresAt'];
     if (count is! int || count <= 0) return null;
     if (firstTxid is! String || firstTxid.trim().isEmpty) return null;
     if (startedAt is! String) return null;
+    if (expiresAt is! String) return null;
     final parsedStartedAt = DateTime.tryParse(startedAt);
-    if (parsedStartedAt == null) return null;
+    final parsedExpiresAt = DateTime.tryParse(expiresAt);
+    if (parsedStartedAt == null || parsedExpiresAt == null) return null;
     return MigrationExpectedTransferCount(
       count: count,
       firstTxid: firstTxid.toLowerCase(),
       startedAt: parsedStartedAt,
+      expiresAt: parsedExpiresAt,
     );
   }
 
   bool isExpired(DateTime now) {
-    return now.difference(startedAt) > _ttl;
-  }
-
-  Duration get _ttl {
-    return _migrationDelayedBroadcastWindow +
-        _migrationExpectedTransferCountBuffer;
+    return now.isAfter(expiresAt);
   }
 }
 
@@ -70,13 +98,20 @@ class MigrationExpectedTransferCountNotifier
     return const {};
   }
 
-  void setCount(String accountUuid, int count, {required String firstTxid}) {
+  void setCount(
+    String accountUuid,
+    int count, {
+    required String firstTxid,
+    required int broadcastWindowSeconds,
+  }) {
+    final startedAt = DateTime.now();
     state = {
       ...state,
-      accountUuid: MigrationExpectedTransferCount(
+      accountUuid: MigrationExpectedTransferCount.withBroadcastWindow(
         count: count,
         firstTxid: firstTxid,
-        startedAt: DateTime.now(),
+        startedAt: startedAt,
+        broadcastWindowSeconds: broadcastWindowSeconds,
       ),
     };
     unawaited(_persist(state));

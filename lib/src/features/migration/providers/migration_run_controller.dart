@@ -59,6 +59,10 @@ bool migrationRunAdvanced(rust_sync.IronwoodMigrationResult result) {
   };
 }
 
+int? _broadcastWindowSecondsFromStatus(rust_sync.MigrationStatus? status) {
+  return status?.broadcastWindowSeconds.toInt();
+}
+
 class MigrationRunController extends Notifier<MigrationRunState> {
   Timer? _progressTimer;
   Timer? _settleTimer;
@@ -106,6 +110,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
           'Select a testnet endpoint before migrating.',
         );
       }
+      final broadcastWindowSeconds = _currentBroadcastWindowSeconds();
 
       final dbPath = await getWalletDbPath();
       final migrationNetworkName = endpoint.walletNetworkName;
@@ -132,9 +137,12 @@ class MigrationRunController extends Notifier<MigrationRunState> {
 
       final firstTxid = _firstTxid(result.txids);
       if (result.totalCount > 0 && firstTxid != null) {
-        ref
-            .read(migrationExpectedTransferCountProvider.notifier)
-            .setCount(accountUuid, result.totalCount, firstTxid: firstTxid);
+        _setExpectedTransferCount(
+          accountUuid: accountUuid,
+          count: result.totalCount,
+          firstTxid: firstTxid,
+          broadcastWindowSeconds: broadcastWindowSeconds,
+        );
       }
 
       final advanced = migrationRunAdvanced(result);
@@ -193,6 +201,29 @@ class MigrationRunController extends Notifier<MigrationRunState> {
         ref.invalidate(activeOrchardMigrationStatusProvider);
       }
     });
+  }
+
+  int? _currentBroadcastWindowSeconds() {
+    return _broadcastWindowSecondsFromStatus(
+      ref.read(activeOrchardMigrationStatusProvider).value,
+    );
+  }
+
+  void _setExpectedTransferCount({
+    required String accountUuid,
+    required int count,
+    required String firstTxid,
+    required int? broadcastWindowSeconds,
+  }) {
+    if (broadcastWindowSeconds == null) return;
+    ref
+        .read(migrationExpectedTransferCountProvider.notifier)
+        .setCount(
+          accountUuid,
+          count,
+          firstTxid: firstTxid,
+          broadcastWindowSeconds: broadcastWindowSeconds,
+        );
   }
 
   Future<rust_sync.IronwoodMigrationResult> _runMigrationWithPrepareRetry({
@@ -317,6 +348,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
 
       final endpoint = ref.read(rpcEndpointProvider);
       if (endpoint.network != ZcashNetwork.testnet) return;
+      final broadcastWindowSeconds = _currentBroadcastWindowSeconds();
 
       final dbPath = await getWalletDbPath();
       final security = ref.read(appSecurityProvider.notifier);
@@ -354,9 +386,12 @@ class MigrationRunController extends Notifier<MigrationRunState> {
 
       final firstTxid = _firstTxid(result.txids);
       if (result.totalCount > 0 && firstTxid != null) {
-        ref
-            .read(migrationExpectedTransferCountProvider.notifier)
-            .setCount(accountUuid, result.totalCount, firstTxid: firstTxid);
+        _setExpectedTransferCount(
+          accountUuid: accountUuid,
+          count: result.totalCount,
+          firstTxid: firstTxid,
+          broadcastWindowSeconds: broadcastWindowSeconds,
+        );
       }
 
       await _refreshIfAccountStillActive(accountUuid);

@@ -395,8 +395,8 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     bool isHardware,
     rust_sync.MigrationStatus? status,
   ) async {
-    final windowSeconds = (status?.broadcastWindowSeconds ?? BigInt.from(180))
-        .toInt();
+    final windowSeconds = _migrationBroadcastWindowSeconds(status);
+    if (windowSeconds == null) return;
     final confirmed = await MigrationWarningDialog.show(
       context,
       windowSeconds: windowSeconds,
@@ -850,10 +850,20 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     );
 
     final firstTxid = _firstTxid(result.txids);
-    if (result.totalCount > 0 && firstTxid != null) {
+    final broadcastWindowSeconds = _migrationBroadcastWindowSeconds(
+      ref.read(activeOrchardMigrationStatusProvider).value,
+    );
+    if (result.totalCount > 0 &&
+        firstTxid != null &&
+        broadcastWindowSeconds != null) {
       ref
           .read(migrationExpectedTransferCountProvider.notifier)
-          .setCount(accountUuid, result.totalCount, firstTxid: firstTxid);
+          .setCount(
+            accountUuid,
+            result.totalCount,
+            firstTxid: firstTxid,
+            broadcastWindowSeconds: broadcastWindowSeconds,
+          );
     }
 
     if (!migrationRunAdvanced(result)) {
@@ -1012,6 +1022,10 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       if (trimmed.isNotEmpty) return trimmed.toLowerCase();
     }
     return null;
+  }
+
+  int? _migrationBroadcastWindowSeconds(rust_sync.MigrationStatus? status) {
+    return status?.broadcastWindowSeconds.toInt();
   }
 
   String _friendlyKeystoneError(Object error) {

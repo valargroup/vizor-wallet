@@ -4,10 +4,12 @@ import 'package:zcash_wallet/src/features/migration/providers/migration_expected
 void main() {
   test('migration expected count round-trips through persisted json', () {
     final startedAt = DateTime.utc(2026, 6, 9, 3, 0);
+    final expiresAt = DateTime.utc(2026, 6, 9, 3, 4);
     final count = MigrationExpectedTransferCount(
       count: 2,
       firstTxid: 'ABCD',
       startedAt: startedAt,
+      expiresAt: expiresAt,
     );
 
     final restored = MigrationExpectedTransferCount.fromJson(count.toJson());
@@ -16,19 +18,22 @@ void main() {
     expect(restored!.count, 2);
     expect(restored.firstTxid, 'abcd');
     expect(restored.startedAt, startedAt);
+    expect(restored.expiresAt, expiresAt);
   });
 
-  test('migration expected count expires after delayed broadcast window', () {
+  test('migration expected count expires after Rust broadcast window', () {
     final startedAt = DateTime.utc(2026, 6, 9, 3, 0);
-    final count = MigrationExpectedTransferCount(
+    final count = MigrationExpectedTransferCount.withBroadcastWindow(
       count: 2,
       firstTxid: 'abcd',
       startedAt: startedAt,
+      broadcastWindowSeconds: 120,
     );
 
-    // ttl = 3-minute delayed broadcast window + 45s buffer = 225s.
-    expect(count.isExpired(startedAt.add(const Duration(seconds: 224))), false);
-    expect(count.isExpired(startedAt.add(const Duration(seconds: 226))), true);
+    // ttl = Rust broadcast window + 45s buffer = 165s.
+    expect(count.expiresAt, startedAt.add(const Duration(seconds: 165)));
+    expect(count.isExpired(startedAt.add(const Duration(seconds: 165))), false);
+    expect(count.isExpired(startedAt.add(const Duration(seconds: 166))), true);
   });
 
   test('migration expected count rejects malformed persisted json', () {
@@ -38,6 +43,7 @@ void main() {
         'count': 0,
         'firstTxid': 'abcd',
         'startedAt': DateTime.utc(2026).toIso8601String(),
+        'expiresAt': DateTime.utc(2026).toIso8601String(),
       }),
       isNull,
     );
@@ -45,6 +51,15 @@ void main() {
       MigrationExpectedTransferCount.fromJson({
         'count': 2,
         'firstTxid': '',
+        'startedAt': DateTime.utc(2026).toIso8601String(),
+        'expiresAt': DateTime.utc(2026).toIso8601String(),
+      }),
+      isNull,
+    );
+    expect(
+      MigrationExpectedTransferCount.fromJson({
+        'count': 2,
+        'firstTxid': 'abcd',
         'startedAt': DateTime.utc(2026).toIso8601String(),
       }),
       isNull,
