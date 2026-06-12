@@ -17,6 +17,34 @@ void main() {
     );
   });
 
+  test('preparing run in flight keeps split progress visible', () {
+    expect(
+      migrationViewState(
+        rustPhase: null,
+        hasPendingMigration: false,
+        hasCompletedMigration: false,
+        orchardBalance: BigInt.from(1),
+        ironwoodBalance: BigInt.zero,
+        preparingInFlight: true,
+      ),
+      MigrationViewState.preparingDenominations,
+    );
+  });
+
+  test('migrating run in flight keeps send progress visible', () {
+    expect(
+      migrationViewState(
+        rustPhase: null,
+        hasPendingMigration: false,
+        hasCompletedMigration: false,
+        orchardBalance: BigInt.from(1),
+        ironwoodBalance: BigInt.zero,
+        migratingInFlight: true,
+      ),
+      MigrationViewState.buildingSigningBatch,
+    );
+  });
+
   test('account with a pending migration shows confirmation wait', () {
     expect(
       migrationViewState(
@@ -138,76 +166,79 @@ void main() {
     expect(migrationTxidsMatch(txid, unrelated), isFalse);
   });
 
-  test('software auto-advance fires only at ready_to_migrate, software, idle', () {
-    rust_sync.MigrationStatus ready({int signedChildren = 0}) =>
-        rust_sync.MigrationStatus(
-          phase: 'ready_to_migrate',
-          targetValuesZatoshi: Uint64List(0),
-          preparedNoteCount: 0,
-          denominationConfirmationCount: 3,
-          denominationConfirmationTarget: 3,
-          pendingTxCount: 0,
-          signedChildPcztCount: signedChildren,
-          pendingPrepTxCount: 0,
-          broadcastedTxCount: 0,
-          confirmedTxCount: 0,
-          totalCount: 4,
-          canAbandon: false,
-          signingBatchLimit: 8,
-          broadcastWindowSeconds: BigInt.from(180),
-          maxPreparedNotesPerRun: 64,
-          scheduledBroadcasts: const [],
-        );
+  test(
+    'software auto-advance fires only at ready_to_migrate, software, idle',
+    () {
+      rust_sync.MigrationStatus ready({int signedChildren = 0}) =>
+          rust_sync.MigrationStatus(
+            phase: 'ready_to_migrate',
+            targetValuesZatoshi: Uint64List(0),
+            preparedNoteCount: 0,
+            denominationConfirmationCount: 3,
+            denominationConfirmationTarget: 3,
+            pendingTxCount: 0,
+            signedChildPcztCount: signedChildren,
+            pendingPrepTxCount: 0,
+            broadcastedTxCount: 0,
+            confirmedTxCount: 0,
+            totalCount: 4,
+            canAbandon: false,
+            signingBatchLimit: 8,
+            broadcastWindowSeconds: BigInt.from(180),
+            maxPreparedNotesPerRun: 64,
+            scheduledBroadcasts: const [],
+          );
 
-    expect(
-      migrationShouldAutoAdvanceSoftware(
-        status: ready(),
-        isHardware: false,
-        runInFlight: false,
-        alreadyAttempted: false,
-      ),
-      isTrue,
-    );
-    // hardware excluded
-    expect(
-      migrationShouldAutoAdvanceSoftware(
-        status: ready(),
-        isHardware: true,
-        runInFlight: false,
-        alreadyAttempted: false,
-      ),
-      isFalse,
-    );
-    // presigned children present -> not the software path
-    expect(
-      migrationShouldAutoAdvanceSoftware(
-        status: ready(signedChildren: 4),
-        isHardware: false,
-        runInFlight: false,
-        alreadyAttempted: false,
-      ),
-      isFalse,
-    );
-    // already attempted / in flight -> no re-fire
-    expect(
-      migrationShouldAutoAdvanceSoftware(
-        status: ready(),
-        isHardware: false,
-        runInFlight: true,
-        alreadyAttempted: false,
-      ),
-      isFalse,
-    );
-    expect(
-      migrationShouldAutoAdvanceSoftware(
-        status: ready(),
-        isHardware: false,
-        runInFlight: false,
-        alreadyAttempted: true,
-      ),
-      isFalse,
-    );
-  });
+      expect(
+        migrationShouldAutoAdvanceSoftware(
+          status: ready(),
+          isHardware: false,
+          runInFlight: false,
+          alreadyAttempted: false,
+        ),
+        isTrue,
+      );
+      // hardware excluded
+      expect(
+        migrationShouldAutoAdvanceSoftware(
+          status: ready(),
+          isHardware: true,
+          runInFlight: false,
+          alreadyAttempted: false,
+        ),
+        isFalse,
+      );
+      // presigned children present -> not the software path
+      expect(
+        migrationShouldAutoAdvanceSoftware(
+          status: ready(signedChildren: 4),
+          isHardware: false,
+          runInFlight: false,
+          alreadyAttempted: false,
+        ),
+        isFalse,
+      );
+      // already attempted / in flight -> no re-fire
+      expect(
+        migrationShouldAutoAdvanceSoftware(
+          status: ready(),
+          isHardware: false,
+          runInFlight: true,
+          alreadyAttempted: false,
+        ),
+        isFalse,
+      );
+      expect(
+        migrationShouldAutoAdvanceSoftware(
+          status: ready(),
+          isHardware: false,
+          runInFlight: false,
+          alreadyAttempted: true,
+        ),
+        isFalse,
+      );
+    },
+  );
 
   test('single-QR oversize error is detected for the staged fallback', () {
     expect(
@@ -223,47 +254,44 @@ void main() {
     );
   });
 
-  test('staged-fallback Send awaits a scan only before children are signed', () {
-    rust_sync.MigrationStatus status({int signedChildren = 0}) =>
-        rust_sync.MigrationStatus(
-          phase: 'ready_to_migrate',
-          targetValuesZatoshi: Uint64List(0),
-          preparedNoteCount: 0,
-          denominationConfirmationCount: 3,
-          denominationConfirmationTarget: 3,
-          pendingTxCount: 0,
-          signedChildPcztCount: signedChildren,
-          pendingPrepTxCount: 0,
-          broadcastedTxCount: 0,
-          confirmedTxCount: 0,
-          totalCount: 40,
-          canAbandon: false,
-          signingBatchLimit: 8,
-          broadcastWindowSeconds: BigInt.from(180),
-          maxPreparedNotesPerRun: 64,
-          scheduledBroadcasts: const [],
-        );
+  test(
+    'staged-fallback Send awaits a scan only before children are signed',
+    () {
+      rust_sync.MigrationStatus status({int signedChildren = 0}) =>
+          rust_sync.MigrationStatus(
+            phase: 'ready_to_migrate',
+            targetValuesZatoshi: Uint64List(0),
+            preparedNoteCount: 0,
+            denominationConfirmationCount: 3,
+            denominationConfirmationTarget: 3,
+            pendingTxCount: 0,
+            signedChildPcztCount: signedChildren,
+            pendingPrepTxCount: 0,
+            broadcastedTxCount: 0,
+            confirmedTxCount: 0,
+            totalCount: 40,
+            canAbandon: false,
+            signingBatchLimit: 8,
+            broadcastWindowSeconds: BigInt.from(180),
+            maxPreparedNotesPerRun: 64,
+            scheduledBroadcasts: const [],
+          );
 
-    expect(
-      timelineSendIsAwaitingScan(
-        MigrationViewState.readyToMigrate,
-        status(),
-      ),
-      isTrue,
-    );
-    expect(
-      timelineSendIsAwaitingScan(
-        MigrationViewState.readyToMigrate,
-        status(signedChildren: 40),
-      ),
-      isFalse,
-    );
-    expect(
-      timelineSendIsAwaitingScan(
-        MigrationViewState.broadcasting,
-        status(),
-      ),
-      isFalse,
-    );
-  });
+      expect(
+        timelineSendIsAwaitingScan(MigrationViewState.readyToMigrate, status()),
+        isTrue,
+      );
+      expect(
+        timelineSendIsAwaitingScan(
+          MigrationViewState.readyToMigrate,
+          status(signedChildren: 40),
+        ),
+        isFalse,
+      );
+      expect(
+        timelineSendIsAwaitingScan(MigrationViewState.broadcasting, status()),
+        isFalse,
+      );
+    },
+  );
 }

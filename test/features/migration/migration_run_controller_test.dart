@@ -57,7 +57,28 @@ void main() {
     const state = MigrationRunState();
     expect(state.intent, MigrationRunIntent.none);
     expect(state.inFlight, isFalse);
+    expect(state.settling, isFalse);
+    expect(state.keepsProgressVisible, isFalse);
     expect(state.error, isNull);
     expect(state.errorIntent, isNull);
+  });
+
+  test('run state keeps progress visible while in flight or settling', () {
+    const inFlight = MigrationRunState(
+      intent: MigrationRunIntent.preparing,
+      inFlight: true,
+    );
+    const settling = MigrationRunState(
+      intent: MigrationRunIntent.preparing,
+      settling: true,
+    );
+    const errored = MigrationRunState(
+      intent: MigrationRunIntent.preparing,
+      error: 'failed',
+    );
+
+    expect(inFlight.keepsProgressVisible, isTrue);
+    expect(settling.keepsProgressVisible, isTrue);
+    expect(errored.keepsProgressVisible, isFalse);
   });
 }

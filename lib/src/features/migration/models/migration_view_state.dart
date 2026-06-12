@@ -57,9 +57,13 @@ MigrationViewState migrationViewState({
   required bool hasCompletedMigration,
   required BigInt orchardBalance,
   required BigInt ironwoodBalance,
+  bool preparingInFlight = false,
+  bool migratingInFlight = false,
 }) {
   final phaseState = migrationViewStateFromRustPhase(rustPhase);
   if (phaseState != null) return phaseState;
+  if (preparingInFlight) return MigrationViewState.preparingDenominations;
+  if (migratingInFlight) return MigrationViewState.buildingSigningBatch;
   if (hasPendingMigration) {
     return MigrationViewState.waitingMigrationConfirmations;
   }

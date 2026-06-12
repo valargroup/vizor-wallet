@@ -7,6 +7,7 @@ import '../../../core/widgets/app_icon.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../migration_copy.dart';
 import '../models/migration_timeline_model.dart';
+import '../models/migration_view_state.dart';
 
 /// Connected three-node migration timeline (split → confirm → send). Pure
 /// presentation: all state comes in via [model] and the data fields.
@@ -155,9 +156,10 @@ class MigrationTimeline extends StatelessWidget {
     }
     final text = switch (model.split) {
       MigrationNodeStatus.active => MigrationCopy.splitActive,
-      MigrationNodeStatus.done => status != null && status!.totalCount > 0
-          ? MigrationCopy.splitDone(status!.totalCount)
-          : MigrationCopy.splitDoneGeneric,
+      MigrationNodeStatus.done =>
+        status != null && status!.totalCount > 0
+            ? MigrationCopy.splitDone(status!.totalCount)
+            : MigrationCopy.splitDoneGeneric,
       MigrationNodeStatus.pending => '',
       MigrationNodeStatus.error => '',
     };
@@ -217,7 +219,14 @@ class MigrationTimeline extends StatelessWidget {
 
     // active or done
     final rows = shares.reversed.toList(growable: false); // oldest -> newest
-    final total = [rows.length, totalShares, 1].reduce((a, b) => a > b ? a : b);
+    final scheduledBroadcasts =
+        status?.scheduledBroadcasts.toList(growable: false) ?? const [];
+    final total = [
+      rows.length,
+      scheduledBroadcasts.length,
+      totalShares,
+      1,
+    ].reduce((a, b) => a > b ? a : b);
     final confirmed = rows.where(_isConfirmed).length;
     final amount = ZecAmount.fromZatoshi(
       amountZatoshi,
@@ -256,11 +265,24 @@ class MigrationTimeline extends StatelessWidget {
         ],
         const SizedBox(height: AppSpacing.s),
         for (var i = 0; i < total; i++) ...[
-          if (i > 0) Divider(height: AppSpacing.md, color: colors.border.subtle),
-          _ShareRow(
-            index: i,
-            transaction: i < rows.length ? rows[i] : null,
-            now: now,
+          if (i > 0)
+            Divider(height: AppSpacing.md, color: colors.border.subtle),
+          Builder(
+            builder: (_) {
+              final broadcast = i < scheduledBroadcasts.length
+                  ? scheduledBroadcasts[i]
+                  : null;
+              return _ShareRow(
+                index: i,
+                transaction: _transactionForShareRow(
+                  index: i,
+                  rows: rows,
+                  broadcast: broadcast,
+                ),
+                scheduledBroadcast: broadcast,
+                now: now,
+              );
+            },
           ),
         ],
       ],
@@ -270,6 +292,19 @@ class MigrationTimeline extends StatelessWidget {
 
 bool _isConfirmed(rust_sync.TransactionInfo tx) =>
     tx.minedHeight != BigInt.zero && !tx.expiredUnmined;
+
+rust_sync.TransactionInfo? _transactionForShareRow({
+  required int index,
+  required List<rust_sync.TransactionInfo> rows,
+  required rust_sync.MigrationScheduledBroadcast? broadcast,
+}) {
+  if (broadcast != null) {
+    for (final tx in rows) {
+      if (migrationTxidsMatch(tx.txidHex, broadcast.txidHex)) return tx;
+    }
+  }
+  return index < rows.length ? rows[index] : null;
+}
 
 class _Dot extends StatelessWidget {
   const _Dot({required this.status});
@@ -321,11 +356,13 @@ class _ShareRow extends StatelessWidget {
   const _ShareRow({
     required this.index,
     required this.transaction,
+    required this.scheduledBroadcast,
     required this.now,
   });
 
   final int index;
   final rust_sync.TransactionInfo? transaction;
+  final rust_sync.MigrationScheduledBroadcast? scheduledBroadcast;
   final DateTime now;
 
   @override
@@ -333,15 +370,20 @@ class _ShareRow extends StatelessWidget {
     final colors = context.colors;
     final tx = transaction;
     final isFailed = tx?.expiredUnmined ?? false;
-    final isConfirmed = tx != null && _isConfirmed(tx);
-    final isSending = tx != null && !isConfirmed && !isFailed;
+    final broadcastStatus = scheduledBroadcast?.status;
+    final isConfirmed =
+        (tx != null && _isConfirmed(tx)) ||
+        (tx == null && broadcastStatus == 'confirmed');
+    final isSending =
+        (tx != null && !isConfirmed && !isFailed) ||
+        (tx == null && broadcastStatus == 'broadcasted');
     final statusText = isFailed
         ? MigrationCopy.shareFailed
         : isConfirmed
         ? MigrationCopy.shareConfirmed
         : isSending
         ? MigrationCopy.shareSending
-        : MigrationCopy.shareScheduled;
+        : _scheduledStatusText(scheduledBroadcast, now);
     final icon = isFailed
         ? AppIcons.warning
         : isConfirmed
@@ -365,9 +407,24 @@ class _ShareRow extends StatelessWidget {
         ),
         Text(
           statusText,
-          style: AppTypography.bodyMedium.copyWith(color: colors.text.secondary),
+          style: AppTypography.bodyMedium.copyWith(
+            color: colors.text.secondary,
+          ),
         ),
       ],
     );
   }
+}
+
+String _scheduledStatusText(
+  rust_sync.MigrationScheduledBroadcast? broadcast,
+  DateTime now,
+) {
+  if (broadcast?.status != 'scheduled') return MigrationCopy.shareScheduled;
+  final scheduledAt = DateTime.fromMillisecondsSinceEpoch(
+    broadcast!.scheduledAtMs.toInt(),
+  );
+  final remaining = scheduledAt.difference(now);
+  if (remaining <= Duration.zero) return MigrationCopy.shareScheduledNow;
+  return MigrationCopy.shareScheduledIn(migrationCountdownLabel(remaining));
 }

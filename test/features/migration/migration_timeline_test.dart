@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart' show Uint64List;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/core/theme/app_theme.dart';
 import 'package:zcash_wallet/src/features/migration/migration_copy.dart';
 import 'package:zcash_wallet/src/features/migration/models/migration_timeline_model.dart';
+import 'package:zcash_wallet/src/features/migration/models/migration_view_state.dart';
 import 'package:zcash_wallet/src/features/migration/widgets/migration_timeline.dart';
+import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
 Future<void> _pump(
   WidgetTester tester,
   MigrationTimelineModel model, {
+  rust_sync.MigrationStatus? status,
   int totalShares = 3,
+  DateTime? now,
   VoidCallback? onScanSends,
 }) async {
   await tester.pumpWidget(
@@ -19,17 +24,40 @@ Future<void> _pump(
           body: SingleChildScrollView(
             child: MigrationTimeline(
               model: model,
-              status: null,
+              status: status,
               shares: const [],
               amountZatoshi: BigInt.from(120000000),
               totalShares: totalShares,
-              now: DateTime.fromMillisecondsSinceEpoch(0),
+              now: now ?? DateTime.fromMillisecondsSinceEpoch(0),
               onScanSends: onScanSends,
             ),
           ),
         ),
       ),
     ),
+  );
+}
+
+rust_sync.MigrationStatus _status({
+  required List<rust_sync.MigrationScheduledBroadcast> scheduledBroadcasts,
+}) {
+  return rust_sync.MigrationStatus(
+    phase: 'broadcast_scheduled',
+    targetValuesZatoshi: Uint64List(0),
+    preparedNoteCount: 0,
+    denominationConfirmationCount: 3,
+    denominationConfirmationTarget: 3,
+    pendingTxCount: scheduledBroadcasts.length,
+    signedChildPcztCount: 0,
+    pendingPrepTxCount: 0,
+    broadcastedTxCount: 0,
+    confirmedTxCount: 0,
+    totalCount: scheduledBroadcasts.length,
+    canAbandon: false,
+    signingBatchLimit: 8,
+    broadcastWindowSeconds: BigInt.from(180),
+    maxPreparedNotesPerRun: 64,
+    scheduledBroadcasts: scheduledBroadcasts,
   );
 }
 
@@ -60,5 +88,52 @@ void main() {
       onScanSends: () {},
     );
     expect(find.text(MigrationCopy.sendScanCta), findsOneWidget);
+  });
+
+  testWidgets('scheduled share rows show per-share countdowns', (tester) async {
+    final now = DateTime.fromMillisecondsSinceEpoch(1000);
+    await _pump(
+      tester,
+      const MigrationTimelineModel(
+        split: MigrationNodeStatus.done,
+        confirm: MigrationNodeStatus.done,
+        send: MigrationNodeStatus.active,
+      ),
+      status: _status(
+        scheduledBroadcasts: const [
+          rust_sync.MigrationScheduledBroadcast(
+            txidHex:
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            scheduledAtMs: 61000,
+            status: 'scheduled',
+          ),
+          rust_sync.MigrationScheduledBroadcast(
+            txidHex:
+                'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            scheduledAtMs: 121000,
+            status: 'scheduled',
+          ),
+        ],
+      ),
+      totalShares: 2,
+      now: now,
+    );
+
+    expect(
+      find.text(
+        MigrationCopy.shareScheduledIn(
+          migrationCountdownLabel(const Duration(seconds: 60)),
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        MigrationCopy.shareScheduledIn(
+          migrationCountdownLabel(const Duration(seconds: 120)),
+        ),
+      ),
+      findsOneWidget,
+    );
   });
 }

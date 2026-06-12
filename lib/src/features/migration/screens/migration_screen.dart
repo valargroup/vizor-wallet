@@ -127,7 +127,8 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     final statusIsLoading =
         accountUuid != null &&
         migrationStatus == null &&
-        migrationStatusAsync.isLoading;
+        migrationStatusAsync.isLoading &&
+        !runState.keepsProgressVisible;
     final statusError = migrationStatusAsync.error;
 
     late final Widget body;
@@ -154,12 +155,18 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         hasCompletedMigration: hasCompletedMigration,
         orchardBalance: sync.orchardBalance,
         ironwoodBalance: sync.ironwoodBalance,
+        preparingInFlight:
+            runState.keepsProgressVisible &&
+            runState.intent == MigrationRunIntent.preparing,
+        migratingInFlight:
+            runState.keepsProgressVisible &&
+            runState.intent == MigrationRunIntent.migrating,
       );
 
       final timeline = migrationTimelineModel(
         viewState: viewState,
         status: migrationStatus,
-        runInFlight: runState.inFlight,
+        runInFlight: runState.keepsProgressVisible,
         intent: runState.intent,
         sendNeedsScan:
             isHardware &&
@@ -189,10 +196,10 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
           sync,
           currentRunMigrationTransactions,
         ),
-        onMigrate: () => unawaited(_startMigration(isHardware, migrationStatus)),
+        onMigrate: () =>
+            unawaited(_startMigration(isHardware, migrationStatus)),
         onRetry: () => unawaited(_advanceMigration(retryIntent, isHardware)),
-        onScanSends: () =>
-            _showKeystoneMigration(MigrationRunIntent.migrating),
+        onScanSends: () => _showKeystoneMigration(MigrationRunIntent.migrating),
       );
     }
 
@@ -389,8 +396,8 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     bool isHardware,
     rust_sync.MigrationStatus? status,
   ) async {
-    final windowSeconds =
-        (status?.broadcastWindowSeconds ?? BigInt.from(180)).toInt();
+    final windowSeconds = (status?.broadcastWindowSeconds ?? BigInt.from(180))
+        .toInt();
     final confirmed = await MigrationWarningDialog.show(
       context,
       windowSeconds: windowSeconds,
@@ -474,11 +481,12 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         request = switch (intent) {
           MigrationRunIntent.preparing => await () async {
             try {
-              final single = await rust_sync.prepareOrchardMigrationSingleQrPczt(
-                dbPath: dbPath,
-                network: networkName,
-                accountUuid: accountUuid,
-              );
+              final single = await rust_sync
+                  .prepareOrchardMigrationSingleQrPczt(
+                    dbPath: dbPath,
+                    network: networkName,
+                    accountUuid: accountUuid,
+                  );
               if (mounted) setState(() => _keystoneStagedFallback = false);
               return single;
             } catch (e) {
@@ -1162,7 +1170,9 @@ class _MigrationBody extends StatelessWidget {
         const SizedBox(height: AppSpacing.xs),
         Text(
           MigrationCopy.idleBody,
-          style: AppTypography.bodyMedium.copyWith(color: colors.text.secondary),
+          style: AppTypography.bodyMedium.copyWith(
+            color: colors.text.secondary,
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
         if (viewState == MigrationViewState.complete)
@@ -1249,7 +1259,9 @@ class _MigrationBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.s),
           Text(
             note,
-            style: AppTypography.bodySmall.copyWith(color: colors.text.secondary),
+            style: AppTypography.bodySmall.copyWith(
+              color: colors.text.secondary,
+            ),
           ),
         ],
         const SizedBox(height: AppSpacing.md),
@@ -1293,7 +1305,9 @@ class _MigrationBody extends StatelessWidget {
             status != null && status!.totalCount > 0
                 ? MigrationCopy.doneBody(amount, status!.totalCount)
                 : MigrationCopy.doneBodyGeneric,
-            style: AppTypography.bodySmall.copyWith(color: colors.text.secondary),
+            style: AppTypography.bodySmall.copyWith(
+              color: colors.text.secondary,
+            ),
           ),
         ],
       ),
@@ -1485,4 +1499,3 @@ class _StatusNote extends StatelessWidget {
     );
   }
 }
-

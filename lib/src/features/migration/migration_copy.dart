@@ -50,7 +50,8 @@ abstract final class MigrationCopy {
   static const shareConfirmed = 'Confirmed';
   static const shareSending = 'Sending…';
   static const shareScheduled = 'Scheduled';
-  static String shareScheduledIn(String remaining) => 'Scheduled · $remaining';
+  static const shareScheduledNow = 'Scheduled now';
+  static String shareScheduledIn(String remaining) => 'Scheduled in $remaining';
   static const shareFailed = 'Failed';
 
   // Done
