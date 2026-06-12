@@ -850,7 +850,11 @@ pub async fn migrate_orchard_to_ironwood(
         .iter()
         .enumerate()
         .map(|(index, child)| {
-            let signed_pczt = sign_orchard_migration_pczt_with_usk(&child.base_pczt, &usk)?;
+            let signed_pczt = sign_orchard_migration_pczt_with_usk(
+                &child.base_pczt,
+                &child.orchard_spend_action_indices,
+                &usk,
+            )?;
             let selected_note = super::migration::PreparedOrchardNoteRef {
                 txid_hex: format!("{}", split.txid),
                 output_index: child.selected_note.output_index,
@@ -1920,6 +1924,11 @@ struct PredictedMigrationNote {
     note: orchard::Note,
 }
 
+struct BuiltPczt {
+    bytes: Vec<u8>,
+    orchard_spend_action_indices: Vec<usize>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum KeystoneMigrationRequestState {
     Proofing,
@@ -1962,6 +1971,7 @@ struct StoredDenominationCompletion {
 struct CreatedMigrationPczt {
     id: String,
     base_pczt: Vec<u8>,
+    orchard_spend_action_indices: Vec<usize>,
     pczt_with_proofs: Option<Vec<u8>>,
     redacted_pczt: Vec<u8>,
     target_height: u32,
@@ -2542,11 +2552,20 @@ fn pczt_from_build_result(
     network: WalletNetwork,
     account_derivation: Option<&zcash_client_backend::data_api::Zip32Derivation>,
     orchard_spend_count: usize,
-) -> Result<Vec<u8>, String> {
+) -> Result<BuiltPczt, String> {
     use pczt::roles::{creator::Creator, io_finalizer::IoFinalizer, updater::Updater};
 
-    let orchard_spends = (0..orchard_spend_count)
-        .filter_map(|i| build_result.orchard_meta.spend_action_index(i))
+    let orchard_spend_action_indices = (0..orchard_spend_count)
+        .map(|i| {
+            build_result
+                .orchard_meta
+                .spend_action_index(i)
+                .ok_or_else(|| "Orchard spend action index missing".to_string())
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let orchard_spends = orchard_spend_action_indices
+        .iter()
+        .copied()
         .collect::<HashSet<_>>();
     let created = Creator::build_from_parts(build_result.pczt_parts).ok_or("Build PCZT failed")?;
     let io_finalized = IoFinalizer::new(created)
@@ -2582,7 +2601,10 @@ fn pczt_from_build_result(
         .map_err(|e| format!("Update Orchard PCZT derivations: {e:?}"))?
         .finish();
 
-    Ok(pczt.serialize())
+    Ok(BuiltPczt {
+        bytes: pczt.serialize(),
+        orchard_spend_action_indices,
+    })
 }
 
 fn predicted_note_from_split_action(
@@ -2760,16 +2782,16 @@ fn create_orchard_denomination_split_pczt(
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    let pczt_bytes = pczt_from_build_result(
+    let built_pczt = pczt_from_build_result(
         build_result,
         network,
         account_derivation,
         orchard_inputs.len(),
     )?;
-    let redacted_pczt = super::pczt::redact_pczt_for_signer(&pczt_bytes)?;
+    let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
 
     Ok(Some(CreatedDenominationSplitPczt {
-        base_pczt: pczt_bytes,
+        base_pczt: built_pczt.bytes,
         redacted_pczt,
         fee_zatoshi: u64::from(prep_fee),
         migrated_outputs,
@@ -3083,13 +3105,14 @@ fn create_orchard_to_ironwood_pczt_from_predicted_note(
         .build_for_pczt(rand_core::OsRng, &fee_rule)
         .map_err(|e| format!("Build predicted migration PCZT failed: {e}"))?;
     let expiry_height = u32::from(build_result.pczt_parts.expiry_height);
-    let pczt_bytes = pczt_from_build_result(build_result, network, account_derivation, 1)?;
-    let redacted_pczt = super::pczt::redact_pczt_for_signer(&pczt_bytes)?;
+    let built_pczt = pczt_from_build_result(build_result, network, account_derivation, 1)?;
+    let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
     let target_height_u32: u32 = target_height.into();
 
     Ok(Some(CreatedMigrationPczt {
         id: format!("migration-{migration_index}"),
-        base_pczt: pczt_bytes,
+        base_pczt: built_pczt.bytes,
+        orchard_spend_action_indices: built_pczt.orchard_spend_action_indices,
         pczt_with_proofs: None,
         redacted_pczt,
         target_height: target_height_u32,
@@ -3108,17 +3131,23 @@ fn create_orchard_to_ironwood_pczt_from_predicted_note(
 
 fn sign_orchard_migration_pczt_with_usk(
     pczt_bytes: &[u8],
+    orchard_spend_action_indices: &[usize],
     usk: &UnifiedSpendingKey,
 ) -> Result<Vec<u8>, String> {
     use pczt::roles::signer::Signer;
 
+    if orchard_spend_action_indices.is_empty() {
+        return Err("Migration PCZT has no Orchard spend actions".to_string());
+    }
     let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse migration PCZT: {e:?}"))?;
     let orchard_ask = orchard::keys::SpendAuthorizingKey::from(usk.orchard());
     let mut signer =
         Signer::new(pczt).map_err(|e| format!("Create migration PCZT signer: {e:?}"))?;
-    signer
-        .sign_orchard(0, &orchard_ask)
-        .map_err(|e| format!("Sign migration PCZT: {e:?}"))?;
+    for index in orchard_spend_action_indices {
+        signer
+            .sign_orchard(*index, &orchard_ask)
+            .map_err(|e| format!("Sign migration PCZT action {index}: {e:?}"))?;
+    }
     Ok(signer.finish().serialize())
 }
 
@@ -3424,18 +3453,19 @@ fn create_orchard_to_ironwood_pczt_from_note(
         .build_for_pczt(rand_core::OsRng, &fee_rule)
         .map_err(|e| format!("Build exact-note migration PCZT failed: {e}"))?;
     let expiry_height = u32::from(build_result.pczt_parts.expiry_height);
-    let pczt_bytes = pczt_from_build_result(
+    let built_pczt = pczt_from_build_result(
         build_result,
         network,
         account_derivation,
         orchard_inputs.len(),
     )?;
-    let redacted_pczt = super::pczt::redact_pczt_for_signer(&pczt_bytes)?;
+    let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
     let target_height_u32: u32 = target_height.into();
 
     Ok(Some(CreatedMigrationPczt {
         id: format!("migration-{migration_index}"),
-        base_pczt: pczt_bytes,
+        base_pczt: built_pczt.bytes,
+        orchard_spend_action_indices: built_pczt.orchard_spend_action_indices,
         pczt_with_proofs: None,
         redacted_pczt,
         target_height: target_height_u32,
