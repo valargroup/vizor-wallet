@@ -6548,6 +6548,7 @@ impl SseDecode for crate::api::sync::MigrationStatus {
         let mut var_confirmedTxCount = <u32>::sse_decode(deserializer);
         let mut var_totalCount = <u32>::sse_decode(deserializer);
         let mut var_signedChildPcztCount = <u32>::sse_decode(deserializer);
+        let mut var_pendingPrepTxCount = <u32>::sse_decode(deserializer);
         let mut var_message = <Option<String>>::sse_decode(deserializer);
         let mut var_canAbandon = <bool>::sse_decode(deserializer);
         let mut var_signingBatchLimit = <u32>::sse_decode(deserializer);
@@ -6567,6 +6568,7 @@ impl SseDecode for crate::api::sync::MigrationStatus {
             confirmed_tx_count: var_confirmedTxCount,
             total_count: var_totalCount,
             signed_child_pczt_count: var_signedChildPcztCount,
+            pending_prep_tx_count: var_pendingPrepTxCount,
             message: var_message,
             can_abandon: var_canAbandon,
             signing_batch_limit: var_signingBatchLimit,
@@ -8544,6 +8546,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::sync::MigrationStatus {
             self.confirmed_tx_count.into_into_dart().into_dart(),
             self.total_count.into_into_dart().into_dart(),
             self.signed_child_pczt_count.into_into_dart().into_dart(),
+            self.pending_prep_tx_count.into_into_dart().into_dart(),
             self.message.into_into_dart().into_dart(),
             self.can_abandon.into_into_dart().into_dart(),
             self.signing_batch_limit.into_into_dart().into_dart(),
@@ -10536,6 +10539,7 @@ impl SseEncode for crate::api::sync::MigrationStatus {
         <u32>::sse_encode(self.confirmed_tx_count, serializer);
         <u32>::sse_encode(self.total_count, serializer);
         <u32>::sse_encode(self.signed_child_pczt_count, serializer);
+        <u32>::sse_encode(self.pending_prep_tx_count, serializer);
         <Option<String>>::sse_encode(self.message, serializer);
         <bool>::sse_encode(self.can_abandon, serializer);
         <u32>::sse_encode(self.signing_batch_limit, serializer);

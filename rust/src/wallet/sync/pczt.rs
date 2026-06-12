@@ -284,19 +284,51 @@ pub(crate) fn set_orchard_anchor_and_witness(
     pczt_bytes: &[u8],
     anchor: orchard::Anchor,
     witness: &orchard::tree::MerklePath,
+    spend_nullifier_hex: &str,
 ) -> Result<Vec<u8>, String> {
     use pczt::roles::updater::{OrchardSpendWitness, Updater};
 
     let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT: {e:?}"))?;
-
+    let spend_nullifier = parse_32_byte_hex(spend_nullifier_hex, "Orchard spend nullifier")?;
+    let action_indices = pczt
+        .orchard()
+        .actions()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, action)| {
+            if *action.spend().nullifier() == spend_nullifier {
+                Some(index)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    let action_index = match action_indices.as_slice() {
+        [index] => *index,
+        [] => {
+            return Err("Orchard spend nullifier not found in PCZT".to_string());
+        }
+        _ => {
+            return Err("Orchard spend nullifier matched multiple PCZT actions".to_string());
+        }
+    };
     let updated = Updater::new(pczt)
         .set_v6_orchard_anchor(anchor)
         .map_err(|e| format!("Set Orchard anchor in PCZT: {e}"))?
-        .set_orchard_spend_witnesses([OrchardSpendWitness::from_merkle_path(0, witness.clone())])
+        .set_orchard_spend_witnesses([OrchardSpendWitness::from_merkle_path(
+            action_index,
+            witness.clone(),
+        )])
         .map_err(|e| format!("Set Orchard witness in PCZT: {e}"))?
         .finish();
 
     Ok(updated.serialize())
+}
+
+fn parse_32_byte_hex(value: &str, label: &str) -> Result<[u8; 32], String> {
+    let mut bytes = [0u8; 32];
+    hex::decode_to_slice(value, &mut bytes).map_err(|e| format!("Decode {label}: {e}"))?;
+    Ok(bytes)
 }
 
 fn combine_pczts(proofs: &[u8], sigs: &[u8]) -> Result<pczt::Pczt, String> {

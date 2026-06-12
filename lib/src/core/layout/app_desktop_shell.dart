@@ -141,22 +141,23 @@ class _GlobalMigrationWarningBannerState
       final status = ref.read(activeOrchardMigrationStatusProvider).value;
       if (!_showsMigrationWarning(status)) return;
 
+      final now = DateTime.now();
       final hasScheduledPendingBroadcasts =
           migrationHasScheduledPendingBroadcasts(status);
-      final signedChildrenMayFinalize = migrationSignedChildrenMayFinalize(
+      final shouldRunBroadcastTick = migrationShouldRunBroadcastTick(
         status,
+        now,
       );
       final hasSignedChildren = migrationHasSignedChildPczts(status);
+      final hasPendingPrepBroadcast = migrationHasPendingPrepBroadcast(status);
       final hadDueScheduledBroadcast = migrationHasDueScheduledBroadcast(
         status,
-        DateTime.now(),
+        now,
       );
       final hasBroadcastedUnconfirmed =
           migrationHasBroadcastedUnconfirmedTransactions(status);
 
-      if (hasScheduledPendingBroadcasts ||
-          signedChildrenMayFinalize ||
-          hasSignedChildren) {
+      if (shouldRunBroadcastTick) {
         await ref
             .read(migrationRunControllerProvider.notifier)
             .broadcastDueScheduled();
@@ -164,6 +165,7 @@ class _GlobalMigrationWarningBannerState
 
       if (hadDueScheduledBroadcast ||
           hasBroadcastedUnconfirmed ||
+          hasPendingPrepBroadcast ||
           hasSignedChildren) {
         await ref.read(syncProvider.notifier).startSyncAnyway();
         ref.invalidate(activeOrchardMigrationStatusProvider);
@@ -171,7 +173,7 @@ class _GlobalMigrationWarningBannerState
       }
 
       if (!hasScheduledPendingBroadcasts &&
-          !signedChildrenMayFinalize &&
+          !hasPendingPrepBroadcast &&
           !hasSignedChildren) {
         await ref
             .read(syncProvider.notifier)

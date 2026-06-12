@@ -1098,6 +1098,7 @@ class MigrationStatus {
   final int confirmedTxCount;
   final int totalCount;
   final int signedChildPcztCount;
+  final int pendingPrepTxCount;
   final String? message;
   final bool canAbandon;
   final int signingBatchLimit;
@@ -1117,6 +1118,7 @@ class MigrationStatus {
     required this.confirmedTxCount,
     required this.totalCount,
     required this.signedChildPcztCount,
+    required this.pendingPrepTxCount,
     this.message,
     required this.canAbandon,
     required this.signingBatchLimit,
@@ -1138,6 +1140,7 @@ class MigrationStatus {
       confirmedTxCount.hashCode ^
       totalCount.hashCode ^
       signedChildPcztCount.hashCode ^
+      pendingPrepTxCount.hashCode ^
       message.hashCode ^
       canAbandon.hashCode ^
       signingBatchLimit.hashCode ^
@@ -1163,6 +1166,7 @@ class MigrationStatus {
           confirmedTxCount == other.confirmedTxCount &&
           totalCount == other.totalCount &&
           signedChildPcztCount == other.signedChildPcztCount &&
+          pendingPrepTxCount == other.pendingPrepTxCount &&
           message == other.message &&
           canAbandon == other.canAbandon &&
           signingBatchLimit == other.signingBatchLimit &&

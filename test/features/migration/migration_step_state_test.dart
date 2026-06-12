@@ -7,6 +7,7 @@ import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 rust_sync.MigrationStatus _status({
   String phase = 'ready_to_migrate',
   int pendingTxCount = 0,
+  int pendingPrepTxCount = 0,
   int signedChildPcztCount = 0,
   int denominationConfirmationCount = 0,
   int broadcastedTxCount = 0,
@@ -21,6 +22,7 @@ rust_sync.MigrationStatus _status({
     denominationConfirmationTarget: 3,
     pendingTxCount: pendingTxCount,
     signedChildPcztCount: signedChildPcztCount,
+    pendingPrepTxCount: pendingPrepTxCount,
     broadcastedTxCount: broadcastedTxCount,
     confirmedTxCount: confirmedTxCount,
     totalCount: 0,
@@ -175,6 +177,7 @@ void main() {
       ],
     );
     expect(migrationHasScheduledPendingBroadcasts(futureScheduled), isTrue);
+    expect(migrationShouldRunBroadcastTick(futureScheduled, now), isFalse);
     expect(migrationHasDueScheduledBroadcast(futureScheduled, now), isFalse);
     expect(
       migrationHasBroadcastedUnconfirmedTransactions(futureScheduled),
@@ -192,6 +195,7 @@ void main() {
       ],
     );
     expect(migrationHasDueScheduledBroadcast(dueScheduled, now), isTrue);
+    expect(migrationShouldRunBroadcastTick(dueScheduled, now), isTrue);
 
     final broadcasted = _status(
       phase: 'waiting_migration_confirmations',
@@ -207,6 +211,21 @@ void main() {
     expect(migrationHasScheduledPendingBroadcasts(broadcasted), isFalse);
     expect(migrationHasDueScheduledBroadcast(broadcasted, now), isFalse);
     expect(migrationHasBroadcastedUnconfirmedTransactions(broadcasted), isTrue);
+    expect(migrationShouldRunBroadcastTick(broadcasted, now), isFalse);
+
+    final pendingPrep = _status(
+      phase: 'waiting_denom_confirmations',
+      pendingPrepTxCount: 1,
+      signedChildPcztCount: 4,
+    );
+    expect(migrationHasPendingPrepBroadcast(pendingPrep), isTrue);
+    expect(migrationShouldRunBroadcastTick(pendingPrep, now), isTrue);
+
+    final waitingForWitnesses = _status(
+      phase: 'waiting_denom_confirmations',
+      signedChildPcztCount: 4,
+    );
+    expect(migrationShouldRunBroadcastTick(waitingForWitnesses, now), isFalse);
 
     final confirmed = _status(
       phase: 'broadcast_scheduled',
@@ -232,10 +251,11 @@ void main() {
       signedChildPcztCount: 4,
       denominationConfirmationCount: 3,
     );
-    expect(migrationSignedChildrenMayFinalize(confirmedDenominations), isTrue);
+    expect(migrationSignedChildrenMayFinalize(confirmedDenominations), isFalse);
 
     final ready = _status(phase: 'ready_to_migrate', signedChildPcztCount: 4);
     expect(migrationSignedChildrenMayFinalize(ready), isTrue);
+    expect(migrationShouldRunBroadcastTick(ready, DateTime.now()), isTrue);
 
     final noSignedChildren = _status(
       phase: 'ready_to_migrate',
@@ -293,6 +313,12 @@ void main() {
     expect(migrationShouldWarnBeforeClose(confirming), isTrue);
     expect(migrationRemainingScheduledSubmissionTime(confirming, now), isNull);
 
+    expect(
+      migrationShouldWarnBeforeClose(
+        _status(phase: 'waiting_denom_confirmations', pendingPrepTxCount: 1),
+      ),
+      isTrue,
+    );
     expect(
       migrationShouldWarnBeforeClose(_status(phase: 'building_signing_batch')),
       isTrue,

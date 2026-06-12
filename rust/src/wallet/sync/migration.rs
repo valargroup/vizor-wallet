@@ -221,6 +221,7 @@ pub(crate) struct MigrationStatus {
     pub confirmed_tx_count: u32,
     pub total_count: u32,
     pub signed_child_pczt_count: u32,
+    pub pending_prep_tx_count: u32,
     pub message: Option<String>,
     pub can_abandon: bool,
     pub signing_batch_limit: u32,
@@ -270,6 +271,7 @@ pub(crate) fn migration_status(
         confirmed_tx_count: 0,
         total_count: 0,
         signed_child_pczt_count: 0,
+        pending_prep_tx_count: 0,
         message: None,
         can_abandon: false,
         signing_batch_limit: ZCASH_SIGN_BATCH_MAX_MESSAGES as u32,
@@ -955,6 +957,15 @@ pub(crate) fn scheduled_pending_count(db_path: &str, run_id: &str) -> Result<u32
     count_pending_with_status(&conn, run_id, "scheduled")
 }
 
+pub(crate) fn prepared_note_spend_metadata_available(
+    db_path: &str,
+    run_id: &str,
+) -> Result<bool, String> {
+    let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
+    ensure_schema(&conn)?;
+    prepared_note_spend_metadata_available_for_run(&conn, run_id)
+}
+
 pub(crate) fn pending_totals_for_run(
     db_path: &str,
     run_id: &str,
@@ -1143,17 +1154,25 @@ pub(crate) fn locked_migration_note_refs(
 
 fn status_for_run(conn: &rusqlite::Connection, run: ActiveRun) -> Result<MigrationStatus, String> {
     let prepared_note_count = count_for_run(conn, PREPARED_NOTES_TABLE, &run.run_id)?;
+    let pending_prep_tx_count = pending_prep_tx_count_for_run(conn, &run.run_id)?;
     let pending_tx_count = count_for_run(conn, PENDING_TXS_TABLE, &run.run_id)?;
     let broadcasted_tx_count = count_pending_with_status(conn, &run.run_id, "broadcasted")?;
     let confirmed_tx_count = count_pending_with_status(conn, &run.run_id, "confirmed")?;
     let scheduled_broadcasts = scheduled_broadcasts_for_run(conn, &run.run_id)?;
     let signed_child_pczt_count = count_for_run(conn, SIGNED_CHILD_PCZTS_TABLE, &run.run_id)?;
     let total_count = run.target_values_zatoshi.len() as u32;
-    let phase = if total_count > 0 && confirmed_tx_count >= total_count {
+    let mut phase = if total_count > 0 && confirmed_tx_count >= total_count {
         PHASE_COMPLETE.to_string()
     } else {
         run.phase
     };
+    if phase == PHASE_READY_TO_MIGRATE
+        && pending_tx_count == 0
+        && prepared_note_count > 0
+        && !prepared_note_spend_metadata_available_for_run(conn, &run.run_id)?
+    {
+        phase = PHASE_WAITING_DENOM_CONFIRMATIONS.to_string();
+    }
     let denomination_confirmation_target = denomination_confirmations_required();
     let denomination_confirmation_count = if phase == PHASE_WAITING_DENOM_CONFIRMATIONS {
         denomination_confirmation_count_for_run(conn, &run.run_id)?
@@ -1187,6 +1206,7 @@ fn status_for_run(conn: &rusqlite::Connection, run: ActiveRun) -> Result<Migrati
         confirmed_tx_count,
         total_count,
         signed_child_pczt_count,
+        pending_prep_tx_count,
         message: run.last_error,
         can_abandon,
         signing_batch_limit: ZCASH_SIGN_BATCH_MAX_MESSAGES as u32,
@@ -1430,6 +1450,32 @@ fn confirmed_prepared_denomination_notes(
     }
 
     Ok(Some(confirmed))
+}
+
+fn prepared_note_spend_metadata_available_for_run(
+    conn: &rusqlite::Connection,
+    run_id: &str,
+) -> Result<bool, String> {
+    Ok(matches!(
+        confirmed_prepared_denomination_notes(conn, run_id)?,
+        Some(notes) if !notes.is_empty()
+    ))
+}
+
+fn pending_prep_tx_count_for_run(conn: &rusqlite::Connection, run_id: &str) -> Result<u32, String> {
+    if !table_exists(conn, PREP_TXS_TABLE)? {
+        return Ok(0);
+    }
+    conn.query_row(
+        &format!(
+            "SELECT COUNT(*)
+             FROM {PREP_TXS_TABLE}
+             WHERE run_id = ?1 AND status = 'pending'"
+        ),
+        params![run_id],
+        |row| row.get::<_, u32>(0),
+    )
+    .map_err(|e| format!("Count pending migration prep txs: {e}"))
 }
 
 fn synced_orchard_confirmation_count(
@@ -1930,6 +1976,133 @@ mod tests {
             )
             .unwrap();
         assert_eq!(nullifier_hex, "ab".repeat(32));
+    }
+
+    #[test]
+    fn status_waits_for_spend_metadata_before_presigned_child_finalization() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        conn.execute(
+            "CREATE TABLE transactions (
+                id_tx INTEGER PRIMARY KEY,
+                txid BLOB NOT NULL,
+                mined_height INTEGER
+             )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "CREATE TABLE orchard_received_notes (
+                transaction_id INTEGER NOT NULL,
+                action_index INTEGER NOT NULL,
+                value INTEGER NOT NULL,
+                note_version INTEGER NOT NULL,
+                nf BLOB,
+                commitment_tree_position INTEGER
+             )",
+            [],
+        )
+        .unwrap();
+
+        let run_id = "run-presigned";
+        let txid_hex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        conn.execute(
+            &format!(
+                "INSERT INTO {RUNS_TABLE}
+                 (run_id, account_uuid, network, db_fingerprint, phase,
+                  created_at_ms, updated_at_ms, target_values_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 1, 1, ?6)"
+            ),
+            params![
+                run_id,
+                "account-1",
+                "test",
+                "db",
+                PHASE_READY_TO_MIGRATE,
+                "[100000000]",
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            &format!(
+                "INSERT INTO {PREPARED_NOTES_TABLE}
+                 (run_id, txid_hex, output_index, value_zatoshi, note_version,
+                  nullifier_hex, lock_state)
+                 VALUES (?1, ?2, 0, 100000000, 2, ?3, 'locked')"
+            ),
+            params![run_id, txid_hex, "ab".repeat(32)],
+        )
+        .unwrap();
+        conn.execute(
+            &format!(
+                "INSERT INTO {PREP_TXS_TABLE}
+                 (run_id, txid_hex, encrypted_raw_tx, status)
+                 VALUES (?1, ?2, 'raw', 'pending')"
+            ),
+            params![run_id, txid_hex],
+        )
+        .unwrap();
+
+        let mut txid_blob = hex::decode(txid_hex).unwrap();
+        txid_blob.reverse();
+        let nf = vec![0xabu8; 32];
+        conn.execute(
+            "INSERT INTO transactions (id_tx, txid, mined_height) VALUES (1, ?1, 20)",
+            params![txid_blob],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO orchard_received_notes
+             (transaction_id, action_index, value, note_version, nf,
+              commitment_tree_position)
+             VALUES (1, 0, 100000000, 2, ?1, NULL)",
+            params![nf],
+        )
+        .unwrap();
+
+        let run = ActiveRun {
+            run_id: run_id.to_string(),
+            phase: PHASE_READY_TO_MIGRATE.to_string(),
+            target_values_zatoshi: vec![100_000_000],
+            last_error: None,
+        };
+        let status = status_for_run(&conn, run.clone()).unwrap();
+        assert_eq!(status.phase, PHASE_WAITING_DENOM_CONFIRMATIONS);
+        assert_eq!(status.signed_child_pczt_count, 0);
+        assert_eq!(status.pending_prep_tx_count, 1);
+
+        conn.execute(
+            &format!(
+                "INSERT INTO {SIGNED_CHILD_PCZTS_TABLE}
+                 (run_id, message_id, child_index, encrypted_base_pczt,
+                  encrypted_signed_pczt, target_height, expiry_height,
+                  value_zatoshi, fee_zatoshi, selected_note_json, metadata_json)
+                 VALUES (?1, 'migration-1', 0, 'base', 'signed', 10, 20,
+                         99980000, 20000, '{{}}', '{{}}')"
+            ),
+            params![run_id],
+        )
+        .unwrap();
+
+        let status = status_for_run(&conn, run.clone()).unwrap();
+        assert_eq!(status.phase, PHASE_WAITING_DENOM_CONFIRMATIONS);
+        assert_eq!(status.signed_child_pczt_count, 1);
+        assert_eq!(status.pending_prep_tx_count, 1);
+
+        conn.execute(
+            "UPDATE orchard_received_notes SET commitment_tree_position = 0",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            &format!("UPDATE {PREP_TXS_TABLE} SET status = 'broadcasted' WHERE run_id = ?1"),
+            params![run_id],
+        )
+        .unwrap();
+
+        let status = status_for_run(&conn, run).unwrap();
+        assert_eq!(status.phase, PHASE_READY_TO_MIGRATE);
+        assert_eq!(status.pending_prep_tx_count, 0);
     }
 
     #[test]

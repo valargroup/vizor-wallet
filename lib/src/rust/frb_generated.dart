@@ -7124,8 +7124,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   MigrationStatus dco_decode_migration_status(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 17)
-      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
+    if (arr.length != 18)
+      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
     return MigrationStatus(
       phase: dco_decode_String(arr[0]),
       activeRunId: dco_decode_opt_String(arr[1]),
@@ -7138,13 +7138,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       confirmedTxCount: dco_decode_u_32(arr[8]),
       totalCount: dco_decode_u_32(arr[9]),
       signedChildPcztCount: dco_decode_u_32(arr[10]),
-      message: dco_decode_opt_String(arr[11]),
-      canAbandon: dco_decode_bool(arr[12]),
-      signingBatchLimit: dco_decode_u_32(arr[13]),
-      broadcastWindowSeconds: dco_decode_u_64(arr[14]),
-      maxPreparedNotesPerRun: dco_decode_u_32(arr[15]),
+      pendingPrepTxCount: dco_decode_u_32(arr[11]),
+      message: dco_decode_opt_String(arr[12]),
+      canAbandon: dco_decode_bool(arr[13]),
+      signingBatchLimit: dco_decode_u_32(arr[14]),
+      broadcastWindowSeconds: dco_decode_u_64(arr[15]),
+      maxPreparedNotesPerRun: dco_decode_u_32(arr[16]),
       scheduledBroadcasts: dco_decode_list_migration_scheduled_broadcast(
-        arr[16],
+        arr[17],
       ),
     );
   }
@@ -9222,6 +9223,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_confirmedTxCount = sse_decode_u_32(deserializer);
     var var_totalCount = sse_decode_u_32(deserializer);
     var var_signedChildPcztCount = sse_decode_u_32(deserializer);
+    var var_pendingPrepTxCount = sse_decode_u_32(deserializer);
     var var_message = sse_decode_opt_String(deserializer);
     var var_canAbandon = sse_decode_bool(deserializer);
     var var_signingBatchLimit = sse_decode_u_32(deserializer);
@@ -9242,6 +9244,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       confirmedTxCount: var_confirmedTxCount,
       totalCount: var_totalCount,
       signedChildPcztCount: var_signedChildPcztCount,
+      pendingPrepTxCount: var_pendingPrepTxCount,
       message: var_message,
       canAbandon: var_canAbandon,
       signingBatchLimit: var_signingBatchLimit,
@@ -11352,6 +11355,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.confirmedTxCount, serializer);
     sse_encode_u_32(self.totalCount, serializer);
     sse_encode_u_32(self.signedChildPcztCount, serializer);
+    sse_encode_u_32(self.pendingPrepTxCount, serializer);
     sse_encode_opt_String(self.message, serializer);
     sse_encode_bool(self.canAbandon, serializer);
     sse_encode_u_32(self.signingBatchLimit, serializer);

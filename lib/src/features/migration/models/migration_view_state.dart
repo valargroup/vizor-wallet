@@ -144,22 +144,31 @@ bool migrationHasBroadcastedUnconfirmedTransactions(
   return (status?.broadcastedTxCount ?? 0) > 0;
 }
 
+bool migrationHasPendingPrepBroadcast(rust_sync.MigrationStatus? status) {
+  return (status?.pendingPrepTxCount ?? 0) > 0;
+}
+
 bool migrationHasSignedChildPczts(rust_sync.MigrationStatus? status) {
   return (status?.signedChildPcztCount ?? 0) > 0;
 }
 
 bool migrationSignedChildrenMayFinalize(rust_sync.MigrationStatus? status) {
   if (!migrationHasSignedChildPczts(status)) return false;
-  if (status?.phase == 'ready_to_migrate') return true;
-  if (status?.phase != 'waiting_denom_confirmations') return false;
+  return status?.phase == 'ready_to_migrate';
+}
 
-  final target = status?.denominationConfirmationTarget ?? 0;
-  if (target <= 0) return false;
-  return (status?.denominationConfirmationCount ?? 0) >= target;
+bool migrationShouldRunBroadcastTick(
+  rust_sync.MigrationStatus? status,
+  DateTime now,
+) {
+  return migrationHasPendingPrepBroadcast(status) ||
+      migrationHasDueScheduledBroadcast(status, now) ||
+      migrationSignedChildrenMayFinalize(status);
 }
 
 bool migrationShouldWarnBeforeClose(rust_sync.MigrationStatus? status) {
   return migrationHasScheduledPendingBroadcasts(status) ||
+      migrationHasPendingPrepBroadcast(status) ||
       migrationHasBroadcastedUnconfirmedTransactions(status) ||
       migrationHasSignedChildPczts(status) ||
       status?.phase == 'building_signing_batch' ||

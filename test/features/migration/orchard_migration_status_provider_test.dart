@@ -42,6 +42,7 @@ rust_sync.MigrationStatus _status(String phase) {
     denominationConfirmationTarget: 3,
     pendingTxCount: 0,
     signedChildPcztCount: 0,
+    pendingPrepTxCount: 0,
     broadcastedTxCount: 0,
     confirmedTxCount: 0,
     totalCount: 0,

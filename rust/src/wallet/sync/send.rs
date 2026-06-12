@@ -936,6 +936,9 @@ pub async fn broadcast_due_orchard_migration_transactions(
         });
     };
 
+    let pending_totals = super::migration::pending_totals_for_run(db_path, &run.run_id)?;
+    let signed_child_count = super::migration::signed_child_pczt_count(db_path, &run.run_id)?;
+
     if let Some(prep_broadcast) = broadcast_pending_migration_prep_tx(
         db_path,
         lightwalletd_url,
@@ -954,9 +957,7 @@ pub async fn broadcast_due_orchard_migration_transactions(
         ));
     }
 
-    if super::migration::pending_totals_for_run(db_path, &run.run_id)?.total_count == 0
-        && super::migration::signed_child_pczt_count(db_path, &run.run_id)? > 0
-    {
+    if pending_totals.total_count == 0 && signed_child_count > 0 {
         if !run_may_finalize_presigned_migration_children(&run) {
             return Ok(prepared_notes_not_spendable_result(
                 run.target_values_zatoshi.len() as u32,
@@ -1497,6 +1498,11 @@ pub(crate) fn prepare_orchard_migration_batch_pczt(
     if pending_totals.total_count > 0 {
         return Err("Migration transactions are already signed and scheduled".to_string());
     }
+    if !prepared_note_spend_metadata_is_available(db_path, &run.run_id)? {
+        return Err(
+            "Prepared denomination notes are not spendable yet. Sync and try again.".to_string(),
+        );
+    }
     {
         let mut request_store = keystone_migration_requests()
             .lock()
@@ -1741,6 +1747,12 @@ async fn resume_active_migration_run(
             if prepared_notes.is_empty() {
                 return Err("Migration run has no prepared denomination notes".to_string());
             }
+            if !prepared_note_spend_metadata_is_available(db_path, &run.run_id)? {
+                return Ok(prepared_notes_not_spendable_result(
+                    fallback_total_count,
+                    fallback_migrated_zatoshi,
+                ));
+            }
 
             let mut pending = Vec::with_capacity(prepared_notes.len());
             for note_ref in &prepared_notes {
@@ -1840,6 +1852,14 @@ fn mark_prepared_notes_waiting(db_path: &str, run_id: &str) -> Result<(), String
         super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS,
         Some("Prepared denomination notes are not spendable yet."),
     )
+}
+
+fn prepared_note_spend_metadata_is_available(db_path: &str, run_id: &str) -> Result<bool, String> {
+    if super::migration::prepared_note_spend_metadata_available(db_path, run_id)? {
+        return Ok(true);
+    }
+    mark_prepared_notes_waiting(db_path, run_id)?;
+    Ok(false)
 }
 
 fn prepared_notes_not_spendable_result(
@@ -3541,6 +3561,7 @@ impl ActiveIronwoodMigration {
             .map_err(|_| "Ironwood migration lock poisoned".to_string())?;
 
         if !active.insert(key.clone()) {
+            log::warn!("migration finalizer: active migration guard already held");
             return Err("An Ironwood migration is already running for this account".to_string());
         }
 
@@ -4017,6 +4038,16 @@ fn finalize_presigned_migration_children(
     pending_password: &[u8],
     pending_salt_base64: &str,
 ) -> Result<bool, String> {
+    if super::migration::signed_child_pczt_count(db_path, run_id)? == 0 {
+        return Ok(false);
+    }
+    if super::migration::pending_totals_for_run(db_path, run_id)?.total_count > 0 {
+        return Ok(false);
+    }
+    if !prepared_note_spend_metadata_is_available(db_path, run_id)? {
+        return Ok(false);
+    }
+
     let signed_children = super::migration::signed_child_pczts_for_run(
         db_path,
         run_id,
@@ -4024,9 +4055,6 @@ fn finalize_presigned_migration_children(
         pending_salt_base64,
     )?;
     if signed_children.is_empty() {
-        return Ok(false);
-    }
-    if super::migration::pending_totals_for_run(db_path, run_id)?.total_count > 0 {
         return Ok(false);
     }
 
@@ -4037,26 +4065,40 @@ fn finalize_presigned_migration_children(
             .iter()
             .find(|note| same_prepared_note_without_nullifier(note, &child.selected_note))
             .ok_or("Prepared migration notes changed before child finalization")?;
-        let Some((orchard_anchor, orchard_witness)) = orchard_anchor_and_witness_for_prepared_note(
-            db_path,
-            network,
-            account_uuid,
-            current_note,
-        )?
+        let Some((orchard_anchor, orchard_witness)) =
+            (match orchard_anchor_and_witness_for_prepared_note(
+                db_path,
+                network,
+                account_uuid,
+                current_note,
+            ) {
+                Ok(result) => result,
+                Err(e) if is_orchard_witness_not_ready_error(&e) => {
+                    mark_prepared_notes_waiting(db_path, run_id)?;
+                    return Ok(false);
+                }
+                Err(e) => return Err(e),
+            })
         else {
             mark_prepared_notes_waiting(db_path, run_id)?;
             return Ok(false);
         };
+        let current_note_nullifier_hex = current_note
+            .nullifier_hex
+            .as_deref()
+            .ok_or("Prepared migration note nullifier unavailable")?;
 
         let base_pczt = super::pczt::set_orchard_anchor_and_witness(
             &child.base_pczt,
             orchard_anchor,
             &orchard_witness,
+            current_note_nullifier_hex,
         )?;
         let signed_pczt = super::pczt::set_orchard_anchor_and_witness(
             &child.signed_pczt,
             orchard_anchor,
             &orchard_witness,
+            current_note_nullifier_hex,
         )?;
         let pczt_with_proofs = super::pczt::add_proofs_to_pczt(&base_pczt, None, None)?;
         let extracted = super::pczt::extract_transaction_from_pczt(
@@ -4143,10 +4185,21 @@ async fn broadcast_pending_migration_prep_tx(
         );
     }
     if let Err(e) = super::migration::mark_prep_tx_broadcasted(db_path, run_id) {
-        log::warn!(
-            "migration: broadcast denomination split {} but could not mark it broadcasted: {e}",
-            prep_tx.txid_hex
+        let message = format!(
+            "Denomination split broadcast was accepted, but local state update failed: {e}"
         );
+        log::warn!(
+            "migration: broadcast denomination split {} but could not mark it broadcasted: {}",
+            prep_tx.txid_hex,
+            e
+        );
+        return Ok(Some(CreatedBroadcastResult {
+            txids: prep_tx.txid_hex,
+            status: CreatedBroadcastResult::PENDING_BROADCAST,
+            broadcasted_count: 0,
+            total_count: 1,
+            message: Some(message),
+        }));
     }
 
     Ok(Some(CreatedBroadcastResult {
@@ -4471,7 +4524,7 @@ async fn broadcast_raw_transaction(
         .await
         .map_err(|e| format!("SendTransaction gRPC failed: {e}"))?;
 
-    if resp.error_code != 0 && !broadcast_rejection_is_already_committed(&resp.error_message) {
+    if resp.error_code != 0 && !broadcast_rejection_is_already_accepted(&resp.error_message) {
         return Err(format!(
             "Broadcast rejected: {} (code {})",
             resp.error_message, resp.error_code
@@ -4481,9 +4534,14 @@ async fn broadcast_raw_transaction(
     Ok(())
 }
 
-fn broadcast_rejection_is_already_committed(message: &str) -> bool {
+fn broadcast_rejection_is_already_accepted(message: &str) -> bool {
     let message = message.to_ascii_lowercase();
     message.contains("transaction was committed to the best chain")
+        || message.contains("already in mempool")
+        || message.contains("already have transaction")
+        || message.contains("transaction already in block chain")
+        || message.contains("txn-already-in-mempool")
+        || message.contains("already known")
 }
 
 // ======================== Auto-Resubmit ========================
@@ -4853,6 +4911,22 @@ mod tests {
         );
         assert_eq!(result.fee_zatoshi, 20_000);
         assert_eq!(result.migrated_zatoshi, 180_000);
+    }
+
+    #[test]
+    fn duplicate_broadcast_rejections_are_accepted_for_retry_marking() {
+        assert!(broadcast_rejection_is_already_accepted(
+            "transaction was committed to the best chain"
+        ));
+        assert!(broadcast_rejection_is_already_accepted(
+            "txn-already-in-mempool"
+        ));
+        assert!(broadcast_rejection_is_already_accepted(
+            "already have transaction"
+        ));
+        assert!(!broadcast_rejection_is_already_accepted(
+            "bad-txns-inputs-spent"
+        ));
     }
 
     #[test]
