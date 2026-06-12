@@ -1,5 +1,7 @@
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart' show Uint64List;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/features/migration/models/migration_view_state.dart';
+import 'package:zcash_wallet/src/rust/api/sync.dart' as rust_sync;
 
 void main() {
   test('account with Orchard funds plans denominations', () {
@@ -134,5 +136,76 @@ void main() {
 
     expect(migrationTxidsMatch(txid, 'not-a-txid'), isFalse);
     expect(migrationTxidsMatch(txid, unrelated), isFalse);
+  });
+
+  test('software auto-advance fires only at ready_to_migrate, software, idle', () {
+    rust_sync.MigrationStatus ready({int signedChildren = 0}) =>
+        rust_sync.MigrationStatus(
+          phase: 'ready_to_migrate',
+          targetValuesZatoshi: Uint64List(0),
+          preparedNoteCount: 0,
+          denominationConfirmationCount: 3,
+          denominationConfirmationTarget: 3,
+          pendingTxCount: 0,
+          signedChildPcztCount: signedChildren,
+          pendingPrepTxCount: 0,
+          broadcastedTxCount: 0,
+          confirmedTxCount: 0,
+          totalCount: 4,
+          canAbandon: false,
+          signingBatchLimit: 8,
+          broadcastWindowSeconds: BigInt.from(180),
+          maxPreparedNotesPerRun: 64,
+          scheduledBroadcasts: const [],
+        );
+
+    expect(
+      migrationShouldAutoAdvanceSoftware(
+        status: ready(),
+        isHardware: false,
+        runInFlight: false,
+        alreadyAttempted: false,
+      ),
+      isTrue,
+    );
+    // hardware excluded
+    expect(
+      migrationShouldAutoAdvanceSoftware(
+        status: ready(),
+        isHardware: true,
+        runInFlight: false,
+        alreadyAttempted: false,
+      ),
+      isFalse,
+    );
+    // presigned children present -> not the software path
+    expect(
+      migrationShouldAutoAdvanceSoftware(
+        status: ready(signedChildren: 4),
+        isHardware: false,
+        runInFlight: false,
+        alreadyAttempted: false,
+      ),
+      isFalse,
+    );
+    // already attempted / in flight -> no re-fire
+    expect(
+      migrationShouldAutoAdvanceSoftware(
+        status: ready(),
+        isHardware: false,
+        runInFlight: true,
+        alreadyAttempted: false,
+      ),
+      isFalse,
+    );
+    expect(
+      migrationShouldAutoAdvanceSoftware(
+        status: ready(),
+        isHardware: false,
+        runInFlight: false,
+        alreadyAttempted: true,
+      ),
+      isFalse,
+    );
   });
 }

@@ -224,3 +224,19 @@ String _reverseTxidByteOrder(String txid) {
   }
   return reversed.toString();
 }
+
+/// Whether the global migration tick should auto-fire software stage 2. Software
+/// reaches `ready_to_migrate` with no presigned children (those are a hardware
+/// concept), so the second stage must be kicked off for it. Hardware is excluded
+/// — its children are already presigned and promoted by the tick.
+bool migrationShouldAutoAdvanceSoftware({
+  required rust_sync.MigrationStatus? status,
+  required bool isHardware,
+  required bool runInFlight,
+  required bool alreadyAttempted,
+}) {
+  if (status == null || isHardware || runInFlight || alreadyAttempted) {
+    return false;
+  }
+  return status.phase == 'ready_to_migrate' && status.signedChildPcztCount == 0;
+}

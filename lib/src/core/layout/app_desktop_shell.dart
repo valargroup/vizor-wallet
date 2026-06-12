@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../main.dart' show log;
 import '../../features/migration/migration_copy.dart';
+import '../../features/migration/models/migration_timeline_model.dart';
 import '../../features/migration/models/migration_view_state.dart';
 import '../../features/migration/providers/migration_expected_transfer_count_provider.dart';
 import '../../features/migration/providers/migration_run_controller.dart';
 import '../../features/migration/providers/orchard_migration_status_provider.dart';
+import '../../providers/account_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../rust/api/sync.dart' as rust_sync;
 import '../theme/app_theme.dart';
@@ -68,6 +70,7 @@ class _GlobalMigrationWarningBanner extends ConsumerStatefulWidget {
 class _GlobalMigrationWarningBannerState
     extends ConsumerState<_GlobalMigrationWarningBanner> {
   Timer? _migrationTickTimer;
+  final Set<String> _autoAdvancedRunIds = <String>{};
 
   @override
   void dispose() {
@@ -78,8 +81,12 @@ class _GlobalMigrationWarningBannerState
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(activeOrchardMigrationStatusProvider).value;
+    final isHardware =
+        ref.watch(accountProvider).value?.activeAccount?.isHardware ?? false;
+    final wantsAutoAdvance =
+        !isHardware && status?.phase == 'ready_to_migrate';
     final visible = _showsMigrationWarning(status);
-    _syncMigrationTick(visible);
+    _syncMigrationTick(visible || wantsAutoAdvance);
 
     if (!visible) return const SizedBox.shrink();
 
@@ -139,6 +146,7 @@ class _GlobalMigrationWarningBannerState
   Future<void> _tickMigrationActivity() async {
     try {
       final status = ref.read(activeOrchardMigrationStatusProvider).value;
+      await _maybeAutoAdvanceSoftware(status);
       if (!_showsMigrationWarning(status)) return;
 
       final now = DateTime.now();
@@ -185,6 +193,29 @@ class _GlobalMigrationWarningBannerState
     } catch (e) {
       log('GlobalMigrationWarningBanner: migration activity tick failed: $e');
     }
+  }
+
+  Future<void> _maybeAutoAdvanceSoftware(
+    rust_sync.MigrationStatus? status,
+  ) async {
+    final isHardware =
+        ref.read(accountProvider).value?.activeAccount?.isHardware ?? false;
+    final runInFlight = ref.read(migrationRunControllerProvider).inFlight;
+    final runId = status?.activeRunId;
+    if (!migrationShouldAutoAdvanceSoftware(
+      status: status,
+      isHardware: isHardware,
+      runInFlight: runInFlight,
+      alreadyAttempted: runId != null && _autoAdvancedRunIds.contains(runId),
+    )) {
+      return;
+    }
+    if (runId != null) _autoAdvancedRunIds.add(runId);
+    log('GlobalMigrationWarningBanner: auto-advancing software migration stage 2');
+    await ref
+        .read(migrationRunControllerProvider.notifier)
+        .advance(MigrationRunIntent.migrating);
+    ref.invalidate(activeOrchardMigrationStatusProvider);
   }
 
   bool _showsMigrationWarning(rust_sync.MigrationStatus? status) {
