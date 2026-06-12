@@ -14,7 +14,7 @@ import '../../../providers/sync_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../migration_copy.dart';
 import '../models/migration_batch.dart';
-import '../models/migration_step_state.dart';
+import '../models/migration_timeline_model.dart';
 import 'migration_expected_transfer_count_provider.dart';
 import 'orchard_migration_status_provider.dart';
 
