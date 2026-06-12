@@ -45,6 +45,23 @@ void main() {
     );
   });
 
+  test('entry card is hidden while progress is settling', () {
+    expect(
+      migrationShouldShowEntry(
+        viewState: MigrationViewState.planningDenominations,
+        keepsProgressVisible: false,
+      ),
+      isTrue,
+    );
+    expect(
+      migrationShouldShowEntry(
+        viewState: MigrationViewState.planningDenominations,
+        keepsProgressVisible: true,
+      ),
+      isFalse,
+    );
+  });
+
   test('account with a pending migration shows confirmation wait', () {
     expect(
       migrationViewState(

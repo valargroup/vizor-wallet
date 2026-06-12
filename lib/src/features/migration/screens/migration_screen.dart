@@ -862,6 +862,9 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         result.message ?? MigrationCopy.partialBroadcastError,
       );
     }
+    ref
+        .read(migrationRunControllerProvider.notifier)
+        .settleAfterExternalAdvance(session.intent);
 
     await ref
         .read(syncProvider.notifier)
@@ -1151,11 +1154,10 @@ class _MigrationBody extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback onScanSends;
 
-  bool get _isIdle =>
-      viewState == MigrationViewState.noOrchardFunds ||
-      viewState == MigrationViewState.waitingForSpendableOrchard ||
-      (viewState == MigrationViewState.planningDenominations &&
-          !runState.inFlight);
+  bool get _isIdle => migrationShouldShowEntry(
+    viewState: viewState,
+    keepsProgressVisible: runState.keepsProgressVisible,
+  );
 
   @override
   Widget build(BuildContext context) {

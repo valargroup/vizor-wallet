@@ -179,6 +179,19 @@ bool migrationShouldWarnBeforeClose(rust_sync.MigrationStatus? status) {
       status?.phase == 'signing_batch';
 }
 
+bool migrationShouldShowEntry({
+  required MigrationViewState viewState,
+  required bool keepsProgressVisible,
+}) {
+  if (keepsProgressVisible) return false;
+  return switch (viewState) {
+    MigrationViewState.noOrchardFunds ||
+    MigrationViewState.waitingForSpendableOrchard ||
+    MigrationViewState.planningDenominations => true,
+    _ => false,
+  };
+}
+
 Duration? migrationRemainingScheduledSubmissionTime(
   rust_sync.MigrationStatus? status,
   DateTime now,

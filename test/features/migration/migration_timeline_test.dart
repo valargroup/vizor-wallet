@@ -90,7 +90,9 @@ void main() {
     expect(find.text(MigrationCopy.sendScanCta), findsOneWidget);
   });
 
-  testWidgets('scheduled share rows show per-share countdowns', (tester) async {
+  testWidgets('only the next scheduled share row shows a countdown', (
+    tester,
+  ) async {
     final now = DateTime.fromMillisecondsSinceEpoch(1000);
     await _pump(
       tester,
@@ -133,7 +135,8 @@ void main() {
           migrationCountdownLabel(const Duration(seconds: 120)),
         ),
       ),
-      findsOneWidget,
+      findsNothing,
     );
+    expect(find.text(MigrationCopy.shareScheduled), findsOneWidget);
   });
 }

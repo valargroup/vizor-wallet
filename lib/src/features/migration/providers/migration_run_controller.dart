@@ -174,6 +174,11 @@ class MigrationRunController extends Notifier<MigrationRunState> {
     }
   }
 
+  void settleAfterExternalAdvance(MigrationRunIntent intent) {
+    if (state.inFlight) return;
+    _showSettlingState(intent);
+  }
+
   void _showSettlingState(MigrationRunIntent intent) {
     _settleTimer?.cancel();
     state = MigrationRunState(intent: intent, settling: true);

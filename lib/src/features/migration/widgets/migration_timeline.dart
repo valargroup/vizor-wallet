@@ -221,6 +221,7 @@ class MigrationTimeline extends StatelessWidget {
     final rows = shares.reversed.toList(growable: false); // oldest -> newest
     final scheduledBroadcasts =
         status?.scheduledBroadcasts.toList(growable: false) ?? const [];
+    final nextScheduledBroadcast = _nextScheduledBroadcast(scheduledBroadcasts);
     final total = [
       rows.length,
       scheduledBroadcasts.length,
@@ -280,6 +281,10 @@ class MigrationTimeline extends StatelessWidget {
                   broadcast: broadcast,
                 ),
                 scheduledBroadcast: broadcast,
+                showScheduleCountdown:
+                    broadcast != null &&
+                    nextScheduledBroadcast != null &&
+                    _sameScheduledBroadcast(broadcast, nextScheduledBroadcast),
                 now: now,
               );
             },
@@ -304,6 +309,32 @@ rust_sync.TransactionInfo? _transactionForShareRow({
     }
   }
   return index < rows.length ? rows[index] : null;
+}
+
+rust_sync.MigrationScheduledBroadcast? _nextScheduledBroadcast(
+  List<rust_sync.MigrationScheduledBroadcast> broadcasts,
+) {
+  rust_sync.MigrationScheduledBroadcast? next;
+  for (final broadcast in broadcasts) {
+    if (broadcast.status != 'scheduled') continue;
+    final candidateTime = broadcast.scheduledAtMs.toInt();
+    final nextTime = next?.scheduledAtMs.toInt();
+    if (next == null ||
+        candidateTime < nextTime! ||
+        (candidateTime == nextTime &&
+            broadcast.txidHex.compareTo(next.txidHex) < 0)) {
+      next = broadcast;
+    }
+  }
+  return next;
+}
+
+bool _sameScheduledBroadcast(
+  rust_sync.MigrationScheduledBroadcast left,
+  rust_sync.MigrationScheduledBroadcast right,
+) {
+  return left.scheduledAtMs == right.scheduledAtMs &&
+      migrationTxidsMatch(left.txidHex, right.txidHex);
 }
 
 class _Dot extends StatelessWidget {
@@ -357,12 +388,14 @@ class _ShareRow extends StatelessWidget {
     required this.index,
     required this.transaction,
     required this.scheduledBroadcast,
+    required this.showScheduleCountdown,
     required this.now,
   });
 
   final int index;
   final rust_sync.TransactionInfo? transaction;
   final rust_sync.MigrationScheduledBroadcast? scheduledBroadcast;
+  final bool showScheduleCountdown;
   final DateTime now;
 
   @override
@@ -383,7 +416,11 @@ class _ShareRow extends StatelessWidget {
         ? MigrationCopy.shareConfirmed
         : isSending
         ? MigrationCopy.shareSending
-        : _scheduledStatusText(scheduledBroadcast, now);
+        : _scheduledStatusText(
+            scheduledBroadcast,
+            now,
+            showCountdown: showScheduleCountdown,
+          );
     final icon = isFailed
         ? AppIcons.warning
         : isConfirmed
@@ -418,9 +455,12 @@ class _ShareRow extends StatelessWidget {
 
 String _scheduledStatusText(
   rust_sync.MigrationScheduledBroadcast? broadcast,
-  DateTime now,
-) {
-  if (broadcast?.status != 'scheduled') return MigrationCopy.shareScheduled;
+  DateTime now, {
+  required bool showCountdown,
+}) {
+  if (!showCountdown || broadcast?.status != 'scheduled') {
+    return MigrationCopy.shareScheduled;
+  }
   final scheduledAt = DateTime.fromMillisecondsSinceEpoch(
     broadcast!.scheduledAtMs.toInt(),
   );
