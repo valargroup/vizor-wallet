@@ -364,6 +364,30 @@ void main() {
       ),
       isTrue,
     );
+    expect(
+      migrationShouldWarnBeforeCloseRead(statusKnown: false, status: null),
+      isTrue,
+    );
+    expect(
+      migrationShouldWarnBeforeCloseRead(statusKnown: true, status: null),
+      isFalse,
+    );
+    expect(
+      migrationShouldWarnBeforeCloseSnapshot(
+        statusKnown: true,
+        status: null,
+        keepsProgressVisible: true,
+      ),
+      isTrue,
+    );
+    expect(
+      migrationShouldWarnBeforeCloseSnapshot(
+        statusKnown: true,
+        status: null,
+        keepsProgressVisible: false,
+      ),
+      isFalse,
+    );
   });
 
   test('single-QR oversize error is detected for the staged fallback', () {

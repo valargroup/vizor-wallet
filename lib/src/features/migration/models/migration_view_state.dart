@@ -193,6 +193,26 @@ bool migrationShouldWarnBeforeClose(rust_sync.MigrationStatus? status) {
       migrationHasSignedChildPczts(status);
 }
 
+bool migrationShouldWarnBeforeCloseRead({
+  required bool statusKnown,
+  required rust_sync.MigrationStatus? status,
+}) {
+  if (!statusKnown) return true;
+  return migrationShouldWarnBeforeClose(status);
+}
+
+bool migrationShouldWarnBeforeCloseSnapshot({
+  required bool statusKnown,
+  required rust_sync.MigrationStatus? status,
+  required bool keepsProgressVisible,
+}) {
+  if (keepsProgressVisible) return true;
+  return migrationShouldWarnBeforeCloseRead(
+    statusKnown: statusKnown,
+    status: status,
+  );
+}
+
 bool migrationShouldShowGlobalWarning(rust_sync.MigrationStatus? status) {
   return migrationShouldWarnBeforeClose(status);
 }

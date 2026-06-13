@@ -10,6 +10,7 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../models/migration_view_state.dart';
+import '../providers/migration_run_controller.dart';
 import '../providers/orchard_migration_status_provider.dart';
 
 class MigrationCloseGuard extends ConsumerStatefulWidget {
@@ -56,16 +57,21 @@ class _MigrationCloseGuardState extends ConsumerState<MigrationCloseGuard>
   Future<void> _handleCloseRequest() async {
     if (_dialogVisible) return;
 
-    final status = await _readMigrationStatus();
+    final statusRead = await _readMigrationStatus();
     if (!mounted) return;
 
-    if (!migrationShouldWarnBeforeClose(status)) {
+    final runState = ref.read(migrationRunControllerProvider);
+    if (!migrationShouldWarnBeforeCloseSnapshot(
+      statusKnown: statusRead.known,
+      status: statusRead.status,
+      keepsProgressVisible: runState.keepsProgressVisible,
+    )) {
       await _closeWindow();
       return;
     }
 
     final remaining = migrationRemainingScheduledSubmissionTime(
-      status,
+      statusRead.status,
       DateTime.now(),
     );
     final dialogContext = _dialogContext();
@@ -111,21 +117,32 @@ class _MigrationCloseGuardState extends ConsumerState<MigrationCloseGuard>
     await windowManager.close();
   }
 
-  Future<rust_sync.MigrationStatus?> _readMigrationStatus() async {
-    final current = ref.read(activeOrchardMigrationStatusProvider).value;
-    if (current != null) return current;
+  Future<_MigrationCloseStatusRead> _readMigrationStatus() async {
+    final current = ref.read(activeOrchardMigrationStatusProvider);
+    if (current.hasValue && !current.isLoading) {
+      return _MigrationCloseStatusRead.known(current.value);
+    }
 
     try {
-      return await ref
+      final status = await ref
           .read(activeOrchardMigrationStatusProvider.future)
           .timeout(const Duration(seconds: 1));
+      return _MigrationCloseStatusRead.known(status);
     } catch (_) {
-      return null;
+      return const _MigrationCloseStatusRead.unknown();
     }
   }
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+class _MigrationCloseStatusRead {
+  const _MigrationCloseStatusRead.known(this.status) : known = true;
+  const _MigrationCloseStatusRead.unknown() : known = false, status = null;
+
+  final bool known;
+  final rust_sync.MigrationStatus? status;
 }
 
 class _MigrationCloseWarningDialog extends StatelessWidget {
