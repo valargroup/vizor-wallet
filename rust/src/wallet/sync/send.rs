@@ -3045,6 +3045,10 @@ fn create_orchard_to_ironwood_pczt_from_predicted_note(
         .value_zatoshi
         .try_into()
         .map_err(|e| format!("Predicted migration note value invalid: {e}"))?;
+    // Migration children are built from predicted denomination notes before the
+    // split tx is mined. This dummy anchor is v6-only scaffolding. Orchard
+    // spend signatures do not commit to it, and finalization replaces it with
+    // the real anchor/witness before creating proofs.
     let dummy_witness = dummy_orchard_merkle_path()?;
     let dummy_anchor = {
         let cmx: orchard::note::ExtractedNoteCommitment = predicted.note.commitment().into();
@@ -4119,6 +4123,8 @@ fn finalize_presigned_migration_children(
             .as_deref()
             .ok_or("Prepared migration note nullifier unavailable")?;
 
+        // Keep this before proof creation. V6 signatures survive the anchor
+        // update, but Orchard proofs depend on the real anchor.
         let base_pczt = super::pczt::set_orchard_anchor_and_witness(
             &child.base_pczt,
             orchard_anchor,
