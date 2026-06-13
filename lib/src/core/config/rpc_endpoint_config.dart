@@ -58,6 +58,14 @@ class RpcEndpointConfig {
   }
 }
 
+Map<String, String> nativeRpcEndpointPayload(RpcEndpointConfig endpoint) {
+  return {
+    'lightwalletdUrl': endpoint.normalizedLightwalletdUrl,
+    'network': endpoint.walletNetworkName,
+    'presetId': endpoint.effectivePresetId,
+  };
+}
+
 class RpcEndpointPreset {
   const RpcEndpointPreset({
     required this.id,

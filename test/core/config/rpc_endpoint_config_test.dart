@@ -246,6 +246,36 @@ void main() {
       );
     });
 
+    test('native payload uses the wallet network name for Local Ironwood', () {
+      final endpoint = defaultRpcEndpointConfig(
+        'test',
+        defaultPresetId: kLocalIronwoodTestnetRpcEndpointPresetId,
+        includeLocalIronwoodTestnet: true,
+      );
+
+      expect(
+        nativeRpcEndpointPayload(endpoint),
+        containsPair('network', kLocalIronwoodTestnetWalletNetworkName),
+      );
+    });
+
+    test(
+      'native payload keeps public network names for ordinary endpoints',
+      () {
+        final mainnetEndpoint = defaultRpcEndpointConfig('main');
+        final testnetEndpoint = defaultRpcEndpointConfig('test');
+
+        expect(
+          nativeRpcEndpointPayload(mainnetEndpoint),
+          containsPair('network', mainnetEndpoint.networkName),
+        );
+        expect(
+          nativeRpcEndpointPayload(testnetEndpoint),
+          containsPair('network', testnetEndpoint.networkName),
+        );
+      },
+    );
+
     test('ignores unavailable build-time default preset ids', () {
       final defaultEndpoint = defaultRpcEndpointConfig(
         'test',

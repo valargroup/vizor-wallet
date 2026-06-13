@@ -395,12 +395,10 @@ AccountInfo mergeBootstrappedAccountInfo({
 Future<void> _seedNativeRpcEndpointMirror(RpcEndpointConfig endpoint) async {
   if (!Platform.isIOS) return;
   try {
-    final success = await _backgroundSyncChannel
-        .invokeMethod<bool>('updateEndpoint', {
-          'lightwalletdUrl': endpoint.normalizedLightwalletdUrl,
-          'network': endpoint.networkName,
-          'presetId': endpoint.effectivePresetId,
-        });
+    final success = await _backgroundSyncChannel.invokeMethod<bool>(
+      'updateEndpoint',
+      nativeRpcEndpointPayload(endpoint),
+    );
     if (success != true) {
       log('bootstrap: iOS RPC endpoint mirror seed returned $success');
     }
