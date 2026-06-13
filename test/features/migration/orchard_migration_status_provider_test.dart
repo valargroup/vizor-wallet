@@ -165,5 +165,28 @@ void main() {
         isFalse,
       );
     });
+
+    test('loaded migration phases block sends only while active', () {
+      expect(
+        migrationBlocksSend(
+          AsyncData<rust_sync.MigrationStatus?>(
+            _status('waiting_denom_confirmations'),
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        migrationBlocksSend(
+          AsyncData<rust_sync.MigrationStatus?>(_status('ready_to_migrate')),
+        ),
+        isTrue,
+      );
+      expect(
+        migrationBlocksSend(
+          AsyncData<rust_sync.MigrationStatus?>(_status('ready_to_prepare')),
+        ),
+        isFalse,
+      );
+    });
   });
 }

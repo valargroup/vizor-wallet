@@ -35,6 +35,18 @@ extension MigrationViewStateX on MigrationViewState {
     _ => false,
   };
 
+  bool get needsKeepOpenWarning => switch (this) {
+    MigrationViewState.preparingDenominations ||
+    MigrationViewState.waitingDenomConfirmations ||
+    MigrationViewState.readyToMigrate ||
+    MigrationViewState.buildingSigningBatch ||
+    MigrationViewState.signingBatch ||
+    MigrationViewState.broadcastScheduled ||
+    MigrationViewState.broadcasting ||
+    MigrationViewState.waitingMigrationConfirmations => true,
+    _ => false,
+  };
+
   bool get shouldPollProgress => switch (this) {
     MigrationViewState.waitingDenomConfirmations ||
     MigrationViewState.readyToMigrate ||
@@ -171,24 +183,18 @@ bool migrationShouldRunBroadcastTick(
 }
 
 bool migrationShouldWarnBeforeClose(rust_sync.MigrationStatus? status) {
-  return migrationHasScheduledPendingBroadcasts(status) ||
+  return (migrationViewStateFromRustPhase(
+            status?.phase,
+          )?.needsKeepOpenWarning ??
+          false) ||
+      migrationHasScheduledPendingBroadcasts(status) ||
       migrationHasPendingPrepBroadcast(status) ||
       migrationHasBroadcastedUnconfirmedTransactions(status) ||
-      migrationHasSignedChildPczts(status) ||
-      status?.phase == 'building_signing_batch' ||
-      status?.phase == 'signing_batch';
+      migrationHasSignedChildPczts(status);
 }
 
 bool migrationShouldShowGlobalWarning(rust_sync.MigrationStatus? status) {
-  return migrationShouldWarnBeforeClose(status) ||
-      switch (status?.phase) {
-        'building_signing_batch' ||
-        'signing_batch' ||
-        'broadcast_scheduled' ||
-        'broadcasting' ||
-        'waiting_migration_confirmations' => true,
-        _ => false,
-      };
+  return migrationShouldWarnBeforeClose(status);
 }
 
 bool migrationShouldShowEntry({

@@ -38,11 +38,8 @@ class _GlobalMigrationWarningBannerState
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(activeOrchardMigrationStatusProvider).value;
-    final isHardware =
-        ref.watch(accountProvider).value?.activeAccount?.isHardware ?? false;
-    final wantsAutoAdvance = !isHardware && status?.phase == 'ready_to_migrate';
     final visible = migrationShouldShowGlobalWarning(status);
-    _syncMigrationTick(visible || wantsAutoAdvance);
+    _syncMigrationTick(visible);
 
     if (!visible) return const SizedBox.shrink();
 

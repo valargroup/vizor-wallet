@@ -138,7 +138,7 @@ class _MigrationCloseWarningDialog extends StatelessWidget {
     final colors = context.colors;
     final remaining = this.remaining;
     final remainingLine = remaining == null
-        ? 'Vizor is still submitting or confirming migration transactions.'
+        ? 'Vizor is still preparing, submitting, or confirming migration transactions.'
         : remaining > Duration.zero
         ? 'About ${migrationCountdownLabel(remaining)} remaining until the final scheduled submission.'
         : 'The final scheduled submission is due now.';
@@ -183,7 +183,7 @@ class _MigrationCloseWarningDialog extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'If you close Vizor now, remaining scheduled submissions will not happen on their own, and confirmation progress will not update until Vizor is reopened.',
+                'If you close Vizor now, migration steps will pause and confirmation progress will not update until Vizor is reopened.',
                 style: AppTypography.bodySmall.copyWith(
                   color: colors.text.warning,
                 ),

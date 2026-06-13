@@ -188,6 +188,27 @@ void main() {
     );
   });
 
+  test('keep-open warning predicate covers progress-capable phases', () {
+    const warnedStates = {
+      MigrationViewState.preparingDenominations,
+      MigrationViewState.waitingDenomConfirmations,
+      MigrationViewState.readyToMigrate,
+      MigrationViewState.buildingSigningBatch,
+      MigrationViewState.signingBatch,
+      MigrationViewState.broadcastScheduled,
+      MigrationViewState.broadcasting,
+      MigrationViewState.waitingMigrationConfirmations,
+    };
+
+    for (final state in MigrationViewState.values) {
+      expect(
+        state.needsKeepOpenWarning,
+        warnedStates.contains(state),
+        reason: '$state',
+      );
+    }
+  });
+
   test('migration txid matching rejects invalid and unrelated txids', () {
     const txid =
         '24fccdf39b619967ac5904743cb0f4a33b0b4d4b67b84dcee0f4ba0dc2887725';
@@ -272,7 +293,7 @@ void main() {
     },
   );
 
-  test('global warning shows only while migration needs attention', () {
+  test('keep-open warnings show only while migration needs attention', () {
     rust_sync.MigrationStatus status({
       required String phase,
       int pendingPrepTxCount = 0,
@@ -302,6 +323,30 @@ void main() {
     expect(
       migrationShouldShowGlobalWarning(status(phase: 'ready_to_prepare')),
       isFalse,
+    );
+    expect(
+      migrationShouldWarnBeforeClose(status(phase: 'ready_to_prepare')),
+      isFalse,
+    );
+    expect(
+      migrationShouldShowGlobalWarning(
+        status(phase: 'waiting_denom_confirmations'),
+      ),
+      isTrue,
+    );
+    expect(
+      migrationShouldWarnBeforeClose(
+        status(phase: 'waiting_denom_confirmations'),
+      ),
+      isTrue,
+    );
+    expect(
+      migrationShouldShowGlobalWarning(status(phase: 'ready_to_migrate')),
+      isTrue,
+    );
+    expect(
+      migrationShouldWarnBeforeClose(status(phase: 'ready_to_migrate')),
+      isTrue,
     );
     expect(
       migrationShouldShowGlobalWarning(status(phase: 'building_signing_batch')),
