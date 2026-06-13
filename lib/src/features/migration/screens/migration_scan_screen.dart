@@ -13,8 +13,20 @@ import '../../../services/qr_scanner.dart';
 import '../../keystone/widgets/keystone_qr_scanner_card.dart';
 import '../migration_copy.dart';
 
+typedef MigrationScanScannerBuilder =
+    Widget Function({
+      required bool decoding,
+      required String? error,
+      required ValueChanged<Object> onDecodeError,
+      required ValueChanged<ScanResult> onComplete,
+    });
+
 class MigrationScanScreen extends ConsumerStatefulWidget {
-  const MigrationScanScreen({super.key});
+  const MigrationScanScreen({this.scannerBuilder, super.key});
+
+  /// Overrides scanner construction for tests so route behavior can be
+  /// exercised without starting the camera plugin.
+  final MigrationScanScannerBuilder? scannerBuilder;
 
   @override
   ConsumerState<MigrationScanScreen> createState() =>
@@ -39,7 +51,35 @@ class _MigrationScanScreenState extends ConsumerState<MigrationScanScreen> {
   void _handleComplete(ScanResult result) {
     if (_decoding) return;
     setState(() => _decoding = true);
-    context.pop(Uint8List.fromList(result.data));
+    final bytes = Uint8List.fromList(result.data);
+    if (context.canPop()) {
+      context.pop(bytes);
+      return;
+    }
+    context.go('/migration');
+  }
+
+  Widget _buildScanner() {
+    final scannerBuilder = widget.scannerBuilder;
+    if (scannerBuilder != null) {
+      return scannerBuilder(
+        decoding: _decoding,
+        error: _error,
+        onDecodeError: _handleDecodeError,
+        onComplete: _handleComplete,
+      );
+    }
+
+    return KeystoneQrScannerCard(
+      expectedUrType: _signResultUrType,
+      decoding: _decoding,
+      error: _error,
+      onProgress: (_) {},
+      onDecodeError: _handleDecodeError,
+      onComplete: _handleComplete,
+      decodingLabel: MigrationCopy.scanDecodingLabel,
+      unavailableMessage: MigrationCopy.scanUnavailable,
+    );
   }
 
   void _handleDecodeError(Object error) {
@@ -85,20 +125,7 @@ class _MigrationScanScreenState extends ConsumerState<MigrationScanScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            Expanded(
-              child: Center(
-                child: KeystoneQrScannerCard(
-                  expectedUrType: _signResultUrType,
-                  decoding: _decoding,
-                  error: _error,
-                  onProgress: (_) {},
-                  onDecodeError: _handleDecodeError,
-                  onComplete: _handleComplete,
-                  decodingLabel: MigrationCopy.scanDecodingLabel,
-                  unavailableMessage: MigrationCopy.scanUnavailable,
-                ),
-              ),
-            ),
+            Expanded(child: Center(child: _buildScanner())),
           ],
         ),
       ),
