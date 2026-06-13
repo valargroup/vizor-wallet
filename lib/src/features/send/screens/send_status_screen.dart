@@ -385,7 +385,10 @@ class _SendStatusScreenState extends ConsumerState<SendStatusScreen> {
           if (available) {
             await channel.invokeMethod(
               'startTxTracking',
-              nativeRpcEndpointPayload(endpoint),
+              nativeRpcEndpointPayload(
+                endpoint,
+                walletNetworkName: endpoint.walletNetworkName,
+              ),
             );
           }
         } catch (e) {

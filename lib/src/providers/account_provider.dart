@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../main.dart' show log;
 import '../app_bootstrap.dart';
 import '../core/account_name_policy.dart';
+import '../core/config/rpc_endpoint_config.dart';
 import '../core/profile_pictures.dart';
 import '../core/storage/app_secure_store.dart';
 import '../core/storage/wallet_paths.dart';
@@ -88,6 +89,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         accountUuid = result.accountUuid;
         unifiedAddress = result.unifiedAddress;
         await _storage.writeString(_networkKey, publicNetwork);
+        await _storage.writeString(kWalletNetworkNameKey, network);
       } else {
         // Additional account — generate mnemonic + add to existing DB
         mnemonic = rust_wallet.generateMnemonic();
@@ -168,6 +170,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         accountUuid = result.accountUuid;
         unifiedAddress = result.unifiedAddress;
         await _storage.writeString(_networkKey, publicNetwork);
+        await _storage.writeString(kWalletNetworkNameKey, network);
       } else {
         final result = await rust_wallet.addAccount(
           dbPath: dbPath,
@@ -239,6 +242,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         accountUuid = result.accountUuid;
         unifiedAddress = result.unifiedAddress;
         await _storage.writeString(_networkKey, publicNetwork);
+        await _storage.writeString(kWalletNetworkNameKey, network);
       } else {
         // Additional account
         final result = await rust_wallet.addAccount(
@@ -617,6 +621,13 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       final updated = [...prev.accounts, newAccount];
       await _saveAccounts(updated);
       await _storage.writeString(_activeAccountKey, accountUuid);
+      if (prev.accounts.isEmpty) {
+        await _storage.writeString(
+          _networkKey,
+          publicNetworkNameForWalletNetworkName(network),
+        );
+        await _storage.writeString(kWalletNetworkNameKey, network);
+      }
 
       state = AsyncData(
         AccountState(

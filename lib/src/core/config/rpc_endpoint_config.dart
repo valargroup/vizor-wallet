@@ -25,17 +25,24 @@ class RpcEndpointConfig {
     required this.networkName,
     required this.lightwalletdUrl,
     this.presetId,
-  });
+    String? walletNetworkName,
+  }) : _walletNetworkName = walletNetworkName;
 
   final String networkName;
   final String lightwalletdUrl;
   final String? presetId;
+  final String? _walletNetworkName;
 
   ZcashNetwork get network => zcashNetworkFromName(networkName);
 
-  String get walletNetworkName => isLocalIronwoodTestnetEndpoint(this)
-      ? kLocalIronwoodTestnetWalletNetworkName
-      : networkName;
+  String get walletNetworkName =>
+      _walletNetworkName ?? endpointWalletNetworkName;
+
+  String get endpointWalletNetworkName => inferWalletNetworkName(
+    networkName: networkName,
+    lightwalletdUrl: lightwalletdUrl,
+    presetId: presetId,
+  );
 
   String get normalizedLightwalletdUrl =>
       normalizeRpcEndpointUrl(lightwalletdUrl, allowDefaultPort: true);
@@ -49,19 +56,78 @@ class RpcEndpointConfig {
     String? networkName,
     String? lightwalletdUrl,
     String? presetId,
+    String? walletNetworkName,
   }) {
     return RpcEndpointConfig(
       networkName: networkName ?? this.networkName,
       lightwalletdUrl: lightwalletdUrl ?? this.lightwalletdUrl,
       presetId: presetId ?? this.presetId,
+      walletNetworkName: walletNetworkName ?? this.walletNetworkName,
     );
   }
 }
 
-Map<String, String> nativeRpcEndpointPayload(RpcEndpointConfig endpoint) {
+String inferWalletNetworkName({
+  required String networkName,
+  required String lightwalletdUrl,
+  String? presetId,
+}) {
+  final network = zcashNetworkFromName(networkName);
+  if (network == ZcashNetwork.testnet &&
+      (presetId == kLocalIronwoodTestnetRpcEndpointPresetId ||
+          normalizeRpcEndpointUrl(lightwalletdUrl, allowDefaultPort: true) ==
+              normalizeRpcEndpointUrl(
+                kLocalIronwoodTestnetRpcEndpointPreset.url,
+                allowDefaultPort: true,
+              ))) {
+    return kLocalIronwoodTestnetWalletNetworkName;
+  }
+  return network.name;
+}
+
+String? normalizeWalletNetworkName(String? walletNetworkName) {
+  final value = walletNetworkName?.trim();
+  return switch (value) {
+    'main' => 'main',
+    'test' => 'test',
+    kLocalIronwoodTestnetWalletNetworkName =>
+      kLocalIronwoodTestnetWalletNetworkName,
+    'regtest' => 'regtest',
+    _ => null,
+  };
+}
+
+String publicNetworkNameForWalletNetworkName(String walletNetworkName) {
+  return walletNetworkName == kLocalIronwoodTestnetWalletNetworkName
+      ? ZcashNetwork.testnet.name
+      : zcashNetworkFromName(walletNetworkName).name;
+}
+
+RpcEndpointConfig defaultRpcEndpointConfigForWalletNetwork(
+  String walletNetworkName,
+) {
+  final normalized =
+      normalizeWalletNetworkName(walletNetworkName) ?? kZcashDefaultNetworkName;
+  final publicNetwork = publicNetworkNameForWalletNetworkName(normalized);
+  final endpoint = defaultRpcEndpointConfig(
+    publicNetwork,
+    defaultPresetId: normalized == kLocalIronwoodTestnetWalletNetworkName
+        ? kLocalIronwoodTestnetRpcEndpointPresetId
+        : '',
+    includeLocalIronwoodTestnet:
+        normalized == kLocalIronwoodTestnetWalletNetworkName ||
+        kZcashEnableLocalIronwoodTestnet,
+  );
+  return endpoint.copyWith(walletNetworkName: normalized);
+}
+
+Map<String, String> nativeRpcEndpointPayload(
+  RpcEndpointConfig endpoint, {
+  required String walletNetworkName,
+}) {
   return {
     'lightwalletdUrl': endpoint.normalizedLightwalletdUrl,
-    'network': endpoint.walletNetworkName,
+    'network': walletNetworkName,
     'presetId': endpoint.effectivePresetId,
   };
 }
@@ -272,8 +338,9 @@ RpcEndpointPreset? explicitRpcEndpointPresetFor(RpcEndpointConfig config) {
 }
 
 List<RpcEndpointConfig> fallbackRpcEndpointCandidatesFor(
-  RpcEndpointConfig primary,
-) {
+  RpcEndpointConfig primary, {
+  bool includeLocalIronwoodTestnet = kZcashEnableLocalIronwoodTestnet,
+}) {
   if (isLocalIronwoodTestnetEndpoint(primary)) return const [];
 
   final primaryPreset = _selectedFallbackPrimaryPreset(primary);
@@ -283,7 +350,10 @@ List<RpcEndpointConfig> fallbackRpcEndpointCandidatesFor(
   final seenUrls = <String>{};
   final candidates = <RpcEndpointConfig>[];
 
-  for (final preset in rpcEndpointPresetsForNetwork(primary.networkName)) {
+  for (final preset in rpcEndpointPresetsForNetwork(
+    primary.networkName,
+    includeLocalIronwoodTestnet: includeLocalIronwoodTestnet,
+  )) {
     final normalized = normalizeRpcEndpointUrl(
       preset.url,
       allowDefaultPort: true,
@@ -298,11 +368,17 @@ List<RpcEndpointConfig> fallbackRpcEndpointCandidatesFor(
         networkName: primary.networkName,
         lightwalletdUrl: preset.url,
         presetId: preset.id,
+        walletNetworkName: primary.walletNetworkName,
       ),
     );
   }
 
-  return List.unmodifiable(candidates);
+  return List.unmodifiable(
+    candidates.where(
+      (candidate) =>
+          candidate.endpointWalletNetworkName == primary.walletNetworkName,
+    ),
+  );
 }
 
 RpcEndpointConfig? fallbackRpcEndpointConfigFor(RpcEndpointConfig primary) {
@@ -318,15 +394,18 @@ RpcEndpointConfig resolveStoredRpcEndpointConfig({
   required String networkName,
   required String? storedUrl,
   required String? storedPresetId,
+  String? storedWalletNetworkName,
 }) {
   final network = zcashNetworkFromName(networkName);
+  final walletNetworkName = normalizeWalletNetworkName(storedWalletNetworkName);
   final presetId = storedPresetId?.trim();
+  RpcEndpointConfig? candidate;
   if (presetId != null &&
       presetId.isNotEmpty &&
       presetId != kCustomRpcEndpointPresetId) {
     final preset = findRpcEndpointPresetById(network.name, presetId);
     if (preset != null) {
-      return RpcEndpointConfig(
+      candidate = RpcEndpointConfig(
         networkName: network.name,
         lightwalletdUrl: preset.url,
         presetId: preset.id,
@@ -334,16 +413,24 @@ RpcEndpointConfig resolveStoredRpcEndpointConfig({
     }
   }
 
-  final url = storedUrl?.trim();
-  if (url == null || url.isEmpty) {
-    return defaultRpcEndpointConfig(network.name);
+  if (candidate == null) {
+    final url = storedUrl?.trim();
+    if (url == null || url.isEmpty) {
+      candidate = defaultRpcEndpointConfig(network.name);
+    } else {
+      candidate = RpcEndpointConfig(
+        networkName: network.name,
+        lightwalletdUrl: normalizeRpcEndpointUrl(url, allowDefaultPort: true),
+        presetId: kCustomRpcEndpointPresetId,
+      );
+    }
   }
 
-  return RpcEndpointConfig(
-    networkName: network.name,
-    lightwalletdUrl: normalizeRpcEndpointUrl(url, allowDefaultPort: true),
-    presetId: kCustomRpcEndpointPresetId,
-  );
+  if (walletNetworkName == null) return candidate;
+  if (candidate.walletNetworkName == walletNetworkName) {
+    return candidate.copyWith(walletNetworkName: walletNetworkName);
+  }
+  return defaultRpcEndpointConfigForWalletNetwork(walletNetworkName);
 }
 
 RpcEndpointPreset? findRpcEndpointPresetById(
@@ -393,12 +480,11 @@ bool isLocalIronwoodTestnetEndpoint(RpcEndpointConfig config) {
     return true;
   }
 
-  return kZcashEnableLocalIronwoodTestnet &&
-      config.normalizedLightwalletdUrl ==
-          normalizeRpcEndpointUrl(
-            kLocalIronwoodTestnetRpcEndpointPreset.url,
-            allowDefaultPort: true,
-          );
+  return config.normalizedLightwalletdUrl ==
+      normalizeRpcEndpointUrl(
+        kLocalIronwoodTestnetRpcEndpointPreset.url,
+        allowDefaultPort: true,
+      );
 }
 
 String normalizeRpcEndpointUrl(

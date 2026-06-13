@@ -254,7 +254,10 @@ void main() {
       );
 
       expect(
-        nativeRpcEndpointPayload(endpoint),
+        nativeRpcEndpointPayload(
+          endpoint,
+          walletNetworkName: endpoint.walletNetworkName,
+        ),
         containsPair('network', kLocalIronwoodTestnetWalletNetworkName),
       );
     });
@@ -266,15 +269,34 @@ void main() {
         final testnetEndpoint = defaultRpcEndpointConfig('test');
 
         expect(
-          nativeRpcEndpointPayload(mainnetEndpoint),
+          nativeRpcEndpointPayload(
+            mainnetEndpoint,
+            walletNetworkName: mainnetEndpoint.walletNetworkName,
+          ),
           containsPair('network', mainnetEndpoint.networkName),
         );
         expect(
-          nativeRpcEndpointPayload(testnetEndpoint),
+          nativeRpcEndpointPayload(
+            testnetEndpoint,
+            walletNetworkName: testnetEndpoint.walletNetworkName,
+          ),
           containsPair('network', testnetEndpoint.networkName),
         );
       },
     );
+
+    test('native payload uses the explicit wallet network argument', () {
+      final endpoint = defaultRpcEndpointConfig(
+        'test',
+        defaultPresetId: kLocalIronwoodTestnetRpcEndpointPresetId,
+        includeLocalIronwoodTestnet: true,
+      );
+
+      expect(
+        nativeRpcEndpointPayload(endpoint, walletNetworkName: 'test'),
+        containsPair('network', 'test'),
+      );
+    });
 
     test('ignores unavailable build-time default preset ids', () {
       final defaultEndpoint = defaultRpcEndpointConfig(
@@ -332,6 +354,34 @@ void main() {
       );
       expect(config.presetId, kCustomRpcEndpointPresetId);
     });
+
+    test('keeps a legacy test wallet on ordinary testnet parameters', () {
+      final config = resolveStoredRpcEndpointConfig(
+        networkName: 'test',
+        storedUrl: kLocalIronwoodTestnetRpcEndpointPreset.url,
+        storedPresetId: kLocalIronwoodTestnetRpcEndpointPresetId,
+        storedWalletNetworkName: 'test',
+      );
+
+      expect(config.networkName, 'test');
+      expect(config.walletNetworkName, 'test');
+      expect(config.lightwalletdUrl, 'https://testnet.zec.rocks:443');
+      expect(config.presetId, 'default-testnet');
+    });
+
+    test('keeps a Local Ironwood wallet on Local Ironwood parameters', () {
+      final config = resolveStoredRpcEndpointConfig(
+        networkName: 'test',
+        storedUrl: 'https://testnet.zec.rocks:443',
+        storedPresetId: 'default-testnet',
+        storedWalletNetworkName: kLocalIronwoodTestnetWalletNetworkName,
+      );
+
+      expect(config.networkName, 'test');
+      expect(config.walletNetworkName, kLocalIronwoodTestnetWalletNetworkName);
+      expect(config.lightwalletdUrl, 'https://174-138-65-204.sslip.io:9067');
+      expect(config.presetId, kLocalIronwoodTestnetRpcEndpointPresetId);
+    });
   });
 
   group('RpcEndpointConfig', () {
@@ -354,6 +404,21 @@ void main() {
       );
 
       expect(config.effectivePresetId, 'zec-rocks');
+    });
+
+    test('separates endpoint-required network from frozen wallet network', () {
+      final config = const RpcEndpointConfig(
+        networkName: 'test',
+        lightwalletdUrl: 'https://174-138-65-204.sslip.io:9067',
+        presetId: kLocalIronwoodTestnetRpcEndpointPresetId,
+        walletNetworkName: 'test',
+      );
+
+      expect(
+        config.endpointWalletNetworkName,
+        kLocalIronwoodTestnetWalletNetworkName,
+      );
+      expect(config.walletNetworkName, 'test');
     });
   });
 
