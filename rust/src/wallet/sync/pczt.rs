@@ -531,18 +531,27 @@ pub async fn extract_and_broadcast_pczt(
         Err(status) => return Err(format!("Broadcast: {status}")),
     };
 
+    handle_pczt_send_response(&txid.to_string(), &resp, store_locally)
+}
+
+fn handle_pczt_send_response<F>(
+    txid: &str,
+    resp: &zcash_client_backend::proto::service::SendResponse,
+    store_locally: F,
+) -> Result<ExtractAndBroadcastPcztResult, String>
+where
+    F: FnOnce() -> Result<(), String>,
+{
     // zebra-lightwalletd returns the txid in `error_message` on
-    // success, so the only reliable signal is `error_code`.
-    if resp.error_code != 0 {
-        return Err(format!(
-            "Broadcast rejected: {} (code {})",
-            resp.error_message, resp.error_code
-        ));
+    // success, so the only reliable clean-success signal is
+    // `error_code`. Duplicate/already-known responses are also
+    // definite acceptance because the network already has the tx.
+    if let Some(error) = super::broadcast::send_response_rejection_error(resp) {
+        return Err(error);
     }
 
-    // Step 3: broadcast was accepted. Persist locally so the UI
-    // sees the tx immediately and the spent notes stop showing up
-    // as spendable.
+    // Broadcast was accepted. Persist locally so the UI sees the tx
+    // immediately and the spent notes stop showing up as spendable.
     if let Err(storage_err) = store_locally() {
         log::error!(
             "keystone: broadcast succeeded but local storage failed \
@@ -559,4 +568,84 @@ pub async fn extract_and_broadcast_pczt(
     }
 
     Ok(ExtractAndBroadcastPcztResult::broadcasted(txid.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use super::*;
+    use zcash_client_backend::proto::service::SendResponse;
+
+    fn send_response(error_code: i32, error_message: &str) -> SendResponse {
+        SendResponse {
+            error_code,
+            error_message: error_message.to_string(),
+        }
+    }
+
+    #[test]
+    fn pczt_success_response_stores_locally_and_returns_broadcasted() {
+        let store_calls = Cell::new(0);
+
+        let result = handle_pczt_send_response("txid", &send_response(0, "txid"), || {
+            store_calls.set(store_calls.get() + 1);
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(result.status, ExtractAndBroadcastPcztResult::BROADCASTED);
+        assert_eq!(result.message, None);
+        assert_eq!(store_calls.get(), 1);
+    }
+
+    #[test]
+    fn pczt_duplicate_response_stores_locally_and_returns_broadcasted() {
+        let store_calls = Cell::new(0);
+
+        let result =
+            handle_pczt_send_response("txid", &send_response(18, "txn-already-in-mempool"), || {
+                store_calls.set(store_calls.get() + 1);
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(result.status, ExtractAndBroadcastPcztResult::BROADCASTED);
+        assert_eq!(result.message, None);
+        assert_eq!(store_calls.get(), 1);
+    }
+
+    #[test]
+    fn pczt_duplicate_response_with_storage_failure_is_network_success() {
+        let result = handle_pczt_send_response("txid", &send_response(18, "already known"), || {
+            Err("database is busy".to_string())
+        })
+        .unwrap();
+
+        assert_eq!(
+            result.status,
+            ExtractAndBroadcastPcztResult::BROADCASTED_STORAGE_FAILED
+        );
+        assert!(result
+            .message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("The transaction is on the network"));
+    }
+
+    #[test]
+    fn pczt_fatal_rejection_does_not_store_locally() {
+        let store_calls = Cell::new(0);
+
+        let err =
+            handle_pczt_send_response("txid", &send_response(18, "bad-txns-inputs-spent"), || {
+                store_calls.set(store_calls.get() + 1);
+                Ok(())
+            })
+            .err()
+            .unwrap();
+
+        assert_eq!(err, "Broadcast rejected: bad-txns-inputs-spent (code 18)");
+        assert_eq!(store_calls.get(), 0);
+    }
 }

@@ -4555,24 +4555,11 @@ async fn broadcast_raw_transaction(
         .await
         .map_err(|e| format!("SendTransaction gRPC failed: {e}"))?;
 
-    if resp.error_code != 0 && !broadcast_rejection_is_already_accepted(&resp.error_message) {
-        return Err(format!(
-            "Broadcast rejected: {} (code {})",
-            resp.error_message, resp.error_code
-        ));
+    if let Some(error) = super::broadcast::send_response_rejection_error(&resp) {
+        return Err(error);
     }
 
     Ok(())
-}
-
-fn broadcast_rejection_is_already_accepted(message: &str) -> bool {
-    let message = message.to_ascii_lowercase();
-    message.contains("transaction was committed to the best chain")
-        || message.contains("already in mempool")
-        || message.contains("already have transaction")
-        || message.contains("transaction already in block chain")
-        || message.contains("txn-already-in-mempool")
-        || message.contains("already known")
 }
 
 // ======================== Auto-Resubmit ========================
@@ -4942,22 +4929,6 @@ mod tests {
         );
         assert_eq!(result.fee_zatoshi, 20_000);
         assert_eq!(result.migrated_zatoshi, 180_000);
-    }
-
-    #[test]
-    fn duplicate_broadcast_rejections_are_accepted_for_retry_marking() {
-        assert!(broadcast_rejection_is_already_accepted(
-            "transaction was committed to the best chain"
-        ));
-        assert!(broadcast_rejection_is_already_accepted(
-            "txn-already-in-mempool"
-        ));
-        assert!(broadcast_rejection_is_already_accepted(
-            "already have transaction"
-        ));
-        assert!(!broadcast_rejection_is_already_accepted(
-            "bad-txns-inputs-spent"
-        ));
     }
 
     #[test]

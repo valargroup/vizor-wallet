@@ -23,6 +23,7 @@ use crate::wallet::{
     network::WalletNetwork,
 };
 
+mod broadcast;
 mod migration;
 mod pczt;
 mod send;
