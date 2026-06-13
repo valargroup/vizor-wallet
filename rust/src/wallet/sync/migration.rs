@@ -527,10 +527,14 @@ pub(crate) fn pending_prep_tx_for_run(
     }))
 }
 
-pub(crate) fn mark_prep_tx_broadcasted(db_path: &str, run_id: &str) -> Result<(), String> {
+pub(crate) fn mark_prep_tx_broadcasted(db_path: &str, run_id: &str) -> Result<String, String> {
     let conn = open_wallet_raw_conn_with_timeout(db_path, READ_DB_BUSY_TIMEOUT)?;
     ensure_schema(&conn)?;
-    conn.execute(
+    let now = now_ms()?;
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Begin migration prep broadcast update: {e}"))?;
+    tx.execute(
         &format!(
             "UPDATE {PREP_TXS_TABLE}
              SET status = 'broadcasted'
@@ -539,7 +543,25 @@ pub(crate) fn mark_prep_tx_broadcasted(db_path: &str, run_id: &str) -> Result<()
         params![run_id],
     )
     .map_err(|e| format!("Mark migration prep tx broadcasted: {e}"))?;
-    Ok(())
+    tx.execute(
+        &format!(
+            "UPDATE {RUNS_TABLE}
+             SET updated_at_ms = ?1, last_error = NULL
+             WHERE run_id = ?2"
+        ),
+        params![now, run_id],
+    )
+    .map_err(|e| format!("Clear migration prep broadcast message: {e}"))?;
+    let phase = tx
+        .query_row(
+            &format!("SELECT phase FROM {RUNS_TABLE} WHERE run_id = ?1"),
+            params![run_id],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|e| format!("Read migration prep broadcast phase: {e}"))?;
+    tx.commit()
+        .map_err(|e| format!("Commit migration prep broadcast update: {e}"))?;
+    Ok(phase)
 }
 
 pub(crate) fn insert_pending_txs(

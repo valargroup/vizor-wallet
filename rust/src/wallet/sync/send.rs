@@ -4207,42 +4207,14 @@ async fn broadcast_pending_migration_prep_tx(
         }));
     }
 
-    if let Err(e) =
-        super::transactions::decrypt_and_store_transaction(db_path, network, &prep_tx.raw_tx, None)
-    {
-        log::warn!(
-            "migration: broadcast denomination split {} but local storage failed: {e}",
-            prep_tx.txid_hex
-        );
-    }
-    if let Err(e) = super::migration::mark_prep_tx_broadcasted(db_path, run_id) {
-        let message = format!(
-            "Denomination split broadcast was accepted, but local state update failed: {e}"
-        );
-        log::warn!(
-            "migration: broadcast denomination split {} but could not mark it broadcasted: {}",
-            prep_tx.txid_hex,
-            e
-        );
-        return Ok(Some(CreatedBroadcastResult {
-            txids: prep_tx.txid_hex,
-            status: CreatedBroadcastResult::PENDING_BROADCAST,
-            broadcasted_count: 0,
-            total_count: 1,
-            message: Some(message),
-        }));
-    }
-
-    Ok(Some(CreatedBroadcastResult {
-        txids: prep_tx.txid_hex,
-        status: super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS,
-        broadcasted_count: 1,
-        total_count: 1,
-        message: Some(
-            "Denomination notes were created. Migration will continue after confirmation."
-                .to_string(),
-        ),
-    }))
+    record_accepted_prep_migration_tx(
+        db_path,
+        network,
+        run_id,
+        &prep_tx,
+        decrypt_and_store_migration_tx,
+    )
+    .map(Some)
 }
 
 async fn broadcast_due_scheduled_migration_txs(
@@ -4328,18 +4300,17 @@ async fn broadcast_due_scheduled_migration_txs(
             ));
         }
 
-        if let Err(e) = super::transactions::decrypt_and_store_transaction(
+        if let Some(result) = record_accepted_scheduled_migration_tx(
             db_path,
             network,
-            &pending.raw_tx,
-            None,
-        ) {
-            log::warn!(
-                "migration: broadcast {} but fallback wallet storage failed: {e}",
-                pending.txid_hex
-            );
+            run_id,
+            &pending,
+            fallback_total_count,
+            fallback_migrated_zatoshi,
+            decrypt_and_store_migration_tx,
+        )? {
+            return Ok(result);
         }
-        super::migration::mark_pending_broadcasted(db_path, run_id, &pending.txid_hex)?;
         log::info!("migration: broadcast scheduled tx {}", pending.txid_hex);
     }
 
@@ -4362,6 +4333,135 @@ async fn broadcast_due_scheduled_migration_txs(
         fallback_total_count,
         fallback_migrated_zatoshi,
     ))
+}
+
+fn decrypt_and_store_migration_tx(
+    db_path: &str,
+    network: WalletNetwork,
+    raw_tx: &[u8],
+) -> Result<(), String> {
+    super::transactions::decrypt_and_store_transaction(db_path, network, raw_tx, None)
+}
+
+fn migration_storage_retry_message(tx_label: &str, txid_hex: &str, error: &str) -> String {
+    format!(
+        "{tx_label} {txid_hex} was accepted by lightwalletd, but local wallet storage failed: {error}. Vizor will retry until local state is recorded."
+    )
+}
+
+fn record_accepted_prep_migration_tx<F>(
+    db_path: &str,
+    network: WalletNetwork,
+    run_id: &str,
+    prep_tx: &super::migration::MigrationPrepTx,
+    store_tx: F,
+) -> Result<CreatedBroadcastResult, String>
+where
+    F: FnOnce(&str, WalletNetwork, &[u8]) -> Result<(), String>,
+{
+    if let Err(e) = store_tx(db_path, network, &prep_tx.raw_tx) {
+        let result = migration_prep_storage_retry_result(prep_tx.txid_hex.clone(), &e);
+        if let Some(message) = &result.message {
+            log::warn!("migration: {message}");
+            if let Err(mark_err) = super::migration::mark_run_phase(
+                db_path,
+                run_id,
+                super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS,
+                Some(message),
+            ) {
+                log::warn!(
+                    "migration: could not persist denomination split retry message: {mark_err}"
+                );
+            }
+        }
+        return Ok(result);
+    }
+
+    let phase = match super::migration::mark_prep_tx_broadcasted(db_path, run_id) {
+        Ok(phase) => phase,
+        Err(e) => {
+            let message = format!(
+                "Denomination split broadcast was accepted, but local state update failed: {e}"
+            );
+            log::warn!(
+                "migration: broadcast denomination split {} but could not mark it broadcasted: {}",
+                prep_tx.txid_hex,
+                e
+            );
+            return Ok(CreatedBroadcastResult {
+                txids: prep_tx.txid_hex.clone(),
+                status: CreatedBroadcastResult::PENDING_BROADCAST,
+                broadcasted_count: 0,
+                total_count: 1,
+                message: Some(message),
+            });
+        }
+    };
+    let status = if phase == super::migration::PHASE_READY_TO_MIGRATE {
+        super::migration::PHASE_READY_TO_MIGRATE
+    } else {
+        super::migration::PHASE_WAITING_DENOM_CONFIRMATIONS
+    };
+    let message = if status == super::migration::PHASE_READY_TO_MIGRATE {
+        "Denomination notes are ready. Continue migration.".to_string()
+    } else {
+        "Denomination notes were created. Migration will continue after confirmation.".to_string()
+    };
+
+    Ok(CreatedBroadcastResult {
+        txids: prep_tx.txid_hex.clone(),
+        status,
+        broadcasted_count: 1,
+        total_count: 1,
+        message: Some(message),
+    })
+}
+
+fn migration_prep_storage_retry_result(txid_hex: String, error: &str) -> CreatedBroadcastResult {
+    let message = migration_storage_retry_message("Denomination split", &txid_hex, error);
+    CreatedBroadcastResult {
+        txids: txid_hex,
+        status: CreatedBroadcastResult::PENDING_BROADCAST,
+        broadcasted_count: 0,
+        total_count: 1,
+        message: Some(message),
+    }
+}
+
+fn record_accepted_scheduled_migration_tx<F>(
+    db_path: &str,
+    network: WalletNetwork,
+    run_id: &str,
+    pending: &super::migration::DuePendingMigrationTx,
+    fallback_total_count: u32,
+    fallback_migrated_zatoshi: u64,
+    store_tx: F,
+) -> Result<Option<IronwoodMigrationResult>, String>
+where
+    F: FnOnce(&str, WalletNetwork, &[u8]) -> Result<(), String>,
+{
+    if let Err(e) = store_tx(db_path, network, &pending.raw_tx) {
+        let message =
+            migration_storage_retry_message("Migration transaction", &pending.txid_hex, &e);
+        log::warn!("migration: {message}");
+        super::migration::mark_run_phase(
+            db_path,
+            run_id,
+            super::migration::PHASE_BROADCAST_SCHEDULED,
+            Some(&message),
+        )?;
+        let totals = super::migration::pending_totals_for_run(db_path, run_id)?;
+        return Ok(Some(migration_result_from_pending_totals(
+            totals,
+            super::migration::PHASE_BROADCAST_SCHEDULED,
+            Some(message),
+            fallback_total_count,
+            fallback_migrated_zatoshi,
+        )));
+    }
+
+    super::migration::mark_pending_broadcasted(db_path, run_id, &pending.txid_hex)?;
+    Ok(None)
 }
 
 fn migration_result_from_pending_totals(
@@ -4853,12 +4953,17 @@ impl OutputProver for NoOpOutputProver {
 
 #[cfg(test)]
 mod tests {
+    use super::super::migration;
     use super::*;
 
     use transparent::bundle::{OutPoint, TxOut};
     use zcash_client_backend::{data_api::WalletWrite, wallet::WalletTransparentOutput};
     use zcash_keys::keys::{ReceiverRequirement, UnifiedSpendingKey};
     use zcash_protocol::consensus::BlockHeight;
+
+    const MIGRATION_TEST_ACCOUNT: &str = "account-1";
+    const MIGRATION_TEST_PASSWORD: &[u8] = b"correct horse battery staple";
+    const MIGRATION_TEST_SALT: &str = "AQIDBAUGBwgJCgsMDQ4PEA==";
 
     fn taddr(seed: u8) -> TransparentAddress {
         TransparentAddress::PublicKeyHash([seed; 20])
@@ -4874,6 +4979,27 @@ mod tests {
 
     fn receiver(value: u64, scope: TransparentKeyScope) -> (TransparentKeyOrigin, Balance) {
         (TransparentKeyOrigin::Derived { scope }, balance(value))
+    }
+
+    fn migration_test_plan() -> migration::DenominationPlan {
+        migration::DenominationPlan {
+            migration_outputs: vec![100_000],
+            orchard_change: None,
+            prep_fee_zatoshi: 10_000,
+            migration_fee_zatoshi: 10_000,
+            total_input_zatoshi: 120_000,
+            total_migratable_zatoshi: 100_000,
+        }
+    }
+
+    fn migration_test_note(txid_hex: &str) -> migration::PreparedOrchardNoteRef {
+        migration::PreparedOrchardNoteRef {
+            txid_hex: txid_hex.to_string(),
+            output_index: 0,
+            value_zatoshi: 100_000,
+            note_version: 2,
+            nullifier_hex: None,
+        }
     }
 
     #[test]
@@ -4929,6 +5055,227 @@ mod tests {
         );
         assert_eq!(result.fee_zatoshi, 20_000);
         assert_eq!(result.migrated_zatoshi, 180_000);
+    }
+
+    #[test]
+    fn prep_storage_failure_after_acceptance_leaves_prep_tx_retryable() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("wallet.db");
+        let db_path = db_path.to_string_lossy().to_string();
+        let txid_hex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        let raw_tx = vec![1, 2, 3, 4];
+        let plan = migration_test_plan();
+        let prepared_notes = vec![migration_test_note(txid_hex)];
+        let run_id = migration::create_run_with_prepared_notes_and_prep_tx(
+            &db_path,
+            MIGRATION_TEST_ACCOUNT,
+            WalletNetwork::Test,
+            &plan,
+            &prepared_notes,
+            true,
+            txid_hex,
+            raw_tx.clone(),
+            MIGRATION_TEST_PASSWORD,
+            MIGRATION_TEST_SALT,
+        )
+        .unwrap();
+        let prep_tx = migration::pending_prep_tx_for_run(
+            &db_path,
+            &run_id,
+            MIGRATION_TEST_PASSWORD,
+            MIGRATION_TEST_SALT,
+        )
+        .unwrap()
+        .unwrap();
+
+        let result = record_accepted_prep_migration_tx(
+            &db_path,
+            WalletNetwork::Test,
+            &run_id,
+            &prep_tx,
+            |_db_path, _network, _raw_tx| Err("db busy".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(result.txids, txid_hex);
+        assert_eq!(result.status, CreatedBroadcastResult::PENDING_BROADCAST);
+        assert_eq!(result.broadcasted_count, 0);
+        assert_eq!(result.total_count, 1);
+        let message = result.message.as_deref().unwrap();
+        assert!(message.contains("accepted by lightwalletd"));
+        assert!(message.contains("Vizor will retry"));
+        assert_eq!(
+            migration::pending_prep_tx_for_run(
+                &db_path,
+                &run_id,
+                MIGRATION_TEST_PASSWORD,
+                MIGRATION_TEST_SALT,
+            )
+            .unwrap()
+            .unwrap()
+            .txid_hex,
+            txid_hex
+        );
+        let active =
+            migration::active_migration_run(&db_path, MIGRATION_TEST_ACCOUNT, WalletNetwork::Test)
+                .unwrap()
+                .unwrap();
+        assert_eq!(active.phase, migration::PHASE_WAITING_DENOM_CONFIRMATIONS);
+        assert_eq!(active.last_error.as_deref(), Some(message));
+        migration::mark_run_phase(
+            &db_path,
+            &run_id,
+            migration::PHASE_READY_TO_MIGRATE,
+            Some("ready before retry"),
+        )
+        .unwrap();
+
+        let result = record_accepted_prep_migration_tx(
+            &db_path,
+            WalletNetwork::Test,
+            &run_id,
+            &prep_tx,
+            |_db_path, _network, _raw_tx| Ok(()),
+        )
+        .unwrap();
+
+        assert_eq!(result.txids, txid_hex);
+        assert_eq!(result.status, migration::PHASE_READY_TO_MIGRATE);
+        assert_eq!(result.broadcasted_count, 1);
+        assert!(migration::pending_prep_tx_for_run(
+            &db_path,
+            &run_id,
+            MIGRATION_TEST_PASSWORD,
+            MIGRATION_TEST_SALT,
+        )
+        .unwrap()
+        .is_none());
+        let active =
+            migration::active_migration_run(&db_path, MIGRATION_TEST_ACCOUNT, WalletNetwork::Test)
+                .unwrap()
+                .unwrap();
+        assert_eq!(active.phase, migration::PHASE_READY_TO_MIGRATE);
+        assert_eq!(active.last_error, None);
+    }
+
+    #[test]
+    fn scheduled_storage_failure_after_acceptance_leaves_tx_scheduled() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("wallet.db");
+        let db_path = db_path.to_string_lossy().to_string();
+        let selected_note_txid = "101112131415161718191a1b1c1d1e1f000102030405060708090a0b0c0d0e0f";
+        let pending_txid = "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f";
+        let selected_note = migration_test_note(selected_note_txid);
+        let plan = migration_test_plan();
+        let run_id = migration::create_run_with_prepared_notes_and_signed_children(
+            &db_path,
+            MIGRATION_TEST_ACCOUNT,
+            WalletNetwork::Test,
+            &plan,
+            &[selected_note.clone()],
+            true,
+            Vec::new(),
+            MIGRATION_TEST_PASSWORD,
+            MIGRATION_TEST_SALT,
+            None,
+            None,
+        )
+        .unwrap();
+        migration::insert_pending_txs(
+            &db_path,
+            &run_id,
+            vec![migration::PendingMigrationTxInsert {
+                txid_hex: pending_txid.to_string(),
+                raw_tx: vec![5, 6, 7, 8],
+                target_height: 100,
+                expiry_height: 120,
+                value_zatoshi: 100_000,
+                fee_zatoshi: 10_000,
+                selected_note: selected_note.clone(),
+                metadata: migration::PendingMigrationTxMetadata {
+                    tx_kind: "migration".to_string(),
+                    funding_account_uuid: MIGRATION_TEST_ACCOUNT.to_string(),
+                    selected_note,
+                },
+            }],
+            MIGRATION_TEST_PASSWORD,
+            MIGRATION_TEST_SALT,
+        )
+        .unwrap();
+        let pending = migration::DuePendingMigrationTx {
+            txid_hex: pending_txid.to_string(),
+            raw_tx: vec![5, 6, 7, 8],
+        };
+
+        let result = record_accepted_scheduled_migration_tx(
+            &db_path,
+            WalletNetwork::Test,
+            &run_id,
+            &pending,
+            1,
+            100_000,
+            |_db_path, _network, _raw_tx| Err("db busy".to_string()),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.txids, pending_txid);
+        assert_eq!(result.status, migration::PHASE_BROADCAST_SCHEDULED);
+        assert_eq!(result.broadcasted_count, 0);
+        assert_eq!(result.total_count, 1);
+        assert_eq!(result.fee_zatoshi, 10_000);
+        assert_eq!(result.migrated_zatoshi, 100_000);
+        let message = result.message.as_deref().unwrap();
+        assert!(message.contains("accepted by lightwalletd"));
+        assert!(message.contains("Vizor will retry"));
+        assert_eq!(
+            migration::scheduled_pending_count(&db_path, &run_id).unwrap(),
+            1
+        );
+        assert_eq!(
+            migration::pending_totals_for_run(&db_path, &run_id)
+                .unwrap()
+                .broadcasted_count,
+            0
+        );
+        let active =
+            migration::active_migration_run(&db_path, MIGRATION_TEST_ACCOUNT, WalletNetwork::Test)
+                .unwrap()
+                .unwrap();
+        assert_eq!(active.phase, migration::PHASE_BROADCAST_SCHEDULED);
+        assert_eq!(active.last_error.as_deref(), Some(message));
+
+        let result = record_accepted_scheduled_migration_tx(
+            &db_path,
+            WalletNetwork::Test,
+            &run_id,
+            &pending,
+            1,
+            100_000,
+            |_db_path, _network, _raw_tx| Ok(()),
+        )
+        .unwrap();
+
+        assert!(result.is_none());
+        assert_eq!(
+            migration::scheduled_pending_count(&db_path, &run_id).unwrap(),
+            0
+        );
+        assert_eq!(
+            migration::pending_totals_for_run(&db_path, &run_id)
+                .unwrap()
+                .broadcasted_count,
+            1
+        );
+        let active =
+            migration::active_migration_run(&db_path, MIGRATION_TEST_ACCOUNT, WalletNetwork::Test)
+                .unwrap()
+                .unwrap();
+        assert_eq!(
+            active.phase,
+            migration::PHASE_WAITING_MIGRATION_CONFIRMATIONS
+        );
+        assert_eq!(active.last_error, None);
     }
 
     #[test]

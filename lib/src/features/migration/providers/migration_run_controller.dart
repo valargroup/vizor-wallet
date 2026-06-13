@@ -45,13 +45,14 @@ class MigrationRunState {
 /// waiting_denom_confirmations, stage 2 returns
 /// broadcast_scheduled once transactions are signed and scheduled, then
 /// waiting_migration_confirmations after the last scheduled broadcast
-/// submission (and its benign "notes not spendable yet" no-op also returns
-/// waiting_denom_confirmations).
+/// submission. A retry can also return ready_to_migrate if sync already made
+/// denomination outputs spendable before the retry recorded local state.
 bool migrationRunAdvanced(rust_sync.IronwoodMigrationResult result) {
   return switch (result.status) {
     'broadcasted' ||
     'broadcast_scheduled' ||
     'waiting_denom_confirmations' ||
+    'ready_to_migrate' ||
     'waiting_migration_confirmations' => true,
     'partial_broadcast' =>
       result.broadcastedCount > 0 && result.message == null,

@@ -32,6 +32,7 @@ void main() {
       migrationRunAdvanced(_result('waiting_migration_confirmations')),
       isTrue,
     );
+    expect(migrationRunAdvanced(_result('ready_to_migrate')), isTrue);
     expect(
       migrationRunAdvanced(_result('partial_broadcast', broadcastedCount: 2)),
       isTrue,

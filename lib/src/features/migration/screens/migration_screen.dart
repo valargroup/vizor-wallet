@@ -866,7 +866,12 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
           );
     }
 
-    if (!migrationRunAdvanced(result)) {
+    final advanced = migrationRunAdvanced(result);
+    // Keystone completion reaches this point only after Rust has staged the run.
+    // A pending broadcast result should leave the modal and let the retry tick continue.
+    final retryingFromStoredRun = result.status == 'pending_broadcast';
+    if (!advanced && !retryingFromStoredRun) {
+      await _refreshAfterKeystoneMigrationResult(accountUuid);
       throw _KeystoneMigrationError(
         result.message ?? MigrationCopy.partialBroadcastError,
       );
@@ -875,15 +880,31 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
         .read(migrationRunControllerProvider.notifier)
         .settleAfterExternalAdvance(session.intent);
 
-    await ref
-        .read(syncProvider.notifier)
-        .refreshAfterSend(
-          transactionHistoryLimit: migrationProgressTransactionHistoryLimit,
-        );
-    ref.invalidate(activeOrchardMigrationStatusProvider);
+    await _refreshAfterKeystoneMigrationResult(accountUuid);
 
     if (!mounted) return;
     _clearKeystoneMigration(discardRequest: false);
+  }
+
+  Future<void> _refreshAfterKeystoneMigrationResult(String accountUuid) async {
+    final activeAccountUuid = ref
+        .read(accountProvider)
+        .value
+        ?.activeAccountUuid;
+    if (activeAccountUuid == accountUuid) {
+      try {
+        await ref
+            .read(syncProvider.notifier)
+            .refreshAfterSend(
+              transactionHistoryLimit: migrationProgressTransactionHistoryLimit,
+            );
+      } catch (e, st) {
+        log(
+          'MigrationScreen: refresh after Keystone migration failed: $e\n$st',
+        );
+      }
+    }
+    ref.invalidate(activeOrchardMigrationStatusProvider);
   }
 
   void _cancelKeystoneMigration() {
