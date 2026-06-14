@@ -2653,6 +2653,7 @@ fn pczt_from_build_result(
     network: WalletNetwork,
     account_derivation: Option<&zcash_client_backend::data_api::Zip32Derivation>,
     orchard_spend_count: usize,
+    orchard_change_output_count: usize,
 ) -> Result<BuiltPczt, String> {
     use pczt::roles::{creator::Creator, io_finalizer::IoFinalizer, updater::Updater};
 
@@ -2664,7 +2665,19 @@ fn pczt_from_build_result(
                 .ok_or_else(|| "Orchard spend action index missing".to_string())
         })
         .collect::<Result<Vec<_>, String>>()?;
-    let orchard_spends = orchard_spend_action_indices
+    let mut orchard_derivation_action_indices =
+        Vec::with_capacity(orchard_spend_count + orchard_change_output_count);
+    orchard_derivation_action_indices.extend(orchard_spend_action_indices.iter().copied());
+    for i in 0..orchard_change_output_count {
+        let index = build_result
+            .orchard_meta
+            .output_action_index(i)
+            .ok_or_else(|| "Orchard change output action index missing".to_string())?;
+        if !orchard_derivation_action_indices.contains(&index) {
+            orchard_derivation_action_indices.push(index);
+        }
+    }
+    let orchard_derivation_actions = orchard_derivation_action_indices
         .iter()
         .copied()
         .collect::<HashSet<_>>();
@@ -2676,7 +2689,7 @@ fn pczt_from_build_result(
     let pczt = Updater::new(io_finalized)
         .update_orchard_with(|mut updater| {
             if let Some(derivation) = account_derivation {
-                for index in &orchard_spends {
+                for index in &orchard_derivation_actions {
                     updater.update_action_with(*index, |mut action_updater| {
                         action_updater.set_spend_zip32_derivation(
                             orchard::pczt::Zip32Derivation::parse(
@@ -2889,6 +2902,7 @@ fn create_orchard_denomination_split_pczt(
         network,
         account_derivation,
         orchard_inputs.len(),
+        split_outputs.len(),
     )?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
 
@@ -3211,7 +3225,7 @@ fn create_orchard_to_ironwood_pczt_from_predicted_note(
         .build_for_pczt(rand_core::OsRng, &fee_rule)
         .map_err(|e| format!("Build predicted migration PCZT failed: {e}"))?;
     let expiry_height = u32::from(build_result.pczt_parts.expiry_height);
-    let built_pczt = pczt_from_build_result(build_result, network, account_derivation, 1)?;
+    let built_pczt = pczt_from_build_result(build_result, network, account_derivation, 1, 0)?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
     let target_height_u32: u32 = target_height.into();
 
@@ -3564,6 +3578,7 @@ fn create_orchard_to_ironwood_pczt_from_note(
         network,
         account_derivation,
         orchard_inputs.len(),
+        0,
     )?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
     let target_height_u32: u32 = target_height.into();
@@ -3673,7 +3688,8 @@ fn make_orchard_split_builder(
 
     for value in outputs {
         builder
-            .add_orchard_output::<<ConservativeZip317FeeRule as FeeRule>::Error>(
+            .add_orchard_change_output::<<ConservativeZip317FeeRule as FeeRule>::Error>(
+                orchard_fvk.clone(),
                 internal_ovk.clone(),
                 recipient,
                 Zatoshis::from_u64(*value).map_err(|_| "Bad denomination output value")?,
