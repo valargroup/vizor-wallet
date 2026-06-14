@@ -2730,6 +2730,7 @@ fn predicted_note_from_split_action(
         orchard::value::NoteValue::from_raw(value_zatoshi),
         rho,
         rseed,
+        orchard::note::NoteVersion::V2,
     )
     .into_option()
     .ok_or("Denomination split output note is invalid".to_string())

@@ -124,7 +124,12 @@ pub(crate) struct ExtractedPcztTransaction {
 
 fn orchard_proving_key() -> &'static orchard::circuit::ProvingKey {
     static ORCHARD_PROVING_KEY: OnceLock<orchard::circuit::ProvingKey> = OnceLock::new();
-    ORCHARD_PROVING_KEY.get_or_init(orchard::circuit::ProvingKey::build)
+    ORCHARD_PROVING_KEY
+        .get_or_init(|| orchard::circuit::ProvingKey::build(orchard_circuit_version()))
+}
+
+fn orchard_circuit_version() -> orchard::circuit::OrchardCircuitVersion {
+    orchard::circuit::OrchardCircuitVersion::Ironwood
 }
 
 /// Create a PCZT from a stored proposal (for hardware wallet signing).
@@ -350,7 +355,7 @@ pub(crate) fn extract_transaction_from_pczt(
     use pczt::roles::spend_finalizer::SpendFinalizer;
     use pczt::roles::tx_extractor::TransactionExtractor;
 
-    let orchard_vk = orchard::circuit::VerifyingKey::build();
+    let orchard_vk = orchard::circuit::VerifyingKey::build(orchard_circuit_version());
     let sapling_vks: Option<(
         sapling_crypto::circuit::SpendVerifyingKey,
         sapling_crypto::circuit::OutputVerifyingKey,
@@ -409,7 +414,7 @@ pub async fn extract_and_broadcast_pczt(
         decrypt_and_store_transaction, extract_and_store_transaction_from_pczt,
     };
 
-    let orchard_vk = orchard::circuit::VerifyingKey::build();
+    let orchard_vk = orchard::circuit::VerifyingKey::build(orchard_circuit_version());
 
     // Load Sapling verifying keys once if the caller supplied params.
     // The prover keeps the underlying params alive, and
