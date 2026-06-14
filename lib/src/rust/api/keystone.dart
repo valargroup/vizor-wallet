@@ -36,6 +36,29 @@ Future<List<String>> encodePcztUrParts({
   maxFragmentLen: maxFragmentLen,
 );
 
+/// Encode redacted PCZT bytes into a `zcash-sign-batch` animated UR.
+Future<List<String>> encodeZcashSignBatchUrParts({
+  required String requestId,
+  required List<ZcashBatchMessageInput> messages,
+  required BigInt maxFragmentLen,
+}) => RustLib.instance.api.crateApiKeystoneEncodeZcashSignBatchUrParts(
+  requestId: requestId,
+  messages: messages,
+  maxFragmentLen: maxFragmentLen,
+);
+
+/// Decode the CBOR payload returned from a `zcash-sign-result` UR.
+Future<ZcashBatchSignResult> decodeZcashSignResultCbor({
+  required List<int> cbor,
+}) =>
+    RustLib.instance.api.crateApiKeystoneDecodeZcashSignResultCbor(cbor: cbor);
+
+/// Return the Sapling and Orchard nullifiers spent by a PCZT.
+Future<List<String>> pcztSpendNullifiers({required List<int> pcztBytes}) =>
+    RustLib.instance.api.crateApiKeystonePcztSpendNullifiers(
+      pcztBytes: pcztBytes,
+    );
+
 /// Discard any in-flight multi-part UR decode state. The scan screen calls
 /// this on entry to guarantee a fresh session regardless of how the previous
 /// scan ended (cancel, back button, mid-stream error).

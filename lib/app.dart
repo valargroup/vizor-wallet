@@ -27,6 +27,9 @@ import 'src/features/activity/screens/swap_activity_detail_screen.dart';
 import 'src/features/accounts/screens/accounts_screen.dart';
 import 'src/features/address_book/screens/address_book_screen.dart';
 import 'src/features/home/screens/home_screen.dart';
+import 'src/features/migration/screens/migration_screen.dart';
+import 'src/features/migration/screens/migration_scan_screen.dart';
+import 'src/features/migration/widgets/migration_close_guard.dart';
 import 'src/features/about/screens/about_screen.dart';
 import 'src/features/onboarding/create/address_types_screen.dart';
 import 'src/features/onboarding/create/intro_zcash_screen.dart';
@@ -179,6 +182,8 @@ Future<void> runZcashWalletApp() async {
   }
 }
 
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final _routerProvider = Provider<GoRouter>((ref) {
   final bootstrap = ref.watch(appBootstrapProvider);
   final refresh = ref.watch(routerRefreshProvider);
@@ -192,6 +197,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
   log('router: initialized');
 
   return GoRouter(
+    navigatorKey: _rootNavigatorKey,
     initialLocation: bootstrap.initialLocation,
     refreshListenable: refresh,
     redirect: (context, state) {
@@ -554,6 +560,11 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/terms', builder: (_, _) => const TermsScreen()),
       GoRoute(path: '/privacy', builder: (_, _) => const PrivacyPolicyScreen()),
       GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
+      GoRoute(path: '/migration', builder: (_, _) => const MigrationScreen()),
+      GoRoute(
+        path: '/migration/scan',
+        builder: (_, _) => const MigrationScanScreen(),
+      ),
       GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
       GoRoute(
         path: '/address-book',
@@ -779,27 +790,30 @@ class ZcashWalletApp extends ConsumerWidget {
           // events over empty regions while descendant GestureDetectors
           // (buttons, TextFields) win the gesture arena first, keeping
           // focused buttons focused when re-clicked.
-          child: _LinuxUpdateNoticeListener(
-            child: _WindowsUpdateStartupCheck(
-              child: _WindowsUpdatePromptHost(
-                router: router,
-                child: _RpcEndpointFailoverToastListener(
-                  child: _LinuxOpaqueWindowBackground(
-                    child: DesktopWindowTitlebarSafeArea(
-                      child: GestureDetector(
-                        onTap: () {
-                          // Leaf-only: skip when the primary focus is a
-                          // `FocusScopeNode` rather than a concrete `FocusNode`.
-                          // Unfocusing the scope itself strips the scope's
-                          // "most-recently-focused child" memory, which leaves the
-                          // next Tab with no deterministic starting point.
-                          final primary = FocusManager.instance.primaryFocus;
-                          if (primary != null && primary is! FocusScopeNode) {
-                            primary.unfocus();
-                          }
-                        },
-                        behavior: HitTestBehavior.translucent,
-                        child: child!,
+          child: MigrationCloseGuard(
+            navigatorKey: _rootNavigatorKey,
+            child: _LinuxUpdateNoticeListener(
+              child: _WindowsUpdateStartupCheck(
+                child: _WindowsUpdatePromptHost(
+                  router: router,
+                  child: _RpcEndpointFailoverToastListener(
+                    child: _LinuxOpaqueWindowBackground(
+                      child: DesktopWindowTitlebarSafeArea(
+                        child: GestureDetector(
+                          onTap: () {
+                            // Leaf-only: skip when the primary focus is a
+                            // `FocusScopeNode` rather than a concrete `FocusNode`.
+                            // Unfocusing the scope itself strips the scope's
+                            // "most-recently-focused child" memory, which leaves the
+                            // next Tab with no deterministic starting point.
+                            final primary = FocusManager.instance.primaryFocus;
+                            if (primary != null && primary is! FocusScopeNode) {
+                              primary.unfocus();
+                            }
+                          },
+                          behavior: HitTestBehavior.translucent,
+                          child: child!,
+                        ),
                       ),
                     ),
                   ),

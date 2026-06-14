@@ -17,6 +17,10 @@ void main() {
   });
 
   group('resolveStoredOrDefaultZcashNetworkName', () {
+    test('defaults ordinary builds to mainnet', () {
+      expect(kZcashDefaultNetworkName, 'main');
+    });
+
     test('uses the build-time default for missing stored values', () {
       expect(
         resolveStoredOrDefaultZcashNetworkName(null),

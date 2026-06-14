@@ -2,7 +2,10 @@
 
 use crate::wallet::keystone;
 
-pub use crate::wallet::keystone::{KeystoneAccountInfo, UrDecodeResult};
+pub use crate::wallet::keystone::{
+    KeystoneAccountInfo, UrDecodeResult, ZcashBatchMessageInput, ZcashBatchSignResult,
+    ZcashBatchSignedMessage,
+};
 
 /// Encode PCZT bytes to a UR string for QR code display.
 pub fn encode_pczt_to_ur(pczt_bytes: Vec<u8>) -> Result<String, String> {
@@ -28,6 +31,25 @@ pub fn encode_pczt_ur_parts(
     max_fragment_len: usize,
 ) -> Result<Vec<String>, String> {
     keystone::encode_pczt_ur_parts(&pczt_bytes, max_fragment_len)
+}
+
+/// Encode redacted PCZT bytes into a `zcash-sign-batch` animated UR.
+pub fn encode_zcash_sign_batch_ur_parts(
+    request_id: String,
+    messages: Vec<ZcashBatchMessageInput>,
+    max_fragment_len: usize,
+) -> Result<Vec<String>, String> {
+    keystone::encode_zcash_sign_batch_ur_parts(&request_id, &messages, max_fragment_len)
+}
+
+/// Decode the CBOR payload returned from a `zcash-sign-result` UR.
+pub fn decode_zcash_sign_result_cbor(cbor: Vec<u8>) -> Result<ZcashBatchSignResult, String> {
+    keystone::decode_zcash_sign_result_cbor(&cbor)
+}
+
+/// Return the Sapling and Orchard nullifiers spent by a PCZT.
+pub fn pczt_spend_nullifiers(pczt_bytes: Vec<u8>) -> Result<Vec<String>, String> {
+    keystone::pczt_spend_nullifiers(&pczt_bytes)
 }
 
 /// Discard any in-flight multi-part UR decode state. The scan screen calls

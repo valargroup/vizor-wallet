@@ -147,7 +147,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             .shieldTransparentBalanceWithMacosStoredMnemonic(
               dbPath: dbPath,
               lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-              network: endpoint.networkName,
+              network: endpoint.walletNetworkName,
               accountUuid: accountUuid,
               password: password,
             );
@@ -163,7 +163,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           resultFuture = rust_sync.shieldTransparentBalance(
             dbPath: dbPath,
             lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-            network: endpoint.networkName,
+            network: endpoint.walletNetworkName,
             accountUuid: accountUuid,
             mnemonicBytes: mnemonicBytes,
           );
@@ -289,12 +289,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         activeAccountUuid != null &&
         !hasActivitySyncData &&
         sync.failure == null;
+    final endpoint = ref.watch(rpcEndpointFailoverProvider).current;
+    final showIronwoodTestingBalances = isLocalIronwoodTestnetEndpoint(
+      endpoint,
+    );
+    final orchardShieldedBalance =
+        sync.orchardBalance + sync.orchardPendingBalance;
+    final ironwoodShieldedBalance =
+        sync.ironwoodBalance + sync.ironwoodPendingBalance;
     final privacyModeEnabled = ref.watch(privacyModeProvider);
     final shieldedBalance =
         sync.saplingBalance +
         sync.orchardBalance +
         sync.saplingPendingBalance +
-        sync.orchardPendingBalance;
+        sync.orchardPendingBalance +
+        sync.ironwoodBalance +
+        sync.ironwoodPendingBalance;
     final transparentBalance =
         sync.transparentBalance + sync.transparentPendingBalance;
     final canShieldTransparentBalance = sync.canShieldTransparentBalance;
@@ -330,6 +340,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     canBackgroundSync: _canBackgroundSync,
                     privacyModeEnabled: privacyModeEnabled,
                     shieldedBalanceText: _formatZec(shieldedBalance),
+                    orchardShieldedBalanceText: _formatZec(
+                      orchardShieldedBalance,
+                    ),
+                    ironwoodShieldedBalanceText: _formatZec(
+                      ironwoodShieldedBalance,
+                    ),
+                    showIronwoodBalanceBreakdown:
+                        showIronwoodTestingBalances ||
+                        ironwoodShieldedBalance > BigInt.zero,
                     transparentBalanceText: _formatZec(transparentBalance),
                     hasTransparentBalance: transparentBalance > BigInt.zero,
                     canShieldBalance: canShieldTransparentBalance,
@@ -372,6 +391,9 @@ class _HomePane extends ConsumerStatefulWidget {
     required this.canBackgroundSync,
     required this.privacyModeEnabled,
     required this.shieldedBalanceText,
+    required this.orchardShieldedBalanceText,
+    required this.ironwoodShieldedBalanceText,
+    required this.showIronwoodBalanceBreakdown,
     required this.transparentBalanceText,
     required this.hasTransparentBalance,
     required this.canShieldBalance,
@@ -393,6 +415,9 @@ class _HomePane extends ConsumerStatefulWidget {
   final bool canBackgroundSync;
   final bool privacyModeEnabled;
   final String shieldedBalanceText;
+  final String orchardShieldedBalanceText;
+  final String ironwoodShieldedBalanceText;
+  final bool showIronwoodBalanceBreakdown;
   final String transparentBalanceText;
   final bool hasTransparentBalance;
   final bool canShieldBalance;
@@ -537,6 +562,12 @@ class _HomePaneState extends ConsumerState<_HomePane> {
                         const SizedBox(height: AppSpacing.md),
                         _HomeBalanceCard(
                           shieldedBalanceText: widget.shieldedBalanceText,
+                          orchardShieldedBalanceText:
+                              widget.orchardShieldedBalanceText,
+                          ironwoodShieldedBalanceText:
+                              widget.ironwoodShieldedBalanceText,
+                          showIronwoodBalanceBreakdown:
+                              widget.showIronwoodBalanceBreakdown,
                           transparentBalanceText: widget.transparentBalanceText,
                           hasTransparentBalance: widget.hasTransparentBalance,
                           canShieldBalance: widget.canShieldBalance,
@@ -635,6 +666,7 @@ class _HomePaneState extends ConsumerState<_HomePane> {
       if (widget.hasActivitySyncData)
         for (final tx in widget.sync.recentTransactions)
           _HomeActivityEntry(
+            pendingRank: _transactionPendingRank(tx),
             timestamp: _transactionActivityTimestamp(tx),
             row: buildTransactionActivityRow(
               context: context,
@@ -645,6 +677,7 @@ class _HomePaneState extends ConsumerState<_HomePane> {
           ),
       for (final item in swapItems)
         _HomeActivityEntry(
+          pendingRank: 0,
           timestamp: item.activityTimestamp,
           row: buildSwapActivityRow(
             context: context,
@@ -707,7 +740,7 @@ class _HomePaneState extends ConsumerState<_HomePane> {
       }
       return rust_sync.getTransactionDetail(
         dbPath: dbPath,
-        network: endpoint.networkName,
+        network: endpoint.walletNetworkName,
         accountUuid: accountUuid,
         txidHex: transaction.txidHex,
         txKind: transaction.txKind,
@@ -720,19 +753,30 @@ class _HomePaneState extends ConsumerState<_HomePane> {
 }
 
 class _HomeActivityEntry {
-  const _HomeActivityEntry({required this.timestamp, required this.row});
+  const _HomeActivityEntry({
+    required this.pendingRank,
+    required this.timestamp,
+    required this.row,
+  });
 
+  final int pendingRank;
   final DateTime? timestamp;
   final ActivityRowData row;
 }
 
 int _compareHomeActivityEntries(_HomeActivityEntry a, _HomeActivityEntry b) {
+  final pendingComparison = b.pendingRank.compareTo(a.pendingRank);
+  if (pendingComparison != 0) return pendingComparison;
   final aTime = a.timestamp;
   final bTime = b.timestamp;
   if (aTime == null && bTime == null) return 0;
   if (aTime == null) return 1;
   if (bTime == null) return -1;
   return bTime.compareTo(aTime);
+}
+
+int _transactionPendingRank(rust_sync.TransactionInfo tx) {
+  return tx.minedHeight == BigInt.zero && !tx.expiredUnmined ? 1 : 0;
 }
 
 DateTime? _transactionActivityTimestamp(rust_sync.TransactionInfo tx) {
@@ -744,6 +788,9 @@ DateTime? _transactionActivityTimestamp(rust_sync.TransactionInfo tx) {
 class _HomeBalanceCard extends StatefulWidget {
   const _HomeBalanceCard({
     required this.shieldedBalanceText,
+    required this.orchardShieldedBalanceText,
+    required this.ironwoodShieldedBalanceText,
+    required this.showIronwoodBalanceBreakdown,
     required this.transparentBalanceText,
     required this.hasTransparentBalance,
     required this.canShieldBalance,
@@ -754,6 +801,9 @@ class _HomeBalanceCard extends StatefulWidget {
   });
 
   final String shieldedBalanceText;
+  final String orchardShieldedBalanceText;
+  final String ironwoodShieldedBalanceText;
+  final bool showIronwoodBalanceBreakdown;
   final String transparentBalanceText;
   final bool hasTransparentBalance;
   final bool canShieldBalance;
@@ -769,7 +819,7 @@ class _HomeBalanceCard extends StatefulWidget {
 class _HomeBalanceCardState extends State<_HomeBalanceCard> {
   bool _isShieldBalanceHovered = false;
 
-  static const _shieldedCardHeight = 216.0;
+  static const _shieldedCardHeight = 244.0;
   static const _transparentStripHeight = 56.0;
   static const _shieldedCardBorderWidth = 1.5;
   static const _shieldedCardBorderColor = Color(0x12FFFFFF);
@@ -1118,6 +1168,20 @@ class _HomeBalanceCardState extends State<_HomeBalanceCard> {
                                                           colors.text.homeCard,
                                                     ),
                                               ),
+                                              if (widget
+                                                  .showIronwoodBalanceBreakdown) ...[
+                                                const SizedBox(
+                                                  height: AppSpacing.xs,
+                                                ),
+                                                _HomeShieldedPoolBreakdown(
+                                                  orchardBalanceText: widget
+                                                      .orchardShieldedBalanceText,
+                                                  ironwoodBalanceText: widget
+                                                      .ironwoodShieldedBalanceText,
+                                                  privacyModeEnabled:
+                                                      widget.privacyModeEnabled,
+                                                ),
+                                              ],
                                               const Spacer(),
                                               Row(
                                                 mainAxisSize: MainAxisSize.min,
@@ -1222,6 +1286,76 @@ class _HomeBalanceCardState extends State<_HomeBalanceCard> {
           ),
         );
       },
+    );
+  }
+}
+
+class _HomeShieldedPoolBreakdown extends StatelessWidget {
+  const _HomeShieldedPoolBreakdown({
+    required this.orchardBalanceText,
+    required this.ironwoodBalanceText,
+    required this.privacyModeEnabled,
+  });
+
+  final String orchardBalanceText;
+  final String ironwoodBalanceText;
+  final bool privacyModeEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppSpacing.md,
+      runSpacing: AppSpacing.xxs,
+      children: [
+        _HomeShieldedPoolBalanceText(
+          label: 'Orchard shielded',
+          balanceText: orchardBalanceText,
+          privacyModeEnabled: privacyModeEnabled,
+        ),
+        _HomeShieldedPoolBalanceText(
+          label: 'Ironwood shielded',
+          balanceText: ironwoodBalanceText,
+          privacyModeEnabled: privacyModeEnabled,
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeShieldedPoolBalanceText extends StatelessWidget {
+  const _HomeShieldedPoolBalanceText({
+    required this.label,
+    required this.balanceText,
+    required this.privacyModeEnabled,
+  });
+
+  final String label;
+  final String balanceText;
+  final bool privacyModeEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final currencyTickerLower = kZcashDefaultCurrencyTicker.toLowerCase();
+    final displayedBalance = hideIfPrivacyMode(
+      '$balanceText $currencyTickerLower',
+      privacyModeEnabled: privacyModeEnabled,
+      suffix: ' $currencyTickerLower',
+    );
+
+    return RichText(
+      text: TextSpan(
+        style: AppTypography.labelMedium.copyWith(color: colors.text.homeCard),
+        children: [
+          TextSpan(
+            text: '$label: ',
+            style: TextStyle(
+              color: colors.text.homeCard.withValues(alpha: 0.72),
+            ),
+          ),
+          TextSpan(text: displayedBalance),
+        ],
+      ),
     );
   }
 }

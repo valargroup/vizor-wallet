@@ -30,6 +30,7 @@ import '../../../providers/wallet_provider.dart';
 import '../../../rust/api/sync.dart' as rust_sync;
 import '../../address_book/models/address_book_contact.dart';
 import '../../address_book/widgets/address_book_contact_picker_modal.dart';
+import '../../migration/providers/orchard_migration_status_provider.dart';
 import '../models/send_prefill_args.dart';
 import 'send_review_screen.dart';
 
@@ -56,12 +57,14 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       ),
     );
     final spendableBalance = sync.spendableBalance;
+    final migrationBlocksSend = ref.watch(migrationBlocksSendProvider);
 
     return _SendComposeBody(
       key: ValueKey('$activeAccountUuid:${widget.prefill?.fingerprint ?? ''}'),
       walletAsync: walletAsync,
       activeAccountUuid: activeAccountUuid,
       spendableBalance: spendableBalance,
+      migrationBlocksSend: migrationBlocksSend,
       prefill: widget.prefill,
     );
   }
@@ -73,12 +76,14 @@ class _SendComposeBody extends ConsumerStatefulWidget {
     required this.walletAsync,
     required this.activeAccountUuid,
     required this.spendableBalance,
+    required this.migrationBlocksSend,
     this.prefill,
   });
 
   final AsyncValue<WalletState> walletAsync;
   final String? activeAccountUuid;
   final BigInt spendableBalance;
+  final bool migrationBlocksSend;
   final SendPrefillArgs? prefill;
 
   @override
@@ -394,6 +399,7 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
 
   bool get _canReview =>
       !_isSending &&
+      !widget.migrationBlocksSend &&
       !_isResolvingMax &&
       _hasValidAddress &&
       _isAmountValid &&
@@ -456,7 +462,7 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
 
       final estimate = await rust_sync.estimateSendMax(
         dbPath: dbPath,
-        network: endpoint.networkName,
+        network: endpoint.walletNetworkName,
         accountUuid: accountUuid,
         toAddress: address,
         memo: memo.isNotEmpty ? memo : null,
@@ -555,7 +561,7 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
       }
       final fee = await rust_sync.estimateFee(
         dbPath: dbPath,
-        network: endpoint.networkName,
+        network: endpoint.walletNetworkName,
         accountUuid: accountUuid,
         toAddress: address,
         amountZatoshi: zatoshi,
@@ -689,7 +695,7 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
       }
       final proposal = await rust_sync.proposeSend(
         dbPath: dbPath,
-        network: endpoint.networkName,
+        network: endpoint.walletNetworkName,
         accountUuid: accountUuid,
         sendFlowId: _sendFlowId,
         toAddress: address,
@@ -847,6 +853,10 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
                             children: [
                               if (widget.prefill != null) ...[
                                 _SendPrefillNotice(prefill: widget.prefill!),
+                                const SizedBox(height: AppSpacing.xs),
+                              ],
+                              if (widget.migrationBlocksSend) ...[
+                                const _MigrationSendBlockedNotice(),
                                 const SizedBox(height: AppSpacing.xs),
                               ],
                               AppTextField(
@@ -1130,6 +1140,39 @@ class _SendPrefillNotice extends StatelessWidget {
         prefill.message!,
     ];
     return pieces.join(' / ');
+  }
+}
+
+class _MigrationSendBlockedNotice extends StatelessWidget {
+  const _MigrationSendBlockedNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      key: const ValueKey('send_migration_blocked_notice'),
+      padding: const EdgeInsets.all(AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: colors.background.raised,
+        border: Border.all(color: colors.border.subtle),
+        borderRadius: BorderRadius.circular(AppRadii.xSmall),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppIcon(AppIcons.time, size: 18, color: colors.icon.muted),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              'Sending is paused while Orchard migration is active.',
+              style: AppTypography.bodyExtraSmall.copyWith(
+                color: colors.text.secondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

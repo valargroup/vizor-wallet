@@ -32,7 +32,7 @@ use zcash_client_backend::{
 };
 use zcash_protocol::consensus::BlockHeight;
 
-use crate::wallet::db::with_wallet_db_write_lock;
+use crate::wallet::{db::with_wallet_db_write_lock, network::WalletNetwork};
 
 use super::block_source::MemoryBlockSource;
 use super::{elapsed, SyncError, WalletDatabase};
@@ -54,6 +54,28 @@ fn timeout_status(label: &str, timeout: Duration) -> Status {
 
 fn status_to_network_error(label: &str, status: Status) -> SyncError {
     SyncError::net(format!("{label}: {status}"))
+}
+
+#[cfg(zcash_unstable = "nu7")]
+pub(super) fn ironwood_sync_enabled(network: WalletNetwork) -> bool {
+    matches!(network, WalletNetwork::LocalIronwoodTestnet)
+}
+
+#[cfg(not(zcash_unstable = "nu7"))]
+pub(super) fn ironwood_sync_enabled(_network: WalletNetwork) -> bool {
+    false
+}
+
+fn compact_block_pool_types(network: WalletNetwork) -> Vec<i32> {
+    if ironwood_sync_enabled(network) {
+        vec![
+            service::PoolType::Sapling as i32,
+            service::PoolType::Orchard as i32,
+            service::PoolType::Ironwood as i32,
+        ]
+    } else {
+        Vec::new()
+    }
 }
 
 async fn await_tonic_response<T, F>(label: &str, timeout: Duration, future: F) -> Result<T, Status>
@@ -260,7 +282,7 @@ pub(super) async fn next_stream_message<T>(
     }
 }
 
-/// Pulls the latest sapling + orchard subtree roots from lightwalletd
+/// Pulls the latest shielded subtree roots from lightwalletd
 /// and writes them into `db` via `put_*_subtree_roots`. The starting
 /// index for each protocol comes from `db`'s wallet summary, so a
 /// follow-up sync only fetches roots for subtrees the wallet has not
@@ -274,8 +296,10 @@ pub(super) async fn next_stream_message<T>(
 pub(super) async fn download_subtree_roots(
     client: &mut CompactTxStreamerClient<Channel>,
     db: &mut WalletDatabase,
+    network: WalletNetwork,
 ) -> Result<(), SyncError> {
-    let (sap_start, orch_start) = {
+    let ironwood_enabled = ironwood_sync_enabled(network);
+    let (sap_start, orch_start, ironwood_start) = {
         let summary = db
             .get_wallet_summary(ConfirmationsPolicy::default())
             .map_err(|e| SyncError::db(format!("get_wallet_summary: {e}")))?;
@@ -283,16 +307,27 @@ pub(super) async fn download_subtree_roots(
             Some(s) => (
                 s.next_sapling_subtree_index(),
                 s.next_orchard_subtree_index(),
+                s.next_ironwood_subtree_index(),
             ),
-            None => (0, 0),
+            None => (0, 0, 0),
         }
     };
-    log::info!(
-        "[{}] sync: subtree roots start: sapling={}, orchard={}",
-        elapsed(),
-        sap_start,
-        orch_start
-    );
+    if ironwood_enabled {
+        log::info!(
+            "[{}] sync: subtree roots start: sapling={}, orchard={}, ironwood={}",
+            elapsed(),
+            sap_start,
+            orch_start,
+            ironwood_start
+        );
+    } else {
+        log::info!(
+            "[{}] sync: subtree roots start: sapling={}, orchard={}",
+            elapsed(),
+            sap_start,
+            orch_start
+        );
+    }
 
     // Sapling
     let mut stream = await_tonic_stream(
@@ -380,6 +415,51 @@ pub(super) async fn download_subtree_roots(
         })?;
     }
 
+    if ironwood_enabled {
+        let mut stream = await_tonic_stream(
+            "ironwood subtree roots",
+            LIGHTWALLETD_STREAM_START_TIMEOUT,
+            client.get_subtree_roots(Request::new(GetSubtreeRootsArg {
+                start_index: ironwood_start as u32,
+                shielded_protocol: service::ShieldedProtocol::Ironwood.into(),
+                max_entries: 0,
+            })),
+        )
+        .await
+        .map_err(|e| status_to_network_error("ironwood subtree roots", e))?;
+
+        let mut roots = Vec::new();
+        while let Some(root) =
+            next_stream_message(&mut stream, "ironwood subtree roots stream").await?
+        {
+            let bytes: [u8; 32] = root.root_hash.as_slice().try_into().map_err(|_| {
+                SyncError::parse(format!(
+                    "ironwood subtree root: expected 32 bytes, got {}",
+                    root.root_hash.len()
+                ))
+            })?;
+            let node = Option::from(orchard::tree::MerkleHashOrchard::from_bytes(&bytes))
+                .ok_or_else(|| {
+                    SyncError::parse("ironwood subtree root: bad node bytes".to_string())
+                })?;
+            roots.push(CommitmentTreeRoot::from_parts(
+                BlockHeight::from_u32(root.completing_block_height as u32),
+                node,
+            ));
+        }
+        log::info!(
+            "[{}] sync: downloaded {} ironwood subtree roots",
+            elapsed(),
+            roots.len()
+        );
+        if !roots.is_empty() {
+            with_wallet_db_write_lock("sync_engine.put_ironwood_subtree_roots", || {
+                db.put_ironwood_subtree_roots(ironwood_start, roots.as_slice())
+                    .map_err(|e| SyncError::db(format!("put_ironwood_subtree_roots: {e}")))
+            })?;
+        }
+    }
+
     log::info!("[{}] sync: subtree roots done", elapsed());
     Ok(())
 }
@@ -422,6 +502,7 @@ pub(super) async fn download_blocks(
     client: &mut CompactTxStreamerClient<Channel>,
     start: BlockHeight,
     end: BlockHeight,
+    network: WalletNetwork,
 ) -> Result<MemoryBlockSource, SyncError> {
     let mut stream = await_tonic_stream(
         "get_block_range",
@@ -435,7 +516,7 @@ pub(super) async fn download_blocks(
                 height: u32::from(end) as u64,
                 hash: vec![],
             }),
-            pool_types: vec![],
+            pool_types: compact_block_pool_types(network),
         })),
     )
     .await
@@ -447,4 +528,28 @@ pub(super) async fn download_blocks(
     }
 
     Ok(MemoryBlockSource::new(blocks))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn explicit_ironwood_pool_requests_are_local_only() {
+        #[cfg(zcash_unstable = "nu7")]
+        assert_eq!(
+            compact_block_pool_types(WalletNetwork::LocalIronwoodTestnet),
+            vec![
+                service::PoolType::Sapling as i32,
+                service::PoolType::Orchard as i32,
+                service::PoolType::Ironwood as i32,
+            ]
+        );
+        #[cfg(not(zcash_unstable = "nu7"))]
+        assert!(compact_block_pool_types(WalletNetwork::LocalIronwoodTestnet).is_empty());
+
+        assert!(compact_block_pool_types(WalletNetwork::Main).is_empty());
+        assert!(compact_block_pool_types(WalletNetwork::Test).is_empty());
+        assert!(compact_block_pool_types(WalletNetwork::Regtest).is_empty());
+    }
 }

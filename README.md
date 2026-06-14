@@ -50,6 +50,15 @@ fvm flutter build macos --release \
   --dart-define=ZCASH_DEFAULT_NETWORK=test
 ```
 
+For the temporary Local Ironwood testnet stack:
+
+```bash
+fvm flutter build macos --release \
+  --dart-define=ZCASH_DEFAULT_NETWORK=test \
+  --dart-define=ZCASH_ENABLE_LOCAL_IRONWOOD_TESTNET=true \
+  --dart-define=ZCASH_DEFAULT_RPC_ENDPOINT_PRESET=local-ironwood-testnet
+```
+
 The built app is at:
 
 ```text

@@ -109,6 +109,24 @@ void main() {
     expect(state.lastEvent, isNull);
   });
 
+  test('does not fallback to a different wallet network', () {
+    final primary = defaultRpcEndpointConfig(
+      'test',
+    ).copyWith(walletNetworkName: 'test');
+    final candidates = fallbackRpcEndpointCandidatesFor(
+      primary,
+      includeLocalIronwoodTestnet: true,
+    );
+
+    expect(
+      candidates.map((candidate) => candidate.presetId),
+      isNot(contains(kLocalIronwoodTestnetRpcEndpointPresetId)),
+    );
+    expect(candidates.map((candidate) => candidate.walletNetworkName).toSet(), {
+      'test',
+    });
+  });
+
   test('tries fallback candidates in configured order', () async {
     final primary = defaultRpcEndpointConfig('main');
     final container = _container(

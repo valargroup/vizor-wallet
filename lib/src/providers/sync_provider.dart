@@ -15,6 +15,8 @@ import 'app_security_provider.dart';
 import 'rpc_endpoint_failover_provider.dart';
 import 'sync_failure.dart';
 
+const defaultRecentTransactionHistoryLimit = 10;
+
 class SyncState {
   /// Account UUID that owns the balance, shield status, and recent transaction
   /// fields below. Sync progress itself is wallet-wide.
@@ -39,9 +41,11 @@ class SyncState {
   final BigInt transparentBalance;
   final BigInt saplingBalance;
   final BigInt orchardBalance;
+  final BigInt ironwoodBalance;
   final BigInt transparentPendingBalance;
   final BigInt saplingPendingBalance;
   final BigInt orchardPendingBalance;
+  final BigInt ironwoodPendingBalance;
   final bool canShieldTransparentBalance;
   final BigInt shieldTransparentFee;
   final BigInt shieldTransparentAmount;
@@ -69,7 +73,10 @@ class SyncState {
 
   /// Amount waiting for confirmations (e.g. change from a recently sent tx).
   BigInt get pendingBalance =>
-      transparentPendingBalance + saplingPendingBalance + orchardPendingBalance;
+      transparentPendingBalance +
+      saplingPendingBalance +
+      orchardPendingBalance +
+      ironwoodPendingBalance;
 
   SyncState({
     this.accountUuid,
@@ -85,9 +92,11 @@ class SyncState {
     BigInt? transparentBalance,
     BigInt? saplingBalance,
     BigInt? orchardBalance,
+    BigInt? ironwoodBalance,
     BigInt? transparentPendingBalance,
     BigInt? saplingPendingBalance,
     BigInt? orchardPendingBalance,
+    BigInt? ironwoodPendingBalance,
     this.canShieldTransparentBalance = false,
     BigInt? shieldTransparentFee,
     BigInt? shieldTransparentAmount,
@@ -107,9 +116,11 @@ class SyncState {
        transparentBalance = transparentBalance ?? BigInt.zero,
        saplingBalance = saplingBalance ?? BigInt.zero,
        orchardBalance = orchardBalance ?? BigInt.zero,
+       ironwoodBalance = ironwoodBalance ?? BigInt.zero,
        transparentPendingBalance = transparentPendingBalance ?? BigInt.zero,
        saplingPendingBalance = saplingPendingBalance ?? BigInt.zero,
        orchardPendingBalance = orchardPendingBalance ?? BigInt.zero,
+       ironwoodPendingBalance = ironwoodPendingBalance ?? BigInt.zero,
        shieldTransparentFee = shieldTransparentFee ?? BigInt.zero,
        shieldTransparentAmount = shieldTransparentAmount ?? BigInt.zero,
        spendableBalance = spendableBalance ?? BigInt.zero,
@@ -129,9 +140,11 @@ class SyncState {
     BigInt? transparentBalance,
     BigInt? saplingBalance,
     BigInt? orchardBalance,
+    BigInt? ironwoodBalance,
     BigInt? transparentPendingBalance,
     BigInt? saplingPendingBalance,
     BigInt? orchardPendingBalance,
+    BigInt? ironwoodPendingBalance,
     bool? canShieldTransparentBalance,
     BigInt? shieldTransparentFee,
     BigInt? shieldTransparentAmount,
@@ -164,12 +177,15 @@ class SyncState {
       transparentBalance: transparentBalance ?? this.transparentBalance,
       saplingBalance: saplingBalance ?? this.saplingBalance,
       orchardBalance: orchardBalance ?? this.orchardBalance,
+      ironwoodBalance: ironwoodBalance ?? this.ironwoodBalance,
       transparentPendingBalance:
           transparentPendingBalance ?? this.transparentPendingBalance,
       saplingPendingBalance:
           saplingPendingBalance ?? this.saplingPendingBalance,
       orchardPendingBalance:
           orchardPendingBalance ?? this.orchardPendingBalance,
+      ironwoodPendingBalance:
+          ironwoodPendingBalance ?? this.ironwoodPendingBalance,
       canShieldTransparentBalance:
           canShieldTransparentBalance ?? this.canShieldTransparentBalance,
       shieldTransparentFee: shieldTransparentFee ?? this.shieldTransparentFee,
@@ -366,6 +382,9 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       orchardBalance: initialBelongsToActiveAccount
           ? initial.orchardBalance
           : BigInt.zero,
+      ironwoodBalance: initialBelongsToActiveAccount
+          ? initial.ironwoodBalance
+          : BigInt.zero,
       transparentPendingBalance: initialBelongsToActiveAccount
           ? initial.transparentPendingBalance
           : BigInt.zero,
@@ -374,6 +393,9 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
           : BigInt.zero,
       orchardPendingBalance: initialBelongsToActiveAccount
           ? initial.orchardPendingBalance
+          : BigInt.zero,
+      ironwoodPendingBalance: initialBelongsToActiveAccount
+          ? initial.ironwoodPendingBalance
           : BigInt.zero,
       canShieldTransparentBalance: initialBelongsToActiveAccount
           ? initial.canShieldTransparentBalance
@@ -491,9 +513,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         transparentBalance: scopedPrev?.transparentBalance,
         saplingBalance: scopedPrev?.saplingBalance,
         orchardBalance: scopedPrev?.orchardBalance,
+        ironwoodBalance: scopedPrev?.ironwoodBalance,
         transparentPendingBalance: scopedPrev?.transparentPendingBalance,
         saplingPendingBalance: scopedPrev?.saplingPendingBalance,
         orchardPendingBalance: scopedPrev?.orchardPendingBalance,
+        ironwoodPendingBalance: scopedPrev?.ironwoodPendingBalance,
         canShieldTransparentBalance:
             scopedPrev?.canShieldTransparentBalance ?? false,
         shieldTransparentFee: scopedPrev?.shieldTransparentFee,
@@ -534,7 +558,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
           final stream = rust_sync.startFullSync(
             dbPath: dbPath,
             lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-            network: endpoint.networkName,
+            network: endpoint.walletNetworkName,
             mode: 1,
           );
           _syncSub = stream.listen(
@@ -676,9 +700,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         transparentBalance: scopedPrev?.transparentBalance,
         saplingBalance: scopedPrev?.saplingBalance,
         orchardBalance: scopedPrev?.orchardBalance,
+        ironwoodBalance: scopedPrev?.ironwoodBalance,
         transparentPendingBalance: scopedPrev?.transparentPendingBalance,
         saplingPendingBalance: scopedPrev?.saplingPendingBalance,
         orchardPendingBalance: scopedPrev?.orchardPendingBalance,
+        ironwoodPendingBalance: scopedPrev?.ironwoodPendingBalance,
         canShieldTransparentBalance:
             scopedPrev?.canShieldTransparentBalance ?? false,
         shieldTransparentFee: scopedPrev?.shieldTransparentFee,
@@ -779,9 +805,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         transparentBalance: scopedPrev?.transparentBalance,
         saplingBalance: scopedPrev?.saplingBalance,
         orchardBalance: scopedPrev?.orchardBalance,
+        ironwoodBalance: scopedPrev?.ironwoodBalance,
         transparentPendingBalance: scopedPrev?.transparentPendingBalance,
         saplingPendingBalance: scopedPrev?.saplingPendingBalance,
         orchardPendingBalance: scopedPrev?.orchardPendingBalance,
+        ironwoodPendingBalance: scopedPrev?.ironwoodPendingBalance,
         canShieldTransparentBalance:
             scopedPrev?.canShieldTransparentBalance ?? false,
         shieldTransparentFee: scopedPrev?.shieldTransparentFee,
@@ -1163,7 +1191,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     _mempoolSub?.cancel();
     final stream = rust_sync.startMempoolObserver(
       dbPath: dbPath,
-      network: endpoint.networkName,
+      network: endpoint.walletNetworkName,
       lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
     );
     _mempoolSub = stream.listen(
@@ -1301,7 +1329,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
     final prev = state.value;
     final dbPath = await _getDbPath();
-    final network = _endpointConfig.networkName;
+    final network = _endpointConfig.walletNetworkName;
     final accountUuid = _getActiveAccountUuid();
     if (accountUuid == null) {
       log('SyncNotifier: no active account, skipping refresh');
@@ -1314,9 +1342,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     BigInt? transparent;
     BigInt? sapling;
     BigInt? orchard;
+    BigInt? ironwood;
     BigInt? transparentPending;
     BigInt? saplingPending;
     BigInt? orchardPending;
+    BigInt? ironwoodPending;
     BigInt? spendable;
     BigInt? total;
     bool? canShieldTransparentBalance;
@@ -1336,9 +1366,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         transparent = balance.transparent;
         sapling = balance.sapling;
         orchard = balance.orchard;
+        ironwood = balance.ironwood;
         transparentPending = balance.transparentPending;
         saplingPending = balance.saplingPending;
         orchardPending = balance.orchardPending;
+        ironwoodPending = balance.ironwoodPending;
         spendable = balance.spendable;
         total = balance.total;
         didFetchBalance = true;
@@ -1349,7 +1381,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         recentTxs = await rust_sync.getTransactionHistory(
           dbPath: dbPath,
           network: network,
-          limit: 10,
+          limit: defaultRecentTransactionHistoryLimit,
           accountUuid: accountUuid,
         );
         didFetchRecentTxs = true;
@@ -1430,6 +1462,9 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         orchardBalance: useFetchedAccountData
             ? orchard ?? stateScopedPrev?.orchardBalance
             : stateScopedPrev?.orchardBalance,
+        ironwoodBalance: useFetchedAccountData
+            ? ironwood ?? stateScopedPrev?.ironwoodBalance
+            : stateScopedPrev?.ironwoodBalance,
         transparentPendingBalance: useFetchedAccountData
             ? transparentPending ?? stateScopedPrev?.transparentPendingBalance
             : stateScopedPrev?.transparentPendingBalance,
@@ -1439,6 +1474,9 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         orchardPendingBalance: useFetchedAccountData
             ? orchardPending ?? stateScopedPrev?.orchardPendingBalance
             : stateScopedPrev?.orchardPendingBalance,
+        ironwoodPendingBalance: useFetchedAccountData
+            ? ironwoodPending ?? stateScopedPrev?.ironwoodPendingBalance
+            : stateScopedPrev?.ironwoodPendingBalance,
         canShieldTransparentBalance: useFetchedAccountData
             ? canShieldTransparentBalance ??
                   stateScopedPrev?.canShieldTransparentBalance ??
@@ -1488,11 +1526,15 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
   // ======================== Balance Refresh ========================
 
   /// Public: refresh balance and recent transactions (e.g. after send).
-  Future<void> refreshAfterSend() => _refreshBalance();
+  Future<void> refreshAfterSend({
+    int transactionHistoryLimit = defaultRecentTransactionHistoryLimit,
+  }) => _refreshBalance(transactionHistoryLimit: transactionHistoryLimit);
 
   Future<void> refreshAfterUnlock() => _refreshBalance();
 
-  Future<void> _refreshBalance() async {
+  Future<void> _refreshBalance({
+    int transactionHistoryLimit = defaultRecentTransactionHistoryLimit,
+  }) async {
     if (_requiresUnlock) {
       _stopDisplayProgressTimer();
       state = AsyncData(SyncState());
@@ -1501,7 +1543,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     final epoch = _sensitiveStateEpoch;
     final prev = state.value;
     final dbPath = await _getDbPath();
-    final network = _endpointConfig.networkName;
+    final network = _endpointConfig.walletNetworkName;
     final accountUuid = _getActiveAccountUuid();
     if (accountUuid == null) {
       log('SyncNotifier: no active account, skipping refresh');
@@ -1512,9 +1554,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     BigInt? transparent;
     BigInt? sapling;
     BigInt? orchard;
+    BigInt? ironwood;
     BigInt? transparentPending;
     BigInt? saplingPending;
     BigInt? orchardPending;
+    BigInt? ironwoodPending;
     BigInt? spendable;
     BigInt? total;
     bool? canShieldTransparentBalance;
@@ -1531,9 +1575,11 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       transparent = balance.transparent;
       sapling = balance.sapling;
       orchard = balance.orchard;
+      ironwood = balance.ironwood;
       transparentPending = balance.transparentPending;
       saplingPending = balance.saplingPending;
       orchardPending = balance.orchardPending;
+      ironwoodPending = balance.ironwoodPending;
       spendable = balance.spendable;
       total = balance.total;
       didFetchBalance = true;
@@ -1551,7 +1597,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       recentTxs = await rust_sync.getTransactionHistory(
         dbPath: dbPath,
         network: network,
-        limit: 10,
+        limit: transactionHistoryLimit,
         accountUuid: accountUuid,
       );
       didFetchRecentTxs = true;
@@ -1610,12 +1656,15 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         transparentBalance: transparent ?? accountFallback?.transparentBalance,
         saplingBalance: sapling ?? accountFallback?.saplingBalance,
         orchardBalance: orchard ?? accountFallback?.orchardBalance,
+        ironwoodBalance: ironwood ?? accountFallback?.ironwoodBalance,
         transparentPendingBalance:
             transparentPending ?? accountFallback?.transparentPendingBalance,
         saplingPendingBalance:
             saplingPending ?? accountFallback?.saplingPendingBalance,
         orchardPendingBalance:
             orchardPending ?? accountFallback?.orchardPendingBalance,
+        ironwoodPendingBalance:
+            ironwoodPending ?? accountFallback?.ironwoodPendingBalance,
         canShieldTransparentBalance:
             canShieldTransparentBalance ??
             accountFallback?.canShieldTransparentBalance ??

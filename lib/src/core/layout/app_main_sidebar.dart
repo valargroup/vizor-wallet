@@ -108,13 +108,13 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(
-                left: AppSpacing.xs,
-                right: AppSpacing.xs,
-                bottom: AppSpacing.xs,
-              ),
-              child: Column(
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.xs,
+                  right: AppSpacing.xs,
+                  bottom: AppSpacing.xs,
+                ),
                 children: [
                   AppSidebarItem(
                     key: const ValueKey('sidebar_accounts_button'),
@@ -160,6 +160,16 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   AppSidebarItem(
+                    key: const ValueKey('sidebar_migration_button'),
+                    label: 'Migration',
+                    iconName: AppIcons.doubleArrowVertical,
+                    active: _matches('/migration'),
+                    onTap: _matches('/migration')
+                        ? null
+                        : () => _navigateTo('/migration'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  AppSidebarItem(
                     key: const ValueKey('sidebar_address_book_button'),
                     label: 'Address book',
                     iconName: AppIcons.users,
@@ -181,7 +191,6 @@ class _AppMainSidebarState extends ConsumerState<AppMainSidebar> {
                 ],
               ),
             ),
-            const Spacer(),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.xs),
               child: Column(

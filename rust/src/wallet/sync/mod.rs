@@ -23,6 +23,8 @@ use crate::wallet::{
     network::WalletNetwork,
 };
 
+mod broadcast;
+mod migration;
 mod pczt;
 mod send;
 mod transactions;
@@ -36,23 +38,37 @@ mod transactions;
 // reachable from anywhere in the crate but not re-exported to
 // downstream consumers, which matches the pre-refactor surface
 // exactly).
+pub(crate) use migration::migration_status;
 pub use pczt::{
     add_proofs_to_pczt, create_pczt_from_proposal, discard_proposal, extract_and_broadcast_pczt,
     redact_pczt_for_signer, ExtractAndBroadcastPcztResult,
 };
 pub(crate) use send::estimate_send_max;
-pub(crate) use send::{
-    create_shield_transparent_pczt, get_shield_transparent_status, shield_transparent_balance,
-};
 pub use send::{
-    estimate_fee, execute_proposal, execute_proposal_with_seed_loader, propose_send,
-    ExecuteProposalResult,
+    broadcast_due_orchard_migration_transactions, estimate_fee, execute_proposal,
+    execute_proposal_with_seed_loader, migrate_orchard_to_ironwood, propose_send,
+    ExecuteProposalResult, IronwoodMigrationResult,
+};
+pub(crate) use send::{
+    complete_orchard_migration_batch_pczt, complete_orchard_migration_denominations_pczt,
+    complete_orchard_migration_single_qr_pczt, discard_keystone_migration_request,
+    keystone_migration_proof_status, prepare_orchard_migration_batch_pczt,
+    prepare_orchard_migration_denominations_pczt, prepare_orchard_migration_single_qr_pczt,
+    KeystoneSignedMigrationMessage,
+};
+pub(crate) use send::{
+    create_reserved_pczt_batch, create_shield_transparent_pczt, get_shield_transparent_status,
+    shield_transparent_balance,
 };
 // Internal-only re-export for `sync_engine::run_sync_impl`'s
 // auto-resubmit pass. Not part of the `wallet::sync` public surface.
 pub(crate) use send::resubmit_pending_transactions;
 #[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
 pub(crate) use send::ProposalResult;
+#[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
+pub(crate) use send::ReservedPcztBatchItem;
+#[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
+pub(crate) use send::ReservedPcztBatchRequest;
 #[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
 pub(crate) use send::SendMaxEstimateResult;
 #[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
@@ -61,6 +77,8 @@ pub(crate) use send::ShieldTransparentPcztResult;
 pub(crate) use send::ShieldTransparentResult;
 #[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
 pub(crate) use send::ShieldTransparentStatus;
+#[allow(unused_imports)] // names reachable via `crate::wallet::sync::*`; pre-refactor surface
+pub(crate) use send::{KeystoneMigrationMessage, KeystoneMigrationSigningRequest};
 pub use transactions::{
     check_tx_mined, decrypt_and_store_transaction, get_next_available_address,
     get_pending_transactions, get_transaction_data_requests, get_transaction_detail,
@@ -128,7 +146,7 @@ pub fn update_chain_tip(db_path: &str, network: WalletNetwork, height: u64) -> R
 pub fn get_next_subtree_indices(
     db_path: &str,
     network: WalletNetwork,
-) -> Result<(u64, u64), String> {
+) -> Result<(u64, u64, u64), String> {
     let db = open_wallet_db_for_read(db_path, network)?;
     let summary = db
         .get_wallet_summary(ConfirmationsPolicy::default())
@@ -137,8 +155,9 @@ pub fn get_next_subtree_indices(
         Some(s) => Ok((
             s.next_sapling_subtree_index(),
             s.next_orchard_subtree_index(),
+            s.next_ironwood_subtree_index(),
         )),
-        None => Ok((0, 0)),
+        None => Ok((0, 0, 0)),
     }
 }
 
@@ -151,7 +170,7 @@ pub fn put_sapling_subtree_roots(
     let parsed: Vec<_> = roots
         .iter()
         .map(|(h, bytes)| {
-            let arr: [u8; 32] = bytes[..32].try_into().map_err(|_| "bad hash len")?;
+            let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| "bad hash len")?;
             let node =
                 Option::from(sapling_crypto::Node::from_bytes(arr)).ok_or("bad sapling hash")?;
             Ok::<_, String>(CommitmentTreeRoot::from_parts(
@@ -180,7 +199,7 @@ pub fn put_orchard_subtree_roots(
     let parsed: Vec<_> = roots
         .iter()
         .map(|(h, bytes)| {
-            let arr: [u8; 32] = bytes[..32].try_into().map_err(|_| "bad hash len")?;
+            let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| "bad hash len")?;
             let node = Option::from(orchard::tree::MerkleHashOrchard::from_bytes(&arr))
                 .ok_or("bad orchard hash")?;
             Ok::<_, String>(CommitmentTreeRoot::from_parts(
@@ -195,6 +214,35 @@ pub fn put_orchard_subtree_roots(
         with_wallet_db_write_lock("sync.put_orchard_subtree_roots", || {
             let mut db = open_wallet_db(db_path, network)?;
             db.put_orchard_subtree_roots(start_index, parsed.as_slice())
+                .map_err(|e| format!("{e}"))
+        })
+    }
+}
+
+pub fn put_ironwood_subtree_roots(
+    db_path: &str,
+    network: WalletNetwork,
+    start_index: u64,
+    roots: &[(u64, Vec<u8>)],
+) -> Result<(), String> {
+    let parsed: Vec<_> = roots
+        .iter()
+        .map(|(h, bytes)| {
+            let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| "bad hash len")?;
+            let node = Option::from(orchard::tree::MerkleHashOrchard::from_bytes(&arr))
+                .ok_or("bad ironwood hash")?;
+            Ok::<_, String>(CommitmentTreeRoot::from_parts(
+                BlockHeight::from_u32(*h as u32),
+                node,
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if parsed.is_empty() {
+        Ok(())
+    } else {
+        with_wallet_db_write_lock("sync.put_ironwood_subtree_roots", || {
+            let mut db = open_wallet_db(db_path, network)?;
+            db.put_ironwood_subtree_roots(start_index, parsed.as_slice())
                 .map_err(|e| format!("{e}"))
         })
     }
@@ -266,6 +314,7 @@ pub fn scan_blocks(
     ts_time: u32,
     ts_sapling: &str,
     ts_orchard: &str,
+    ts_ironwood: &str,
     limit: u64,
 ) -> Result<u64, String> {
     let db_cache = open_block_cache(cache_path)?;
@@ -282,6 +331,7 @@ pub fn scan_blocks(
             time: ts_time,
             sapling_tree: ts_sapling.into(),
             orchard_tree: ts_orchard.into(),
+            ironwood_tree: ts_ironwood.into(),
         }
         .to_chain_state()
         .map_err(|e| format!("{e}"))?

@@ -151,7 +151,13 @@ void main() {
       findsNothing,
     );
 
-    await tester.drag(find.byType(ListView), const Offset(0, -900));
+    await tester.drag(
+      find.descendant(
+        of: find.byKey(const ValueKey('accounts_list_scrollbar')),
+        matching: find.byType(ListView),
+      ),
+      const Offset(0, -900),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -1104,7 +1110,9 @@ class _FakeSyncNotifier extends SyncNotifier {
   Future<SyncState> build() async => SyncState();
 
   @override
-  Future<void> refreshAfterSend() async {
+  Future<void> refreshAfterSend({
+    int transactionHistoryLimit = defaultRecentTransactionHistoryLimit,
+  }) async {
     events?.add('refresh');
     refreshCount += 1;
   }

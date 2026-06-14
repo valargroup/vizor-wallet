@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
+import '../../../core/config/rpc_endpoint_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
@@ -79,7 +80,10 @@ class _KeystoneWalletBirthdayScreenState
   }
 
   int get _minimumBirthdayHeight =>
-      ref.read(rpcEndpointProvider).network.saplingActivationHeight;
+      _metadata?.saplingActivationHeight ??
+      (isLocalIronwoodTestnetEndpoint(ref.read(rpcEndpointProvider))
+          ? 1
+          : ref.read(rpcEndpointProvider).network.saplingActivationHeight);
 
   Future<void> _loadMetadata() async {
     setState(() {
@@ -318,7 +322,7 @@ class _KeystoneWalletBirthdayScreenState
   }
 
   int? get _validatedManualHeight {
-    final value = int.tryParse(_manualHeightController.text.trim());
+    final value = _parseManualHeight(_manualHeightController.text);
     if (value == null) return null;
     final minimumHeight = _minimumBirthdayHeight;
     if (value < minimumHeight) {
@@ -334,7 +338,7 @@ class _KeystoneWalletBirthdayScreenState
   String? get _manualHeightError {
     final text = _manualHeightController.text.trim();
     if (text.isEmpty) return null;
-    final parsed = int.tryParse(text);
+    final parsed = _parseManualHeight(text);
     if (parsed == null) return 'Doesn’t seem like a legit block height';
     if (parsed < _minimumBirthdayHeight) {
       return 'Doesn’t seem like a legit block height';
@@ -345,6 +349,15 @@ class _KeystoneWalletBirthdayScreenState
     }
     if (_metadataError != null) return _metadataError;
     return null;
+  }
+
+  int? _parseManualHeight(String text) {
+    final trimmed = text.trim();
+    return int.tryParse(
+      trimmed.endsWith('.')
+          ? trimmed.substring(0, trimmed.length - 1)
+          : trimmed,
+    );
   }
 
   String? get _dateMessage {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' show Colors, Scaffold;
 import 'package:flutter/widgets.dart';
 
+import '../../features/migration/widgets/global_migration_warning_banner.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/app_toast.dart';
@@ -29,7 +30,15 @@ class AppDesktopShell extends StatelessWidget {
             children: [
               SizedBox(width: sidebarWidth, child: sidebar),
               const SizedBox(width: AppSpacing.xs),
-              Expanded(child: pane),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const GlobalMigrationWarningBanner(),
+                    Expanded(child: pane),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

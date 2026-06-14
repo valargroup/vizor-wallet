@@ -20,18 +20,44 @@ class RpcEndpointNotifier extends Notifier<RpcEndpointConfig> {
       allowDefaultPort: true,
     );
     await _verifyNetwork(normalized);
-    await _persist(
-      state.copyWith(lightwalletdUrl: normalized, presetId: preset.id),
-    );
+    await _persistEndpoint(lightwalletdUrl: normalized, presetId: preset.id);
   }
 
   Future<void> setCustom(String input) async {
     final normalized = normalizeRpcEndpointUrl(input, allowDefaultPort: true);
     await _verifyNetwork(normalized);
+    await _persistEndpoint(
+      lightwalletdUrl: normalized,
+      presetId: kCustomRpcEndpointPresetId,
+    );
+  }
+
+  Future<void> _persistEndpoint({
+    required String lightwalletdUrl,
+    required String presetId,
+  }) async {
+    final endpointWalletNetwork = inferWalletNetworkName(
+      networkName: state.networkName,
+      lightwalletdUrl: lightwalletdUrl,
+      presetId: presetId,
+    );
+    final storedWalletNetwork = normalizeWalletNetworkName(
+      await _store.readString(kWalletNetworkNameKey),
+    );
+    if (storedWalletNetwork != null &&
+        storedWalletNetwork != endpointWalletNetwork) {
+      throw FormatException(
+        'This wallet uses $storedWalletNetwork, but the selected endpoint uses '
+        '$endpointWalletNetwork. Create or import a separate wallet for that '
+        'network.',
+      );
+    }
+
     await _persist(
       state.copyWith(
-        lightwalletdUrl: normalized,
-        presetId: kCustomRpcEndpointPresetId,
+        lightwalletdUrl: lightwalletdUrl,
+        presetId: presetId,
+        walletNetworkName: storedWalletNetwork ?? endpointWalletNetwork,
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zcash_wallet/src/app_bootstrap.dart';
+import 'package:zcash_wallet/src/core/config/rpc_endpoint_config.dart';
 import 'package:zcash_wallet/src/providers/account_models.dart';
 
 void main() {
@@ -82,5 +83,43 @@ void main() {
 
   test('empty bootstrap starts with privacy mode disabled', () {
     expect(AppBootstrapState.empty.privacyModeEnabled, isFalse);
+  });
+
+  group('resolveBootstrapWalletNetworkName', () {
+    test('does not infer an existing legacy wallet from the endpoint', () {
+      expect(
+        resolveBootstrapWalletNetworkName(
+          publicNetworkName: 'test',
+          storedWalletNetworkName: null,
+          walletExists: true,
+        ),
+        'test',
+      );
+    });
+
+    test(
+      'lets new wallets derive their network from the selected endpoint',
+      () {
+        expect(
+          resolveBootstrapWalletNetworkName(
+            publicNetworkName: 'test',
+            storedWalletNetworkName: null,
+            walletExists: false,
+          ),
+          isNull,
+        );
+      },
+    );
+
+    test('preserves an explicit Local Ironwood wallet network', () {
+      expect(
+        resolveBootstrapWalletNetworkName(
+          publicNetworkName: 'test',
+          storedWalletNetworkName: kLocalIronwoodTestnetWalletNetworkName,
+          walletExists: true,
+        ),
+        kLocalIronwoodTestnetWalletNetworkName,
+      );
+    });
   });
 }
