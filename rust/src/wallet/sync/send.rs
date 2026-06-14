@@ -70,6 +70,8 @@ use zcash_client_backend::{
 };
 use zcash_client_sqlite::{wallet::commitment_tree, AccountUuid, ReceivedNoteId};
 use zcash_keys::keys::UnifiedSpendingKey;
+#[cfg(zcash_unstable = "nu7")]
+use zcash_primitives::transaction::TxVersion;
 use zcash_primitives::transaction::{
     builder::{BuildConfig, Builder},
     fees::{
@@ -2653,6 +2655,7 @@ fn pczt_from_build_result(
     network: WalletNetwork,
     account_derivation: Option<&zcash_client_backend::data_api::Zip32Derivation>,
     orchard_spend_count: usize,
+    orchard_change_output_count: usize,
 ) -> Result<BuiltPczt, String> {
     use pczt::roles::{creator::Creator, io_finalizer::IoFinalizer, updater::Updater};
 
@@ -2664,7 +2667,19 @@ fn pczt_from_build_result(
                 .ok_or_else(|| "Orchard spend action index missing".to_string())
         })
         .collect::<Result<Vec<_>, String>>()?;
-    let orchard_spends = orchard_spend_action_indices
+    let mut orchard_derivation_action_indices =
+        Vec::with_capacity(orchard_spend_count + orchard_change_output_count);
+    orchard_derivation_action_indices.extend(orchard_spend_action_indices.iter().copied());
+    for i in 0..orchard_change_output_count {
+        let index = build_result
+            .orchard_meta
+            .output_action_index(i)
+            .ok_or_else(|| "Orchard change output action index missing".to_string())?;
+        if !orchard_derivation_action_indices.contains(&index) {
+            orchard_derivation_action_indices.push(index);
+        }
+    }
+    let orchard_derivation_actions = orchard_derivation_action_indices
         .iter()
         .copied()
         .collect::<HashSet<_>>();
@@ -2676,7 +2691,7 @@ fn pczt_from_build_result(
     let pczt = Updater::new(io_finalized)
         .update_orchard_with(|mut updater| {
             if let Some(derivation) = account_derivation {
-                for index in &orchard_spends {
+                for index in &orchard_derivation_actions {
                     updater.update_action_with(*index, |mut action_updater| {
                         action_updater.set_spend_zip32_derivation(
                             orchard::pczt::Zip32Derivation::parse(
@@ -2889,6 +2904,7 @@ fn create_orchard_denomination_split_pczt(
         network,
         account_derivation,
         orchard_inputs.len(),
+        split_outputs.len(),
     )?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
 
@@ -3211,7 +3227,7 @@ fn create_orchard_to_ironwood_pczt_from_predicted_note(
         .build_for_pczt(rand_core::OsRng, &fee_rule)
         .map_err(|e| format!("Build predicted migration PCZT failed: {e}"))?;
     let expiry_height = u32::from(build_result.pczt_parts.expiry_height);
-    let built_pczt = pczt_from_build_result(build_result, network, account_derivation, 1)?;
+    let built_pczt = pczt_from_build_result(build_result, network, account_derivation, 1, 0)?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
     let target_height_u32: u32 = target_height.into();
 
@@ -3564,6 +3580,7 @@ fn create_orchard_to_ironwood_pczt_from_note(
         network,
         account_derivation,
         orchard_inputs.len(),
+        0,
     )?;
     let redacted_pczt = super::pczt::redact_pczt_for_signer(&built_pczt.bytes)?;
     let target_height_u32: u32 = target_height.into();
@@ -3661,6 +3678,16 @@ fn make_orchard_split_builder(
     )
     .with_expiry_height(BlockHeight::from(MIGRATION_NO_EXPIRY_HEIGHT));
 
+    #[cfg(zcash_unstable = "nu7")]
+    if network.is_nu_active(
+        zcash_protocol::consensus::NetworkUpgrade::Nu7,
+        BlockHeight::from(target_height),
+    ) {
+        builder
+            .propose_version::<<ConservativeZip317FeeRule as FeeRule>::Error>(TxVersion::V6)
+            .map_err(|e| format!("Use V6 for Orchard denomination split PCZT: {e:?}"))?;
+    }
+
     for (note, merkle_path) in orchard_inputs {
         builder
             .add_orchard_spend::<<ConservativeZip317FeeRule as FeeRule>::Error>(
@@ -3673,7 +3700,8 @@ fn make_orchard_split_builder(
 
     for value in outputs {
         builder
-            .add_orchard_output::<<ConservativeZip317FeeRule as FeeRule>::Error>(
+            .add_orchard_change_output::<<ConservativeZip317FeeRule as FeeRule>::Error>(
+                orchard_fvk.clone(),
                 internal_ovk.clone(),
                 recipient,
                 Zatoshis::from_u64(*value).map_err(|_| "Bad denomination output value")?,
@@ -5441,6 +5469,62 @@ mod tests {
         assert_eq!(conservative_fee, standard_p2pkh_fee);
         assert_eq!(u64::from(conservative_fee), 15_000);
         assert_eq!(u64::from(standard_undersized_fee), 10_000);
+    }
+
+    #[test]
+    #[cfg(zcash_unstable = "nu7")]
+    fn orchard_denomination_split_pczt_uses_v6_for_change_outputs() {
+        let network = WalletNetwork::LocalIronwoodTestnet;
+        let target_height = 120;
+        let sk = orchard::keys::SpendingKey::from_bytes([7; 32]).unwrap();
+        let fvk = orchard::keys::FullViewingKey::from(&sk);
+        let recipient_scope = orchard::keys::Scope::Internal;
+        let recipient = fvk.address_at(0u32, recipient_scope);
+        let internal_ovk = Some(fvk.to_ovk(recipient_scope));
+        let memo = MemoBytes::empty();
+        let output_value = 100_000;
+        let fee_rule = ConservativeZip317FeeRule;
+
+        let build_builder = |input_value| {
+            let rho = orchard::note::Rho::from_bytes(&[1; 32]).unwrap();
+            let rseed = (0u8..=255)
+                .find_map(|b| orchard::note::RandomSeed::from_bytes([b; 32], &rho).into_option())
+                .expect("test rseed");
+            let note = orchard::Note::from_parts(
+                recipient,
+                orchard::value::NoteValue::from_raw(input_value),
+                rho,
+                rseed,
+                orchard::note::NoteVersion::V2,
+            )
+            .unwrap();
+            let merkle_path = dummy_orchard_merkle_path().unwrap();
+            let cmx: orchard::note::ExtractedNoteCommitment = note.commitment().into();
+            let orchard_anchor = merkle_path.root(cmx);
+
+            make_orchard_split_builder(
+                network,
+                target_height,
+                orchard_anchor,
+                &[(note, merkle_path)],
+                &fvk,
+                internal_ovk.clone(),
+                recipient,
+                &[output_value],
+                &memo,
+            )
+        };
+
+        let fee = build_builder(1_000_000)
+            .unwrap()
+            .get_fee(&fee_rule)
+            .unwrap();
+        let builder = build_builder(output_value + u64::from(fee)).unwrap();
+        let build_result = builder.build_for_pczt(rand_core::OsRng, &fee_rule).unwrap();
+
+        assert_eq!(build_result.pczt_parts.version, TxVersion::V6);
+        let built_pczt = pczt_from_build_result(build_result, network, None, 1, 1).unwrap();
+        crate::wallet::sync::pczt::redact_pczt_for_signer(&built_pczt.bytes).unwrap();
     }
 
     #[test]
