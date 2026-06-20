@@ -17,6 +17,14 @@ pub struct KeystoneAccountInfo {
     pub seed_fingerprint: Vec<u8>,
 }
 
+fn pczt_format_version(pczt_bytes: &[u8]) -> Option<u32> {
+    if pczt_bytes.len() < 8 || &pczt_bytes[..4] != b"PCZT" {
+        return None;
+    }
+
+    Some(u32::from_le_bytes(pczt_bytes[4..8].try_into().ok()?))
+}
+
 // ==================== UR Encoding/Decoding ====================
 
 /// Decode a single-part UR string into the raw CBOR bytes for the given
@@ -274,6 +282,11 @@ pub fn encode_pczt_ur_parts(
         parts.push(part.to_uppercase());
     }
 
-    log::info!("keystone: encoded PCZT into {} UR parts", parts.len());
+    log::info!(
+        "keystone: encoded PCZT format_version={:?} byte_len={} into {} UR parts",
+        pczt_format_version(pczt_bytes),
+        pczt_bytes.len(),
+        parts.len()
+    );
     Ok(parts)
 }

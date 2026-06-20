@@ -66,7 +66,7 @@ use zcash_primitives::transaction::{
         zip317::{P2PKH_STANDARD_INPUT_SIZE, P2PKH_STANDARD_OUTPUT_SIZE},
         FeeRule,
     },
-    TxId,
+    TxId, TxVersion,
 };
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::{
@@ -245,9 +245,10 @@ pub fn propose_send(
         &change_strategy,
         request,
         ConfirmationsPolicy::default(),
-        None,
+        Some(TxVersion::V5),
     )
     .map_err(|e| format!("Propose failed: {e}"))?;
+    log::info!("qleak: proposed send with requested transaction version v5");
 
     let needs_sapling = proposal
         .steps()
@@ -324,7 +325,7 @@ pub fn estimate_fee(
         &change_strategy,
         request,
         ConfirmationsPolicy::default(),
-        None,
+        Some(TxVersion::V5),
     )
     .map_err(|e| format!("Propose failed: {e}"))?;
 
@@ -589,7 +590,7 @@ async fn execute_stored_proposal(
                         &wallet::SpendingKeys::from_unified_spending_key(usk),
                         OvkPolicy::Sender,
                         &stored.proposal,
-                        None,
+                        Some(TxVersion::V5),
                     )
                     .map_err(|e| format!("Create TX failed: {e}"))?
                 }
@@ -604,7 +605,7 @@ async fn execute_stored_proposal(
                         &wallet::SpendingKeys::from_unified_spending_key(usk),
                         OvkPolicy::Sender,
                         &stored.proposal,
-                        None,
+                        Some(TxVersion::V5),
                     )
                     .map_err(|e| format!("Create TX failed: {e}"))?
                 }
@@ -703,6 +704,7 @@ fn build_send_max_proposal(
         memo_bytes,
         MaxSpendMode::MaxSpendable,
         ConfirmationsPolicy::default(),
+        Some(TxVersion::V5),
     )
     .map_err(|e| format!("Propose max failed: {e}"))
 }
@@ -762,7 +764,11 @@ fn build_transparent_recipient_send_max_proposal_from_notes<NoteRef>(
         .num_outputs(sapling_input_count, 0)
         .map_err(|e| format!("Max Sapling bundle size failed: {e:?}"))?;
     let orchard_action_count = ::orchard::builder::BundleType::DEFAULT
-        .num_actions(orchard_input_count, 0)
+        .num_actions(
+            orchard_input_count,
+            0,
+            ::orchard::BundleProtocol::OrchardPreNu6_3,
+        )
         .map_err(|e| format!("Max Orchard bundle size failed: {e:?}"))?;
 
     let fee = fee_rule

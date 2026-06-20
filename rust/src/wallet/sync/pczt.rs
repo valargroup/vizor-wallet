@@ -71,12 +71,15 @@
 
 use std::convert::Infallible;
 
+use zcash_primitives::transaction::TxVersion;
 use zcash_proofs::prover::LocalTxProver;
 
 use crate::wallet::db::with_wallet_db_write_lock;
 use crate::wallet::network::WalletNetwork;
 
 use super::{consume_stored_proposal, discard_stored_proposal, open_wallet_db};
+
+const QLEAK_V5_RANDOMIZED_CIPHERTEXT_MARKER: &str = "qleak:v5-randomized-enc-ciphertext";
 
 pub struct ExtractAndBroadcastPcztResult {
     pub txid: String,
@@ -114,6 +117,60 @@ impl ExtractAndBroadcastPcztResult {
     }
 }
 
+fn qleak_randomized_output_stats(pczt: &pczt::Pczt) -> (usize, usize, usize, usize) {
+    pczt.orchard().actions().iter().fold(
+        (0usize, 0usize, 0usize, 0usize),
+        |(total, value_present, zero_value, no_user_address), action| {
+            let output = action.output();
+            if output
+                .proprietary()
+                .contains_key(QLEAK_V5_RANDOMIZED_CIPHERTEXT_MARKER)
+            {
+                (
+                    total + 1,
+                    value_present + usize::from(output.value().is_some()),
+                    zero_value
+                        + usize::from(output.value().as_ref().is_some_and(|value| *value == 0)),
+                    no_user_address + usize::from(output.user_address().is_none()),
+                )
+            } else {
+                (total, value_present, zero_value, no_user_address)
+            }
+        },
+    )
+}
+
+fn log_qleak_pczt_summary(label: &str, pczt: &pczt::Pczt) {
+    let global = pczt.global();
+    #[cfg(zcash_unstable = "nu6.3")]
+    let ironwood_actions = pczt.ironwood().actions().len();
+    #[cfg(not(zcash_unstable = "nu6.3"))]
+    let ironwood_actions = 0usize;
+    let (
+        randomized_outputs,
+        randomized_value_present,
+        randomized_zero_value,
+        randomized_no_user_address,
+    ) = qleak_randomized_output_stats(pczt);
+
+    log::info!(
+        "qleak: {label} pczt tx_version={} version_group_id={:#x} consensus_branch_id={:#x} \
+         orchard_actions={} orchard_flags={:#x} qleak_randomized_outputs={} \
+         qleak_randomized_value_present={} qleak_randomized_zero_value={} \
+         qleak_randomized_no_user_address={} ironwood_actions={}",
+        global.tx_version(),
+        global.version_group_id(),
+        global.consensus_branch_id(),
+        pczt.orchard().actions().len(),
+        pczt.orchard().flags(),
+        randomized_outputs,
+        randomized_value_present,
+        randomized_zero_value,
+        randomized_no_user_address,
+        ironwood_actions,
+    );
+}
+
 /// Create a PCZT from a stored proposal (for hardware wallet signing).
 ///
 /// This is the hardware-wallet analogue of `execute_proposal`, and
@@ -130,7 +187,7 @@ pub fn create_pczt_from_proposal(
     proposal_id: u64,
     send_flow_id: &str,
 ) -> Result<Vec<u8>, String> {
-    use zcash_client_backend::data_api::wallet::create_pczt_from_proposal as zcb_create_pczt;
+    use zcash_client_backend::data_api::wallet::create_pczt_from_proposal_with_tx_version as zcb_create_pczt;
     use zcash_client_backend::wallet::OvkPolicy;
 
     // Consume the proposal up-front (matches execute_proposal), so
@@ -149,9 +206,12 @@ pub fn create_pczt_from_proposal(
             stored.account_id,
             OvkPolicy::Sender,
             &stored.proposal,
+            TxVersion::V5,
         )
         .map_err(|e| format!("Create PCZT failed: {e}"))
     })?;
+
+    log_qleak_pczt_summary("created", &pczt);
 
     Ok(pczt.serialize())
 }
@@ -190,7 +250,9 @@ pub fn add_proofs_to_pczt(
 
     if prover.requires_orchard_proof() {
         prover = prover
-            .create_orchard_proof(&orchard::circuit::ProvingKey::build())
+            .create_orchard_proof(&orchard::circuit::ProvingKey::build(
+                orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2,
+            ))
             .map_err(|e| format!("Orchard proof: {e:?}"))?;
     }
 
@@ -223,6 +285,7 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
     use pczt::roles::redactor::Redactor;
 
     let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT: {e:?}"))?;
+    log_qleak_pczt_summary("pre-redact", &pczt);
 
     let redacted = Redactor::new(pczt)
         .redact_global_with(|mut r| r.redact_proprietary("zcash_client_backend:proposal_info"))
@@ -230,6 +293,7 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
             r.redact_actions(|mut ar| {
                 ar.clear_spend_witness();
                 ar.redact_output_proprietary("zcash_client_backend:output_info");
+                ar.redact_output_proprietary(QLEAK_V5_RANDOMIZED_CIPHERTEXT_MARKER);
             });
         })
         .redact_sapling_with(|mut r| {
@@ -244,8 +308,17 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
             });
         })
         .finish();
+    log_qleak_pczt_summary("redacted", &redacted);
 
-    Ok(redacted.serialize())
+    let redacted_bytes = redacted
+        .serialize_legacy_v1()
+        .map_err(|e| format!("Serialize legacy PCZT v1 for signer: {e}"))?;
+    log::info!(
+        "qleak: redacted signer PCZT serialized as legacy v1 byte_len={}",
+        redacted_bytes.len()
+    );
+
+    Ok(redacted_bytes)
 }
 
 /// Combine a PCZT-with-proofs and a PCZT-with-signatures, broadcast
@@ -284,7 +357,9 @@ pub async fn extract_and_broadcast_pczt(
             .map_err(|e| format!("Combine PCZTs: {e:?}"))
     }
 
-    let orchard_vk = orchard::circuit::VerifyingKey::build();
+    let orchard_vk = orchard::circuit::VerifyingKey::build(
+        orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2,
+    );
 
     // Load Sapling verifying keys once if the caller supplied params.
     // The prover keeps the underlying params alive, and
