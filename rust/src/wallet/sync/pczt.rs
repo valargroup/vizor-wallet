@@ -71,6 +71,7 @@
 
 use std::convert::Infallible;
 
+use sha2::{Digest, Sha256};
 use zcash_primitives::transaction::TxVersion;
 use zcash_proofs::prover::LocalTxProver;
 
@@ -117,6 +118,22 @@ impl ExtractAndBroadcastPcztResult {
     }
 }
 
+#[derive(Clone, Debug)]
+struct QleakCiphertextAudit {
+    action_index: usize,
+    cmx_sha256: String,
+    enc_ciphertext_sha256: String,
+    enc_ciphertext_len: usize,
+    value_present: bool,
+    zero_value: bool,
+    no_user_address: bool,
+    marker_present: bool,
+}
+
+fn sha256_hex(bytes: impl AsRef<[u8]>) -> String {
+    hex::encode(Sha256::digest(bytes.as_ref()))
+}
+
 fn qleak_randomized_output_stats(pczt: &pczt::Pczt) -> (usize, usize, usize, usize) {
     pczt.orchard().actions().iter().fold(
         (0usize, 0usize, 0usize, 0usize),
@@ -138,6 +155,118 @@ fn qleak_randomized_output_stats(pczt: &pczt::Pczt) -> (usize, usize, usize, usi
             }
         },
     )
+}
+
+fn qleak_marked_ciphertext_audits(pczt: &pczt::Pczt) -> Vec<QleakCiphertextAudit> {
+    pczt.orchard()
+        .actions()
+        .iter()
+        .enumerate()
+        .filter_map(|(action_index, action)| {
+            let output = action.output();
+            let marker_present = output
+                .proprietary()
+                .contains_key(QLEAK_V5_RANDOMIZED_CIPHERTEXT_MARKER);
+            marker_present.then(|| QleakCiphertextAudit {
+                action_index,
+                cmx_sha256: sha256_hex(output.cmx()),
+                enc_ciphertext_sha256: sha256_hex(output.enc_ciphertext()),
+                enc_ciphertext_len: output.enc_ciphertext().len(),
+                value_present: output.value().is_some(),
+                zero_value: output.value().as_ref().is_some_and(|value| *value == 0),
+                no_user_address: output.user_address().is_none(),
+                marker_present,
+            })
+        })
+        .collect()
+}
+
+fn qleak_ciphertext_audit_for_action(
+    action_index: usize,
+    action: &pczt::orchard::Action,
+) -> QleakCiphertextAudit {
+    let output = action.output();
+    QleakCiphertextAudit {
+        action_index,
+        cmx_sha256: sha256_hex(output.cmx()),
+        enc_ciphertext_sha256: sha256_hex(output.enc_ciphertext()),
+        enc_ciphertext_len: output.enc_ciphertext().len(),
+        value_present: output.value().is_some(),
+        zero_value: output.value().as_ref().is_some_and(|value| *value == 0),
+        no_user_address: output.user_address().is_none(),
+        marker_present: output
+            .proprietary()
+            .contains_key(QLEAK_V5_RANDOMIZED_CIPHERTEXT_MARKER),
+    }
+}
+
+fn log_qleak_ciphertext_audits(label: &str, audits: &[QleakCiphertextAudit]) {
+    if audits.is_empty() {
+        log::warn!("qleak: {label} marked_output count=0");
+    }
+
+    for audit in audits {
+        log::info!(
+            "qleak: {label} marked_output action_index={} value_present={} zero_value={} \
+             no_user_address={} marker_present={} cmx_sha256={} enc_ciphertext_sha256={} \
+             enc_ciphertext_len={}",
+            audit.action_index,
+            audit.value_present,
+            audit.zero_value,
+            audit.no_user_address,
+            audit.marker_present,
+            audit.cmx_sha256,
+            audit.enc_ciphertext_sha256,
+            audit.enc_ciphertext_len,
+        );
+    }
+}
+
+fn log_qleak_ciphertext_retention(
+    label: &str,
+    pczt: &pczt::Pczt,
+    expected: &[QleakCiphertextAudit],
+) {
+    for expected_audit in expected {
+        let matched =
+            pczt.orchard()
+                .actions()
+                .iter()
+                .enumerate()
+                .find_map(|(action_index, action)| {
+                    let output = action.output();
+                    let cmx_matches = sha256_hex(output.cmx()) == expected_audit.cmx_sha256;
+                    let enc_ciphertext_matches =
+                        sha256_hex(output.enc_ciphertext()) == expected_audit.enc_ciphertext_sha256;
+                    (cmx_matches && enc_ciphertext_matches)
+                        .then(|| qleak_ciphertext_audit_for_action(action_index, action))
+                });
+
+        match matched {
+            Some(actual) => log::info!(
+                "qleak: {label} retained_marked_ciphertext expected_action_index={} \
+                 matched_action_index={} value_present={} zero_value={} no_user_address={} \
+                 marker_present={} cmx_sha256={} enc_ciphertext_sha256={} enc_ciphertext_len={}",
+                expected_audit.action_index,
+                actual.action_index,
+                actual.value_present,
+                actual.zero_value,
+                actual.no_user_address,
+                actual.marker_present,
+                actual.cmx_sha256,
+                actual.enc_ciphertext_sha256,
+                actual.enc_ciphertext_len,
+            ),
+            None => log::error!(
+                "qleak: {label} missing_marked_ciphertext expected_action_index={} \
+                 cmx_sha256={} enc_ciphertext_sha256={} enc_ciphertext_len={}",
+                expected_audit.action_index,
+                expected_audit.cmx_sha256,
+                expected_audit.enc_ciphertext_sha256,
+                expected_audit.enc_ciphertext_len,
+            ),
+        }
+    }
 }
 
 fn log_qleak_pczt_summary(label: &str, pczt: &pczt::Pczt) {
@@ -286,6 +415,8 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
 
     let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT: {e:?}"))?;
     log_qleak_pczt_summary("pre-redact", &pczt);
+    let pre_redact_audits = qleak_marked_ciphertext_audits(&pczt);
+    log_qleak_ciphertext_audits("pre-redact", &pre_redact_audits);
 
     let redacted = Redactor::new(pczt)
         .redact_global_with(|mut r| r.redact_proprietary("zcash_client_backend:proposal_info"))
@@ -309,13 +440,22 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
         })
         .finish();
     log_qleak_pczt_summary("redacted", &redacted);
+    log_qleak_ciphertext_retention("redacted", &redacted, &pre_redact_audits);
 
     let redacted_bytes = redacted
         .serialize_legacy_v1()
         .map_err(|e| format!("Serialize legacy PCZT v1 for signer: {e}"))?;
+    let redacted_v1_roundtrip =
+        pczt::Pczt::parse(&redacted_bytes).map_err(|e| format!("Parse redacted PCZT v1: {e:?}"))?;
+    log_qleak_ciphertext_retention(
+        "redacted-v1-roundtrip",
+        &redacted_v1_roundtrip,
+        &pre_redact_audits,
+    );
     log::info!(
-        "qleak: redacted signer PCZT serialized as legacy v1 byte_len={}",
-        redacted_bytes.len()
+        "qleak: redacted signer PCZT serialized as legacy v1 byte_len={} sha256={}",
+        redacted_bytes.len(),
+        sha256_hex(&redacted_bytes),
     );
 
     Ok(redacted_bytes)
@@ -343,6 +483,23 @@ pub async fn extract_and_broadcast_pczt(
     use zcash_client_backend::data_api::wallet::{
         decrypt_and_store_transaction, extract_and_store_transaction_from_pczt,
     };
+
+    log::info!(
+        "qleak: extract input PCZT hashes proofs_sha256={} signatures_sha256={}",
+        sha256_hex(pczt_with_proofs_bytes),
+        sha256_hex(pczt_with_signatures_bytes),
+    );
+    {
+        let proofs_pczt = pczt::Pczt::parse(pczt_with_proofs_bytes)
+            .map_err(|e| format!("Parse PCZT with proofs for qleak audit: {e:?}"))?;
+        let signatures_pczt = pczt::Pczt::parse(pczt_with_signatures_bytes)
+            .map_err(|e| format!("Parse PCZT with signatures for qleak audit: {e:?}"))?;
+        let proof_audits = qleak_marked_ciphertext_audits(&proofs_pczt);
+        log_qleak_pczt_summary("proofs-before-combine", &proofs_pczt);
+        log_qleak_ciphertext_audits("proofs-before-combine", &proof_audits);
+        log_qleak_pczt_summary("signed-before-combine", &signatures_pczt);
+        log_qleak_ciphertext_retention("signed-before-combine", &signatures_pczt, &proof_audits);
+    }
 
     // Re-parsing and re-combining is cheap compared to ZK proof
     // validation; we do it twice so we can hand one owned Pczt to

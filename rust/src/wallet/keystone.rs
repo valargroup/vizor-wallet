@@ -3,6 +3,7 @@
 //! Provides UR encoding/decoding for QR-based Keystone communication.
 //! Uses PCZT (ZIP-332) for transaction signing.
 
+use sha2::{Digest, Sha256};
 use ur_registry::traits::RegistryItem;
 use ur_registry::zcash::zcash_accounts::ZcashAccounts;
 use ur_registry::zcash::zcash_pczt::ZcashPczt;
@@ -23,6 +24,10 @@ fn pczt_format_version(pczt_bytes: &[u8]) -> Option<u32> {
     }
 
     Some(u32::from_le_bytes(pczt_bytes[4..8].try_into().ok()?))
+}
+
+fn sha256_hex(bytes: impl AsRef<[u8]>) -> String {
+    hex::encode(Sha256::digest(bytes.as_ref()))
 }
 
 // ==================== UR Encoding/Decoding ====================
@@ -283,9 +288,10 @@ pub fn encode_pczt_ur_parts(
     }
 
     log::info!(
-        "keystone: encoded PCZT format_version={:?} byte_len={} into {} UR parts",
+        "keystone: encoded PCZT format_version={:?} byte_len={} sha256={} into {} UR parts",
         pczt_format_version(pczt_bytes),
         pczt_bytes.len(),
+        sha256_hex(pczt_bytes),
         parts.len()
     );
     Ok(parts)
