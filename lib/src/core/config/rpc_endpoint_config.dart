@@ -475,6 +475,11 @@ RpcEndpointPreset? findRpcEndpointPresetByUrl(
 }
 
 bool isLocalIronwoodTestnetEndpoint(RpcEndpointConfig config) {
+  // Mainnet-masquerade: this build runs as `main` (so it derives mainnet 133'/u1 keys for a
+  // normal-mode Keystone) but always points at the private Ironwood test chain. Treat every
+  // endpoint as the Ironwood testnet so the migration flow + Ironwood balances surface, while
+  // walletNetworkName stays "main" for derivation/keychain. See kZcashIronwoodMasquerade.
+  if (kZcashIronwoodMasquerade) return true;
   if (config.network != ZcashNetwork.testnet) return false;
   if (config.presetId == kLocalIronwoodTestnetRpcEndpointPresetId) {
     return true;
