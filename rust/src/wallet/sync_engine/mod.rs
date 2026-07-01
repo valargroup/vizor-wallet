@@ -766,11 +766,23 @@ async fn refresh_utxos(
         let start_height = db
             .utxo_query_height(account_id)
             .map_err(|e| SyncError::db(format!("utxo_query_height: {e}")))?;
+        // Masquerade (`--cfg ironwood_masquerade`): the node is a regtest zebra that
+        // keys its transparent address index by the testnet `tm…` encoding, while the
+        // wallet is Main (`t1…`, same 20-byte hash). getaddressutxos with the Main
+        // form returns 0, so query with the node's testnet form (mirrors the faucet's
+        // zebra_taddr helper on the node side).
+        #[cfg(ironwood_masquerade)]
+        let query_network = {
+            let _ = &network;
+            WalletNetwork::Test
+        };
+        #[cfg(not(ironwood_masquerade))]
+        let query_network = network;
         let addresses: Vec<String> = db
             .get_transparent_receivers(account_id, true, true)
             .map_err(|e| SyncError::db(format!("get_transparent_receivers: {e}")))?
             .into_keys()
-            .map(|addr| addr.encode(&network))
+            .map(|addr| addr.encode(&query_network))
             .collect();
 
         if !addresses.is_empty() {
