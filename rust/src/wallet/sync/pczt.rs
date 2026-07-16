@@ -358,39 +358,15 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
     redact_pczt_for_signer_inner(pczt_bytes, None)
 }
 
-/// Redact a PCZT for a Keystone **migration batch** request. On top of
-/// [`redact_pczt_for_signer`], this also clears from every Orchard and Ironwood
-/// action:
+/// Redact a PCZT for a Keystone **migration batch** request.
 ///
-/// - the spend `fvk`: the device verifies each spend's nullifier and `rk` against
-///   the FVK it derives from its own stored UFVK and never reads the wire `fvk`,
-///   so dropping it saves wire bytes and skips the device's parse-time
-///   `FullViewingKey::from_bytes` cost for every action in every check pass;
-/// - the spend `spend_auth_sig`: at request time the only signatures present are
-///   the wallet's own IO-finalizer dummy signatures. The device skips those
-///   dummy spends without needing them, and the wallet's stored copy of the
-///   PCZT retains them for the post-signing combine, so on the wire they are
-///   pure overhead (and the device would echo them back, bloating the
-///   response);
-/// - the spend `alpha` for constructor-identified dummy spends: the IO finalizer
-///   has already authorized them, so the device neither reads nor needs their
-///   spend randomizer. Wallet-controlled zero-value spends retain `alpha`;
-/// - the output `ock`, ZIP32 derivation metadata, and user address string, when
-///   present: the device never reads `ock` or ZIP32 metadata while checking,
-///   displaying, or signing migration children, and it recovers the recipient
-///   from the note ciphertext for wallet-owned migration outputs. The wallet
-///   keeps the unredacted PCZT for proof/signature combination;
-/// - for a v6 PCZT, the compact-format fields the device resolves while
-///   parsing (see `Pczt::resolve_fields` in the pinned pczt crate): every
-///   action's `cv_net` (recomputed from the wire values and `rcv`) and every
-///   wallet-decryptable output `enc_ciphertext` (carried as its stripped memo
-///   plaintext and re-encrypted deterministically from the wire note fields;
-///   ciphertexts the wire fields cannot decrypt stay encrypted). The bundle
-///   `bsk`s and anchors are also cleared: the v6 sighash does not commit to
-///   anchors and the device never verifies them, while the wallet keeps the
-///   unredacted PCZT that owns the real anchor and `bsk` for
-///   proof/extraction. `cmx` is also recomputed from the output note fields and
-///   spend nullifier. `nullifier`, `rk`, and `ephemeral_key` stay on the wire.
+/// The v6 path starts with librustzcash's general signer view, including its
+/// checked compaction of regenerable Orchard and Ironwood fields. Vizor then
+/// removes fields that Keystone never reads: spend FVKs, request-time
+/// signatures, output recovery and derivation metadata, user addresses, and
+/// the spend randomizers for IO-finalizer dummy actions. Wallet-controlled
+/// actions retain their randomizers. The wallet keeps the unredacted PCZT for
+/// proof and signature combination.
 ///
 /// Only use this for the migration batch flow; the single-transaction hardware
 /// send keeps [`redact_pczt_for_signer`].
@@ -408,10 +384,8 @@ pub fn redact_pczt_for_batch_signer(
     )
 }
 
-/// Applies the signer redaction to a parsed PCZT: the standard witness /
-/// proprietary clears, the batch-only spend `fvk` / `spend_auth_sig` / output
-/// metadata clears when `for_batch` is set, and — for v6 batch requests — the
-/// upstream compact-format elisions (see [`redact_pczt_for_batch_signer`]).
+/// Applies the standard signer policy, plus Keystone's additional migration
+/// batch redaction when requested.
 fn apply_signer_redaction(
     pczt: pczt::Pczt,
     batch_dummy_spends: Option<BatchDummySpendActionIndices<'_>>,
@@ -421,18 +395,20 @@ fn apply_signer_redaction(
     let for_batch = batch_dummy_spends.is_some();
     let orchard_dummy_spends = batch_dummy_spends.map_or(&[][..], |indices| indices.orchard);
     let ironwood_dummy_spends = batch_dummy_spends.map_or(&[][..], |indices| indices.ironwood);
-    // The compact elisions are v6-only: the device re-derives the elided
-    // fields via the pczt crate's `resolve_fields` and the v6 sighash excludes
-    // anchors, while the legacy v1 (v5) serialization requires the fields on
-    // the wire.
-    let elide =
+    // The compact signer view requires PCZT v2, while legacy v5 signing uses
+    // v1 on the wire. Keep the existing local policy for v5 and ordinary sends.
+    let compact =
         for_batch && *pczt.global().tx_version() == zcash_protocol::constants::V6_TX_VERSION;
+    let pczt = if compact {
+        zcash_client_backend::data_api::wallet::redact_pczt_for_signer(&pczt)
+    } else {
+        pczt
+    };
 
     fn redact_bundle(
         r: &mut pczt::roles::redactor::orchard::OrchardRedactor<'_>,
-        note_version: orchard::note::NoteVersion,
         for_batch: bool,
-        elide: bool,
+        compact: bool,
         dummy_spend_action_indices: &[usize],
     ) {
         r.redact_actions(|mut ar| {
@@ -445,53 +421,28 @@ fn apply_signer_redaction(
                 ar.clear_output_zip32_derivation();
                 ar.clear_output_user_address();
             }
-            if elide {
-                // The device recomputes cv_net from the wire values and rcv.
-                ar.clear_cv_net();
-                // Swaps in the stripped memo plaintext for every ciphertext
-                // the wire note fields actually decrypt; undecryptable
-                // (randomized) ciphertexts stay on the wire.
-                ar.replace_enc_ciphertext_with_decrypted_memo_plaintext(note_version);
-                // Memo recovery above needs cmx; the device recomputes it from
-                // the retained output note fields and spend nullifier.
-                ar.clear_cmx();
-            }
         });
-        if elide {
+        if compact {
             for index in dummy_spend_action_indices {
                 r.redact_action(*index, |mut ar| ar.clear_spend_alpha());
             }
-            // Never read by the device; the wallet's stored copy retains the
-            // real bsk and anchor for proof creation and extraction.
-            r.clear_bsk();
-            r.clear_anchor();
         }
     }
 
     let mut redactor = Redactor::new(pczt)
         .redact_global_with(|mut r| r.redact_proprietary("zcash_client_backend:proposal_info"))
         .redact_orchard_with(|mut r| {
-            redact_bundle(
-                &mut r,
-                orchard::note::NoteVersion::V2,
-                for_batch,
-                elide,
-                orchard_dummy_spends,
-            );
+            redact_bundle(&mut r, for_batch, compact, orchard_dummy_spends);
         });
 
     redactor = redactor.redact_ironwood_with(|mut r| {
-        redact_bundle(
-            &mut r,
-            orchard::note::NoteVersion::V3,
-            for_batch,
-            elide,
-            ironwood_dummy_spends,
-        );
+        redact_bundle(&mut r, for_batch, compact, ironwood_dummy_spends);
     });
 
     redactor
         .redact_sapling_with(|mut r| {
+            // The generic helper retains Sapling witnesses for signers that
+            // verify nullifiers. Preserve Keystone's existing omission.
             r.redact_spends(|mut sr| sr.clear_witness());
             r.redact_outputs(|mut or| {
                 or.redact_proprietary("zcash_client_backend:output_info");
@@ -506,8 +457,7 @@ fn apply_signer_redaction(
 }
 
 /// Shared body of [`redact_pczt_for_signer`] and [`redact_pczt_for_batch_signer`]:
-/// the standard signer redaction, plus the batch-only clears and compact-format
-/// elisions when `for_batch` is set.
+/// the standard signer redaction, plus the batch-only Keystone clears.
 fn redact_pczt_for_signer_inner(
     pczt_bytes: &[u8],
     batch_dummy_spends: Option<BatchDummySpendActionIndices<'_>>,
