@@ -2772,7 +2772,7 @@ class VotingSessionNotifier extends AsyncNotifier<VotingSessionState> {
       dbPath: dbPath,
       accountUuid: accountUuid,
       isHardwareAccount: isHardwareAccount,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
       config: config,
       round: round,

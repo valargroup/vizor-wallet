@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
-import '../../../core/config/rpc_endpoint_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
@@ -35,10 +34,7 @@ enum _ImportWalletSubmitPhase {
 }
 
 class ImportWalletBirthdayScreen extends ConsumerStatefulWidget {
-  const ImportWalletBirthdayScreen({
-    required this.args,
-    super.key,
-  });
+  const ImportWalletBirthdayScreen({required this.args, super.key});
 
   final ImportBirthdayArgs args;
 
@@ -110,7 +106,6 @@ class _ImportWalletBirthdayScreenState
 
   int get _minimumBirthdayHeight {
     final endpoint = ref.read(rpcEndpointProvider);
-    if (isLocalIronwoodTestnetEndpoint(endpoint)) return 1;
     return _metadata?.saplingActivationHeight ??
         endpoint.network.saplingActivationHeight;
   }

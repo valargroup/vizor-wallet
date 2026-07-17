@@ -483,7 +483,7 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
 
       final estimate = await rust_sync.estimateSendMax(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
         toAddress: address,
         memo: memo.isNotEmpty ? memo : null,
@@ -585,7 +585,7 @@ class _SendComposeBodyState extends ConsumerState<_SendComposeBody> {
       }
       final fee = await rust_sync.estimateFee(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
         toAddress: address,
         amountZatoshi: zatoshi,

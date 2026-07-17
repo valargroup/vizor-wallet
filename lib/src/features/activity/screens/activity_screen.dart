@@ -79,7 +79,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final endpoint = ref.read(rpcEndpointProvider);
     return rust_sync.getTransactionHistory(
       dbPath: dbPath,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       accountUuid: accountUuid,
     );
   }
@@ -263,7 +263,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       }
       return rust_sync.getTransactionDetail(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
         txidHex: transaction.txidHex,
         txKind: transaction.txKind,

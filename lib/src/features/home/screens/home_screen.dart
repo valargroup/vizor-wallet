@@ -194,9 +194,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         !hasActivitySyncData &&
         sync.failure == null;
     final endpoint = ref.watch(rpcEndpointFailoverProvider).current;
-    final showIronwoodTestingBalances = isLocalIronwoodTestnetEndpoint(
-      endpoint,
-    );
+    final showTestnetIronwoodBalances =
+        endpoint.network == ZcashNetwork.testnet;
     final orchardShieldedBalance =
         sync.orchardBalance + sync.orchardPendingBalance;
     final ironwoodShieldedBalance =
@@ -263,7 +262,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ironwoodShieldedBalance,
                 ),
                 showIronwoodBalanceBreakdown:
-                    showIronwoodTestingBalances ||
+                    showTestnetIronwoodBalances ||
                     ironwoodShieldedBalance > BigInt.zero,
                 shieldedFiatBalanceText: shieldedFiatBalanceText,
                 priceChange24hPct: priceChange24hPct,
@@ -571,7 +570,7 @@ class _HomePaneState extends ConsumerState<_HomePane> {
       }
       return rust_sync.getTransactionDetail(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
         txidHex: transaction.txidHex,
         txKind: transaction.txKind,

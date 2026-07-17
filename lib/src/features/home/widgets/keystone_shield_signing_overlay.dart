@@ -111,7 +111,7 @@ class _KeystoneShieldSigningOverlayState
       final endpoint = ref.read(rpcEndpointFailoverProvider).current;
       final shieldPczt = await rust_sync.createShieldTransparentPczt(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
       );
 
@@ -203,7 +203,7 @@ class _KeystoneShieldSigningOverlayState
       final result = await rust_sync.extractAndBroadcastPczt(
         dbPath: dbPath,
         lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         pcztWithProofsBytes: pcztWithProofs,
         pcztWithSignaturesBytes: signatures,
         spendParamsPath: _needsSaplingParams ? saplingParams.spendPath : null,

@@ -65,7 +65,7 @@ class _MobileActivityScreenState extends ConsumerState<MobileActivityScreen> {
     final endpoint = ref.read(rpcEndpointProvider);
     return rust_sync.getTransactionHistory(
       dbPath: dbPath,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       accountUuid: accountUuid,
     );
   }

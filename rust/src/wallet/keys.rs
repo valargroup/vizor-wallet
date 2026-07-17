@@ -1175,10 +1175,6 @@ mod tests {
         assert!(matches!(parse_network("main"), Ok(WalletNetwork::Main)));
         assert!(matches!(parse_network("test"), Ok(WalletNetwork::Test)));
         assert!(matches!(
-            parse_network("local_ironwood_testnet"),
-            Ok(WalletNetwork::LocalIronwoodTestnet)
-        ));
-        assert!(matches!(
             parse_network("regtest"),
             Ok(WalletNetwork::Regtest)
         ));

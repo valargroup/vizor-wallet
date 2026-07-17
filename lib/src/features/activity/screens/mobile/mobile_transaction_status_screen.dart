@@ -111,7 +111,7 @@ class _MobileTransactionStatusScreenState
     final endpoint = ref.read(rpcEndpointProvider);
     return rust_sync.getTransactionHistory(
       dbPath: dbPath,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       accountUuid: accountUuid,
     );
   }
@@ -126,7 +126,7 @@ class _MobileTransactionStatusScreenState
     final endpoint = ref.read(rpcEndpointProvider);
     return rust_sync.getTransactionDetail(
       dbPath: dbPath,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       accountUuid: accountUuid,
       txidHex: transaction.txidHex,
       txKind: transaction.txKind,

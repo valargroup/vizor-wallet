@@ -198,7 +198,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     );
     _syncKeystoneSessionContext(
       accountUuid: accountUuid,
-      networkName: endpoint.walletNetworkName,
+      networkName: endpoint.networkName,
       lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
     );
 
@@ -345,7 +345,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
     final currentEndpoint = ref.read(rpcEndpointProvider);
     return expected.matchesContext(
       accountUuid: currentAccountUuid,
-      networkName: currentEndpoint.walletNetworkName,
+      networkName: currentEndpoint.networkName,
       lightwalletdUrl: currentEndpoint.normalizedLightwalletdUrl,
     );
   }
@@ -431,7 +431,7 @@ class _MigrationScreenState extends ConsumerState<MigrationScreen> {
       }
 
       final endpoint = ref.read(rpcEndpointProvider);
-      final networkName = endpoint.walletNetworkName;
+      final networkName = endpoint.networkName;
       final lightwalletdUrl = endpoint.normalizedLightwalletdUrl;
       if (!_keystoneSessionIdentityIsCurrent(session)) {
         return;

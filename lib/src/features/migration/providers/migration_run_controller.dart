@@ -101,7 +101,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
 
       final endpoint = ref.read(rpcEndpointProvider);
       final dbPath = await getWalletDbPath();
-      final migrationNetworkName = endpoint.walletNetworkName;
+      final migrationNetworkName = endpoint.networkName;
       final security = ref.read(appSecurityProvider.notifier);
       final password = security.requireSessionPasswordForNativeSecretUse();
       final saltBase64 = await security
@@ -322,7 +322,7 @@ class MigrationRunController extends Notifier<MigrationRunState> {
         result = await rust_sync.broadcastDueOrchardMigrationTransactions(
           dbPath: dbPath,
           lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-          network: endpoint.walletNetworkName,
+          network: endpoint.networkName,
           accountUuid: accountUuid,
           password: password,
           saltBase64: saltBase64,

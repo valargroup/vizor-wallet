@@ -82,7 +82,7 @@ class RustSwapHardwareSigningService implements SwapHardwareSigningService {
       );
       final proposal = await rust_sync.proposeSend(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
         sendFlowId: sendFlowId,
         toAddress: depositAddress,
@@ -91,7 +91,7 @@ class RustSwapHardwareSigningService implements SwapHardwareSigningService {
       proposalId = proposal.proposalId;
       final pcztBytes = await rust_sync.createPcztFromProposal(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         proposalId: proposal.proposalId,
         sendFlowId: sendFlowId,
       );
@@ -163,7 +163,7 @@ class RustSwapHardwareSigningService implements SwapHardwareSigningService {
     final result = await rust_sync.extractAndBroadcastPczt(
       dbPath: dbPath,
       lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       pcztWithProofsBytes: pcztWithProofsBytes,
       pcztWithSignaturesBytes: pcztWithSignaturesBytes,
       spendParamsPath: spendParamsPath,
