@@ -294,7 +294,7 @@ class _SettingsSeedPhraseScreenState
     final endpoint = ref.read(rpcEndpointProvider);
     final height = await rust_sync.getExportBirthdayHeight(
       dbPath: dbPath,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       accountUuid: activeAccountUuid,
     );
     return height.toInt();

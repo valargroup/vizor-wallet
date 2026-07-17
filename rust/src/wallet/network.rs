@@ -4,7 +4,6 @@ use zcash_protocol::consensus::{BlockHeight, Network, NetworkType, NetworkUpgrad
 pub enum WalletNetwork {
     Main,
     Test,
-    LocalIronwoodTestnet,
     Regtest,
 }
 
@@ -13,35 +12,17 @@ impl WalletNetwork {
         match network {
             "main" => Some(Self::Main),
             "test" => Some(Self::Test),
-            "local_ironwood_testnet" => Some(Self::LocalIronwoodTestnet),
             "regtest" => Some(Self::Regtest),
             _ => None,
         }
     }
 }
 
-fn local_ironwood_testnet_activation_height(nu: NetworkUpgrade) -> Option<BlockHeight> {
-    let height = match nu {
-        NetworkUpgrade::Overwinter
-        | NetworkUpgrade::Sapling
-        | NetworkUpgrade::Blossom
-        | NetworkUpgrade::Heartwood
-        | NetworkUpgrade::Canopy
-        | NetworkUpgrade::Nu5 => 1,
-        NetworkUpgrade::Nu6 => 2,
-        NetworkUpgrade::Nu6_1 => 3,
-        NetworkUpgrade::Nu6_2 => 4,
-        NetworkUpgrade::Nu6_3 => 120,
-    };
-
-    Some(BlockHeight::from_u32(height))
-}
-
 impl Parameters for WalletNetwork {
     fn network_type(&self) -> NetworkType {
         match self {
             Self::Main => NetworkType::Main,
-            Self::Test | Self::LocalIronwoodTestnet => NetworkType::Test,
+            Self::Test => NetworkType::Test,
             Self::Regtest => NetworkType::Regtest,
         }
     }
@@ -50,7 +31,6 @@ impl Parameters for WalletNetwork {
         match self {
             Self::Main => Network::MainNetwork.activation_height(nu),
             Self::Test => Network::TestNetwork.activation_height(nu),
-            Self::LocalIronwoodTestnet => local_ironwood_testnet_activation_height(nu),
             Self::Regtest => match nu {
                 NetworkUpgrade::Overwinter
                 | NetworkUpgrade::Sapling
@@ -64,25 +44,5 @@ impl Parameters for WalletNetwork {
                 | NetworkUpgrade::Nu6_3 => Some(BlockHeight::from_u32(1)),
             },
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn local_ironwood_testnet_keeps_testnet_identity_with_local_activation_heights() {
-        let network = WalletNetwork::LocalIronwoodTestnet;
-
-        assert_eq!(network.network_type(), NetworkType::Test);
-        assert_eq!(
-            network.activation_height(NetworkUpgrade::Nu5),
-            Some(BlockHeight::from_u32(1))
-        );
-        assert_eq!(
-            network.activation_height(NetworkUpgrade::Nu6_3),
-            Some(BlockHeight::from_u32(120))
-        );
     }
 }

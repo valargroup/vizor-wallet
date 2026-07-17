@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../main.dart' show log;
-import '../../../core/config/rpc_endpoint_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_icon.dart';
@@ -84,7 +83,6 @@ class _KeystoneWalletBirthdayScreenState
 
   int get _minimumBirthdayHeight {
     final endpoint = ref.read(rpcEndpointProvider);
-    if (isLocalIronwoodTestnetEndpoint(endpoint)) return 1;
     return _metadata?.saplingActivationHeight ??
         endpoint.network.saplingActivationHeight;
   }

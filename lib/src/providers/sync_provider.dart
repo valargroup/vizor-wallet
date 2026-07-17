@@ -558,7 +558,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
           final stream = rust_sync.startFullSync(
             dbPath: dbPath,
             lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-            network: endpoint.walletNetworkName,
+            network: endpoint.networkName,
             mode: 1,
           );
           _syncSub = stream.listen(
@@ -1191,7 +1191,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     _mempoolSub?.cancel();
     final stream = rust_sync.startMempoolObserver(
       dbPath: dbPath,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
     );
     _mempoolSub = stream.listen(
@@ -1340,7 +1340,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
     final prev = state.value;
     final dbPath = await _getDbPath();
-    final network = _endpointConfig.walletNetworkName;
+    final network = _endpointConfig.networkName;
     final accountUuid = _getActiveAccountUuid();
     if (accountUuid == null) {
       log('SyncNotifier: no active account, skipping refresh');
@@ -1554,7 +1554,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     final epoch = _sensitiveStateEpoch;
     final prev = state.value;
     final dbPath = await _getDbPath();
-    final network = _endpointConfig.walletNetworkName;
+    final network = _endpointConfig.networkName;
     final accountUuid = _getActiveAccountUuid();
     if (accountUuid == null) {
       log('SyncNotifier: no active account, skipping refresh');

@@ -38,7 +38,7 @@ class RustSwapMaxAmountEstimator implements SwapMaxAmountEstimator {
     );
     final estimate = await rust_sync.estimateSendMax(
       dbPath: dbPath,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       accountUuid: accountUuid,
       toAddress: estimateAddress,
       memo: null,

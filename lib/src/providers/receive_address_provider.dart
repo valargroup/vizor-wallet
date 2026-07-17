@@ -112,7 +112,7 @@ class ReceiveAddressService {
   }
 
   String get _network {
-    return _ref.read(rpcEndpointProvider).walletNetworkName;
+    return _ref.read(rpcEndpointProvider).networkName;
   }
 
   Future<T> _withDatabaseLockRetry<T>({

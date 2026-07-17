@@ -14,7 +14,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../main.dart' show log;
-import '../../../core/config/rpc_endpoint_config.dart';
 import '../../../core/storage/wallet_paths.dart';
 import '../../../providers/account_provider.dart';
 import '../../../providers/app_security_provider.dart';
@@ -90,7 +89,7 @@ Future<SendReviewArgs> proposeSendTransfer({
   final endpoint = ref.read(rpcEndpointProvider);
   final proposal = await rust_sync.proposeSend(
     dbPath: dbPath,
-    network: endpoint.walletNetworkName,
+    network: endpoint.networkName,
     accountUuid: accountUuid,
     sendFlowId: sendFlowId,
     toAddress: address,
@@ -324,7 +323,7 @@ Future<SendBroadcastOutcome> runSendBroadcast({
       final result = await rust_sync.extractAndBroadcastPczt(
         dbPath: dbPath,
         lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         pcztWithProofsBytes: keystone.pcztWithProofsBytes,
         pcztWithSignaturesBytes: keystone.pcztWithSignaturesBytes,
         spendParamsPath: args.needsSaplingParams
@@ -438,13 +437,11 @@ Future<SendBroadcastOutcome> runSendBroadcast({
         final available =
             await channel.invokeMethod<bool>('isAvailable') ?? false;
         if (available) {
-          await channel.invokeMethod(
-            'startTxTracking',
-            nativeRpcEndpointPayload(
-              endpoint,
-              walletNetworkName: endpoint.walletNetworkName,
-            ),
-          );
+          await channel.invokeMethod('startTxTracking', {
+            'lightwalletdUrl': endpoint.normalizedLightwalletdUrl,
+            'network': endpoint.networkName,
+            'presetId': endpoint.effectivePresetId,
+          });
         }
       } catch (e) {
         log('SendBroadcast: iOS TX tracking failed (non-critical): $e');

@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../main.dart' show log;
 import '../app_bootstrap.dart';
 import '../core/account_name_policy.dart';
-import '../core/config/rpc_endpoint_config.dart';
 import '../core/profile_pictures.dart';
 import '../core/storage/app_secure_store.dart';
 import '../core/storage/wallet_paths.dart';
@@ -75,8 +74,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     try {
       final dbPath = await _getDbPath();
       final endpoint = ref.read(rpcEndpointProvider);
-      final network = endpoint.walletNetworkName;
-      final publicNetwork = endpoint.networkName;
+      final network = endpoint.networkName;
 
       final birthday = await _fetchCreationBirthdayHeight();
       log('createAccount: birthday=$birthday');
@@ -100,8 +98,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         mnemonic = result.mnemonic;
         accountUuid = result.accountUuid;
         unifiedAddress = result.unifiedAddress;
-        await _storage.writeString(_networkKey, publicNetwork);
-        await _storage.writeString(kWalletNetworkNameKey, network);
+        await _storage.writeString(_networkKey, network);
       } else {
         // Additional account — generate mnemonic + add to existing DB
         mnemonic = rust_wallet.generateMnemonic();
@@ -158,8 +155,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     try {
       final dbPath = await _getDbPath();
       final endpoint = ref.read(rpcEndpointProvider);
-      final network = endpoint.walletNetworkName;
-      final publicNetwork = endpoint.networkName;
+      final network = endpoint.networkName;
 
       final birthday = await _fetchCreationBirthdayHeight();
       log('createAccountFromMnemonic: birthday=$birthday');
@@ -181,8 +177,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         );
         accountUuid = result.accountUuid;
         unifiedAddress = result.unifiedAddress;
-        await _storage.writeString(_networkKey, publicNetwork);
-        await _storage.writeString(kWalletNetworkNameKey, network);
+        await _storage.writeString(_networkKey, network);
       } else {
         final result = await rust_wallet.addAccount(
           dbPath: dbPath,
@@ -232,8 +227,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
     try {
       final dbPath = await _getDbPath();
       final endpoint = ref.read(rpcEndpointProvider);
-      final network = endpoint.walletNetworkName;
-      final publicNetwork = endpoint.networkName;
+      final network = endpoint.networkName;
       final accounts = state.value?.accounts ?? [];
       final accountName = name ?? 'Account ${accounts.length + 1}';
       final isFirstWalletAccount = accounts.isEmpty;
@@ -260,8 +254,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
         throw StateError('Software wallet import did not return an account.');
       }
       if (isFirstWalletAccount) {
-        await _storage.writeString(_networkKey, publicNetwork);
-        await _storage.writeString(kWalletNetworkNameKey, network);
+        await _storage.writeString(_networkKey, network);
       }
 
       for (final account in result.accounts) {
@@ -749,11 +742,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
       await _saveAccounts(updated);
       await _storage.writeString(_activeAccountKey, accountUuid);
       if (prev.accounts.isEmpty) {
-        await _storage.writeString(
-          _networkKey,
-          publicNetworkNameForWalletNetworkName(network),
-        );
-        await _storage.writeString(kWalletNetworkNameKey, network);
+        await _storage.writeString(_networkKey, network);
       }
 
       state = AsyncData(
@@ -861,7 +850,7 @@ class AccountNotifier extends AsyncNotifier<AccountState> {
   }
 
   Future<String> _getNetwork() async {
-    return ref.read(rpcEndpointProvider).walletNetworkName;
+    return ref.read(rpcEndpointProvider).networkName;
   }
 
   Future<void> _deleteExistingDb(String dbPath) async {

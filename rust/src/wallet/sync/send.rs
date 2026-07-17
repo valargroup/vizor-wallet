@@ -5519,11 +5519,19 @@ mod tests {
     use transparent::bundle::{OutPoint, TxOut};
     use zcash_client_backend::{data_api::WalletWrite, wallet::WalletTransparentOutput};
     use zcash_keys::keys::{ReceiverRequirement, UnifiedSpendingKey};
-    use zcash_protocol::consensus::BlockHeight;
+    use zcash_protocol::consensus::{BlockHeight, NetworkUpgrade};
 
     const MIGRATION_TEST_ACCOUNT: &str = "account-1";
     const MIGRATION_TEST_PASSWORD: &[u8] = b"correct horse battery staple";
     const MIGRATION_TEST_SALT: &str = "AQIDBAUGBwgJCgsMDQ4PEA==";
+
+    fn testnet_nu6_3_activation_height() -> u32 {
+        u32::from(
+            WalletNetwork::Test
+                .activation_height(NetworkUpgrade::Nu6_3)
+                .expect("testnet NU6.3 activation height"),
+        )
+    }
 
     fn taddr(seed: u8) -> TransparentAddress {
         TransparentAddress::PublicKeyHash([seed; 20])
@@ -5622,15 +5630,17 @@ mod tests {
 
     #[test]
     fn send_proposals_use_v6_after_nu6_3() {
-        let network = WalletNetwork::LocalIronwoodTestnet;
+        let network = WalletNetwork::Test;
+        let activation_height = testnet_nu6_3_activation_height();
         let v2_only = SelectedOrchardNoteVersions {
             has_v2: true,
             has_v3: false,
         };
 
         // Pass-1 ceiling: no explicit version before activation, V6 after.
-        let before = proposed_tx_version_for_send(network, TargetHeight::from(119));
-        let after = proposed_tx_version_for_send(network, TargetHeight::from(120));
+        let before =
+            proposed_tx_version_for_send(network, TargetHeight::from(activation_height - 1));
+        let after = proposed_tx_version_for_send(network, TargetHeight::from(activation_height));
         assert_eq!(before, None);
         assert_eq!(after, Some(TxVersion::V6));
 
@@ -6039,7 +6049,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("wallet.db");
         let db_path = db_path.to_str().unwrap();
-        let network = WalletNetwork::LocalIronwoodTestnet;
+        let network = WalletNetwork::Test;
         let mnemonic = crate::wallet::keys::generate_mnemonic();
         let seed = crate::wallet::keys::mnemonic_to_seed(&mnemonic).unwrap();
         let (account_uuid, _) = crate::wallet::keys::init_db_and_create_account(
@@ -6053,7 +6063,7 @@ mod tests {
         let account_id = parse_account_uuid(&account_uuid).unwrap();
 
         let mut db = open_wallet_db(db_path, network).unwrap();
-        let tip = BlockHeight::from_u32(120);
+        let tip = BlockHeight::from_u32(testnet_nu6_3_activation_height());
         db.update_chain_tip(tip).unwrap();
         // Shielding now derives the target/anchor heights from scan progress
         // (shard-tree checkpoints) rather than the raw chain tip; checkpoint
@@ -6285,8 +6295,8 @@ mod tests {
 
         let fee = ConservativeZip317FeeRule
             .fee_required(
-                &WalletNetwork::LocalIronwoodTestnet,
-                BlockHeight::from_u32(120),
+                &WalletNetwork::Test,
+                BlockHeight::from_u32(testnet_nu6_3_activation_height()),
                 std::iter::empty::<TransparentInputSize>(),
                 std::iter::empty::<usize>(),
                 0,
@@ -6361,8 +6371,8 @@ mod tests {
     /// output), so all of them carry the wallet `fvk` on the wire and are signable
     /// with the returned spending key.
     fn built_v6_split_pczt() -> (BuiltPczt, orchard::keys::SpendingKey) {
-        let network = WalletNetwork::LocalIronwoodTestnet;
-        let target_height = 120;
+        let network = WalletNetwork::Test;
+        let target_height = testnet_nu6_3_activation_height();
         let sk = orchard::keys::SpendingKey::from_bytes([7; 32]).unwrap();
         let fvk = orchard::keys::FullViewingKey::from(&sk);
         let recipient_scope = orchard::keys::Scope::Internal;
@@ -6423,8 +6433,8 @@ mod tests {
 
     #[test]
     fn padded_denomination_split_builds_exactly_sixteen_actions() {
-        let network = WalletNetwork::LocalIronwoodTestnet;
-        let target_height = 120;
+        let network = WalletNetwork::Test;
+        let target_height = testnet_nu6_3_activation_height();
         let usk =
             UnifiedSpendingKey::from_seed(&network, &[9; 32], zip32::AccountId::ZERO).unwrap();
         let fvk = orchard::keys::FullViewingKey::from(usk.orchard());

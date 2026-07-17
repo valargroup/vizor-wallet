@@ -104,7 +104,7 @@ class _MobileKeystoneShieldScreenState
       final endpoint = ref.read(rpcEndpointFailoverProvider).current;
       final shieldPczt = await rust_sync.createShieldTransparentPczt(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
       );
 
@@ -301,7 +301,7 @@ class _MobileKeystoneShieldScreenState
       final result = await rust_sync.extractAndBroadcastPczt(
         dbPath: dbPath,
         lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         pcztWithProofsBytes: pcztWithProofs,
         pcztWithSignaturesBytes: signatures,
         spendParamsPath: _needsSaplingParams ? saplingParams.spendPath : null,

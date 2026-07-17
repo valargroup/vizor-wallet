@@ -5,18 +5,6 @@ export 'network_config.dart';
 
 const kDefaultRpcEndpointPresetId = 'default-mainnet';
 const kCustomRpcEndpointPresetId = 'custom';
-const kZcashDefaultRpcEndpointPresetEnvKey =
-    'ZCASH_DEFAULT_RPC_ENDPOINT_PRESET';
-const kZcashDefaultRpcEndpointPresetIdRaw = String.fromEnvironment(
-  kZcashDefaultRpcEndpointPresetEnvKey,
-);
-const kZcashEnableLocalIronwoodTestnetEnvKey =
-    'ZCASH_ENABLE_LOCAL_IRONWOOD_TESTNET';
-const kZcashEnableLocalIronwoodTestnet = bool.fromEnvironment(
-  kZcashEnableLocalIronwoodTestnetEnvKey,
-);
-const kLocalIronwoodTestnetRpcEndpointPresetId = 'local-ironwood-testnet';
-const kLocalIronwoodTestnetWalletNetworkName = 'local_ironwood_testnet';
 const kRegtestSlowRpcEndpointPresetId = 'slow-regtest';
 const kRegtestUnavailableRpcEndpointPresetId = 'unavailable-regtest';
 
@@ -25,24 +13,13 @@ class RpcEndpointConfig {
     required this.networkName,
     required this.lightwalletdUrl,
     this.presetId,
-    String? walletNetworkName,
-  }) : _walletNetworkName = walletNetworkName;
+  });
 
   final String networkName;
   final String lightwalletdUrl;
   final String? presetId;
-  final String? _walletNetworkName;
 
   ZcashNetwork get network => zcashNetworkFromName(networkName);
-
-  String get walletNetworkName =>
-      _walletNetworkName ?? endpointWalletNetworkName;
-
-  String get endpointWalletNetworkName => inferWalletNetworkName(
-    networkName: networkName,
-    lightwalletdUrl: lightwalletdUrl,
-    presetId: presetId,
-  );
 
   String get normalizedLightwalletdUrl =>
       normalizeRpcEndpointUrl(lightwalletdUrl, allowDefaultPort: true);
@@ -56,80 +33,13 @@ class RpcEndpointConfig {
     String? networkName,
     String? lightwalletdUrl,
     String? presetId,
-    String? walletNetworkName,
   }) {
     return RpcEndpointConfig(
       networkName: networkName ?? this.networkName,
       lightwalletdUrl: lightwalletdUrl ?? this.lightwalletdUrl,
       presetId: presetId ?? this.presetId,
-      walletNetworkName: walletNetworkName ?? this.walletNetworkName,
     );
   }
-}
-
-String inferWalletNetworkName({
-  required String networkName,
-  required String lightwalletdUrl,
-  String? presetId,
-}) {
-  final network = zcashNetworkFromName(networkName);
-  if (network == ZcashNetwork.testnet &&
-      (presetId == kLocalIronwoodTestnetRpcEndpointPresetId ||
-          normalizeRpcEndpointUrl(lightwalletdUrl, allowDefaultPort: true) ==
-              normalizeRpcEndpointUrl(
-                kLocalIronwoodTestnetRpcEndpointPreset.url,
-                allowDefaultPort: true,
-              ))) {
-    return kLocalIronwoodTestnetWalletNetworkName;
-  }
-  return network.name;
-}
-
-String? normalizeWalletNetworkName(String? walletNetworkName) {
-  final value = walletNetworkName?.trim();
-  return switch (value) {
-    'main' => 'main',
-    'test' => 'test',
-    kLocalIronwoodTestnetWalletNetworkName =>
-      kLocalIronwoodTestnetWalletNetworkName,
-    'regtest' => 'regtest',
-    _ => null,
-  };
-}
-
-String publicNetworkNameForWalletNetworkName(String walletNetworkName) {
-  return walletNetworkName == kLocalIronwoodTestnetWalletNetworkName
-      ? ZcashNetwork.testnet.name
-      : zcashNetworkFromName(walletNetworkName).name;
-}
-
-RpcEndpointConfig defaultRpcEndpointConfigForWalletNetwork(
-  String walletNetworkName,
-) {
-  final normalized =
-      normalizeWalletNetworkName(walletNetworkName) ?? kZcashDefaultNetworkName;
-  final publicNetwork = publicNetworkNameForWalletNetworkName(normalized);
-  final endpoint = defaultRpcEndpointConfig(
-    publicNetwork,
-    defaultPresetId: normalized == kLocalIronwoodTestnetWalletNetworkName
-        ? kLocalIronwoodTestnetRpcEndpointPresetId
-        : '',
-    includeLocalIronwoodTestnet:
-        normalized == kLocalIronwoodTestnetWalletNetworkName ||
-        kZcashEnableLocalIronwoodTestnet,
-  );
-  return endpoint.copyWith(walletNetworkName: normalized);
-}
-
-Map<String, String> nativeRpcEndpointPayload(
-  RpcEndpointConfig endpoint, {
-  required String walletNetworkName,
-}) {
-  return {
-    'lightwalletdUrl': endpoint.normalizedLightwalletdUrl,
-    'network': walletNetworkName,
-    'presetId': endpoint.effectivePresetId,
-  };
 }
 
 class RpcEndpointPreset {
@@ -228,13 +138,6 @@ final kMainnetRpcEndpointPresets = List<RpcEndpointPreset>.unmodifiable([
   ),
 ]);
 
-const kLocalIronwoodTestnetRpcEndpointPreset = RpcEndpointPreset(
-  id: kLocalIronwoodTestnetRpcEndpointPresetId,
-  region: 'Testnet',
-  label: 'Local Ironwood',
-  url: 'https://174-138-65-204.sslip.io:9067',
-);
-
 final kTestnetRpcEndpointPresets = List<RpcEndpointPreset>.unmodifiable([
   const RpcEndpointPreset(
     id: 'default-testnet',
@@ -273,48 +176,22 @@ final kRegtestRpcEndpointPresets = List<RpcEndpointPreset>.unmodifiable([
   ),
 ]);
 
-List<RpcEndpointPreset> rpcEndpointPresetsForNetwork(
-  String networkName, {
-  bool includeLocalIronwoodTestnet = kZcashEnableLocalIronwoodTestnet,
-}) {
+List<RpcEndpointPreset> rpcEndpointPresetsForNetwork(String networkName) {
   final network = zcashNetworkFromName(networkName);
   return switch (network) {
     ZcashNetwork.mainnet => kMainnetRpcEndpointPresets,
-    ZcashNetwork.testnet =>
-      includeLocalIronwoodTestnet
-          ? List<RpcEndpointPreset>.unmodifiable([
-              kLocalIronwoodTestnetRpcEndpointPreset,
-              ...kTestnetRpcEndpointPresets,
-            ])
-          : kTestnetRpcEndpointPresets,
+    ZcashNetwork.testnet => kTestnetRpcEndpointPresets,
     ZcashNetwork.regtest => kRegtestRpcEndpointPresets,
   };
 }
 
-RpcEndpointConfig defaultRpcEndpointConfig(
-  String networkName, {
-  String defaultPresetId = kZcashDefaultRpcEndpointPresetIdRaw,
-  bool includeLocalIronwoodTestnet = kZcashEnableLocalIronwoodTestnet,
-}) {
+RpcEndpointConfig defaultRpcEndpointConfig(String networkName) {
   final network = zcashNetworkFromName(networkName);
-  final presets = rpcEndpointPresetsForNetwork(
-    network.name,
-    includeLocalIronwoodTestnet: includeLocalIronwoodTestnet,
+  final presets = rpcEndpointPresetsForNetwork(network.name);
+  final preset = presets.firstWhere(
+    (preset) => preset.isDefault,
+    orElse: () => presets.first,
   );
-  final requestedPresetId = defaultPresetId.trim();
-  final requestedPreset = requestedPresetId.isEmpty
-      ? null
-      : findRpcEndpointPresetById(
-          network.name,
-          requestedPresetId,
-          includeLocalIronwoodTestnet: includeLocalIronwoodTestnet,
-        );
-  final preset =
-      requestedPreset ??
-      presets.firstWhere(
-        (preset) => preset.isDefault,
-        orElse: () => presets.first,
-      );
   return RpcEndpointConfig(
     networkName: network.name,
     lightwalletdUrl: preset.url,
@@ -338,11 +215,8 @@ RpcEndpointPreset? explicitRpcEndpointPresetFor(RpcEndpointConfig config) {
 }
 
 List<RpcEndpointConfig> fallbackRpcEndpointCandidatesFor(
-  RpcEndpointConfig primary, {
-  bool includeLocalIronwoodTestnet = kZcashEnableLocalIronwoodTestnet,
-}) {
-  if (isLocalIronwoodTestnetEndpoint(primary)) return const [];
-
+  RpcEndpointConfig primary,
+) {
   final primaryPreset = _selectedFallbackPrimaryPreset(primary);
   if (primaryPreset == null) return const [];
 
@@ -350,10 +224,7 @@ List<RpcEndpointConfig> fallbackRpcEndpointCandidatesFor(
   final seenUrls = <String>{};
   final candidates = <RpcEndpointConfig>[];
 
-  for (final preset in rpcEndpointPresetsForNetwork(
-    primary.networkName,
-    includeLocalIronwoodTestnet: includeLocalIronwoodTestnet,
-  )) {
+  for (final preset in rpcEndpointPresetsForNetwork(primary.networkName)) {
     final normalized = normalizeRpcEndpointUrl(
       preset.url,
       allowDefaultPort: true,
@@ -368,17 +239,11 @@ List<RpcEndpointConfig> fallbackRpcEndpointCandidatesFor(
         networkName: primary.networkName,
         lightwalletdUrl: preset.url,
         presetId: preset.id,
-        walletNetworkName: primary.walletNetworkName,
       ),
     );
   }
 
-  return List.unmodifiable(
-    candidates.where(
-      (candidate) =>
-          candidate.endpointWalletNetworkName == primary.walletNetworkName,
-    ),
-  );
+  return List.unmodifiable(candidates);
 }
 
 RpcEndpointConfig? fallbackRpcEndpointConfigFor(RpcEndpointConfig primary) {
@@ -394,18 +259,15 @@ RpcEndpointConfig resolveStoredRpcEndpointConfig({
   required String networkName,
   required String? storedUrl,
   required String? storedPresetId,
-  String? storedWalletNetworkName,
 }) {
   final network = zcashNetworkFromName(networkName);
-  final walletNetworkName = normalizeWalletNetworkName(storedWalletNetworkName);
   final presetId = storedPresetId?.trim();
-  RpcEndpointConfig? candidate;
   if (presetId != null &&
       presetId.isNotEmpty &&
       presetId != kCustomRpcEndpointPresetId) {
     final preset = findRpcEndpointPresetById(network.name, presetId);
     if (preset != null) {
-      candidate = RpcEndpointConfig(
+      return RpcEndpointConfig(
         networkName: network.name,
         lightwalletdUrl: preset.url,
         presetId: preset.id,
@@ -413,35 +275,23 @@ RpcEndpointConfig resolveStoredRpcEndpointConfig({
     }
   }
 
-  if (candidate == null) {
-    final url = storedUrl?.trim();
-    if (url == null || url.isEmpty) {
-      candidate = defaultRpcEndpointConfig(network.name);
-    } else {
-      candidate = RpcEndpointConfig(
-        networkName: network.name,
-        lightwalletdUrl: normalizeRpcEndpointUrl(url, allowDefaultPort: true),
-        presetId: kCustomRpcEndpointPresetId,
-      );
-    }
+  final url = storedUrl?.trim();
+  if (url == null || url.isEmpty) {
+    return defaultRpcEndpointConfig(network.name);
   }
 
-  if (walletNetworkName == null) return candidate;
-  if (candidate.walletNetworkName == walletNetworkName) {
-    return candidate.copyWith(walletNetworkName: walletNetworkName);
-  }
-  return defaultRpcEndpointConfigForWalletNetwork(walletNetworkName);
+  return RpcEndpointConfig(
+    networkName: network.name,
+    lightwalletdUrl: normalizeRpcEndpointUrl(url, allowDefaultPort: true),
+    presetId: kCustomRpcEndpointPresetId,
+  );
 }
 
 RpcEndpointPreset? findRpcEndpointPresetById(
   String networkName,
-  String presetId, {
-  bool includeLocalIronwoodTestnet = kZcashEnableLocalIronwoodTestnet,
-}) {
-  for (final preset in rpcEndpointPresetsForNetwork(
-    networkName,
-    includeLocalIronwoodTestnet: includeLocalIronwoodTestnet,
-  )) {
+  String presetId,
+) {
+  for (final preset in rpcEndpointPresetsForNetwork(networkName)) {
     if (preset.id == presetId) return preset;
   }
   return null;
@@ -450,21 +300,11 @@ RpcEndpointPreset? findRpcEndpointPresetById(
 RpcEndpointPreset? findRpcEndpointPresetByUrl(
   String url, {
   String? networkName,
-  bool includeLocalIronwoodTestnet = kZcashEnableLocalIronwoodTestnet,
 }) {
   final normalized = normalizeRpcEndpointUrl(url, allowDefaultPort: true);
   final presets = networkName == null
-      ? [
-          ...kMainnetRpcEndpointPresets,
-          ...rpcEndpointPresetsForNetwork(
-            ZcashNetwork.testnet.name,
-            includeLocalIronwoodTestnet: includeLocalIronwoodTestnet,
-          ),
-        ]
-      : rpcEndpointPresetsForNetwork(
-          networkName,
-          includeLocalIronwoodTestnet: includeLocalIronwoodTestnet,
-        );
+      ? [...kMainnetRpcEndpointPresets, ...kTestnetRpcEndpointPresets]
+      : rpcEndpointPresetsForNetwork(networkName);
   for (final preset in presets) {
     if (normalizeRpcEndpointUrl(preset.url, allowDefaultPort: true) ==
         normalized) {
@@ -472,19 +312,6 @@ RpcEndpointPreset? findRpcEndpointPresetByUrl(
     }
   }
   return null;
-}
-
-bool isLocalIronwoodTestnetEndpoint(RpcEndpointConfig config) {
-  if (config.network != ZcashNetwork.testnet) return false;
-  if (config.presetId == kLocalIronwoodTestnetRpcEndpointPresetId) {
-    return true;
-  }
-
-  return config.normalizedLightwalletdUrl ==
-      normalizeRpcEndpointUrl(
-        kLocalIronwoodTestnetRpcEndpointPreset.url,
-        allowDefaultPort: true,
-      );
 }
 
 String normalizeRpcEndpointUrl(

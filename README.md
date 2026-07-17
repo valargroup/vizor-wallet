@@ -51,15 +51,6 @@ fvm flutter build macos --release \
   --dart-define=ZCASH_DEFAULT_NETWORK=test
 ```
 
-For the temporary Local Ironwood testnet stack:
-
-```bash
-fvm flutter build macos --release \
-  --dart-define=ZCASH_DEFAULT_NETWORK=test \
-  --dart-define=ZCASH_ENABLE_LOCAL_IRONWOOD_TESTNET=true \
-  --dart-define=ZCASH_DEFAULT_RPC_ENDPOINT_PRESET=local-ironwood-testnet
-```
-
 `VIZOR_COINGECKO_PRICE_BASE_URL` controls the home screen ZEC price and 24h
 change source. Open-source builds should use the public CoinGecko base URL
 above; production builds can point this define at a Vizor-operated proxy.

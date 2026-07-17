@@ -537,7 +537,7 @@ mod tests {
             service::PoolType::Ironwood as i32,
         ];
 
-        for network in [WalletNetwork::Main, WalletNetwork::LocalIronwoodTestnet] {
+        for network in [WalletNetwork::Main, WalletNetwork::Test] {
             let activation = network
                 .activation_height(NetworkUpgrade::Nu6_3)
                 .expect("NU6.3 activation height");
