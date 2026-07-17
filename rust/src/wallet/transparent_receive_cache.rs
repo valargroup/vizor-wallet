@@ -589,7 +589,6 @@ fn network_cache_key(network: WalletNetwork) -> &'static str {
     match network {
         WalletNetwork::Main => "main",
         WalletNetwork::Test => "test",
-        WalletNetwork::LocalIronwoodTestnet => "local_ironwood_testnet",
         WalletNetwork::Regtest => "regtest",
     }
 }

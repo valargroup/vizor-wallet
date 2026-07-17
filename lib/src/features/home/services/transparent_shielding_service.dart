@@ -68,7 +68,8 @@ bool _isNativeMnemonicUnavailable(Object error) {
 /// bytes read from secure storage. This is the non-macOS path and the fallback
 /// the macOS native path uses when its stored mnemonic is unavailable. The
 /// mnemonic bytes are zeroed before returning.
-Future<rust_sync.ShieldTransparentResult> _shieldTransparentBalanceWithMnemonicBytes({
+Future<rust_sync.ShieldTransparentResult>
+_shieldTransparentBalanceWithMnemonicBytes({
   required WidgetRef ref,
   required String dbPath,
   required String lightwalletdUrl,
@@ -121,13 +122,14 @@ Future<rust_sync.ShieldTransparentResult> shieldTransparentSoftwareBalance({
           .read(appSecurityProvider.notifier)
           .requireSessionPasswordForNativeSecretUse();
       try {
-        result = await rust_sync.shieldTransparentBalanceWithMacosStoredMnemonic(
-          dbPath: dbPath,
-          lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-          network: endpoint.walletNetworkName,
-          accountUuid: accountUuid,
-          password: password,
-        );
+        result = await rust_sync
+            .shieldTransparentBalanceWithMacosStoredMnemonic(
+              dbPath: dbPath,
+              lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
+              network: endpoint.networkName,
+              accountUuid: accountUuid,
+              password: password,
+            );
       } catch (e) {
         if (!_isNativeMnemonicUnavailable(e)) {
           rethrow;
@@ -140,7 +142,7 @@ Future<rust_sync.ShieldTransparentResult> shieldTransparentSoftwareBalance({
           ref: ref,
           dbPath: dbPath,
           lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-          network: endpoint.walletNetworkName,
+          network: endpoint.networkName,
           accountUuid: accountUuid,
         );
       }
@@ -149,7 +151,7 @@ Future<rust_sync.ShieldTransparentResult> shieldTransparentSoftwareBalance({
         ref: ref,
         dbPath: dbPath,
         lightwalletdUrl: endpoint.normalizedLightwalletdUrl,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
       );
     }

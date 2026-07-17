@@ -190,7 +190,7 @@ class _SendReviewScreenState extends ConsumerState<SendReviewScreen> {
 
       final pcztBytes = await rust_sync.createPcztFromProposal(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         proposalId: widget.args.proposalId,
         sendFlowId: widget.args.sendFlowId,
       );

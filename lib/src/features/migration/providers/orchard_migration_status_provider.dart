@@ -62,7 +62,7 @@ final activeOrchardMigrationStatusProvider =
       final dbPath = await getWalletDbPath();
       return rust_sync.getOrchardMigrationStatus(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
       );
     });

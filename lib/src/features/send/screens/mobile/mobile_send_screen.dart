@@ -781,7 +781,7 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
 
       final estimate = await rust_sync.estimateSendMax(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
         toAddress: address,
         memo: memo.isNotEmpty ? memo : null,
@@ -900,7 +900,7 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
       if (!mounted || seq != _validateSeq || accountUuid == null) return;
       final fee = await (widget.estimateFee ?? rust_sync.estimateFee)(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
         toAddress: _addressController.text.trim(),
         amountZatoshi: zatoshi,
@@ -991,7 +991,7 @@ class _MobileSendScreenState extends ConsumerState<MobileSendScreen> {
       if (!mounted || seq != _feeSeq) return;
       final fee = await (widget.estimateFee ?? rust_sync.estimateFee)(
         dbPath: dbPath,
-        network: endpoint.walletNetworkName,
+        network: endpoint.networkName,
         accountUuid: accountUuid,
         toAddress: _addressController.text.trim(),
         amountZatoshi: zatoshi,

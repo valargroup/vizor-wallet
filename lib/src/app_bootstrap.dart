@@ -225,30 +225,12 @@ Future<AppBootstrapState> loadAppBootstrap() async {
     } catch (e) {
       log('bootstrap: failed to recover password rotation: $e');
     }
-    final storedPublicNetwork = resolveStoredOrDefaultZcashNetworkName(
+    final network = resolveStoredOrDefaultZcashNetworkName(
       await storage.readString(_networkKey),
     );
     final dbPath = await _getDbPath();
     final hasWalletDb = rust_wallet.walletExists(dbPath: dbPath);
-    final rawStoredWalletNetwork = await storage.readString(
-      kWalletNetworkNameKey,
-    );
-    final storedWalletNetwork = normalizeWalletNetworkName(
-      resolveBootstrapWalletNetworkName(
-        publicNetworkName: storedPublicNetwork,
-        storedWalletNetworkName: rawStoredWalletNetwork,
-        walletExists: hasWalletDb,
-      ),
-    );
-    final network = storedWalletNetwork == null
-        ? storedPublicNetwork
-        : publicNetworkNameForWalletNetworkName(storedWalletNetwork);
-    final rpcEndpointConfig = await _readRpcEndpointConfig(
-      storage,
-      network,
-      storedWalletNetworkName: storedWalletNetwork,
-    );
-    final walletNetwork = rpcEndpointConfig.walletNetworkName;
+    final rpcEndpointConfig = await _readRpcEndpointConfig(storage, network);
     await _seedNativeRpcEndpointMirror(rpcEndpointConfig);
     final themeMode = await _readThemeMode(storage);
     final privacyModeEnabled = await _readPrivacyModeEnabled(storage);
@@ -258,19 +240,11 @@ Future<AppBootstrapState> loadAppBootstrap() async {
     final isPasswordConfigured = await storage.isPasswordConfigured();
     final isUnlocked = storage.hasSessionPassword;
     if (hasWalletDb) {
-      if (storedWalletNetwork != null &&
-          normalizeWalletNetworkName(rawStoredWalletNetwork) !=
-              storedWalletNetwork) {
-        await storage.writePlain(kWalletNetworkNameKey, storedWalletNetwork);
-      }
-      if (network != storedPublicNetwork) {
-        await storage.writePlain(_networkKey, network);
-      }
       try {
         log('bootstrap: ensuring wallet DB migrations before startup snapshot');
         await rust_wallet.ensureWalletDbMigrated(
           dbPath: dbPath,
-          network: walletNetwork,
+          network: network,
         );
       } catch (e) {
         log('bootstrap: wallet DB migration preflight failed: $e');
@@ -292,7 +266,7 @@ Future<AppBootstrapState> loadAppBootstrap() async {
       try {
         final listed = await rust_wallet.listAccounts(
           dbPath: dbPath,
-          network: walletNetwork,
+          network: network,
         );
         rustAccounts = listed.indexed.map((entry) {
           final (index, account) = entry;
@@ -327,7 +301,7 @@ Future<AppBootstrapState> loadAppBootstrap() async {
     if (isUnlocked && hasWallet && activeAccountUuid != null && hasWalletDb) {
       initialSyncSnapshot = await _loadInitialSyncSnapshot(
         dbPath: dbPath,
-        network: walletNetwork,
+        network: network,
         accountUuid: activeAccountUuid,
       );
     }
@@ -438,13 +412,12 @@ AccountInfo mergeBootstrappedAccountInfo({
 Future<void> _seedNativeRpcEndpointMirror(RpcEndpointConfig endpoint) async {
   if (!Platform.isIOS) return;
   try {
-    final success = await _backgroundSyncChannel.invokeMethod<bool>(
-      'updateEndpoint',
-      nativeRpcEndpointPayload(
-        endpoint,
-        walletNetworkName: endpoint.walletNetworkName,
-      ),
-    );
+    final success = await _backgroundSyncChannel
+        .invokeMethod<bool>('updateEndpoint', {
+          'lightwalletdUrl': endpoint.normalizedLightwalletdUrl,
+          'network': endpoint.networkName,
+          'presetId': endpoint.effectivePresetId,
+        });
     if (success != true) {
       log('bootstrap: iOS RPC endpoint mirror seed returned $success');
     }
@@ -455,9 +428,8 @@ Future<void> _seedNativeRpcEndpointMirror(RpcEndpointConfig endpoint) async {
 
 Future<RpcEndpointConfig> _readRpcEndpointConfig(
   AppSecureStore storage,
-  String network, {
-  String? storedWalletNetworkName,
-}) async {
+  String network,
+) async {
   try {
     final storedUrl = await storage.readString(kRpcEndpointUrlKey);
     final storedPreset = await storage.readString(kRpcEndpointPresetKey);
@@ -465,29 +437,13 @@ Future<RpcEndpointConfig> _readRpcEndpointConfig(
       networkName: zcashNetworkFromName(network).name,
       storedUrl: storedUrl,
       storedPresetId: storedPreset,
-      storedWalletNetworkName: storedWalletNetworkName,
     );
   } on SecureStorageUnavailableException {
     rethrow;
   } catch (e) {
     log('bootstrap: failed to read RPC endpoint: $e');
-    return storedWalletNetworkName == null
-        ? defaultRpcEndpointConfig(network)
-        : defaultRpcEndpointConfigForWalletNetwork(storedWalletNetworkName);
+    return defaultRpcEndpointConfig(network);
   }
-}
-
-@visibleForTesting
-String? resolveBootstrapWalletNetworkName({
-  required String publicNetworkName,
-  required String? storedWalletNetworkName,
-  required bool walletExists,
-}) {
-  final stored = normalizeWalletNetworkName(storedWalletNetworkName);
-  if (stored != null) return stored;
-  if (!walletExists) return null;
-  return normalizeWalletNetworkName(publicNetworkName) ??
-      kZcashDefaultNetworkName;
 }
 
 Future<ThemeMode> _readThemeMode(AppSecureStore storage) async {

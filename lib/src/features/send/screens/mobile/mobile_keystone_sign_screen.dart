@@ -63,7 +63,7 @@ class MobileKeystoneSignScreen extends ConsumerWidget {
 
     final pcztBytes = await rust_sync.createPcztFromProposal(
       dbPath: dbPath,
-      network: endpoint.walletNetworkName,
+      network: endpoint.networkName,
       proposalId: args.proposalId,
       sendFlowId: args.sendFlowId,
     );
