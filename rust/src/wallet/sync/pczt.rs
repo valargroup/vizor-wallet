@@ -360,14 +360,16 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Redact a PCZT for a Keystone **migration batch** request.
 ///
-/// Librustzcash owns the version 6 migration signer policy, including checked
-/// compaction of regenerable fields and validation of the IO-finalizer dummy
-/// action indices captured by Vizor. The wallet keeps the unredacted PCZT for
+/// The v6 path starts with librustzcash's general signer view, including its
+/// checked compaction of regenerable Orchard and Ironwood fields. Vizor then
+/// removes fields that Keystone never reads: spend FVKs, request-time
+/// signatures, output recovery and derivation metadata, user addresses, and
+/// the spend randomizers for IO-finalizer dummy actions. Wallet-controlled
+/// actions retain their randomizers. The wallet keeps the unredacted PCZT for
 /// proof and signature combination.
 ///
 /// Only use this for the migration batch flow; the single-transaction hardware
-/// send keeps [`redact_pczt_for_signer`]. Returns an error for legacy
-/// transaction versions or invalid dummy action metadata.
+/// send keeps [`redact_pczt_for_signer`].
 pub fn redact_pczt_for_batch_signer(
     pczt_bytes: &[u8],
     orchard_dummy_spend_action_indices: &[usize],
@@ -382,25 +384,59 @@ pub fn redact_pczt_for_batch_signer(
     )
 }
 
-/// Applies Vizor's standard signer policy for ordinary hardware sends.
-fn apply_signer_redaction(pczt: pczt::Pczt) -> pczt::Pczt {
+/// Applies the standard signer policy, plus Keystone's additional migration
+/// batch redaction when requested.
+fn apply_signer_redaction(
+    pczt: pczt::Pczt,
+    batch_dummy_spends: Option<BatchDummySpendActionIndices<'_>>,
+) -> pczt::Pczt {
     use pczt::roles::redactor::Redactor;
 
-    fn redact_bundle(r: &mut pczt::roles::redactor::orchard::OrchardRedactor<'_>) {
+    let for_batch = batch_dummy_spends.is_some();
+    let orchard_dummy_spends = batch_dummy_spends.map_or(&[][..], |indices| indices.orchard);
+    let ironwood_dummy_spends = batch_dummy_spends.map_or(&[][..], |indices| indices.ironwood);
+    // The compact signer view requires PCZT v2, while legacy v5 signing uses
+    // v1 on the wire. Keep the existing local policy for v5 and ordinary sends.
+    let compact =
+        for_batch && *pczt.global().tx_version() == zcash_protocol::constants::V6_TX_VERSION;
+    let pczt = if compact {
+        zcash_client_backend::data_api::wallet::redact_pczt_for_signer(&pczt)
+    } else {
+        pczt
+    };
+
+    fn redact_bundle(
+        r: &mut pczt::roles::redactor::orchard::OrchardRedactor<'_>,
+        for_batch: bool,
+        compact: bool,
+        dummy_spend_action_indices: &[usize],
+    ) {
         r.redact_actions(|mut ar| {
             ar.clear_spend_witness();
             ar.redact_output_proprietary("zcash_client_backend:output_info");
+            if for_batch {
+                ar.clear_spend_fvk();
+                ar.clear_spend_auth_sig();
+                ar.clear_output_ock();
+                ar.clear_output_zip32_derivation();
+                ar.clear_output_user_address();
+            }
         });
+        if compact {
+            for index in dummy_spend_action_indices {
+                r.redact_action(*index, |mut ar| ar.clear_spend_alpha());
+            }
+        }
     }
 
     let mut redactor = Redactor::new(pczt)
         .redact_global_with(|mut r| r.redact_proprietary("zcash_client_backend:proposal_info"))
         .redact_orchard_with(|mut r| {
-            redact_bundle(&mut r);
+            redact_bundle(&mut r, for_batch, compact, orchard_dummy_spends);
         });
 
     redactor = redactor.redact_ironwood_with(|mut r| {
-        redact_bundle(&mut r);
+        redact_bundle(&mut r, for_batch, compact, ironwood_dummy_spends);
     });
 
     redactor
@@ -420,23 +456,15 @@ fn apply_signer_redaction(pczt: pczt::Pczt) -> pczt::Pczt {
         .finish()
 }
 
-/// Shared parsing and wire-format boundary for the standard and migration
-/// signer views.
+/// Shared body of [`redact_pczt_for_signer`] and [`redact_pczt_for_batch_signer`]:
+/// the standard signer redaction, plus the batch-only Keystone clears.
 fn redact_pczt_for_signer_inner(
     pczt_bytes: &[u8],
     batch_dummy_spends: Option<BatchDummySpendActionIndices<'_>>,
 ) -> Result<Vec<u8>, String> {
     let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT: {e:?}"))?;
 
-    let redacted = match batch_dummy_spends {
-        Some(indices) => zcash_client_backend::data_api::wallet::redact_pczt_for_migration_signer(
-            &pczt,
-            indices.orchard,
-            indices.ironwood,
-        )
-        .map_err(|e| format!("Redact migration PCZT for signer: {e}"))?,
-        None => apply_signer_redaction(pczt),
-    };
+    let redacted = apply_signer_redaction(pczt, batch_dummy_spends);
 
     if *redacted.global().tx_version() == 5 {
         pczt::v1::Pczt::try_from(redacted)
