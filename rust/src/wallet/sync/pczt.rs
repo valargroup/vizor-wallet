@@ -345,94 +345,55 @@ pub fn add_proofs_to_pczt(
         .map_err(|e| format!("Serialize PCZT with proofs: {e:?}"))
 }
 
-#[derive(Clone, Copy)]
-struct BatchDummySpendActionIndices<'a> {
-    orchard: &'a [usize],
-    ironwood: &'a [usize],
-}
-
 /// Redact information from a PCZT that the signer role doesn't need
 /// (witnesses, proprietary metadata). Produces the bytes to send to
 /// the hardware wallet for signing.
 pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
-    redact_pczt_for_signer_inner(pczt_bytes, None)
+    redact_pczt_for_signer_inner(pczt_bytes, false)
 }
 
 /// Redact a PCZT for a Keystone **migration batch** request.
 ///
-/// The v6 path starts with librustzcash's general signer view, including its
-/// checked compaction of regenerable Orchard and Ironwood fields. Vizor then
-/// removes spend FVKs, request-time signatures, and the spend randomizers for
-/// IO-finalizer dummy actions. Wallet-controlled actions retain their
-/// randomizers. The wallet keeps the unredacted PCZT for proof and signature
-/// combination.
+/// The v6 path uses librustzcash's batch signer policy, including its checked
+/// compaction of regenerable Orchard and Ironwood fields. The wallet keeps the
+/// unredacted PCZT for proof and signature combination.
 ///
 /// Only use this for the migration batch flow; the single-transaction hardware
 /// send keeps [`redact_pczt_for_signer`].
-pub fn redact_pczt_for_batch_signer(
-    pczt_bytes: &[u8],
-    orchard_dummy_spend_action_indices: &[usize],
-    ironwood_dummy_spend_action_indices: &[usize],
-) -> Result<Vec<u8>, String> {
-    redact_pczt_for_signer_inner(
-        pczt_bytes,
-        Some(BatchDummySpendActionIndices {
-            orchard: orchard_dummy_spend_action_indices,
-            ironwood: ironwood_dummy_spend_action_indices,
-        }),
-    )
+pub fn redact_pczt_for_batch_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
+    redact_pczt_for_signer_inner(pczt_bytes, true)
 }
 
 /// Applies the standard signer policy, plus Keystone's additional migration
 /// batch redaction when requested.
-fn apply_signer_redaction(
-    pczt: pczt::Pczt,
-    batch_dummy_spends: Option<BatchDummySpendActionIndices<'_>>,
-) -> pczt::Pczt {
+fn apply_signer_redaction(pczt: pczt::Pczt, for_batch: bool) -> pczt::Pczt {
     use pczt::roles::redactor::Redactor;
 
-    let for_batch = batch_dummy_spends.is_some();
-    let orchard_dummy_spends = batch_dummy_spends.map_or(&[][..], |indices| indices.orchard);
-    let ironwood_dummy_spends = batch_dummy_spends.map_or(&[][..], |indices| indices.ironwood);
     // The compact signer view requires PCZT v2, while legacy v5 signing uses
     // v1 on the wire. Keep the existing local policy for v5 and ordinary sends.
     let compact =
         for_batch && *pczt.global().tx_version() == zcash_protocol::constants::V6_TX_VERSION;
     let pczt = if compact {
-        zcash_client_backend::data_api::wallet::redact_pczt_for_signer(&pczt)
+        zcash_client_backend::data_api::wallet::redact_pczt_for_batch_signer(&pczt)
     } else {
         pczt
     };
 
-    fn redact_bundle(
-        r: &mut pczt::roles::redactor::orchard::OrchardRedactor<'_>,
-        for_batch: bool,
-        compact: bool,
-        dummy_spend_action_indices: &[usize],
-    ) {
+    fn redact_bundle(r: &mut pczt::roles::redactor::orchard::OrchardRedactor<'_>) {
         r.redact_actions(|mut ar| {
             ar.clear_spend_witness();
             ar.redact_output_proprietary("zcash_client_backend:output_info");
-            if for_batch {
-                ar.clear_spend_fvk();
-                ar.clear_spend_auth_sig();
-            }
         });
-        if compact {
-            for index in dummy_spend_action_indices {
-                r.redact_action(*index, |mut ar| ar.clear_spend_alpha());
-            }
-        }
     }
 
     let mut redactor = Redactor::new(pczt)
         .redact_global_with(|mut r| r.redact_proprietary("zcash_client_backend:proposal_info"))
         .redact_orchard_with(|mut r| {
-            redact_bundle(&mut r, for_batch, compact, orchard_dummy_spends);
+            redact_bundle(&mut r);
         });
 
     redactor = redactor.redact_ironwood_with(|mut r| {
-        redact_bundle(&mut r, for_batch, compact, ironwood_dummy_spends);
+        redact_bundle(&mut r);
     });
 
     redactor
@@ -452,15 +413,12 @@ fn apply_signer_redaction(
         .finish()
 }
 
-/// Shared body of [`redact_pczt_for_signer`] and [`redact_pczt_for_batch_signer`]:
-/// the standard signer redaction, plus the batch-only Keystone clears.
-fn redact_pczt_for_signer_inner(
-    pczt_bytes: &[u8],
-    batch_dummy_spends: Option<BatchDummySpendActionIndices<'_>>,
-) -> Result<Vec<u8>, String> {
+/// Shared parser and serializer for [`redact_pczt_for_signer`] and
+/// [`redact_pczt_for_batch_signer`].
+fn redact_pczt_for_signer_inner(pczt_bytes: &[u8], for_batch: bool) -> Result<Vec<u8>, String> {
     let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT: {e:?}"))?;
 
-    let redacted = apply_signer_redaction(pczt, batch_dummy_spends);
+    let redacted = apply_signer_redaction(pczt, for_batch);
 
     if *redacted.global().tx_version() == 5 {
         pczt::v1::Pczt::try_from(redacted)
@@ -1708,7 +1666,7 @@ mod tests {
             use orchard::primitives::redpallas::{Signature, SpendAuth, VerificationKey};
             use pczt::roles::redactor::Redactor;
 
-            fn finalized_dummy_spend_action_indices(bundle: &pczt::orchard::Bundle) -> Vec<usize> {
+            fn preauthorized_spend_action_indices(bundle: &pczt::orchard::Bundle) -> Vec<usize> {
                 bundle
                     .actions()
                     .iter()
@@ -1721,19 +1679,12 @@ mod tests {
 
             let (base_bytes, orchard_ask, spend_index, _, _, _) = build_migration_base_pczt();
             let base = pczt::Pczt::parse(&base_bytes).unwrap();
-            let orchard_dummy_spend_action_indices =
-                finalized_dummy_spend_action_indices(base.orchard());
-            let ironwood_dummy_spend_action_indices =
-                finalized_dummy_spend_action_indices(base.ironwood());
-            assert_eq!(orchard_dummy_spend_action_indices.len(), 1);
-            assert_eq!(ironwood_dummy_spend_action_indices.len(), 1);
+            let orchard_preauthorized = preauthorized_spend_action_indices(base.orchard());
+            let ironwood_preauthorized = preauthorized_spend_action_indices(base.ironwood());
+            assert_eq!(orchard_preauthorized.len(), 1);
+            assert_eq!(ironwood_preauthorized.len(), 1);
 
-            let batch = redact_pczt_for_batch_signer(
-                &base_bytes,
-                &orchard_dummy_spend_action_indices,
-                &ironwood_dummy_spend_action_indices,
-            )
-            .unwrap();
+            let batch = redact_pczt_for_batch_signer(&base_bytes).unwrap();
             // The point of the compact format: a migration child small enough
             // for a short device QR carousel. The retained bytes are dominated
             // by the still-required `out_ciphertext`s and the
@@ -1769,6 +1720,7 @@ mod tests {
                         .zip(base.ironwood().actions().iter()),
                 )
             {
+                assert!(action.spend().spend_auth_sig().is_none());
                 assert!(action.cv_net().is_none());
                 assert!(matches!(
                     action.output().enc_ciphertext(),
@@ -1782,6 +1734,24 @@ mod tests {
                     base_action.output().ephemeral_key()
                 );
             }
+
+            let clear_fvks = |pczt: pczt::Pczt| {
+                Redactor::new(pczt)
+                    .redact_orchard_with(|mut r| {
+                        r.redact_actions(|mut action| action.clear_spend_fvk());
+                    })
+                    .redact_ironwood_with(|mut r| {
+                        r.redact_actions(|mut action| action.clear_spend_fvk());
+                    })
+                    .finish()
+                    .serialize()
+                    .unwrap()
+            };
+            assert_eq!(
+                clear_fvks(parsed.clone()),
+                batch,
+                "batch redaction must already have cleared both pools' spend FVKs",
+            );
 
             let clear_alphas =
                 |pczt: pczt::Pczt, orchard_indices: &[usize], ironwood_indices: &[usize]| {
@@ -1800,8 +1770,8 @@ mod tests {
             assert_eq!(
                 clear_alphas(
                     parsed.clone(),
-                    &orchard_dummy_spend_action_indices,
-                    &ironwood_dummy_spend_action_indices,
+                    &orchard_preauthorized,
+                    &ironwood_preauthorized,
                 ),
                 batch,
                 "dummy spend alphas must already be absent",

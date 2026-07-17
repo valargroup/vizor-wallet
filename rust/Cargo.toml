@@ -158,15 +158,15 @@ vote-commitment-tree-client = { git = "https://github.com/valargroup/zcash_votin
 zcash_voting = { git = "https://github.com/valargroup/zcash_voting", rev = "a1ec065609e55c2d9b6314f5e1e1437956fa4570" }
 
 # Keep the librustzcash family on one revision.
-pczt = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
-zcash_address = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
-zcash_proofs = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
-zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "9281db6145eaff7aa0ed098434de8e401d974559" }
+pczt = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
+zcash_address = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
+zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "534726f76d433281d2976bfbaa7d7eda691965e7" }
 
 # Keep the direct tree dependency aligned with the patched graph.
 incrementalmerkletree = { git = "https://github.com/zcash/incrementalmerkletree", rev = "decefc469dbf1e686b20b7e7dcaa7cb4f122125b" }
