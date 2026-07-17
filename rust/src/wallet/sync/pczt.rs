@@ -362,11 +362,10 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
 ///
 /// The v6 path starts with librustzcash's general signer view, including its
 /// checked compaction of regenerable Orchard and Ironwood fields. Vizor then
-/// removes fields that Keystone never reads: spend FVKs, request-time
-/// signatures, output recovery and derivation metadata, user addresses, and
-/// the spend randomizers for IO-finalizer dummy actions. Wallet-controlled
-/// actions retain their randomizers. The wallet keeps the unredacted PCZT for
-/// proof and signature combination.
+/// removes spend FVKs, request-time signatures, and the spend randomizers for
+/// IO-finalizer dummy actions. Wallet-controlled actions retain their
+/// randomizers. The wallet keeps the unredacted PCZT for proof and signature
+/// combination.
 ///
 /// Only use this for the migration batch flow; the single-transaction hardware
 /// send keeps [`redact_pczt_for_signer`].
@@ -417,9 +416,6 @@ fn apply_signer_redaction(
             if for_batch {
                 ar.clear_spend_fvk();
                 ar.clear_spend_auth_sig();
-                ar.clear_output_ock();
-                ar.clear_output_zip32_derivation();
-                ar.clear_output_user_address();
             }
         });
         if compact {
@@ -1425,28 +1421,6 @@ mod tests {
             (deferred.serialize().unwrap(), signature, spend_index)
         }
 
-        fn clear_batch_output_metadata(bytes: &[u8]) -> Vec<u8> {
-            let parsed = pczt::Pczt::parse(bytes).unwrap();
-            pczt::roles::redactor::Redactor::new(parsed)
-                .redact_orchard_with(|mut r| {
-                    r.redact_actions(|mut ar| {
-                        ar.clear_output_ock();
-                        ar.clear_output_zip32_derivation();
-                        ar.clear_output_user_address();
-                    });
-                })
-                .redact_ironwood_with(|mut r| {
-                    r.redact_actions(|mut ar| {
-                        ar.clear_output_ock();
-                        ar.clear_output_zip32_derivation();
-                        ar.clear_output_user_address();
-                    });
-                })
-                .finish()
-                .serialize()
-                .unwrap()
-        }
-
         #[test]
         fn orchard_witnesses_are_matched_by_nullifier_not_request_order() {
             use pczt::roles::redactor::Redactor;
@@ -1771,11 +1745,6 @@ mod tests {
             );
 
             let parsed = pczt::Pczt::parse(&batch).unwrap();
-            assert_eq!(
-                clear_batch_output_metadata(&batch),
-                batch,
-                "batch redaction must already clear output ock, ZIP32 derivation metadata, and user address strings",
-            );
 
             // V6 signatures do not commit to anchors, so both bundle anchors
             // are elided; the wallet's retained PCZT owns the real anchors.
@@ -1800,7 +1769,6 @@ mod tests {
                         .zip(base.ironwood().actions().iter()),
                 )
             {
-                assert!(action.output().user_address().is_none());
                 assert!(action.cv_net().is_none());
                 assert!(matches!(
                     action.output().enc_ciphertext(),
