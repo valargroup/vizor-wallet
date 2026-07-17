@@ -1005,6 +1005,7 @@ fn search_chain(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wallet::keystone::ZCASH_SIGN_BATCH_MAX_MESSAGES;
 
     const FEE: u64 = 80_000;
 
@@ -1142,6 +1143,36 @@ mod tests {
     }
 
     #[test]
+    fn one_input_and_forty_six_outputs_fill_the_single_qr_batch_cap() {
+        let outputs = terminals(46, 1_000_000);
+        let inputs = [46_000_000 + 4 * FEE];
+
+        assert!(plan_exact_stage_count(&inputs, &outputs, 3, FEE)
+            .unwrap()
+            .is_none());
+        let stages = plan_exact_stage_count(&inputs, &outputs, 4, FEE)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            stages
+                .iter()
+                .map(|stage| stage.requested_actions)
+                .collect::<Vec<_>>(),
+            vec![16, 16, 16, 5]
+        );
+        assert_eq!(
+            stages
+                .iter()
+                .map(SplitStagePlan::padding_actions)
+                .collect::<Vec<_>>(),
+            vec![0, 0, 0, 11]
+        );
+        assert_eq!(ZCASH_SIGN_BATCH_MAX_MESSAGES, 50);
+        assert_eq!(outputs.len() + stages.len(), ZCASH_SIGN_BATCH_MAX_MESSAGES);
+    }
+
+    #[test]
     fn one_input_two_stage_chain_caps_at_twenty_nine_outputs() {
         let outputs = terminals(29, 1_000_000);
         let inputs = [29_000_000 + 2 * FEE];
@@ -1269,7 +1300,7 @@ mod tests {
     }
 
     #[test]
-    fn forced_thirty_outputs_can_use_three_roots_for_many_existing_inputs() {
+    fn thirty_outputs_can_use_three_roots_for_many_existing_inputs() {
         let outputs = terminals(30, 1_000_000);
         let mut inputs = vec![1_000_000; 16];
         inputs[4] = 7_000_000 + FEE;
