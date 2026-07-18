@@ -121,7 +121,7 @@ pub(crate) const ZCASH_SIGN_MESSAGE_KIND_PCZT_V1: u32 = 1;
 const ZCASH_SIGN_STATUS_SIGNED: u32 = 0;
 // Must match the signer's `ZCASH_BATCH_MAX_PCZTS`; the device rejects any larger
 // batch before checking or signing it.
-pub(crate) const ZCASH_SIGN_BATCH_MAX_MESSAGES: usize = 50;
+pub(crate) const ZCASH_SIGN_BATCH_MAX_MESSAGES: usize = 35;
 // Must match the signer's `ZCASH_BATCH_MAX_TOTAL_BYTES`. The firmware applies
 // this to both the canonical PCZT byte total and request-id + Postcard envelope.
 const ZCASH_SIGN_BATCH_MAX_TOTAL_BYTES: usize = 512 * 1024;
