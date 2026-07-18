@@ -1143,14 +1143,14 @@ mod tests {
     }
 
     #[test]
-    fn one_input_and_forty_six_outputs_fill_the_single_qr_batch_cap() {
-        let outputs = terminals(46, 1_000_000);
-        let inputs = [46_000_000 + 4 * FEE];
+    fn one_input_and_thirty_two_outputs_fill_the_single_qr_batch_cap() {
+        let outputs = terminals(32, 1_000_000);
+        let inputs = [32_000_000 + 3 * FEE];
 
-        assert!(plan_exact_stage_count(&inputs, &outputs, 3, FEE)
+        assert!(plan_exact_stage_count(&inputs, &outputs, 2, FEE)
             .unwrap()
             .is_none());
-        let stages = plan_exact_stage_count(&inputs, &outputs, 4, FEE)
+        let stages = plan_exact_stage_count(&inputs, &outputs, 3, FEE)
             .unwrap()
             .unwrap();
 
@@ -1159,16 +1159,16 @@ mod tests {
                 .iter()
                 .map(|stage| stage.requested_actions)
                 .collect::<Vec<_>>(),
-            vec![16, 16, 16, 5]
+            vec![16, 16, 5]
         );
         assert_eq!(
             stages
                 .iter()
                 .map(SplitStagePlan::padding_actions)
                 .collect::<Vec<_>>(),
-            vec![0, 0, 0, 11]
+            vec![0, 0, 11]
         );
-        assert_eq!(ZCASH_SIGN_BATCH_MAX_MESSAGES, 50);
+        assert_eq!(ZCASH_SIGN_BATCH_MAX_MESSAGES, 35);
         assert_eq!(outputs.len() + stages.len(), ZCASH_SIGN_BATCH_MAX_MESSAGES);
     }
 

@@ -72,7 +72,7 @@ pub(crate) struct DenominationPlan {
 }
 
 // TEMP TEST OVERRIDE: the `#[allow(unreachable_code)]` below covers the
-// denomination-split logic left dead by the 46-part override inside this fn.
+// denomination-split logic left dead by the 32-part override inside this fn.
 // Remove the attribute together with the override block to restore normal behavior.
 #[allow(unreachable_code)]
 pub(crate) fn plan_denominations(
@@ -97,18 +97,18 @@ pub(crate) fn plan_denominations(
         .ok_or("Denomination split fee underflow")?;
 
     // ===== TEMPORARY TEST OVERRIDE — remove before production =====
-    // Ignore the denomination split and cut `available` into exactly 46 equal parts.
-    // With one input, the four split PCZTs plus 46 children fill a 50-message batch.
+    // Ignore the denomination split and cut `available` into exactly 32 equal parts.
+    // With one input, the three split PCZTs plus 32 children fill a 35-message batch.
     // To revert, delete this block and the `#[allow(unreachable_code)]` on the fn.
     #[cfg(not(test))]
     {
-        const TEST_FORCED_PARTS: u64 = 46;
+        const TEST_FORCED_PARTS: u64 = 32;
         let per_part = available / TEST_FORCED_PARTS;
         let per_part_floor = migration_fee_zatoshi.saturating_add(minimum_output_zatoshi);
         if per_part < per_part_floor {
             return Err(format!(
-                "46-part test override: available {} / {} = {} below per-part floor {} \
-                 (migration_fee + minimum_output); fund more Orchard balance to test 46 parts",
+                "32-part test override: available {} / {} = {} below per-part floor {} \
+                 (migration_fee + minimum_output); fund more Orchard balance to test 32 parts",
                 available, TEST_FORCED_PARTS, per_part, per_part_floor
             ));
         }
