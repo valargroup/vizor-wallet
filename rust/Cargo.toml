@@ -153,9 +153,9 @@ version = "0.3.2"
 
 [patch.crates-io]
 # Keep the voting crates on the revision tested by this application.
-vote-commitment-tree = { git = "https://github.com/valargroup/zcash_voting", rev = "b0b0233641ec53088d46d4f6e6f8f343431bf7a5" }
-vote-commitment-tree-client = { git = "https://github.com/valargroup/zcash_voting", rev = "b0b0233641ec53088d46d4f6e6f8f343431bf7a5" }
-zcash_voting = { git = "https://github.com/valargroup/zcash_voting", rev = "b0b0233641ec53088d46d4f6e6f8f343431bf7a5" }
+vote-commitment-tree = { git = "https://github.com/valargroup/zcash_voting", rev = "5818d3ed53ea463eab31643e857bbf5de8a0b34d" }
+vote-commitment-tree-client = { git = "https://github.com/valargroup/zcash_voting", rev = "5818d3ed53ea463eab31643e857bbf5de8a0b34d" }
+zcash_voting = { git = "https://github.com/valargroup/zcash_voting", rev = "5818d3ed53ea463eab31643e857bbf5de8a0b34d" }
 
 # Keep the librustzcash family on one revision.
 pczt = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
