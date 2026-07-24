@@ -46,7 +46,7 @@ use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::{QueryError, ShardTreeError};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::TransparentKeyScope};
 use zcash_client_backend::data_api::wallet::input_selection::{
-    GreedyInputSelector, InputSelector, SpendPolicy,
+    GreedyInputSelector, InputSelector, LockFilter, LockedInputPolicy, SpendPolicy,
 };
 use zcash_client_backend::{
     data_api::{
@@ -71,7 +71,7 @@ use zcash_client_sqlite::{wallet::commitment_tree, AccountUuid, ReceivedNoteId};
 use zcash_keys::{address::Address, keys::UnifiedSpendingKey};
 use zcash_primitives::transaction::TxVersion;
 use zcash_primitives::transaction::{
-    builder::{BuildConfig, Builder},
+    builder::{BuildConfig, Builder, BundlePadding},
     fees::{
         transparent::InputSize as TransparentInputSize,
         zip317::{P2PKH_STANDARD_INPUT_SIZE, P2PKH_STANDARD_OUTPUT_SIZE},
@@ -84,7 +84,7 @@ use zcash_protocol::{
     consensus::{self, BlockHeight, NetworkConstants, Parameters},
     memo::{Memo, MemoBytes},
     value::Zatoshis,
-    PoolType, ShieldedProtocol,
+    PoolType, ShieldedPool,
 };
 
 use crate::wallet::db::{
@@ -279,7 +279,7 @@ pub fn propose_send(
     amount_zatoshi: u64,
     memo_str: Option<&str>,
 ) -> Result<ProposalResult, String> {
-    use zcash_protocol::{PoolType, ShieldedProtocol as SP};
+    use zcash_protocol::{PoolType, ShieldedPool as SP};
 
     if send_flow_id.is_empty() {
         return Err("Send flow id is required".to_string());
@@ -485,7 +485,7 @@ pub(crate) fn create_shield_transparent_pczt(
             &proposal,
             // Keep the builder-derived expiry height.
             None,
-            orchard::builder::BundleType::DEFAULT,
+            BundlePadding::DEFAULT,
         )
         .map_err(|e| format!("Create shielding PCZT failed: {e}"))?;
         let pczt_bytes = pczt
@@ -549,6 +549,7 @@ pub(crate) async fn shield_transparent_balance(
                 &wallet::SpendingKeys::from_unified_spending_key(usk),
                 OvkPolicy::Sender,
                 &proposal,
+                None,
             )
             .map_err(|e| format!("Create shielding TX failed: {e}"))?;
 
@@ -671,6 +672,7 @@ async fn execute_stored_proposal(
                         &wallet::SpendingKeys::from_unified_spending_key(usk),
                         OvkPolicy::Sender,
                         &proposal,
+                        None,
                     )
                     .map_err(|e| format!("Create TX failed: {e}"))?
                 }
@@ -685,6 +687,7 @@ async fn execute_stored_proposal(
                         &wallet::SpendingKeys::from_unified_spending_key(usk),
                         OvkPolicy::Sender,
                         &proposal,
+                        None,
                     )
                     .map_err(|e| format!("Create TX failed: {e}"))?
                 }
@@ -2985,7 +2988,7 @@ fn create_padded_orchard_denomination_pczts(
     )?
     .ok_or("Insufficient spendable Orchard funds for denomination split")?;
 
-    let padded_bundle_type = orchard::builder::BundleType::Transactional {
+    let padded_bundle_type = BundlePadding {
         bundle_required: false,
         pad_to_minimum: Some(
             u8::try_from(super::migration::DENOMINATION_SPLIT_ACTIONS)
@@ -3255,8 +3258,8 @@ pub(super) fn migration_child_builder<P: consensus::Parameters>(
             sapling_anchor: None,
             orchard_anchor: Some(orchard_anchor),
             ironwood_anchor: Some(orchard::Anchor::empty_tree()),
-            orchard_bundle_type: orchard::builder::BundleType::DEFAULT,
-            ironwood_bundle_type: orchard::builder::BundleType::UNPADDED,
+            orchard_padding: BundlePadding::DEFAULT,
+            ironwood_padding: BundlePadding::UNPADDED,
         },
     )
     .with_expiry_height(BlockHeight::from(MIGRATION_NO_EXPIRY_HEIGHT))
@@ -3433,9 +3436,10 @@ fn create_orchard_to_ironwood_pczt_from_note(
     let selected = db
         .get_spendable_note(
             &txid,
-            ShieldedProtocol::Orchard,
+            ShieldedPool::Orchard,
             note_ref.output_index,
             target_height,
+            LockFilter::Policy(&LockedInputPolicy::Exclude),
         )
         .map_err(|e| format!("Failed to revalidate prepared note: {e}"))?;
     let Some(selected) = selected else {
@@ -3612,7 +3616,7 @@ fn make_orchard_split_builder_with_type(
     recipient: orchard::Address,
     outputs: &[u64],
     memo: &MemoBytes,
-    bundle_type: orchard::builder::BundleType,
+    bundle_type: BundlePadding,
 ) -> Result<Builder<WalletNetwork, ()>, String> {
     let mut builder = Builder::new(
         network,
@@ -3623,8 +3627,8 @@ fn make_orchard_split_builder_with_type(
             ironwood_anchor: Some(orchard::Anchor::empty_tree()),
             // A denomination stage is an ordinary private Orchard-to-Orchard split;
             // keep it padded like regular sends.
-            orchard_bundle_type: bundle_type,
-            ironwood_bundle_type: orchard::builder::BundleType::DEFAULT,
+            orchard_padding: bundle_type,
+            ironwood_padding: BundlePadding::DEFAULT,
         },
     )
     .with_expiry_height(BlockHeight::from(MIGRATION_NO_EXPIRY_HEIGHT));
@@ -3732,6 +3736,7 @@ fn build_shielding_proposal(
         account_id,
         ConfirmationsPolicy::MIN,
         CoinbaseFilter::AllTransparentOutputs,
+        None,
     )
     .map_err(|e| format!("Shield proposal failed: {e}"))?;
 
@@ -3855,7 +3860,7 @@ fn proposal_has_orchard_payment<NoteRef>(proposal: &Proposal<WalletFeeRule, Note
     proposal.steps().iter().any(|step| {
         step.payment_pools()
             .values()
-            .any(|pool| *pool == PoolType::Shielded(ShieldedProtocol::Orchard))
+            .any(|pool| *pool == PoolType::Shielded(ShieldedPool::Orchard))
     })
 }
 
@@ -3953,13 +3958,14 @@ impl InputSource for ReservedInputSource<'_> {
     fn get_spendable_note(
         &self,
         txid: &TxId,
-        protocol: ShieldedProtocol,
+        protocol: ShieldedPool,
         index: u32,
         target_height: wallet::TargetHeight,
+        lock_filter: LockFilter<'_>,
     ) -> Result<Option<ReceivedNote<Self::NoteRef, Note>>, Self::Error> {
         Ok(self
             .inner
-            .get_spendable_note(txid, protocol, index, target_height)?
+            .get_spendable_note(txid, protocol, index, target_height, lock_filter)?
             .filter(|note| !self.reserved.contains(note.internal_note_id()))
             .filter(|note| !self.note_is_locked(note)))
     }
@@ -3968,10 +3974,11 @@ impl InputSource for ReservedInputSource<'_> {
         &self,
         account: Self::AccountId,
         target_value: TargetValue,
-        sources: &[ShieldedProtocol],
+        sources: &[ShieldedPool],
         target_height: wallet::TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
         exclude: &[Self::NoteRef],
+        lock_filter: LockFilter<'_>,
     ) -> Result<ReceivedNotes<Self::NoteRef>, Self::Error> {
         let selected = self.inner.select_spendable_notes(
             account,
@@ -3980,6 +3987,7 @@ impl InputSource for ReservedInputSource<'_> {
             target_height,
             confirmations_policy,
             &self.merged_excludes(exclude),
+            lock_filter,
         )?;
         Ok(ReceivedNotes::new(
             selected.sapling().to_vec(),
@@ -4001,15 +4009,17 @@ impl InputSource for ReservedInputSource<'_> {
     fn select_unspent_notes(
         &self,
         account: Self::AccountId,
-        sources: &[ShieldedProtocol],
+        sources: &[ShieldedPool],
         target_height: wallet::TargetHeight,
         exclude: &[Self::NoteRef],
+        lock_filter: LockFilter<'_>,
     ) -> Result<ReceivedNotes<Self::NoteRef>, Self::Error> {
         let selected = self.inner.select_unspent_notes(
             account,
             sources,
             target_height,
             &self.merged_excludes(exclude),
+            lock_filter,
         )?;
         Ok(ReceivedNotes::new(
             selected.sapling().to_vec(),
@@ -4034,12 +4044,14 @@ impl InputSource for ReservedInputSource<'_> {
         selector: &NoteFilter,
         target_height: wallet::TargetHeight,
         exclude: &[Self::NoteRef],
+        lock_filter: LockFilter<'_>,
     ) -> Result<AccountMeta, Self::Error> {
         self.inner.get_account_metadata(
             account,
             selector,
             target_height,
             &self.merged_excludes(exclude),
+            lock_filter,
         )
     }
 
@@ -4058,12 +4070,14 @@ impl InputSource for ReservedInputSource<'_> {
         target_height: wallet::TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
         output_filter: CoinbaseFilter,
+        lock_filter: LockFilter<'_>,
     ) -> Result<Vec<WalletTransparentOutput<Self::AccountId>>, Self::Error> {
         self.inner.get_spendable_transparent_outputs(
             address,
             target_height,
             confirmations_policy,
             output_filter,
+            lock_filter,
         )
     }
 }
@@ -4105,14 +4119,16 @@ fn build_send_max_proposal(
         account_id,
         // Ironwood / NU6.3 notes are selected through the Orchard protocol path as
         // v3 note rows; librustzcash does not expose a separate Ironwood
-        // ShieldedProtocol selector. This is why balance prechecks can treat
+        // ShieldedPool selector. This is why balance prechecks can treat
         // spendable Ironwood value as available to ordinary sends.
-        &[ShieldedProtocol::Sapling, ShieldedProtocol::Orchard],
+        &[ShieldedPool::Sapling, ShieldedPool::Orchard],
         &fee_rule,
         to,
         memo_bytes,
         MaxSpendMode::MaxSpendable,
         ConfirmationsPolicy::default(),
+        &LockedInputPolicy::Exclude,
+        None,
     )
     .map_err(|e| format!("Propose max failed: {e}"))
 }
@@ -4168,10 +4184,11 @@ fn build_transparent_recipient_send_max_proposal(
         .select_spendable_notes(
             account_id,
             TargetValue::AllFunds(MaxSpendMode::MaxSpendable),
-            &[ShieldedProtocol::Sapling, ShieldedProtocol::Orchard],
+            &[ShieldedPool::Sapling, ShieldedPool::Orchard],
             target_height,
             confirmations_policy,
             &[],
+            LockFilter::Policy(&LockedInputPolicy::Exclude),
         )
         .map_err(|e| format!("Select max inputs failed: {e}"))?;
 
@@ -4280,7 +4297,7 @@ fn summarize_send_max_proposal<NoteRef>(
     let needs_sapling_params = proposal
         .steps()
         .iter()
-        .any(|step| step.involves(PoolType::Shielded(ShieldedProtocol::Sapling)));
+        .any(|step| step.involves(PoolType::Shielded(ShieldedPool::Sapling)));
 
     Ok(SendMaxEstimateResult {
         amount_zatoshi,
@@ -5380,7 +5397,7 @@ fn zip317_helper<DbT: InputSource>(
     let change_strategy = MultiOutputChangeStrategy::new(
         ConservativeZip317FeeRule,
         change_memo,
-        ShieldedProtocol::Orchard,
+        ShieldedPool::Orchard,
         DustOutputPolicy::default(),
         SplitPolicy::with_min_output_value(
             NonZeroUsize::new(4).unwrap(),
@@ -5514,6 +5531,27 @@ mod tests {
                 .activation_height(NetworkUpgrade::Nu6_3)
                 .expect("testnet NU6.3 activation height"),
         )
+    }
+
+    fn checkpoint_empty_trees_at(db: &mut WalletDatabase, height: BlockHeight) {
+        type CheckpointError = WalletError<
+            (),
+            commitment_tree::Error,
+            (),
+            <ConservativeZip317FeeRule as FeeRule>::Error,
+            (),
+            ReceivedNoteId,
+        >;
+
+        let result: Result<_, CheckpointError> =
+            db.with_sapling_tree_mut(|tree| Ok(tree.checkpoint(height)?));
+        assert!(result.unwrap(), "checkpointing the empty Sapling tree");
+        let result: Result<_, CheckpointError> =
+            db.with_orchard_tree_mut(|tree| Ok(tree.checkpoint(height)?));
+        assert!(result.unwrap(), "checkpointing the empty Orchard tree");
+        let result: Result<_, CheckpointError> =
+            db.with_ironwood_tree_mut(|tree| Ok(tree.checkpoint(height)?));
+        result.unwrap();
     }
 
     fn taddr(seed: u8) -> TransparentAddress {
@@ -5795,7 +5833,7 @@ mod tests {
         // Recipient address matches the requested payment pool.
         let to = match payment_pool {
             PoolType::Transparent => Address::Transparent(taddr(9)).to_zcash_address(&network),
-            PoolType::Shielded(ShieldedProtocol::Orchard) => {
+            PoolType::Shielded(ShieldedPool::Orchard) => {
                 let ua = zcash_keys::address::UnifiedAddress::from_receivers(
                     Some(orchard_recipient),
                     None,
@@ -5804,12 +5842,12 @@ mod tests {
                 .expect("UA with an Orchard receiver is valid");
                 Address::from(ua).to_zcash_address(&network)
             }
-            PoolType::Shielded(ShieldedProtocol::Sapling) => {
+            PoolType::Shielded(ShieldedPool::Sapling) => {
                 let esk = sapling_crypto::zip32::ExtendedSpendingKey::master(&[9u8; 32]);
                 let (_, sapling_recipient) = esk.default_address();
                 Address::from(sapling_recipient).to_zcash_address(&network)
             }
-            PoolType::Shielded(ShieldedProtocol::Ironwood) => {
+            PoolType::Shielded(ShieldedPool::Ironwood) => {
                 unreachable!("this fixture never requests Ironwood payments")
             }
         };
@@ -5848,7 +5886,7 @@ mod tests {
     fn proposal_has_orchard_payment_detects_recipient_pool() {
         // Orchard recipient => Orchard payment.
         assert!(proposal_has_orchard_payment(
-            &fabricated_proposal_with_payment_pool(PoolType::Shielded(ShieldedProtocol::Orchard)),
+            &fabricated_proposal_with_payment_pool(PoolType::Shielded(ShieldedPool::Orchard)),
         ));
         // Transparent recipient (Orchard change is not a payment pool) => none.
         assert!(!proposal_has_orchard_payment(
@@ -5856,7 +5894,7 @@ mod tests {
         ));
         // Sapling recipient => not an Orchard payment.
         assert!(!proposal_has_orchard_payment(
-            &fabricated_proposal_with_payment_pool(PoolType::Shielded(ShieldedProtocol::Sapling)),
+            &fabricated_proposal_with_payment_pool(PoolType::Shielded(ShieldedPool::Sapling)),
         ));
         // Change-only send-max proposal (transparent recipient, Orchard spend)
         // has no Orchard payment pool either.
@@ -5871,7 +5909,7 @@ mod tests {
         // build would fail with CrossAddressDisabled), and the re-proposal
         // closure must never run.
         let pass1 =
-            fabricated_proposal_with_payment_pool(PoolType::Shielded(ShieldedProtocol::Orchard));
+            fabricated_proposal_with_payment_pool(PoolType::Shielded(ShieldedPool::Orchard));
 
         let (_, tx_version) =
             propose_with_note_version_downgrade(pass1, Some(TxVersion::V6), |_| {
@@ -6049,27 +6087,9 @@ mod tests {
         let tip = BlockHeight::from_u32(testnet_nu6_3_activation_height());
         db.update_chain_tip(tip).unwrap();
         // Shielding now derives the target/anchor heights from scan progress
-        // (shard-tree checkpoints) rather than the raw chain tip; checkpoint
-        // the empty Orchard tree at the tip to stand in for a scan.
-        {
-            type CheckpointError = WalletError<
-                (),
-                commitment_tree::Error,
-                (),
-                <ConservativeZip317FeeRule as FeeRule>::Error,
-                (),
-                ReceivedNoteId,
-            >;
-            let result: Result<_, CheckpointError> =
-                db.with_sapling_tree_mut(|tree| Ok(tree.checkpoint(tip)?));
-            assert!(result.unwrap(), "checkpointing the empty Sapling tree");
-            let result: Result<_, CheckpointError> =
-                db.with_orchard_tree_mut(|tree| Ok(tree.checkpoint(tip)?));
-            assert!(result.unwrap(), "checkpointing the empty Orchard tree");
-            let result: Result<_, CheckpointError> =
-                db.with_ironwood_tree_mut(|tree| Ok(tree.checkpoint(tip)?));
-            result.unwrap();
-        }
+        // rather than the raw chain tip; checkpoint the empty trees at the tip
+        // to stand in for a scan.
+        checkpoint_empty_trees_at(&mut db, tip);
 
         let ua_request = zcash_keys::keys::UnifiedAddressRequest::custom(
             ReceiverRequirement::Require,
@@ -6392,7 +6412,7 @@ mod tests {
                 recipient,
                 &[output_value],
                 &memo,
-                orchard::builder::BundleType::DEFAULT,
+                BundlePadding::DEFAULT,
             )
         };
 
@@ -6427,7 +6447,7 @@ mod tests {
         let memo = MemoBytes::empty();
         let outputs = vec![100_000u64; 10];
         let fee_rule = ConservativeZip317FeeRule;
-        let bundle_type = orchard::builder::BundleType::Transactional {
+        let bundle_type = BundlePadding {
             bundle_required: false,
             pad_to_minimum: Some(16),
         };
@@ -6710,6 +6730,7 @@ mod tests {
         let mut db = open_wallet_db(db_path, network).unwrap();
         let tip = BlockHeight::from_u32(1_000);
         db.update_chain_tip(tip).unwrap();
+        checkpoint_empty_trees_at(&mut db, tip);
 
         let ua_request = zcash_keys::keys::UnifiedAddressRequest::custom(
             ReceiverRequirement::Require,
@@ -6757,6 +6778,7 @@ mod tests {
             &wallet::SpendingKeys::from_unified_spending_key(usk),
             OvkPolicy::Sender,
             &proposal,
+            None,
         )
         .expect("many-UTXO shielding should build without a fee/change mismatch");
         let change_values = proposal

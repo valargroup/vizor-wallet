@@ -71,21 +71,21 @@ url = "2.5.8"
 
 # Zcash core
 [dependencies.zcash_primitives]
-version = "0.29.0-pre.0"
+version = "0.30.0"
 
 [dependencies.zcash_address]
-version = "0.13.0-pre.0"
+version = "0.13.0"
 
 [dependencies.zcash_keys]
-version = "0.15.0-pre.0"
+version = "0.15.0"
 features = ["orchard"]
 
 [dependencies.zcash_protocol]
-version = "0.10.0-pre.0"
+version = "0.10.1"
 
 [dependencies.transparent]
 package = "zcash_transparent"
-version = "0.9.0-pre.0"
+version = "0.10.0"
 
 [dependencies.zcash_client_backend]
 version = "0.24.0-rc.1"
@@ -109,14 +109,14 @@ version = "1.0.0"
 # Must match the Orchard release used by the pinned librustzcash and
 # zcash_voting revisions to avoid type conflicts.
 [dependencies.orchard]
-version = "0.15.0"
+version = "0.15.4"
 
 # Proofs
 [dependencies.zcash_proofs]
-version = "0.29.0-pre.0"
+version = "0.30.0"
 
 [dependencies.pczt]
-version = "0.8.0-rc.1"
+version = "0.8.0"
 features = [
     "orchard",
     "io-finalizer",
@@ -153,20 +153,20 @@ version = "0.3.2"
 
 [patch.crates-io]
 # Keep the voting crates on the revision tested by this application.
-vote-commitment-tree = { git = "https://github.com/valargroup/zcash_voting", rev = "5818d3ed53ea463eab31643e857bbf5de8a0b34d" }
-vote-commitment-tree-client = { git = "https://github.com/valargroup/zcash_voting", rev = "5818d3ed53ea463eab31643e857bbf5de8a0b34d" }
-zcash_voting = { git = "https://github.com/valargroup/zcash_voting", rev = "5818d3ed53ea463eab31643e857bbf5de8a0b34d" }
+vote-commitment-tree = { git = "https://github.com/valargroup/zcash_voting", rev = "6b2bcc9c80f5f58f2335a020a54dd6c309bb5953" }
+vote-commitment-tree-client = { git = "https://github.com/valargroup/zcash_voting", rev = "6b2bcc9c80f5f58f2335a020a54dd6c309bb5953" }
+zcash_voting = { git = "https://github.com/valargroup/zcash_voting", rev = "6b2bcc9c80f5f58f2335a020a54dd6c309bb5953" }
 
 # Keep the librustzcash family on one revision.
-pczt = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
-zcash_address = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
-zcash_proofs = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
-zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "93b5cce0522429358353f8892b14a38a72591745" }
+pczt = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
+zcash_address = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
+zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "57b844dc00bf1f25254b5859b8d5faa8e5730f98" }
 
 # Keep the direct tree dependency aligned with the patched graph.
 incrementalmerkletree = { git = "https://github.com/zcash/incrementalmerkletree", rev = "decefc469dbf1e686b20b7e7dcaa7cb4f122125b" }
