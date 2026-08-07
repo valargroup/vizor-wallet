@@ -331,9 +331,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<VoteShareWire> dco_decode_list_vote_share_wire(dynamic raw);
 
   @protected
-  List<WireEncryptedShare> dco_decode_list_wire_encrypted_share(dynamic raw);
-
-  @protected
   NextStepView dco_decode_next_step_view(dynamic raw);
 
   @protected
@@ -907,11 +904,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<VoteShareWire> sse_decode_list_vote_share_wire(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  List<WireEncryptedShare> sse_decode_list_wire_encrypted_share(
     SseDeserializer deserializer,
   );
 
@@ -1622,12 +1614,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_vote_share_wire(
     List<VoteShareWire> self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_list_wire_encrypted_share(
-    List<WireEncryptedShare> self,
     SseSerializer serializer,
   );
 

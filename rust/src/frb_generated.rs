@@ -3264,6 +3264,9 @@ fn wire__crate__api__sync__put_subtree_roots_impl(
             let api_orchard_start_index = <u64>::sse_decode(&mut deserializer);
             let api_orchard_roots =
                 <Vec<crate::api::sync::SubtreeRoot>>::sse_decode(&mut deserializer);
+            let api_ironwood_start_index = <u64>::sse_decode(&mut deserializer);
+            let api_ironwood_roots =
+                <Vec<crate::api::sync::SubtreeRoot>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
@@ -3274,6 +3277,8 @@ fn wire__crate__api__sync__put_subtree_roots_impl(
                         api_sapling_roots,
                         api_orchard_start_index,
                         api_orchard_roots,
+                        api_ironwood_start_index,
+                        api_ironwood_roots,
                     )?;
                     Ok(output_ok)
                 })())
@@ -3746,6 +3751,7 @@ fn wire__crate__api__sync__scan_blocks_impl(
             let api_tree_state_time = <u32>::sse_decode(&mut deserializer);
             let api_tree_state_sapling_tree = <String>::sse_decode(&mut deserializer);
             let api_tree_state_orchard_tree = <String>::sse_decode(&mut deserializer);
+            let api_tree_state_ironwood_tree = <String>::sse_decode(&mut deserializer);
             let api_limit = <u64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
@@ -3761,6 +3767,7 @@ fn wire__crate__api__sync__scan_blocks_impl(
                         api_tree_state_time,
                         api_tree_state_sapling_tree,
                         api_tree_state_orchard_tree,
+                        api_tree_state_ironwood_tree,
                         api_limit,
                     )?;
                     Ok(output_ok)
@@ -4653,7 +4660,7 @@ const _: fn() = || {
             None::<zcash_voting::wire::DelegationSubmissionWire>.unwrap();
         let _: String = DelegationSubmissionWire.rk;
         let _: String = DelegationSubmissionWire.spend_auth_sig;
-        let _: String = DelegationSubmissionWire.sighash;
+        let _: String = DelegationSubmissionWire.tx1_effects;
         let _: String = DelegationSubmissionWire.nf_signed;
         let _: String = DelegationSubmissionWire.cmx_new;
         let _: String = DelegationSubmissionWire.gov_comm;
@@ -4872,7 +4879,6 @@ const _: fn() = || {
         let _: zcash_voting::types::WireEncryptedShare = VoteShareWire.encrypted_share;
         let _: u32 = VoteShareWire.share_index;
         let _: u64 = VoteShareWire.vc_tree_position;
-        let _: Vec<zcash_voting::types::WireEncryptedShare> = VoteShareWire.all_encrypted_shares;
         let _: Vec<String> = VoteShareWire.share_comms;
         let _: String = VoteShareWire.primary_blind;
         let _: u64 = VoteShareWire.submit_at;
@@ -5316,7 +5322,7 @@ impl SseDecode for zcash_voting::wire::DelegationSubmissionWire {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_rk = <String>::sse_decode(deserializer);
         let mut var_spendAuthSig = <String>::sse_decode(deserializer);
-        let mut var_sighash = <String>::sse_decode(deserializer);
+        let mut var_tx1Effects = <String>::sse_decode(deserializer);
         let mut var_nfSigned = <String>::sse_decode(deserializer);
         let mut var_cmxNew = <String>::sse_decode(deserializer);
         let mut var_govComm = <String>::sse_decode(deserializer);
@@ -5326,7 +5332,7 @@ impl SseDecode for zcash_voting::wire::DelegationSubmissionWire {
         return zcash_voting::wire::DelegationSubmissionWire {
             rk: var_rk,
             spend_auth_sig: var_spendAuthSig,
-            sighash: var_sighash,
+            tx1_effects: var_tx1Effects,
             nf_signed: var_nfSigned,
             cmx_new: var_cmxNew,
             gov_comm: var_govComm,
@@ -5886,20 +5892,6 @@ impl SseDecode for Vec<zcash_voting::wire::VoteShareWire> {
     }
 }
 
-impl SseDecode for Vec<zcash_voting::types::WireEncryptedShare> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut len_ = <i32>::sse_decode(deserializer);
-        let mut ans_ = vec![];
-        for idx_ in 0..len_ {
-            ans_.push(<zcash_voting::types::WireEncryptedShare>::sse_decode(
-                deserializer,
-            ));
-        }
-        return ans_;
-    }
-}
-
 impl SseDecode for zcash_voting::wire::NextStepView {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -6446,9 +6438,11 @@ impl SseDecode for crate::api::sync::SubtreeIndices {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_nextSapling = <u64>::sse_decode(deserializer);
         let mut var_nextOrchard = <u64>::sse_decode(deserializer);
+        let mut var_nextIronwood = <u64>::sse_decode(deserializer);
         return crate::api::sync::SubtreeIndices {
             next_sapling: var_nextSapling,
             next_orchard: var_nextOrchard,
+            next_ironwood: var_nextIronwood,
         };
     }
 }
@@ -6735,8 +6729,6 @@ impl SseDecode for zcash_voting::wire::VoteShareWire {
             <zcash_voting::types::WireEncryptedShare>::sse_decode(deserializer);
         let mut var_shareIndex = <u32>::sse_decode(deserializer);
         let mut var_vcTreePosition = <u64>::sse_decode(deserializer);
-        let mut var_allEncryptedShares =
-            <Vec<zcash_voting::types::WireEncryptedShare>>::sse_decode(deserializer);
         let mut var_shareComms = <Vec<String>>::sse_decode(deserializer);
         let mut var_primaryBlind = <String>::sse_decode(deserializer);
         let mut var_submitAt = <u64>::sse_decode(deserializer);
@@ -6747,7 +6739,6 @@ impl SseDecode for zcash_voting::wire::VoteShareWire {
             encrypted_share: var_encryptedShare,
             share_index: var_shareIndex,
             vc_tree_position: var_vcTreePosition,
-            all_encrypted_shares: var_allEncryptedShares,
             share_comms: var_shareComms,
             primary_blind: var_primaryBlind,
             submit_at: var_submitAt,
@@ -7507,7 +7498,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<zcash_voting::wire::Delegation
         [
             self.0.rk.into_into_dart().into_dart(),
             self.0.spend_auth_sig.into_into_dart().into_dart(),
-            self.0.sighash.into_into_dart().into_dart(),
+            self.0.tx1_effects.into_into_dart().into_dart(),
             self.0.nf_signed.into_into_dart().into_dart(),
             self.0.cmx_new.into_into_dart().into_dart(),
             self.0.gov_comm.into_into_dart().into_dart(),
@@ -8253,6 +8244,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::sync::SubtreeIndices {
         [
             self.next_sapling.into_into_dart().into_dart(),
             self.next_orchard.into_into_dart().into_dart(),
+            self.next_ironwood.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -8589,7 +8581,6 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<zcash_voting::wire::VoteShareW
             self.0.encrypted_share.into_into_dart().into_dart(),
             self.0.share_index.into_into_dart().into_dart(),
             self.0.vc_tree_position.into_into_dart().into_dart(),
-            self.0.all_encrypted_shares.into_into_dart().into_dart(),
             self.0.share_comms.into_into_dart().into_dart(),
             self.0.primary_blind.into_into_dart().into_dart(),
             self.0.submit_at.into_into_dart().into_dart(),
@@ -9058,7 +9049,7 @@ impl SseEncode for zcash_voting::wire::DelegationSubmissionWire {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.rk, serializer);
         <String>::sse_encode(self.spend_auth_sig, serializer);
-        <String>::sse_encode(self.sighash, serializer);
+        <String>::sse_encode(self.tx1_effects, serializer);
         <String>::sse_encode(self.nf_signed, serializer);
         <String>::sse_encode(self.cmx_new, serializer);
         <String>::sse_encode(self.gov_comm, serializer);
@@ -9476,16 +9467,6 @@ impl SseEncode for Vec<zcash_voting::wire::VoteShareWire> {
     }
 }
 
-impl SseEncode for Vec<zcash_voting::types::WireEncryptedShare> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(self.len() as _, serializer);
-        for item in self {
-            <zcash_voting::types::WireEncryptedShare>::sse_encode(item, serializer);
-        }
-    }
-}
-
 impl SseEncode for zcash_voting::wire::NextStepView {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -9870,6 +9851,7 @@ impl SseEncode for crate::api::sync::SubtreeIndices {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u64>::sse_encode(self.next_sapling, serializer);
         <u64>::sse_encode(self.next_orchard, serializer);
+        <u64>::sse_encode(self.next_ironwood, serializer);
     }
 }
 
@@ -10063,10 +10045,6 @@ impl SseEncode for zcash_voting::wire::VoteShareWire {
         <zcash_voting::types::WireEncryptedShare>::sse_encode(self.encrypted_share, serializer);
         <u32>::sse_encode(self.share_index, serializer);
         <u64>::sse_encode(self.vc_tree_position, serializer);
-        <Vec<zcash_voting::types::WireEncryptedShare>>::sse_encode(
-            self.all_encrypted_shares,
-            serializer,
-        );
         <Vec<String>>::sse_encode(self.share_comms, serializer);
         <String>::sse_encode(self.primary_blind, serializer);
         <u64>::sse_encode(self.submit_at, serializer);

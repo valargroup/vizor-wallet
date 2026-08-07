@@ -607,6 +607,8 @@ abstract class RustLibApi extends BaseApi {
     required List<SubtreeRoot> saplingRoots,
     required BigInt orchardStartIndex,
     required List<SubtreeRoot> orchardRoots,
+    required BigInt ironwoodStartIndex,
+    required List<SubtreeRoot> ironwoodRoots,
   });
 
   Future<void> crateApiVotingRecordShareDelegation({
@@ -690,6 +692,7 @@ abstract class RustLibApi extends BaseApi {
     required int treeStateTime,
     required String treeStateSaplingTree,
     required String treeStateOrchardTree,
+    required String treeStateIronwoodTree,
     required BigInt limit,
   });
 
@@ -4158,6 +4161,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required List<SubtreeRoot> saplingRoots,
     required BigInt orchardStartIndex,
     required List<SubtreeRoot> orchardRoots,
+    required BigInt ironwoodStartIndex,
+    required List<SubtreeRoot> ironwoodRoots,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -4169,6 +4174,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_list_subtree_root(saplingRoots, serializer);
           sse_encode_u_64(orchardStartIndex, serializer);
           sse_encode_list_subtree_root(orchardRoots, serializer);
+          sse_encode_u_64(ironwoodStartIndex, serializer);
+          sse_encode_list_subtree_root(ironwoodRoots, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -4188,6 +4195,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           saplingRoots,
           orchardStartIndex,
           orchardRoots,
+          ironwoodStartIndex,
+          ironwoodRoots,
         ],
         apiImpl: this,
       ),
@@ -4204,6 +4213,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "saplingRoots",
           "orchardStartIndex",
           "orchardRoots",
+          "ironwoodStartIndex",
+          "ironwoodRoots",
         ],
       );
 
@@ -4665,6 +4676,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required int treeStateTime,
     required String treeStateSaplingTree,
     required String treeStateOrchardTree,
+    required String treeStateIronwoodTree,
     required BigInt limit,
   }) {
     return handler.executeNormal(
@@ -4681,6 +4693,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_u_32(treeStateTime, serializer);
           sse_encode_String(treeStateSaplingTree, serializer);
           sse_encode_String(treeStateOrchardTree, serializer);
+          sse_encode_String(treeStateIronwoodTree, serializer);
           sse_encode_u_64(limit, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -4705,6 +4718,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           treeStateTime,
           treeStateSaplingTree,
           treeStateOrchardTree,
+          treeStateIronwoodTree,
           limit,
         ],
         apiImpl: this,
@@ -4725,6 +4739,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       "treeStateTime",
       "treeStateSaplingTree",
       "treeStateOrchardTree",
+      "treeStateIronwoodTree",
       "limit",
     ],
   );
@@ -5988,7 +6003,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return DelegationSubmissionWire(
       rk: dco_decode_String(arr[0]),
       spendAuthSig: dco_decode_String(arr[1]),
-      sighash: dco_decode_String(arr[2]),
+      tx1Effects: dco_decode_String(arr[2]),
       nfSigned: dco_decode_String(arr[3]),
       cmxNew: dco_decode_String(arr[4]),
       govComm: dco_decode_String(arr[5]),
@@ -6363,12 +6378,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<VoteShareWire> dco_decode_list_vote_share_wire(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_vote_share_wire).toList();
-  }
-
-  @protected
-  List<WireEncryptedShare> dco_decode_list_wire_encrypted_share(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_wire_encrypted_share).toList();
   }
 
   @protected
@@ -6815,11 +6824,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   SubtreeIndices dco_decode_subtree_indices(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return SubtreeIndices(
       nextSapling: dco_decode_u_64(arr[0]),
       nextOrchard: dco_decode_u_64(arr[1]),
+      nextIronwood: dco_decode_u_64(arr[2]),
     );
   }
 
@@ -7054,8 +7064,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   VoteShareWire dco_decode_vote_share_wire(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return VoteShareWire(
       sharesHash: dco_decode_String(arr[0]),
       proposalId: dco_decode_u_32(arr[1]),
@@ -7063,10 +7073,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       encryptedShare: dco_decode_wire_encrypted_share(arr[3]),
       shareIndex: dco_decode_u_32(arr[4]),
       vcTreePosition: dco_decode_u_64(arr[5]),
-      allEncryptedShares: dco_decode_list_wire_encrypted_share(arr[6]),
-      shareComms: dco_decode_list_String(arr[7]),
-      primaryBlind: dco_decode_String(arr[8]),
-      submitAt: dco_decode_u_64(arr[9]),
+      shareComms: dco_decode_list_String(arr[6]),
+      primaryBlind: dco_decode_String(arr[7]),
+      submitAt: dco_decode_u_64(arr[8]),
     );
   }
 
@@ -7638,7 +7647,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_rk = sse_decode_String(deserializer);
     var var_spendAuthSig = sse_decode_String(deserializer);
-    var var_sighash = sse_decode_String(deserializer);
+    var var_tx1Effects = sse_decode_String(deserializer);
     var var_nfSigned = sse_decode_String(deserializer);
     var var_cmxNew = sse_decode_String(deserializer);
     var var_govComm = sse_decode_String(deserializer);
@@ -7648,7 +7657,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return DelegationSubmissionWire(
       rk: var_rk,
       spendAuthSig: var_spendAuthSig,
-      sighash: var_sighash,
+      tx1Effects: var_tx1Effects,
       nfSigned: var_nfSigned,
       cmxNew: var_cmxNew,
       govComm: var_govComm,
@@ -8229,20 +8238,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<WireEncryptedShare> sse_decode_list_wire_encrypted_share(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <WireEncryptedShare>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_wire_encrypted_share(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
   NextStepView sse_decode_next_step_view(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_kind = sse_decode_String(deserializer);
@@ -8805,9 +8800,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_nextSapling = sse_decode_u_64(deserializer);
     var var_nextOrchard = sse_decode_u_64(deserializer);
+    var var_nextIronwood = sse_decode_u_64(deserializer);
     return SubtreeIndices(
       nextSapling: var_nextSapling,
       nextOrchard: var_nextOrchard,
+      nextIronwood: var_nextIronwood,
     );
   }
 
@@ -9084,9 +9081,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_encryptedShare = sse_decode_wire_encrypted_share(deserializer);
     var var_shareIndex = sse_decode_u_32(deserializer);
     var var_vcTreePosition = sse_decode_u_64(deserializer);
-    var var_allEncryptedShares = sse_decode_list_wire_encrypted_share(
-      deserializer,
-    );
     var var_shareComms = sse_decode_list_String(deserializer);
     var var_primaryBlind = sse_decode_String(deserializer);
     var var_submitAt = sse_decode_u_64(deserializer);
@@ -9097,7 +9091,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       encryptedShare: var_encryptedShare,
       shareIndex: var_shareIndex,
       vcTreePosition: var_vcTreePosition,
-      allEncryptedShares: var_allEncryptedShares,
       shareComms: var_shareComms,
       primaryBlind: var_primaryBlind,
       submitAt: var_submitAt,
@@ -9650,7 +9643,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.rk, serializer);
     sse_encode_String(self.spendAuthSig, serializer);
-    sse_encode_String(self.sighash, serializer);
+    sse_encode_String(self.tx1Effects, serializer);
     sse_encode_String(self.nfSigned, serializer);
     sse_encode_String(self.cmxNew, serializer);
     sse_encode_String(self.govComm, serializer);
@@ -10155,18 +10148,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_wire_encrypted_share(
-    List<WireEncryptedShare> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_wire_encrypted_share(item, serializer);
-    }
-  }
-
-  @protected
   void sse_encode_next_step_view(NextStepView self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.kind, serializer);
@@ -10595,6 +10576,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self.nextSapling, serializer);
     sse_encode_u_64(self.nextOrchard, serializer);
+    sse_encode_u_64(self.nextIronwood, serializer);
   }
 
   @protected
@@ -10800,7 +10782,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_wire_encrypted_share(self.encryptedShare, serializer);
     sse_encode_u_32(self.shareIndex, serializer);
     sse_encode_u_64(self.vcTreePosition, serializer);
-    sse_encode_list_wire_encrypted_share(self.allEncryptedShares, serializer);
     sse_encode_list_String(self.shareComms, serializer);
     sse_encode_String(self.primaryBlind, serializer);
     sse_encode_u_64(self.submitAt, serializer);

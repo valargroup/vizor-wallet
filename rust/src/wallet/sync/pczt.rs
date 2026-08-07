@@ -70,7 +70,9 @@
 //!    cancelled, exception before the consume call, etc.).
 
 use std::convert::Infallible;
+use std::sync::OnceLock;
 
+use zcash_primitives::transaction::builder::BundlePadding;
 use zcash_proofs::prover::LocalTxProver;
 
 use crate::wallet::db::with_wallet_db_write_lock;
@@ -114,6 +116,54 @@ impl ExtractAndBroadcastPcztResult {
     }
 }
 
+fn legacy_orchard_proving_key() -> &'static orchard::circuit::ProvingKey {
+    static LEGACY_ORCHARD_PROVING_KEY: OnceLock<orchard::circuit::ProvingKey> = OnceLock::new();
+    LEGACY_ORCHARD_PROVING_KEY.get_or_init(|| {
+        orchard::circuit::ProvingKey::build(orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2)
+    })
+}
+
+fn ironwood_orchard_proving_key() -> &'static orchard::circuit::ProvingKey {
+    static IRONWOOD_ORCHARD_PROVING_KEY: OnceLock<orchard::circuit::ProvingKey> = OnceLock::new();
+    IRONWOOD_ORCHARD_PROVING_KEY.get_or_init(|| {
+        orchard::circuit::ProvingKey::build(orchard::circuit::OrchardCircuitVersion::PostNu6_3)
+    })
+}
+
+/// Returns the Orchard circuit version selected by the PCZT's consensus branch.
+fn orchard_circuit_version_for_consensus_branch(
+    consensus_branch_id: u32,
+) -> orchard::circuit::OrchardCircuitVersion {
+    if matches!(
+        zcash_protocol::consensus::BranchId::try_from(consensus_branch_id),
+        Ok(zcash_protocol::consensus::BranchId::Nu6_3)
+    ) {
+        orchard::circuit::OrchardCircuitVersion::PostNu6_3
+    } else {
+        orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2
+    }
+}
+
+fn orchard_proving_key_for_consensus_branch(
+    consensus_branch_id: u32,
+) -> &'static orchard::circuit::ProvingKey {
+    if orchard_circuit_version_for_consensus_branch(consensus_branch_id)
+        == orchard::circuit::OrchardCircuitVersion::PostNu6_3
+    {
+        ironwood_orchard_proving_key()
+    } else {
+        legacy_orchard_proving_key()
+    }
+}
+
+fn orchard_verifying_key_for_consensus_branch(
+    consensus_branch_id: u32,
+) -> orchard::circuit::VerifyingKey {
+    orchard::circuit::VerifyingKey::build(orchard_circuit_version_for_consensus_branch(
+        consensus_branch_id,
+    ))
+}
+
 /// Create a PCZT from a stored proposal (for hardware wallet signing).
 ///
 /// This is the hardware-wallet analogue of `execute_proposal`, and
@@ -149,11 +199,14 @@ pub fn create_pczt_from_proposal(
             stored.account_id,
             OvkPolicy::Sender,
             &stored.proposal,
+            None,
+            BundlePadding::DEFAULT,
         )
         .map_err(|e| format!("Create PCZT failed: {e}"))
     })?;
 
-    Ok(pczt.serialize())
+    pczt.serialize()
+        .map_err(|e| format!("Serialize PCZT: {e:?}"))
 }
 
 /// Release a stored proposal without executing it. Called from the
@@ -185,13 +238,22 @@ pub fn add_proofs_to_pczt(
     use pczt::roles::prover::Prover;
 
     let pczt = pczt::Pczt::parse(pczt_bytes).map_err(|e| format!("Parse PCZT: {e:?}"))?;
+    let consensus_branch_id = *pczt.global().consensus_branch_id();
 
     let mut prover = Prover::new(pczt);
 
     if prover.requires_orchard_proof() {
         prover = prover
-            .create_orchard_proof(&orchard::circuit::ProvingKey::build())
+            .create_orchard_proof(orchard_proving_key_for_consensus_branch(
+                consensus_branch_id,
+            ))
             .map_err(|e| format!("Orchard proof: {e:?}"))?;
+    }
+
+    if prover.requires_ironwood_proof() {
+        prover = prover
+            .create_ironwood_proof(ironwood_orchard_proving_key())
+            .map_err(|e| format!("Ironwood proof: {e:?}"))?;
     }
 
     if prover.requires_sapling_proofs() {
@@ -213,7 +275,10 @@ pub fn add_proofs_to_pczt(
         }
     }
 
-    Ok(prover.finish().serialize())
+    prover
+        .finish()
+        .serialize()
+        .map_err(|e| format!("Serialize PCZT with proofs: {e:?}"))
 }
 
 /// Redact information from a PCZT that the signer role doesn't need
@@ -232,6 +297,12 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
                 ar.redact_output_proprietary("zcash_client_backend:output_info");
             });
         })
+        .redact_ironwood_with(|mut r| {
+            r.redact_actions(|mut ar| {
+                ar.clear_spend_witness();
+                ar.redact_output_proprietary("zcash_client_backend:output_info");
+            });
+        })
         .redact_sapling_with(|mut r| {
             r.redact_spends(|mut sr| sr.clear_witness());
             r.redact_outputs(|mut or| {
@@ -245,7 +316,9 @@ pub fn redact_pczt_for_signer(pczt_bytes: &[u8]) -> Result<Vec<u8>, String> {
         })
         .finish();
 
-    Ok(redacted.serialize())
+    redacted
+        .serialize()
+        .map_err(|e| format!("Serialize redacted PCZT: {e:?}"))
 }
 
 /// Combine a PCZT-with-proofs and a PCZT-with-signatures, broadcast
@@ -284,7 +357,10 @@ pub async fn extract_and_broadcast_pczt(
             .map_err(|e| format!("Combine PCZTs: {e:?}"))
     }
 
-    let orchard_vk = orchard::circuit::VerifyingKey::build();
+    let proof_pczt = pczt::Pczt::parse(pczt_with_proofs_bytes)
+        .map_err(|e| format!("Parse PCZT with proofs: {e:?}"))?;
+    let orchard_vk =
+        orchard_verifying_key_for_consensus_branch(*proof_pczt.global().consensus_branch_id());
 
     // Load Sapling verifying keys once if the caller supplied params.
     // The prover keeps the underlying params alive, and

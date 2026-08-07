@@ -568,6 +568,7 @@ fn queue_witness_repairs_if_needed(
 async fn repair_anchor_root_mismatch_if_needed(
     client: &mut CompactTxStreamerClient<Channel>,
     db: &mut WalletDatabase,
+    network: WalletNetwork,
     current_tip_height: u64,
     repair_passes_this_run: &mut u32,
 ) -> Result<Option<u64>, SyncError> {
@@ -584,6 +585,13 @@ async fn repair_anchor_root_mismatch_if_needed(
     let local_orchard = db
         .with_orchard_tree_mut(|tree| tree.root_at_checkpoint_id(&anchor_height))
         .map_err(|e| SyncError::db(format!("orchard root at {anchor_height}: {e}")))?;
+    let ironwood_active = network.is_nu_active(NetworkUpgrade::Nu6_3, anchor_height);
+    let local_ironwood = if ironwood_active {
+        db.with_ironwood_tree_mut(|tree| tree.root_at_checkpoint_id(&anchor_height))
+            .map_err(|e| SyncError::db(format!("ironwood root at {anchor_height}: {e}")))?
+    } else {
+        None
+    };
 
     let anchor_chain_state = get_tree_state(client, u32::from(anchor_height) as u64)
         .await?
@@ -598,8 +606,16 @@ async fn repair_anchor_root_mismatch_if_needed(
 
     let canonical_sapling = anchor_chain_state.final_sapling_tree().root();
     let canonical_orchard = anchor_chain_state.final_orchard_tree().root();
+    let canonical_ironwood =
+        ironwood_active.then(|| anchor_chain_state.final_ironwood_tree().root());
+    let ironwood_roots_match = match (&local_ironwood, &canonical_ironwood) {
+        (Some(local), Some(canonical)) => local.as_ref() == Some(canonical),
+        (None, None) => true,
+        _ => false,
+    };
     if local_sapling.as_ref() == Some(&canonical_sapling)
         && local_orchard.as_ref() == Some(&canonical_orchard)
+        && ironwood_roots_match
     {
         return Ok(None);
     }
@@ -628,7 +644,8 @@ async fn repair_anchor_root_mismatch_if_needed(
             "[{}] sync: anchor root mismatch at {anchor_height} \
              (target={}, repair_height={repair_height}, pass {}/{}); \
              local_sapling={:?}, canonical_sapling={:?}, local_orchard={:?}, \
-             canonical_orchard={:?}; rewinding to canonical chain state",
+             canonical_orchard={:?}, local_ironwood={:?}, canonical_ironwood={:?}; \
+             rewinding to canonical chain state",
             elapsed(),
             u32::from(target_height),
             *repair_passes_this_run,
@@ -637,6 +654,8 @@ async fn repair_anchor_root_mismatch_if_needed(
             canonical_sapling,
             local_orchard,
             canonical_orchard,
+            local_ironwood,
+            canonical_ironwood,
         );
 
         let current_tip = BlockHeight::from_u32(current_tip_height as u32);
@@ -931,6 +950,9 @@ async fn refresh_transparent_addresses(
             OutPoint::new(txid, index),
             TxOut::new(value, Script(script::Code(reply.script))),
             Some(BlockHeight::from_u32(height)),
+            None,
+            None,
+            None,
         )
         .ok_or_else(|| {
             SyncError::parse("transparent UTXO script did not decode to a wallet address")
@@ -1335,6 +1357,7 @@ async fn run_sync_impl(
                 } else if let Some(repair_pending_blocks) = repair_anchor_root_mismatch_if_needed(
                     &mut client,
                     &mut db,
+                    network,
                     current_tip_height,
                     &mut anchor_root_repair_passes_this_run,
                 )

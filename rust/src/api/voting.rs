@@ -1593,6 +1593,12 @@ mod tests {
         base64::engine::general_purpose::STANDARD.encode(bytes)
     }
 
+    fn test_tx1_effects() -> Vec<u8> {
+        let mut effects = vec![0; zcash_voting::tx1::TX1_EFFECTS_LEN];
+        effects[0] = zcash_voting::tx1::TX1_EFFECTS_VERSION;
+        effects
+    }
+
     fn tx_events_json(events: Vec<TxEvent>) -> String {
         serde_json::to_string(&events).unwrap()
     }
@@ -1746,6 +1752,7 @@ mod tests {
                     vote_round_id: "00010203".to_string(),
                     spend_auth_sig: [6; 64],
                     sighash: [7; 32],
+                    tx1_effects: test_tx1_effects(),
                 },
                 pczt_bytes: vec![1, 2, 3],
                 eligible_weight_zatoshi: 20,
@@ -1798,7 +1805,7 @@ mod tests {
                     proof: b64(vec![8; 96]),
                     rk: b64(vec![1; 32]),
                     spend_auth_sig: b64(vec![2; 64]),
-                    sighash: b64(vec![3; 32]),
+                    tx1_effects: b64(test_tx1_effects()),
                     nf_signed: b64(vec![4; 32]),
                     cmx_new: b64(vec![5; 32]),
                     gov_comm: b64(vec![6; 32]),
@@ -1815,6 +1822,8 @@ mod tests {
         let wire: serde_json::Value = serde_json::from_str(&wire).unwrap();
         assert!(wire.get("signed_note_nullifier").is_some());
         assert!(wire.get("van_cmx").is_some());
+        assert!(wire.get("sighash").is_none());
+        assert!(wire.get("tx1_effects").is_some());
         assert_eq!(
             wire["gov_nullifiers"].as_array().unwrap().len(),
             zcash_voting::BUNDLE_NOTE_SLOTS
@@ -1867,18 +1876,6 @@ mod tests {
                 },
                 share_index: 1,
                 vc_tree_position: 55,
-                all_encrypted_shares: vec![
-                    zcash_voting::wire::WireEncryptedShare {
-                        c1: vec![3],
-                        c2: vec![4],
-                        share_index: 1,
-                    },
-                    zcash_voting::wire::WireEncryptedShare {
-                        c1: vec![5],
-                        c2: vec![6],
-                        share_index: 2,
-                    },
-                ],
                 share_comms: vec!["Bw==".to_string(), "CA==".to_string()],
                 primary_blind: "CQ==".to_string(),
                 submit_at: 0,
@@ -1888,10 +1885,6 @@ mod tests {
         )
         .unwrap();
         let expected = serde_json::json!({
-            "all_enc_shares": [
-                {"c1":"Aw==","c2":"BA==","share_index":1},
-                {"c1":"BQ==","c2":"Bg==","share_index":2}
-            ],
             "enc_share": {"c1":"Aw==","c2":"BA==","share_index":1},
             "primary_blind":"CQ==",
             "proposal_id":7,
@@ -1951,7 +1944,7 @@ mod tests {
         assert_eq!(recovered["tree_position"], 99);
         assert_eq!(recovered["submit_at"], 0);
         assert_eq!(recovered["enc_share"]["c1"], "Aw==");
-        assert_eq!(recovered["all_enc_shares"].as_array().unwrap().len(), 2);
+        assert!(recovered.get("all_enc_shares").is_none());
         assert_eq!(
             base64::engine::general_purpose::STANDARD
                 .decode(recovered["shares_hash"].as_str().unwrap())
@@ -1986,7 +1979,6 @@ mod tests {
                 },
                 share_index: 1,
                 vc_tree_position: 0,
-                all_encrypted_shares: vec![],
                 share_comms: vec![],
                 primary_blind: "CQ==".to_string(),
                 submit_at: 0,
@@ -2121,7 +2113,7 @@ mod tests {
                 submission: zcash_voting::wire::DelegationSubmissionWire {
                     rk: "rk".to_string(),
                     spend_auth_sig: "sig".to_string(),
-                    sighash: "sighash".to_string(),
+                    tx1_effects: "tx1-effects".to_string(),
                     nf_signed: "nf".to_string(),
                     cmx_new: "cmx".to_string(),
                     gov_comm: "gov".to_string(),
@@ -2258,7 +2250,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = db::open_voting_db(db_path.to_str().unwrap(), "wallet-api-bundles").unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
 
@@ -2297,7 +2294,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = db::open_voting_db(db_path.to_str().unwrap(), "wallet-api-witness").unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
         let server = start_tree_server(1, vec![fp_one_base64()], 3);
@@ -2333,7 +2335,12 @@ mod tests {
         let db_path = temp_dir.path().join("voting.sqlite");
         let account_uuid = "wallet-api-round-reset";
         let db = db::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
         let server = start_tree_server(1, vec![fp_one_base64()], 3);
@@ -2372,10 +2379,16 @@ mod tests {
         let db_path = temp_dir.path().join("voting.sqlite");
         let account_uuid = "wallet-api-round-scope-reset";
         let db = db::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         let mut other_round_params = test_api_round_params();
         other_round_params.vote_round_id = OTHER_ROUND_ID.to_string();
-        db.init_round(&other_round_params, None).unwrap();
+        db.init_round(zcash_voting::Network::Testnet, &other_round_params, None)
+            .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
         db.ensure_bundles(OTHER_ROUND_ID, &[test_note_info(0)])
@@ -2434,7 +2447,12 @@ mod tests {
         let db_path = temp_dir.path().join("voting.sqlite");
         let account_uuid = "wallet-api-account-reset";
         let db = db::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         db.store_van_position(ROUND_ID, 0, 0).unwrap();
         let server = start_tree_server(1, vec![fp_one_base64()], 3);
@@ -2470,7 +2488,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         seed_recovery_vote(&db, TEST_ACCOUNT_UUID, 0, 7, 1, 88);
 
@@ -2494,7 +2517,12 @@ mod tests {
         let db_path = temp_dir.path().join("voting.sqlite");
         let account_uuid = "wallet-api-recovery";
         let db = db::open_voting_db(db_path.to_str().unwrap(), account_uuid).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         let notes: Vec<_> = (0..6).map(test_note_info).collect();
         db.ensure_bundles(ROUND_ID, &notes).unwrap();
         db.store_delegation_tx_hash(ROUND_ID, 0, "delegation-tx-0")
@@ -2608,14 +2636,24 @@ mod tests {
 
         let target_db = db::open_voting_db(db_path.to_str().unwrap(), target_account_uuid).unwrap();
         target_db
-            .init_round(&test_api_round_params(), None)
+            .init_round(
+                zcash_voting::Network::Testnet,
+                &test_api_round_params(),
+                None,
+            )
             .unwrap();
         target_db
             .ensure_bundles(ROUND_ID, &[test_note_info(0)])
             .unwrap();
 
         let other_db = db::open_voting_db(db_path.to_str().unwrap(), other_account_uuid).unwrap();
-        other_db.init_round(&test_api_round_params(), None).unwrap();
+        other_db
+            .init_round(
+                zcash_voting::Network::Testnet,
+                &test_api_round_params(),
+                None,
+            )
+            .unwrap();
         other_db
             .ensure_bundles(ROUND_ID, &[test_note_info(1)])
             .unwrap();
@@ -2641,7 +2679,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
 
         store_keystone_signature(
@@ -2683,7 +2726,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
 
         set_ballot_intent(
             db_path.to_str().unwrap().to_string(),
@@ -2724,7 +2772,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
 
         let plan = get_round_plan(
             db_path.to_str().unwrap().to_string(),
@@ -2743,7 +2796,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
 
         mark_delegation_submitted(
@@ -2773,7 +2831,12 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("voting.sqlite");
         let db = db::open_voting_db(db_path.to_str().unwrap(), TEST_ACCOUNT_UUID).unwrap();
-        db.init_round(&test_api_round_params(), None).unwrap();
+        db.init_round(
+            zcash_voting::Network::Testnet,
+            &test_api_round_params(),
+            None,
+        )
+        .unwrap();
         db.ensure_bundles(ROUND_ID, &[test_note_info(0)]).unwrap();
         seed_recovery_vote(&db, TEST_ACCOUNT_UUID, 0, 7, 1, 88);
 
@@ -2971,6 +3034,7 @@ mod tests {
             time: 0,
             sapling_tree: String::new(),
             orchard_tree: String::new(),
+            ironwood_tree: String::new(),
         }
     }
 
