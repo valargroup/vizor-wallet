@@ -146,7 +146,7 @@ void main() {
 
     expect(
       tooltip.richMessage?.toPlainText(),
-      contains('4 for funds received from others'),
+      contains('6 for funds received from others'),
     );
   });
 }

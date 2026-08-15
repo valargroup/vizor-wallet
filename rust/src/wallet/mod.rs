@@ -14,7 +14,7 @@ pub mod sync_engine;
 const TRUSTED_CONFIRMATIONS: u32 = 3;
 // Vizor's product policy accepts externally received funds sooner than the
 // ZIP 315 default of 10 confirmations.
-const UNTRUSTED_CONFIRMATIONS: u32 = 4;
+const UNTRUSTED_CONFIRMATIONS: u32 = 6;
 const ALLOW_ZERO_CONFIRMATION_SHIELDING: bool = true;
 
 fn confirmations_policy() -> ConfirmationsPolicy {
@@ -34,7 +34,7 @@ mod tests {
     use zip32::Scope;
 
     #[test]
-    fn confirmation_policy_uses_four_confirmations_for_external_funds() {
+    fn confirmation_policy_uses_six_confirmations_for_external_funds() {
         let policy = confirmations_policy();
 
         assert_eq!(u32::from(policy.trusted()), TRUSTED_CONFIRMATIONS);
@@ -42,7 +42,7 @@ mod tests {
     }
 
     #[test]
-    fn external_funds_become_spendable_after_four_confirmations() {
+    fn external_funds_become_spendable_after_six_confirmations() {
         let policy = confirmations_policy();
         let confirmations_remaining = |target_height| {
             policy.confirmations_until_spendable(
@@ -56,7 +56,7 @@ mod tests {
             )
         };
 
-        assert_eq!(confirmations_remaining(103), 1);
-        assert_eq!(confirmations_remaining(104), 0);
+        assert_eq!(confirmations_remaining(105), 1);
+        assert_eq!(confirmations_remaining(106), 0);
     }
 }
