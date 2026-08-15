@@ -22,12 +22,13 @@
 use std::collections::{HashMap, HashSet};
 
 use rusqlite::OptionalExtension;
-use zcash_client_backend::data_api::{wallet::ConfirmationsPolicy, WalletRead, WalletWrite};
+use zcash_client_backend::data_api::{WalletRead, WalletWrite};
 use zcash_protocol::{
     consensus::BlockHeight,
     memo::{Memo, MemoBytes},
 };
 
+use crate::wallet::confirmations_policy;
 use crate::wallet::db::with_wallet_db_write_lock;
 use crate::wallet::keys::parse_account_uuid;
 use crate::wallet::network::WalletNetwork;
@@ -53,7 +54,7 @@ pub fn get_wallet_balance(
     let db = open_wallet_db_for_read(db_path, network)?;
     let target_id = parse_account_uuid(account_uuid)?;
     match db
-        .get_wallet_summary(ConfirmationsPolicy::default())
+        .get_wallet_summary(confirmations_policy())
         .map_err(|e| format!("{e}"))?
     {
         Some(s) => match s.account_balances().get(&target_id) {

@@ -8,7 +8,6 @@ use zcash_client_backend::{
     data_api::{
         chain::{self, error::Error as ChainError, scan_cached_blocks},
         scanning::{ScanPriority, ScanRange},
-        wallet::ConfirmationsPolicy,
         WalletCommitmentTrees, WalletRead, WalletWrite,
     },
     proto::service,
@@ -18,6 +17,7 @@ use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
 
 use crate::wallet::{
+    confirmations_policy,
     db::{
         open_wallet_db_with_timeout, with_wallet_db_write_lock, WalletDatabase,
         SYNC_DB_BUSY_TIMEOUT,
@@ -182,7 +182,7 @@ fn first_pending_scan_range(ranges: &[ScanRange]) -> Option<String> {
 }
 
 fn wallet_summary_heights(db: &WalletDatabase) -> Result<Option<(u64, u64)>, SyncError> {
-    db.get_wallet_summary(ConfirmationsPolicy::default())
+    db.get_wallet_summary(confirmations_policy())
         .map_err(|e| SyncError::db(format!("get_wallet_summary: {e}")))
         .map(|summary| {
             summary.map(|s| {
@@ -318,7 +318,7 @@ async fn repair_anchor_root_mismatch_if_needed(
     repair_passes_this_run: &mut u32,
 ) -> Result<Option<u64>, SyncError> {
     let Some((target_height, anchor_height)) = db
-        .get_target_and_anchor_heights(ConfirmationsPolicy::default().trusted())
+        .get_target_and_anchor_heights(confirmations_policy().trusted())
         .map_err(|e| SyncError::db(format!("get_target_and_anchor_heights: {e}")))?
     else {
         return Ok(None);

@@ -2,7 +2,6 @@ use zcash_client_backend::{
     data_api::{
         chain::{scan_cached_blocks, CommitmentTreeRoot},
         scanning::ScanPriority,
-        wallet::ConfirmationsPolicy,
         WalletCommitmentTrees, WalletRead, WalletWrite,
     },
     proto::service::TreeState,
@@ -15,6 +14,7 @@ use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
 
 use crate::wallet::{
+    confirmations_policy,
     db::{
         open_readonly_conn_with_timeout, open_wallet_db_for_read_with_timeout,
         open_wallet_db_with_timeout, with_wallet_db_write_lock, WalletDatabase,
@@ -131,7 +131,7 @@ pub fn get_next_subtree_indices(
 ) -> Result<(u64, u64), String> {
     let db = open_wallet_db_for_read(db_path, network)?;
     let summary = db
-        .get_wallet_summary(ConfirmationsPolicy::default())
+        .get_wallet_summary(confirmations_policy())
         .map_err(|e| format!("{e}"))?;
     match summary {
         Some(s) => Ok((
@@ -312,7 +312,7 @@ pub(crate) struct SyncProgress {
 pub fn get_sync_progress(db_path: &str, network: WalletNetwork) -> Result<SyncProgress, String> {
     let db = open_wallet_db_for_read(db_path, network)?;
     match db
-        .get_wallet_summary(ConfirmationsPolicy::default())
+        .get_wallet_summary(confirmations_policy())
         .map_err(|e| format!("{e}"))?
     {
         Some(s) => Ok(SyncProgress {

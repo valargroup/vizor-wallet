@@ -74,6 +74,7 @@ use zcash_protocol::{
     PoolType, ShieldedProtocol,
 };
 
+use crate::wallet::confirmations_policy;
 use crate::wallet::db::with_wallet_db_write_lock;
 use crate::wallet::keys::parse_account_uuid;
 use crate::wallet::network::WalletNetwork;
@@ -230,7 +231,7 @@ pub fn propose_send(
         &input_selector,
         &change_strategy,
         request,
-        ConfirmationsPolicy::default(),
+        confirmations_policy(),
         None,
     )
     .map_err(|e| format!("Propose failed: {e}"))?;
@@ -309,7 +310,7 @@ pub fn estimate_fee(
         &input_selector,
         &change_strategy,
         request,
-        ConfirmationsPolicy::default(),
+        confirmations_policy(),
         None,
     )
     .map_err(|e| format!("Propose failed: {e}"))?;
@@ -677,7 +678,7 @@ fn build_send_max_proposal(
         to,
         memo_bytes,
         MaxSpendMode::MaxSpendable,
-        ConfirmationsPolicy::default(),
+        confirmations_policy(),
     )
     .map_err(|e| format!("Propose max failed: {e}"))
 }

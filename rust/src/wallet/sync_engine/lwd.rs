@@ -21,9 +21,7 @@ use tonic::{
     Request, Response, Status,
 };
 use zcash_client_backend::{
-    data_api::{
-        chain::CommitmentTreeRoot, wallet::ConfirmationsPolicy, WalletCommitmentTrees, WalletRead,
-    },
+    data_api::{chain::CommitmentTreeRoot, WalletCommitmentTrees, WalletRead},
     proto::service::{
         self, compact_tx_streamer_client::CompactTxStreamerClient, BlockId, BlockRange, ChainSpec,
         Empty, GetSubtreeRootsArg, RawTransaction, SendResponse, TransparentAddressBlockFilter,
@@ -32,6 +30,7 @@ use zcash_client_backend::{
 };
 use zcash_protocol::consensus::BlockHeight;
 
+use crate::wallet::confirmations_policy;
 use crate::wallet::db::with_wallet_db_write_lock;
 
 use super::block_source::MemoryBlockSource;
@@ -277,7 +276,7 @@ pub(super) async fn download_subtree_roots(
 ) -> Result<(), SyncError> {
     let (sap_start, orch_start) = {
         let summary = db
-            .get_wallet_summary(ConfirmationsPolicy::default())
+            .get_wallet_summary(confirmations_policy())
             .map_err(|e| SyncError::db(format!("get_wallet_summary: {e}")))?;
         match summary {
             Some(s) => (
