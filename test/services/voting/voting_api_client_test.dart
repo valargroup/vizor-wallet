@@ -35,9 +35,6 @@ void main() {
           'code': 0,
           'log': '',
         },
-        'https://helper.example/shielded-vote/v1/shares': {'status': 'queued'},
-        'https://helper.example/shielded-vote/v1/share-status/$hexRoundId/share-1':
-            {'status': 'pending'},
       },
     );
     final client = VotingApiClient(
@@ -51,32 +48,13 @@ void main() {
     final delegation = await client.submitDelegation(
       submission: {'vote_round_id': encodedRoundId, 'proof': 'AQ=='},
     );
-    await client.submitShare(
-      serverUrl: Uri.parse('https://helper.example'),
-      share: {'share_index': 0, 'vote_round_id': hexRoundId},
-    );
-    await client.getShareStatus(
-      roundId: encodedRoundId,
-      serverUrl: Uri.parse('https://helper.example'),
-      shareId: 'share-1',
-    );
-    await client.resubmitShare(
-      serverUrl: Uri.parse('https://helper.example'),
-      shareId: 'share-1',
-      share: {'share_index': 0, 'vote_round_id': hexRoundId},
-    );
 
     expect(http.requests.map((request) => request.uri.path), [
       '/shielded-vote/v1/rounds',
       '/shielded-vote/v1/round/$hexRoundId',
       '/shielded-vote/v1/tally-results/$hexRoundId',
       '/shielded-vote/v1/delegate-vote',
-      '/shielded-vote/v1/shares',
-      '/shielded-vote/v1/share-status/$hexRoundId/share-1',
-      '/shielded-vote/v1/shares',
     ]);
-    expect(http.requests[4].uri.host, 'helper.example');
-    expect(http.requests[5].uri.host, 'helper.example');
     expect(rounds.single.roundId, hexRoundId);
     expect(status.roundId, hexRoundId);
     expect(tally.roundId, hexRoundId);
@@ -220,42 +198,6 @@ void main() {
     final rounds = await client.listRounds();
 
     expect(rounds.map((round) => round.status), ['3', '1']);
-  });
-
-  test('normalizes base64 round ids before composing status URLs', () async {
-    final http = FakeVotingHttpClient(
-      responses: {
-        '/shielded-vote/v1/round/$hexRoundId': {
-          'round': {'vote_round_id': encodedRoundId, 'status': 'active'},
-        },
-        '/shielded-vote/v1/tally-results/$hexRoundId': {
-          'vote_round_id': encodedRoundId,
-          'results': [],
-        },
-        '/shielded-vote/v1/share-status/$hexRoundId/share-1': {
-          'share_id': 'share-1',
-          'status': 'confirmed',
-        },
-      },
-    );
-    final client = VotingApiClient(
-      baseUrl: Uri.parse('https://voting.valargroup.org'),
-      httpClient: http,
-    );
-
-    await client.getRoundStatus(encodedRoundId);
-    await client.getRoundTally(encodedRoundId);
-    await client.getShareStatus(
-      roundId: encodedRoundId,
-      serverUrl: Uri.parse('https://voting.valargroup.org'),
-      shareId: 'share-1',
-    );
-
-    expect(http.requests.map((request) => request.uri.path), [
-      '/shielded-vote/v1/round/$hexRoundId',
-      '/shielded-vote/v1/tally-results/$hexRoundId',
-      '/shielded-vote/v1/share-status/$hexRoundId/share-1',
-    ]);
   });
 
   test('list rounds treats proto3 empty object as no rounds', () async {
@@ -767,30 +709,6 @@ void main() {
     },
   );
 
-  test('share request payloads forward crate wire JSON unchanged', () async {
-    final http = FakeVotingHttpClient(
-      responses: {
-        'https://helper.example/shielded-vote/v1/shares': {'status': 'queued'},
-      },
-    );
-    final client = VotingApiClient(
-      baseUrl: Uri.parse('https://voting.valargroup.org'),
-      httpClient: http,
-    );
-
-    final result = await client.submitShare(
-      serverUrl: Uri.parse('https://helper.example'),
-      share: {'share_index': 7, 'vote_round_id': hexRoundId},
-    );
-
-    expect(result.status, 'queued');
-    expect(http.requests.single.body, {
-      'share_index': 7,
-      'vote_round_id': hexRoundId,
-    });
-    expect(http.requests.single.timeout, const Duration(seconds: 5));
-  });
-
   test(
     'preflights helpers concurrently and treats failures as unavailable',
     () async {
@@ -840,140 +758,4 @@ void main() {
       );
     },
   );
-
-  test('retries fast helper failures but not a blackholed attempt', () async {
-    final delays = <Duration>[];
-    final blackholedResponse = Completer<VotingHttpResponse>();
-    final http = FakeVotingHttpClient(
-      responses: {
-        'https://helper.example/shielded-vote/v1/shares':
-            SequentialVotingHttpResponses([
-              jsonResponse({'error': 'unavailable'}, statusCode: 503),
-              blackholedResponse.future,
-              {'status': 'queued'},
-            ]),
-      },
-    );
-    final client = VotingApiClient(
-      baseUrl: Uri.parse('https://voting.valargroup.org'),
-      httpClient: http,
-      helperTimeout: const Duration(milliseconds: 30),
-      helperRetryPolicy: VotingRetryPolicy.transientHttp(
-        name: 'test-helper-retry',
-        delays: const [Duration(milliseconds: 2), Duration(milliseconds: 4)],
-      ),
-      delay: (delay) async => delays.add(delay),
-    );
-    final timer = Stopwatch()..start();
-
-    await expectLater(
-      client.submitShare(
-        serverUrl: Uri.parse('https://helper.example'),
-        share: {'share_index': 0, 'vote_round_id': hexRoundId},
-      ),
-      throwsA(isA<TimeoutException>()),
-    );
-
-    expect(http.requests, hasLength(2));
-    expect(delays, const [Duration(milliseconds: 2)]);
-    expect(timer.elapsed, lessThan(const Duration(seconds: 1)));
-  });
-
-  test('does not repeat a resubmission after an ambiguous timeout', () async {
-    final delays = <Duration>[];
-    final http = FakeVotingHttpClient(
-      responses: {
-        'https://helper.example/shielded-vote/v1/shares':
-            SequentialVotingHttpResponses([
-              timeoutResponse(),
-              {'status': 'queued'},
-            ]),
-      },
-    );
-    final client = VotingApiClient(
-      baseUrl: Uri.parse('https://voting.valargroup.org'),
-      httpClient: http,
-      helperRetryPolicy: VotingRetryPolicy.transientHttp(
-        name: 'test-helper-retry',
-        delays: const [Duration(milliseconds: 2)],
-      ),
-      delay: (delay) async => delays.add(delay),
-    );
-
-    await expectLater(
-      client.resubmitShare(
-        serverUrl: Uri.parse('https://helper.example'),
-        shareId: 'share-1',
-        share: {'share_index': 0, 'vote_round_id': hexRoundId},
-      ),
-      throwsA(isA<TimeoutException>()),
-    );
-
-    expect(http.requests, hasLength(1));
-    expect(delays, isEmpty);
-  });
-
-  test('helper responses require known status values', () async {
-    final acceptedClient = VotingApiClient(
-      baseUrl: Uri.parse('https://voting.valargroup.org'),
-      httpClient: FakeVotingHttpClient(
-        responses: {
-          'https://helper.example/shielded-vote/v1/shares': {
-            'status': 'duplicate',
-          },
-          'https://helper.example/shielded-vote/v1/share-status/$hexRoundId/share-1':
-              {'status': 'confirmed'},
-        },
-      ),
-    );
-
-    final submitted = await acceptedClient.submitShare(
-      serverUrl: Uri.parse('https://helper.example'),
-      share: {'share_index': 0, 'vote_round_id': hexRoundId},
-    );
-    final status = await acceptedClient.getShareStatus(
-      roundId: hexRoundId,
-      serverUrl: Uri.parse('https://helper.example'),
-      shareId: 'share-1',
-    );
-
-    expect(submitted.status, 'duplicate');
-    expect(status.status, 'confirmed');
-
-    final rejectedSubmitClient = VotingApiClient(
-      baseUrl: Uri.parse('https://voting.valargroup.org'),
-      httpClient: FakeVotingHttpClient(
-        responses: {
-          'https://helper.example/shielded-vote/v1/shares': {
-            'status': 'accepted',
-          },
-        },
-      ),
-    );
-    await expectLater(
-      rejectedSubmitClient.submitShare(
-        serverUrl: Uri.parse('https://helper.example'),
-        share: {'share_index': 0, 'vote_round_id': hexRoundId},
-      ),
-      throwsA(isA<FormatException>()),
-    );
-
-    final rejectedStatusClient = VotingApiClient(
-      baseUrl: Uri.parse('https://voting.valargroup.org'),
-      httpClient: FakeVotingHttpClient(
-        responses: {
-          'https://helper.example/shielded-vote/v1/share-status/$hexRoundId/share-1':
-              {'status': 'unknown'},
-        },
-      ),
-    );
-    await expectLater(
-      rejectedStatusClient.getShareStatus(
-        roundId: hexRoundId,
-        serverUrl: Uri.parse('https://helper.example'),
-        shareId: 'share-1',
-      ),
-      throwsA(isA<FormatException>()),
-    );
-  });
 }

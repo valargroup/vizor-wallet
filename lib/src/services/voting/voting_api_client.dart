@@ -17,32 +17,20 @@ class VotingApiClient {
     required VotingHttpClient httpClient,
     List<Uri> fallbackBaseUrls = const [],
     Duration timeout = const Duration(seconds: 10),
-    Duration helperTimeout = const Duration(seconds: 5),
     Duration helperPreflightTimeout = const Duration(seconds: 2),
     VotingRetryPolicy? readRetryPolicy,
-    VotingRetryPolicy? helperRetryPolicy,
     VotingRetryPolicy? broadcastRetryPolicy,
     Future<void> Function(Duration delay)? delay,
   }) : _baseUrl = baseUrl,
        _httpClient = httpClient,
        _fallbackBaseUrls = _dedupeBaseUrls(fallbackBaseUrls, baseUrl: baseUrl),
        _timeout = timeout,
-       _helperTimeout = helperTimeout,
        _helperPreflightTimeout = helperPreflightTimeout,
        _readRetryPolicy =
            readRetryPolicy ??
            VotingRetryPolicy.transientHttp(
              name: 'voting-api-read',
              delays: const [Duration(milliseconds: 300), Duration(seconds: 1)],
-           ),
-       _helperRetryPolicy =
-           helperRetryPolicy ??
-           VotingRetryPolicy.transientHttp(
-             name: 'voting-api-helper',
-             delays: const [
-               Duration(milliseconds: 200),
-               Duration(milliseconds: 600),
-             ],
            ),
        _broadcastRetryPolicy =
            broadcastRetryPolicy ??
@@ -56,10 +44,8 @@ class VotingApiClient {
   final List<Uri> _fallbackBaseUrls;
   final VotingHttpClient _httpClient;
   final Duration _timeout;
-  final Duration _helperTimeout;
   final Duration _helperPreflightTimeout;
   final VotingRetryPolicy _readRetryPolicy;
-  final VotingRetryPolicy _helperRetryPolicy;
   final VotingRetryPolicy _broadcastRetryPolicy;
   final Future<void> Function(Duration delay) _delay;
 
@@ -269,65 +255,6 @@ class VotingApiClient {
     return Map<String, bool>.unmodifiable(Map.fromEntries(entries));
   }
 
-  /// Posts one encrypted share directly to a helper server.
-  ///
-  /// The share map is expected to be the complete service JSON body produced
-  /// by the voting pipeline. Fast transient failures retain the helper retry
-  /// policy. An ambiguous timeout is never retried against the same helper so
-  /// the caller can promptly move to another candidate.
-  Future<VotingShareSubmissionResult> submitShare({
-    required Uri serverUrl,
-    required Map<String, dynamic> share,
-  }) async {
-    final decoded = await _postInitialShareJson(
-      _endpoint(['shares'], baseUrl: serverUrl),
-      share,
-    );
-    return VotingShareSubmissionResult.fromJson(_objectFromValue(decoded));
-  }
-
-  /// Checks whether a helper has confirmed a share identified by its nullifier.
-  ///
-  /// [isCancelled] is checked before each retry so lifecycle-owned polling can
-  /// stop without starting another request.
-  Future<VotingShareStatus> getShareStatus({
-    required String roundId,
-    required Uri serverUrl,
-    required String shareId,
-    bool Function()? isCancelled,
-  }) async {
-    final decoded = await _getJson(
-      _endpoint([
-        'share-status',
-        normalizeVotingRoundId(roundId),
-        shareId,
-      ], baseUrl: serverUrl),
-      timeout: _helperTimeout,
-      retryPolicy: _helperRetryPolicy,
-      isCancelled: isCancelled,
-    );
-    return VotingShareStatus.fromJson(_objectFromValue(decoded));
-  }
-
-  /// Resends a previously generated share to a specific helper server.
-  ///
-  /// [shareId] is retained in the signature so call sites can keep the recovery
-  /// key nearby, but the current helper endpoint accepts the same body as the
-  /// initial submission. This makes one transport attempt because a timeout is
-  /// ambiguous; the caller decides whether to try another helper or wait.
-  Future<VotingShareSubmissionResult> resubmitShare({
-    required Uri serverUrl,
-    required String shareId,
-    required Map<String, dynamic> share,
-  }) async {
-    final decoded = await _postJson(
-      _endpoint(['shares'], baseUrl: serverUrl),
-      share,
-      timeout: _helperTimeout,
-    );
-    return VotingShareSubmissionResult.fromJson(_objectFromValue(decoded));
-  }
-
   Uri _endpoint(
     List<String> pathSegments, {
     Map<String, String>? queryParameters,
@@ -392,31 +319,6 @@ class VotingApiClient {
     } catch (_) {
       return false;
     }
-  }
-
-  Future<Object?> _postInitialShareJson(
-    Uri uri,
-    Map<String, dynamic> body,
-  ) async {
-    final retryPolicy = VotingRetryPolicy(
-      name: '${_helperRetryPolicy.name}-initial',
-      delays: _helperRetryPolicy.delays,
-      shouldRetry: (error) =>
-          error is! TimeoutException && _helperRetryPolicy.shouldRetry(error),
-    );
-    final response = await _runRequestWithRetry(
-      retryPolicy: retryPolicy,
-      operation: () async {
-        final response = await _post(
-          uri,
-          body,
-          timeout: _helperTimeout,
-        ).timeout(_helperTimeout);
-        _throwIfNotSuccess(uri, response);
-        return response;
-      },
-    );
-    return jsonDecode(response.bodyText);
   }
 
   Future<VotingHttpResponse> _get(Uri uri, {required Duration timeout}) {
