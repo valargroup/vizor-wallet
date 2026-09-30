@@ -22,6 +22,7 @@ import '../../../core/widgets/review_info_row.dart';
 import '../../../core/widgets/review_list_row.dart';
 import '../../../core/widgets/review_wrap_card.dart';
 import '../../../providers/account_provider.dart';
+import '../../../providers/enhance_pir_provider.dart';
 import '../../../providers/privacy_mode_provider.dart';
 import '../../../providers/rpc_endpoint_provider.dart';
 import '../../../providers/sync_provider.dart';
@@ -36,6 +37,7 @@ import '../../send/widgets/send_status_content_view.dart';
 import '../../send/widgets/send_verify_address_overlay.dart';
 import '../../swap/models/swap_fiat_value_formatting.dart';
 import '../gift_card_activity_index.dart';
+import '../transaction_completeness.dart';
 import '../widgets/gift_card_activity_detail_view.dart';
 import '../widgets/received_receipt_view.dart';
 import '../widgets/shielded_receipt_view.dart';
@@ -188,6 +190,12 @@ class _ActivityTransactionStatusScreenState
           return tx;
         }
       }
+      if (_shownTransactionIsProvisional) {
+        return provisionalRoleSuccessor(
+          transactions,
+          (other) => _txidsMatch(txidHex, other),
+        );
+      }
       return null;
     }
     for (final tx in transactions) {
@@ -195,6 +203,9 @@ class _ActivityTransactionStatusScreenState
     }
     return null;
   }
+
+  bool get _shownTransactionIsProvisional =>
+      (_transaction ?? widget.args.initialTransaction)?.provisional ?? false;
 
   String _recentTxSignature(SyncState? sync) {
     final txKind =
@@ -212,6 +223,7 @@ class _ActivityTransactionStatusScreenState
             tx.txKind,
             tx.displayAmount,
             tx.fee,
+            transactionCompletenessSignature(tx),
           ].join(':');
         }
       }
@@ -226,6 +238,7 @@ class _ActivityTransactionStatusScreenState
           tx.txKind,
           tx.displayAmount,
           tx.fee,
+          transactionCompletenessSignature(tx),
         ].join(':');
       }
     }
@@ -300,11 +313,19 @@ class _ActivityTransactionStatusScreenState
     );
   }
 
+  // Temporary integration feedback is scoped to the Private queries setting.
+  bool _showUnknownFee(rust_sync.TransactionInfo tx) =>
+      ref.watch(enhancePirProvider) && transactionFeeIsUnknown(tx);
+
+  bool _showIncompleteDetails(rust_sync.TransactionInfo tx) =>
+      ref.watch(enhancePirProvider) && transactionDetailsIncomplete(tx);
+
   String _feeText(
     rust_sync.TransactionInfo? tx, {
     required bool privacyModeEnabled,
     GiftCardActivityMetadata? giftCard,
   }) {
+    if (tx != null && _showUnknownFee(tx)) return kUnknownFeeText;
     if (tx == null || tx.fee <= BigInt.zero) return '--';
     final fee = giftCard == null ? tx.fee : giftCard.detailFeeZatoshi(tx.fee);
     return hideAmountIfPrivacyMode(
@@ -486,7 +507,7 @@ class _ActivityTransactionStatusScreenState
         amountText: _amountText(tx, privacyModeEnabled: privacyModeEnabled),
         timestampText: _timestampText(tx),
         txIdText: _truncatedDisplayTxid(tx.txidHex),
-        feeText: tx.fee > BigInt.zero
+        feeText: tx.fee > BigInt.zero || _showUnknownFee(tx)
             ? _feeText(tx, privacyModeEnabled: privacyModeEnabled)
             : null,
         memoText: hasMemo ? memo : null,
@@ -631,7 +652,7 @@ class _ActivityTransactionStatusScreenState
         : tx.minedHeight == BigInt.zero
         ? ('In progress', AppIcons.loader, colors.text.secondary)
         : ('Completed', AppIcons.checkCircle, colors.text.positiveStrong);
-    final feeText = tx.fee > BigInt.zero
+    final feeText = tx.fee > BigInt.zero || _showUnknownFee(tx)
         ? _feeText(tx, privacyModeEnabled: privacyModeEnabled)
         : null;
 
@@ -699,6 +720,14 @@ class _ActivityTransactionStatusScreenState
                 trailingIconName: AppIcons.arrowTopRight,
                 onPressed: () => unawaited(_openTransactionExplorer()),
               ),
+              if (_showIncompleteDetails(tx))
+                ReviewListRow(
+                  label: 'Details',
+                  value: 'Incomplete',
+                  trailingIconName: AppIcons.help,
+                  trailingIconColor: colors.text.secondary,
+                  trailingIconTooltip: kIncompleteDetailsHelpText,
+                ),
               if (feeText != null) ...[
                 const ReviewWrapDivider(),
                 ReviewListRow(
@@ -808,6 +837,16 @@ class _ActivityTransactionStatusScreenState
       );
     }
 
+    // Dedicated receipts show what is known; the notice says it may be partial.
+    // The fallback receipt carries its own row.
+    if (redesignedContent != null && tx != null && _showIncompleteDetails(tx)) {
+      redesignedContent = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [redesignedContent, const _IncompleteDetailsNotice()],
+      );
+    }
+
     final verifyAddress = _verifyAddress;
     final verifyAccountUuid =
         _activeAccountUuid ??
@@ -844,6 +883,28 @@ class _ActivityTransactionStatusScreenState
 String _truncatedDisplayTxid(String protocolTxid) => truncatedTxid(
   zcashDisplayTxidHex(protocolTxid, ZcashExplorerTxidOrder.protocol),
 );
+
+/// Marks a dedicated receipt whose entry is incomplete.
+class _IncompleteDetailsNotice extends StatelessWidget {
+  const _IncompleteDetailsNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return _ReceiptContentColumn(
+      child: ReviewWrapCard(
+        children: [
+          ReviewListRow(
+            label: 'Details',
+            value: 'Incomplete',
+            trailingIconName: AppIcons.help,
+            trailingIconColor: context.colors.text.secondary,
+            trailingIconTooltip: kIncompleteDetailsHelpText,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Centered 420px content column for the received/shielding receipts.
 ///
