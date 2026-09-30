@@ -59,9 +59,27 @@ class ActivityTransactionStatusArgs {
 }
 
 class ActivityTransactionStatusScreen extends ConsumerStatefulWidget {
-  const ActivityTransactionStatusScreen({super.key, required this.args});
+  const ActivityTransactionStatusScreen({
+    super.key,
+    required this.args,
+    this.historyLoader,
+    this.detailLoader,
+  });
 
   final ActivityTransactionStatusArgs args;
+
+  /// Loads account history; tests can supply a deterministic database snapshot.
+  @visibleForTesting
+  final Future<List<rust_sync.TransactionInfo>> Function(String accountUuid)?
+  historyLoader;
+
+  /// Loads receipt details; tests can avoid native wallet storage.
+  @visibleForTesting
+  final Future<rust_sync.TransactionDetail?> Function(
+    String accountUuid,
+    rust_sync.TransactionInfo transaction,
+  )?
+  detailLoader;
 
   @override
   ConsumerState<ActivityTransactionStatusScreen> createState() =>
@@ -93,6 +111,35 @@ class _ActivityTransactionStatusScreenState
     });
   }
 
+  Future<List<rust_sync.TransactionInfo>> _loadHistory(
+    String accountUuid,
+  ) async {
+    final loader = widget.historyLoader;
+    if (loader != null) return loader(accountUuid);
+    final dbPath = await getWalletDbPath();
+    return rust_sync.getTransactionHistory(
+      dbPath: dbPath,
+      network: ref.read(rpcEndpointProvider).networkName,
+      accountUuid: accountUuid,
+    );
+  }
+
+  Future<rust_sync.TransactionDetail?> _loadDetail(
+    String accountUuid,
+    rust_sync.TransactionInfo transaction,
+  ) async {
+    final loader = widget.detailLoader;
+    if (loader != null) return loader(accountUuid, transaction);
+    final dbPath = await getWalletDbPath();
+    return rust_sync.getTransactionDetail(
+      dbPath: dbPath,
+      network: ref.read(rpcEndpointProvider).networkName,
+      accountUuid: accountUuid,
+      txidHex: transaction.txidHex,
+      txKind: transaction.txKind,
+    );
+  }
+
   Future<void> _loadTransaction({bool showLoading = false}) async {
     final accountUuid = ref.read(accountProvider).value?.activeAccountUuid;
     _activeAccountUuid = accountUuid;
@@ -114,13 +161,7 @@ class _ActivityTransactionStatusScreenState
     }
 
     try {
-      final dbPath = await getWalletDbPath();
-      final endpoint = ref.read(rpcEndpointProvider);
-      final txs = await rust_sync.getTransactionHistory(
-        dbPath: dbPath,
-        network: endpoint.networkName,
-        accountUuid: accountUuid,
-      );
+      final txs = await _loadHistory(accountUuid);
       if (!mounted) return;
       if (accountUuid != ref.read(accountProvider).value?.activeAccountUuid) {
         return;
@@ -137,13 +178,7 @@ class _ActivityTransactionStatusScreenState
       rust_sync.TransactionDetail? detail;
       if (tx != null) {
         try {
-          detail = await rust_sync.getTransactionDetail(
-            dbPath: dbPath,
-            network: endpoint.networkName,
-            accountUuid: accountUuid,
-            txidHex: tx.txidHex,
-            txKind: tx.txKind,
-          );
+          detail = await _loadDetail(accountUuid, tx);
         } catch (e, st) {
           log('ActivityTransactionStatus: detail load failed: $e\n$st');
         }
@@ -543,6 +578,10 @@ class _ActivityTransactionStatusScreenState
         denomination: '',
       );
       final reserve = giftCard.claimFeeReserveZatoshi!;
+      final feeUnknown = _showUnknownFee(tx);
+      final networkFeeText = feeUnknown
+          ? kUnknownFeeText
+          : '${privateAmount(tx.fee)} ZEC';
       final networkFeeLabel = isInFlight || isFailed
           ? 'Estimated network fee'
           : 'Network fee';
@@ -554,11 +593,13 @@ class _ActivityTransactionStatusScreenState
               : isInFlight
               ? 'Submitted total'
               : 'Total spent',
-          totalText: privateAmount(giftCard.amountZatoshi + reserve + tx.fee),
+          totalText: feeUnknown
+              ? kUnknownFeeText
+              : '${privateAmount(giftCard.amountZatoshi + reserve + tx.fee)} ZEC',
           breakdownText:
               'Cards ${privateAmount(giftCard.amountZatoshi)} ZEC · '
               'Redeem fees ${privateAmount(reserve)} ZEC · '
-              '$networkFeeLabel ${privateAmount(tx.fee)} ZEC',
+              '$networkFeeLabel $networkFeeText',
         ),
         isInFlight: isInFlight,
         isFailed: isFailed,
@@ -779,7 +820,11 @@ class _ActivityTransactionStatusScreenState
     ref.listen<AsyncValue<SyncState>>(syncProvider, (previous, next) {
       final prevSig = _recentTxSignature(previous?.value);
       final nextSig = _recentTxSignature(next.value);
-      if (prevSig != nextSig) {
+      // Enhancement can change older rows outside the ten recent transactions.
+      final syncCompleted =
+          next.value?.isSyncComplete == true &&
+          previous?.value?.isSyncComplete != true;
+      if (prevSig != nextSig || syncCompleted) {
         unawaited(_loadTransaction());
       }
     });
