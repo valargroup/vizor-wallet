@@ -47,19 +47,32 @@ impl CapturingLwd {
         tip_height: u64,
         on_request: impl Fn(&str) + Send + Sync + 'static,
     ) -> Self {
-        Self::start_inner(history_tx, tip_height, on_request, false).await
+        Self::start_inner(history_tx, tip_height, on_request, None).await
     }
 
     /// A real successful broadcast response for durable operation recovery tests.
     pub(crate) async fn start_for_broadcast(tip_height: u64) -> Self {
-        Self::start_inner(Vec::new(), tip_height, |_| {}, true).await
+        let accepted = SendResponse {
+            error_code: 0,
+            error_message: String::new(),
+        };
+        Self::start_inner(Vec::new(), tip_height, |_| {}, Some(accepted)).await
+    }
+
+    /// A definite node rejection, which discards a Ledger outbox operation.
+    pub(crate) async fn start_rejecting_broadcast(tip_height: u64) -> Self {
+        let rejected = SendResponse {
+            error_code: -26,
+            error_message: "bad-txns-inputs-spent".into(),
+        };
+        Self::start_inner(Vec::new(), tip_height, |_| {}, Some(rejected)).await
     }
 
     async fn start_inner(
         history_tx: Vec<u8>,
         tip_height: u64,
         on_request: impl Fn(&str) + Send + Sync + 'static,
-        accept_broadcast: bool,
+        broadcast: Option<SendResponse>,
     ) -> Self {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let recorded = requests.clone();
@@ -72,6 +85,7 @@ impl CapturingLwd {
                 let recorded = recorded.clone();
                 let on_request = on_request.clone();
                 let history_tx = history_tx.clone();
+                let broadcast = broadcast.clone();
                 tokio::spawn(async move {
                     let service =
                         service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
@@ -79,6 +93,7 @@ impl CapturingLwd {
                             recorded.lock().unwrap().push(path.clone());
                             on_request(&path);
                             let history_tx = history_tx.clone();
+                            let broadcast = broadcast.clone();
                             async move {
                                 let grpc = hyper::Response::builder()
                                     .header("content-type", "application/grpc");
@@ -98,13 +113,11 @@ impl CapturingLwd {
                                     };
                                     grpc.header("grpc-status", "0")
                                         .body(Full::new(grpc_frame(&message)))
-                                } else if path.ends_with("/SendTransaction") && accept_broadcast {
-                                    grpc.header("grpc-status", "0").body(Full::new(grpc_frame(
-                                        &SendResponse {
-                                            error_code: 0,
-                                            error_message: String::new(),
-                                        },
-                                    )))
+                                } else if let Some(response) =
+                                    broadcast.filter(|_| path.ends_with("/SendTransaction"))
+                                {
+                                    grpc.header("grpc-status", "0")
+                                        .body(Full::new(grpc_frame(&response)))
                                 } else if path.ends_with("/GetTransaction") {
                                     grpc.header("grpc-status", "5")
                                         .header("grpc-message", "not found")

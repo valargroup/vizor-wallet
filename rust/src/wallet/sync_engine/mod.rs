@@ -457,7 +457,7 @@ impl ProgressDisplayMode {
     }
 }
 
-fn is_pending_scan_range(range: &ScanRange) -> bool {
+pub(crate) fn is_pending_scan_range(range: &ScanRange) -> bool {
     range.priority() != ScanPriority::Ignored && range.priority() != ScanPriority::Scanned
 }
 

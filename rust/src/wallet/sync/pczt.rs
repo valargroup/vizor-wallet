@@ -1647,14 +1647,31 @@ async fn store_and_broadcast_pczts_inner(
     let txids_joined = txids.join(",");
     let total_count = prepared.len() as u32;
 
-    let mined = prepared
+    use super::hardware_authority::StoredSubmission;
+    let stored = prepared
         .iter()
-        .map(|item| super::hardware_authority::stored_mined(db_path, network, &item.extracted.tx))
+        .map(|item| super::hardware_authority::stored_status(db_path, network, &item.extracted.tx))
         .collect::<Result<Vec<_>, _>>();
-    let mined = match mined {
-        Ok(mined) => mined,
+    let stored = match stored {
+        Ok(stored) => stored,
         Err(error) => return release_signed_pczt_operation_after_failure(proposal, error),
     };
+    // A rewound mined observation is neither success nor an ordinary retry. Defer
+    // expiry classification and every round until scan/status reconciliation.
+    if let Some(item) = prepared
+        .iter()
+        .zip(&stored)
+        .find_map(|(item, stored)| (*stored == StoredSubmission::AwaitingReconciliation).then_some(item))
+    {
+        return release_signed_pczt_operation_after_failure(
+            proposal,
+            super::hardware_authority::awaiting_reconciliation_error(&item.extracted.txid),
+        );
+    }
+    let mined = stored
+        .iter()
+        .map(|stored| *stored == StoredSubmission::Mined)
+        .collect::<Vec<_>>();
     if mined.iter().all(|mined| *mined) {
         if let Some((proposal_id, send_flow_id)) = proposal {
             if let Err(error) = finish_stored_proposal(proposal_id, send_flow_id, false) {

@@ -726,6 +726,7 @@ async fn public_hardware_retry_of_own_stored_spend_reaches_submission() {
 
 #[test]
 fn mined_reconciliation_requires_exact_bytes_and_compatible_reader() {
+    use crate::wallet::sync::hardware_authority::StoredSubmission;
     let mut wallet = wallet();
     wallet
         .db
@@ -736,8 +737,9 @@ fn mined_reconciliation_requires_exact_bytes_and_compatible_reader() {
     tx.write(&mut raw).unwrap();
     let conn = rusqlite::Connection::open(&wallet.path).unwrap();
     conn.execute("INSERT INTO transactions(txid, raw, mined_height, min_observed_height) VALUES (?1, ?2, ?3, ?3)", rusqlite::params![tx.txid().as_ref(), raw, TIP]).unwrap();
-    assert!(
-        crate::wallet::sync::hardware_authority::stored_mined(&wallet.path, NETWORK, &tx).unwrap()
+    assert_eq!(
+        crate::wallet::sync::hardware_authority::stored_status(&wallet.path, NETWORK, &tx).unwrap(),
+        StoredSubmission::Mined
     );
     let conn = rusqlite::Connection::open(&wallet.path).unwrap();
     conn.execute(
@@ -745,12 +747,79 @@ fn mined_reconciliation_requires_exact_bytes_and_compatible_reader() {
         [tx.txid().as_ref()],
     )
     .unwrap();
-    assert!(
-        !crate::wallet::sync::hardware_authority::stored_mined(&wallet.path, NETWORK, &tx).unwrap()
+    assert_eq!(
+        crate::wallet::sync::hardware_authority::stored_status(&wallet.path, NETWORK, &tx).unwrap(),
+        StoredSubmission::Unmined
     );
     conn.execute_batch("UPDATE tpir_meta SET min_reader_version = 999")
         .unwrap();
     assert!(
-        crate::wallet::sync::hardware_authority::stored_mined(&wallet.path, NETWORK, &tx).is_err()
+        crate::wallet::sync::hardware_authority::stored_status(&wallet.path, NETWORK, &tx).is_err()
     );
+}
+
+#[tokio::test]
+async fn stored_retry_without_transparent_inputs_awaits_rewind_reconciliation() {
+    use crate::wallet::sync::hardware_authority::{dispatch, stored_status, StoredSubmission};
+    let mut wallet = wallet();
+    wallet
+        .db
+        .update_chain_tip(BlockHeight::from_u32(TIP))
+        .unwrap();
+    let tx = hardware_tx(vec![]);
+    let mut raw = Vec::new();
+    tx.write(&mut raw).unwrap();
+    let conn = rusqlite::Connection::open(&wallet.path).unwrap();
+    let other = rusqlite::Connection::open(&wallet.path).unwrap();
+    other.busy_timeout(Duration::ZERO).unwrap();
+    let writable = || {
+        other
+            .execute("UPDATE scan_queue SET priority = priority", [])
+            .is_ok()
+    };
+    // A fresh transaction cannot carry mined evidence and takes no reservation.
+    assert!(dispatch(&wallet.path, NETWORK, &tx, &[], TIP.into(), async { writable() })
+        .await
+        .unwrap());
+    conn.execute(
+        "INSERT INTO transactions(txid, raw, min_observed_height, expiry_height)
+         VALUES (?1, ?2, ?3, 1000)",
+        rusqlite::params![tx.txid().as_ref(), raw, TIP],
+    )
+    .unwrap();
+    assert_eq!(
+        stored_status(&wallet.path, NETWORK, &tx).unwrap(),
+        StoredSubmission::Unmined
+    );
+    // A rewind cleared the mined height that the history trigger preserved, and
+    // a pending scan range can still restore it.
+    conn.execute(
+        "INSERT INTO vizor_mined_transactions (txid) VALUES (?1)",
+        [tx.txid().as_ref()],
+    )
+    .unwrap();
+    assert_eq!(
+        stored_status(&wallet.path, NETWORK, &tx).unwrap(),
+        StoredSubmission::AwaitingReconciliation
+    );
+    let error = dispatch(&wallet.path, NETWORK, &tx, &[], TIP.into(), async {
+        panic!("withheld")
+    })
+    .await
+    .err()
+    .unwrap();
+    assert!(error.contains("deferred until wallet sync"), "{error}");
+    // Scanning completes past it without restoring the mined height.
+    conn.execute("UPDATE scan_queue SET priority = 10", [])
+        .unwrap();
+    assert_eq!(
+        stored_status(&wallet.path, NETWORK, &tx).unwrap(),
+        StoredSubmission::Unmined
+    );
+    // The stored retry holds the writer reservation through submission, so no
+    // other connection can add evidence after the gate passes.
+    assert!(!dispatch(&wallet.path, NETWORK, &tx, &[], TIP.into(), async { writable() })
+        .await
+        .unwrap());
+    assert!(writable());
 }

@@ -349,8 +349,18 @@ pub(crate) fn get_unmined_txids_with_mined_output_evidence(
     if pending_ranges.is_empty() {
         return Ok(HashSet::new());
     }
+    unmined_txids_with_mined_output_evidence_on(&open_readonly_conn(db_path)?, pending_ranges)
+}
 
-    let conn = open_readonly_conn(db_path)?;
+/// [`get_unmined_txids_with_mined_output_evidence`] on a connection the caller
+/// holds, so the result shares that connection's open transaction.
+pub(crate) fn unmined_txids_with_mined_output_evidence_on(
+    conn: &rusqlite::Connection,
+    pending_ranges: &[Range<BlockHeight>],
+) -> Result<HashSet<Vec<u8>>, String> {
+    if pending_ranges.is_empty() {
+        return Ok(HashSet::new());
+    }
     let mut stmt = conn
         .prepare(&format!(
             "SELECT DISTINCT t.txid, t.min_observed_height, t.expiry_height

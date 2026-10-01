@@ -798,6 +798,15 @@ mod tests {
         target_height: u32,
         sk: secp256k1::SecretKey,
     ) -> (Vec<u8>, Vec<u8>, u32) {
+        signed_pczt_spending(target_height, sk, OutPoint::new([1; 32], 0), 1_000_000)
+    }
+
+    fn signed_pczt_spending(
+        target_height: u32,
+        sk: secp256k1::SecretKey,
+        prevout: OutPoint,
+        value: u64,
+    ) -> (Vec<u8>, Vec<u8>, u32) {
         let secp = secp256k1::Secp256k1::new();
         let pubkey = sk.public_key(&secp);
         let pubkey_bytes = pubkey.serialize();
@@ -817,12 +826,12 @@ mod tests {
         builder
             .add_transparent_p2pkh_input(
                 pubkey,
-                OutPoint::new([1; 32], 0),
-                TxOut::new(Zatoshis::const_from_u64(1_000_000), address.script().into()),
+                prevout,
+                TxOut::new(Zatoshis::from_u64(value).unwrap(), address.script().into()),
             )
             .unwrap();
         builder
-            .add_transparent_output(&address, Zatoshis::const_from_u64(990_000))
+            .add_transparent_output(&address, Zatoshis::from_u64(value - 10_000).unwrap())
             .unwrap();
         let PcztResult { pczt_parts, .. } = builder
             .build_for_pczt(OsRng, &zip317::FeeRule::standard())
@@ -1292,18 +1301,35 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn restart_recovers_after_wallet_commit_and_before_outbox_commit() {
+    /// A Ledger operation interrupted after the wallet stored its broadcast
+    /// transactions and before the outbox outcome commit.
+    struct InterruptedOperation {
+        _dir: tempfile::TempDir,
+        path: String,
+        uuid: String,
+        proofs: Vec<Vec<u8>>,
+        signatures: Vec<Vec<u8>>,
+        txids: Vec<zcash_primitives::transaction::TxId>,
+        server: crate::wallet::sync_engine::test_lwd::CapturingLwd,
+    }
+
+    fn signed_txid(signature: &[u8]) -> zcash_primitives::transaction::TxId {
+        use pczt::roles::{spend_finalizer::SpendFinalizer, tx_extractor::TransactionExtractor};
+        let finalized = SpendFinalizer::new(pczt::Pczt::parse(signature).unwrap())
+            .finalize_spends()
+            .unwrap();
+        TransactionExtractor::new(finalized).extract().unwrap().txid()
+    }
+
+    /// `rounds` is 1 for an ordinary send or 2 for a chained TEX pair.
+    async fn interrupt_after_wallet_commit(rounds: usize) -> InterruptedOperation {
         use crate::wallet::{
             db::{open_wallet_db_with_timeout, WALLET_DB_BUSY_TIMEOUT},
             keys,
         };
         use secrecy::ExposeSecret;
         use transparent::keys::{AccountPrivKey, NonHardenedChildIndex, TransparentKeyScope};
-        use zcash_client_backend::{
-            data_api::{wallet::decrypt_and_store_transaction, WalletWrite},
-            wallet::WalletTransparentOutput,
-        };
+        use zcash_client_backend::{data_api::WalletWrite, wallet::WalletTransparentOutput};
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("wallet.db").to_str().unwrap().to_owned();
         let seed = keys::mnemonic_to_seed(&keys::generate_mnemonic()).unwrap();
@@ -1325,7 +1351,17 @@ mod tests {
         .derive_external_secret_key(NonHardenedChildIndex::from_index(0).unwrap())
         .unwrap();
         let address = TransparentAddress::from_pubkey(&sk.public_key(&secp256k1::Secp256k1::new()));
-        let (proof, signature, _) = signed_pczt_with_key(200, sk);
+        let (mut proofs, mut signatures, mut txids) = (Vec::new(), Vec::new(), Vec::new());
+        let (mut prevout, mut value) = (OutPoint::new([1; 32], 0), 1_000_000);
+        for _ in 0..rounds {
+            let (proof, signature, _) = signed_pczt_spending(200, sk, prevout, value);
+            let txid = signed_txid(&signature);
+            proofs.push(proof);
+            signatures.push(signature);
+            txids.push(txid);
+            prevout = OutPoint::new(*txid.as_ref(), 0);
+            value -= 10_000;
+        }
         let mut db =
             open_wallet_db_with_timeout(&path, WalletNetwork::Regtest, WALLET_DB_BUSY_TIMEOUT)
                 .unwrap();
@@ -1343,15 +1379,15 @@ mod tests {
         )
         .unwrap();
         drop(db);
-        checkpoint(
+        checkpoint_batch(
             &path,
             WalletNetwork::Regtest,
             "restart-op",
             &uuid,
             "swap_deposit",
             Some("deposit-1"),
-            &proof,
-            &signature,
+            &proofs,
+            &signatures,
         )
         .unwrap();
         let conn = rusqlite::Connection::open(&path).unwrap();
@@ -1368,7 +1404,7 @@ mod tests {
         )
         .await
         .is_err());
-        assert_eq!(server.count("/SendTransaction"), 1);
+        assert_eq!(server.count("/SendTransaction"), rounds);
         let own_spends: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM transparent_received_output_spends",
@@ -1376,13 +1412,30 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(own_spends, 1);
+        assert_eq!(own_spends, rounds as i64);
         assert_eq!(
             list(&path, WalletNetwork::Regtest, None).unwrap()[0].state,
             STATE_SIGNED_PENDING_BROADCAST
         );
         conn.execute_batch("DROP TRIGGER interrupt_outbox").unwrap();
-        drop(conn);
+        InterruptedOperation {
+            _dir: dir,
+            path,
+            uuid,
+            proofs,
+            signatures,
+            txids,
+            server,
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn restart_recovers_after_wallet_commit_and_before_outbox_commit() {
+        use crate::wallet::db::{open_wallet_db_with_timeout, WALLET_DB_BUSY_TIMEOUT};
+        use zcash_client_backend::data_api::{wallet::decrypt_and_store_transaction, WalletWrite};
+        let interrupted = interrupt_after_wallet_commit(1).await;
+        let (path, uuid, server) = (&interrupted.path, &interrupted.uuid, &interrupted.server);
+        let (proof, signature) = (&interrupted.proofs[0], &interrupted.signatures[0]);
         // Execute the actual outbox broadcast API with a fresh process and fresh globals.
         let child_path = path.clone();
         let child_url = server.url.clone();
@@ -1479,5 +1532,237 @@ mod tests {
         .unwrap();
         assert_eq!(result.status, "broadcasted");
         assert_eq!(server.count("/SendTransaction"), 2);
+    }
+
+    /// Scanning observes `txids` mined at 200, then a reorg rewinds below them.
+    /// The rescan completes; transparent-only transactions keep the status
+    /// request that `store_transactions_to_be_sent` queued, now active again.
+    fn mine_then_rewind(path: &str, txids: &[zcash_primitives::transaction::TxId]) {
+        use crate::wallet::db::{open_wallet_db_with_timeout, WALLET_DB_BUSY_TIMEOUT};
+        use zcash_client_backend::data_api::{TransactionStatus, WalletWrite};
+        let mut db =
+            open_wallet_db_with_timeout(path, WalletNetwork::Regtest, WALLET_DB_BUSY_TIMEOUT)
+                .unwrap();
+        for txid in txids {
+            db.set_transaction_status(*txid, TransactionStatus::Mined(BlockHeight::from_u32(200)))
+                .unwrap();
+        }
+        let conn = rusqlite::Connection::open(path).unwrap();
+        conn.execute(
+            "INSERT INTO blocks (height, hash, time, sapling_tree)
+             VALUES (199, zeroblob(32), 0, X'000000')",
+            [],
+        )
+        .unwrap();
+        db.truncate_to_height(BlockHeight::from_u32(199)).unwrap();
+        settle_scan_queue(&conn);
+        for txid in txids {
+            let mined: Option<u32> = conn
+                .query_row(
+                    "SELECT mined_height FROM transactions WHERE txid = ?1",
+                    [txid.as_ref()],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(mined, None);
+            assert!(crate::wallet::sync::has_recovered_status_work(&conn, txid.as_ref()).unwrap());
+        }
+    }
+
+    /// Every scan range is scanned, so only status work can still reconcile.
+    fn settle_scan_queue(conn: &rusqlite::Connection) {
+        // ScanPriority::Scanned
+        conn.execute("UPDATE scan_queue SET priority = 10", [])
+            .unwrap();
+    }
+
+    fn observe_mined(path: &str, txid: zcash_primitives::transaction::TxId, wallet_tip: u32) {
+        use crate::wallet::db::{open_wallet_db_with_timeout, WALLET_DB_BUSY_TIMEOUT};
+        use zcash_client_backend::data_api::{TransactionStatus, WalletWrite};
+        let mut db =
+            open_wallet_db_with_timeout(path, WalletNetwork::Regtest, WALLET_DB_BUSY_TIMEOUT)
+                .unwrap();
+        db.update_chain_tip(BlockHeight::from_u32(wallet_tip)).unwrap();
+        db.set_transaction_status(txid, TransactionStatus::Mined(BlockHeight::from_u32(200)))
+            .unwrap();
+    }
+
+    /// A conclusive non-mined status observation after tip validation, through
+    /// the same reconciliation the sync engine runs.
+    fn observe_not_mined(path: &str, txid: zcash_primitives::transaction::TxId, wallet_tip: u32) {
+        use crate::wallet::db::{open_wallet_db_with_timeout, WALLET_DB_BUSY_TIMEOUT};
+        use zcash_client_backend::data_api::WalletWrite;
+        open_wallet_db_with_timeout(path, WalletNetwork::Regtest, WALLET_DB_BUSY_TIMEOUT)
+            .unwrap()
+            .update_chain_tip(BlockHeight::from_u32(wallet_tip))
+            .unwrap();
+        let mut conn = rusqlite::Connection::open(path).unwrap();
+        settle_scan_queue(&conn);
+        assert!(
+            crate::wallet::sync::resolve_recovered_nonmined_status(&mut conn, txid.as_ref())
+                .unwrap()
+        );
+    }
+
+    async fn assert_deferred(path: &str, url: &str) {
+        let error = broadcast(path, url, WalletNetwork::Regtest, "restart-op", None, None)
+            .await
+            .unwrap_err();
+        assert!(error.contains("deferred until wallet sync"), "{error}");
+        // Retryable on both sides: the outbox and Dart's checkpoint classifier.
+        assert!(!is_terminal_broadcast_failure(&error));
+        assert!(!error.to_ascii_lowercase().contains("cannot be retried"));
+        let rows = list(path, WalletNetwork::Regtest, None).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].state, STATE_SIGNED_PENDING_BROADCAST);
+        assert_eq!(rows[0].status.as_deref(), Some("retryable_error"));
+        assert_eq!(rows[0].external_ref.as_deref(), Some("deposit-1"));
+    }
+
+    fn stored_tx(path: &str, txid: &zcash_primitives::transaction::TxId) -> zcash_primitives::transaction::Transaction {
+        let raw: Vec<u8> = rusqlite::Connection::open(path)
+            .unwrap()
+            .query_row(
+                "SELECT raw FROM transactions WHERE txid = ?1",
+                [txid.as_ref()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        zcash_primitives::transaction::Transaction::read(
+            &raw[..],
+            zcash_protocol::consensus::BranchId::Nu5,
+        )
+        .unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn rewound_operation_waits_for_mined_reconciliation_even_past_expiry() {
+        use crate::wallet::sync_engine::test_lwd::CapturingLwd;
+        // Expiry height 240: tip 200 is unexpired, tip 1000 is past expiry.
+        for tip in [200, 1000] {
+            let op = interrupt_after_wallet_commit(1).await;
+            mine_then_rewind(&op.path, &op.txids);
+            // A definite rejection would discard the operation and its deposit reference.
+            let rejecting = CapturingLwd::start_rejecting_broadcast(tip).await;
+            assert_deferred(&op.path, &rejecting.url).await;
+            assert_deferred(&op.path, &rejecting.url).await;
+            // The dispatch gate rechecks under its writer reservation.
+            let tx = stored_tx(&op.path, &op.txids[0]);
+            let error = crate::wallet::sync::hardware_authority::dispatch(
+                &op.path,
+                WalletNetwork::Regtest,
+                &tx,
+                &[],
+                tip,
+                async { panic!("withheld") },
+            )
+            .await
+            .err()
+            .unwrap();
+            assert!(error.contains("deferred until wallet sync"), "{error}");
+            assert!(rejecting.requests().is_empty(), "no tip read or submission");
+
+            // Scanning restores the exact transaction's mined height.
+            observe_mined(&op.path, op.txids[0], tip as u32);
+            let result = broadcast(
+                &op.path,
+                "http://127.0.0.1:1",
+                WalletNetwork::Regtest,
+                "restart-op",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+            assert_eq!(result.status, "broadcasted");
+            assert!(result.requires_ack);
+            assert_eq!(result.txid, op.txids[0].to_string());
+            let rows = list(&op.path, WalletNetwork::Regtest, None).unwrap();
+            assert_eq!(rows[0].state, STATE_RESULT_PENDING_ACK);
+            assert_eq!(rows[0].external_ref.as_deref(), Some("deposit-1"));
+            assert!(rejecting.requests().is_empty());
+            assert_eq!(op.server.count("/SendTransaction"), 1);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn rewound_operation_resumes_normal_policy_after_nonmined_status() {
+        use crate::wallet::sync_engine::test_lwd::CapturingLwd;
+        for (tip, accept) in [(200, true), (200, false), (1000, false)] {
+            let op = interrupt_after_wallet_commit(1).await;
+            mine_then_rewind(&op.path, &op.txids);
+            let server = if accept {
+                CapturingLwd::start_for_broadcast(tip).await
+            } else {
+                CapturingLwd::start_rejecting_broadcast(tip).await
+            };
+            assert_deferred(&op.path, &server.url).await;
+            assert!(server.requests().is_empty());
+
+            observe_not_mined(&op.path, op.txids[0], tip as u32);
+            let result =
+                broadcast(&op.path, &server.url, WalletNetwork::Regtest, "restart-op", None, None)
+                    .await;
+            match (tip, accept) {
+                (200, true) => {
+                    let result = result.unwrap();
+                    assert_eq!(result.status, "broadcasted");
+                    assert_eq!(server.count("/SendTransaction"), 1);
+                    let rows = list(&op.path, WalletNetwork::Regtest, None).unwrap();
+                    assert_eq!(rows[0].state, STATE_RESULT_PENDING_ACK);
+                    assert_eq!(rows[0].external_ref.as_deref(), Some("deposit-1"));
+                }
+                (200, false) => {
+                    // Only now can the definite rejection discard the operation.
+                    let error = result.unwrap_err();
+                    assert!(error.contains("cannot be retried"), "{error}");
+                    assert_eq!(server.count("/SendTransaction"), 1);
+                    assert!(list(&op.path, WalletNetwork::Regtest, None)
+                        .unwrap()
+                        .is_empty());
+                }
+                _ => {
+                    let result = result.unwrap();
+                    assert_eq!(result.status, "expired");
+                    assert!(result.requires_ack);
+                    assert_eq!(server.count("/SendTransaction"), 0);
+                    let rows = list(&op.path, WalletNetwork::Regtest, None).unwrap();
+                    assert_eq!(rows[0].state, STATE_RESULT_PENDING_ACK);
+                    assert_eq!(rows[0].status.as_deref(), Some("expired"));
+                }
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mixed_mined_and_unmined_rounds_recover_without_resubmitting_the_mined_round() {
+        use crate::wallet::sync_engine::test_lwd::CapturingLwd;
+        // Round 1 mined with exact bytes, round 2 an ordinary retry.
+        let op = interrupt_after_wallet_commit(2).await;
+        observe_mined(&op.path, op.txids[0], 200);
+        let server = CapturingLwd::start_for_broadcast(200).await;
+        let result = broadcast(&op.path, &server.url, WalletNetwork::Regtest, "restart-op", None, None)
+            .await
+            .unwrap();
+        assert_eq!(result.status, "broadcasted");
+        assert_eq!(result.txid, format!("{},{}", op.txids[0], op.txids[1]));
+        assert_eq!(server.count("/SendTransaction"), 1);
+
+        // Both rewound; scanning restores only round 1. Round 2 still awaits status,
+        // so the whole operation defers, including expiry classification.
+        let op = interrupt_after_wallet_commit(2).await;
+        mine_then_rewind(&op.path, &op.txids);
+        observe_mined(&op.path, op.txids[0], 200);
+        settle_scan_queue(&rusqlite::Connection::open(&op.path).unwrap());
+        let rejecting = CapturingLwd::start_rejecting_broadcast(200).await;
+        assert_deferred(&op.path, &rejecting.url).await;
+        assert!(rejecting.requests().is_empty());
+        observe_not_mined(&op.path, op.txids[1], 200);
+        let server = CapturingLwd::start_for_broadcast(200).await;
+        let result = broadcast(&op.path, &server.url, WalletNetwork::Regtest, "restart-op", None, None)
+            .await
+            .unwrap();
+        assert_eq!(result.status, "broadcasted");
+        assert_eq!(server.count("/SendTransaction"), 1);
     }
 }

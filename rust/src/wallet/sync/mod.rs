@@ -35,6 +35,7 @@ mod send;
 mod transactions;
 pub(crate) use transactions::has_recovered_status_work;
 pub(crate) use transactions::resolve_recovered_nonmined_status;
+pub(crate) use transactions::unmined_txids_with_mined_output_evidence_on;
 
 // Keep the existing address API path while its implementation lives with address policy.
 pub use crate::wallet::addresses::{
